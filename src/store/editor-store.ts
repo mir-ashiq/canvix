@@ -5,12 +5,25 @@ import {
   uid,
   type AnyElement,
   type Background,
+  type BrandKit,
+  DEFAULT_BRAND,
   type DesignRecord,
   type PageData,
 } from '@/lib/types'
 import type { TemplateDef } from '@/lib/templates'
 
-export type PanelId = 'templates' | 'elements' | 'text' | 'uploads' | 'background' | 'layers' | null
+export type PanelId =
+  | 'templates'
+  | 'elements'
+  | 'text'
+  | 'brand'
+  | 'uploads'
+  | 'tools'
+  | 'projects'
+  | 'apps'
+  | 'background'
+  | 'layers'
+  | null
 
 interface HistoryEntry {
   pages: PageData[]
@@ -37,6 +50,15 @@ interface EditorState {
   saving: boolean
   /** increments on every content mutation — used by autosave */
   version: number
+
+  // canva-2026 chrome
+  editingMode: 'editing' | 'viewing'
+  previewOpen: boolean
+  /** freehand draw tool */
+  tool: 'select' | 'draw'
+  drawColor: string
+  drawSize: number
+  brand: BrandKit
 
   // lifecycle
   loadDesign: (d: DesignRecord) => void
@@ -79,6 +101,15 @@ interface EditorState {
   zoomOut: () => void
   resetZoom: () => void
 
+  // canva-2026 chrome
+  setEditingMode: (m: 'editing' | 'viewing') => void
+  setPreviewOpen: (open: boolean) => void
+  setTool: (t: 'select' | 'draw') => void
+  setDrawColor: (c: string) => void
+  setDrawSize: (n: number) => void
+  setBrand: (b: BrandKit) => void
+  resizeDesign: (width: number, height: number) => void
+
   // panels & save
   setPanel: (p: PanelId) => void
   markSaving: () => void
@@ -108,6 +139,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   saving: false,
   version: 0,
 
+  editingMode: 'editing',
+  previewOpen: false,
+  tool: 'select',
+  drawColor: '#FFFFFF',
+  drawSize: 6,
+  brand: DEFAULT_BRAND,
+
   loadDesign: (d) =>
     set({
       designId: d.id,
@@ -123,6 +161,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       dirty: false,
       savedAt: Date.now(),
       saving: false,
+      previewOpen: false,
+      tool: 'select',
     }),
 
   rename: (name) => set({ designName: name, dirty: true }),
@@ -319,6 +359,27 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   zoomIn: () => set({ zoom: Math.min(ZOOM_MAX, get().zoom * 1.2) }),
   zoomOut: () => set({ zoom: Math.max(ZOOM_MIN, get().zoom / 1.2) }),
   resetZoom: () => set({ zoom: 1 }),
+
+  setEditingMode: (m) => set({ editingMode: m }),
+  setPreviewOpen: (open) => set({ previewOpen: open }),
+  setTool: (t) => set({ tool: t, selectedIds: [] }),
+  setDrawColor: (c) => set({ drawColor: c }),
+  setDrawSize: (n) => set({ drawSize: Math.min(64, Math.max(1, n)) }),
+  setBrand: (b) => set({ brand: b }),
+
+  resizeDesign: (width, height) => {
+    get().pushHistory()
+    const { pages } = get()
+    const next = clone(pages)
+    // keep elements centered when canvas size changes
+    for (const page of next) {
+      for (const el of page.elements) {
+        el.x = Math.round((width - el.width) / 2)
+        el.y = Math.round((height - el.height) / 2)
+      }
+    }
+    set({ width, height, pages: next, selectedIds: [], zoom: 1 })
+  },
 
   setPanel: (p) => set({ panel: get().panel === p ? null : p }),
 

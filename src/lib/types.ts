@@ -10,10 +10,23 @@ export type ElementType =
   | 'star'
   | 'line'
   | 'path'
+  | 'stroke'
   | 'image'
   | 'sticker'
 
 export type TextAlign = 'left' | 'center' | 'right'
+
+/** Canva-style text effects */
+export type TextEffect = 'none' | 'shadow' | 'lift' | 'hollow' | 'neon' | 'echo'
+
+export const TEXT_EFFECTS: { id: TextEffect; label: string }[] = [
+  { id: 'none', label: 'None' },
+  { id: 'shadow', label: 'Shadow' },
+  { id: 'lift', label: 'Lift' },
+  { id: 'hollow', label: 'Hollow' },
+  { id: 'neon', label: 'Neon' },
+  { id: 'echo', label: 'Echo' },
+]
 
 export interface ShadowConfig {
   enabled: boolean
@@ -50,6 +63,8 @@ export interface TextElement extends BaseElement {
   align: TextAlign
   lineHeight: number
   letterSpacing: number
+  /** canva-style effect preset */
+  effect?: TextEffect
 }
 
 export interface ShapeElement extends BaseElement {
@@ -85,10 +100,32 @@ export interface StickerElement extends BaseElement {
   fontSize: number
 }
 
+/** Freehand stroke — points are [x0,y0,x1,y1,…] relative to (x, y). */
+export interface StrokeElement extends BaseElement {
+  type: 'stroke'
+  points: number[]
+  stroke: string
+  strokeWidth: number
+}
+
+/** Brand kit — persisted per browser (localStorage) */
+export interface BrandKit {
+  colors: string[]
+  headingFont: string
+  bodyFont: string
+}
+
+export const DEFAULT_BRAND: BrandKit = {
+  colors: ['#7630D7', '#02C0CC', '#FF5C8A', '#1F142E', '#FFD166'],
+  headingFont: 'Archivo Black',
+  bodyFont: 'Inter',
+}
+
 export type AnyElement =
   | TextElement
   | ShapeElement
   | LineElement
+  | StrokeElement
   | ImageElement
   | StickerElement
 
@@ -250,6 +287,31 @@ export function createStickerElement(char: string, init: BaseInit & Partial<Stic
   }
 }
 
+export function createStrokeElement(init: BaseInit & Partial<StrokeElement>): StrokeElement {
+  return {
+    ...baseElement('stroke', init),
+    type: 'stroke',
+    points: [],
+    stroke: '#FFFFFF',
+    strokeWidth: 6,
+    ...init,
+  }
+}
+
+/** hex/rgb → rgba with alpha — used by text effect rendering */
+export function withAlpha(color: string, alpha: number): string {
+  if (color.startsWith('#')) {
+    const hex = color.slice(1)
+    const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex
+    const r = parseInt(full.slice(0, 2), 16)
+    const g = parseInt(full.slice(2, 4), 16)
+    const b = parseInt(full.slice(4, 6), 16)
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  }
+  if (color.startsWith('rgb(')) return color.replace('rgb(', 'rgba(').replace(')', `, ${alpha})`)
+  return color
+}
+
 export function createPage(background: Background = { type: 'solid', color: '#FFFFFF' }): PageData {
   return { id: uid('page'), background, elements: [] }
 }
@@ -264,6 +326,9 @@ export function isShape(el: AnyElement): el is ShapeElement {
 }
 export function isLine(el: AnyElement): el is LineElement {
   return el.type === 'line'
+}
+export function isStroke(el: AnyElement): el is StrokeElement {
+  return el.type === 'stroke'
 }
 export function isImage(el: AnyElement): el is ImageElement {
   return el.type === 'image'

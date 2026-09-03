@@ -10,6 +10,7 @@ function elementIcon(el: AnyElement) {
     case 'text': return Type
     case 'image': return ImageIcon
     case 'line': return Minus
+    case 'stroke': return PenTool
     case 'sticker': return Smile
     case 'path': return PenTool
     default: return Square
@@ -21,6 +22,7 @@ function elementLabel(el: AnyElement): string {
   if (el.type === 'sticker') return `Sticker ${el.char}`
   if (el.type === 'image') return 'Image'
   if (el.type === 'line') return 'Line'
+  if (el.type === 'stroke') return 'Stroke'
   if (el.type === 'path') return 'Graphic'
   return el.type.charAt(0).toUpperCase() + el.type.slice(1)
 }
@@ -41,13 +43,13 @@ export function LayersPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 pt-4 pb-3 border-b border-black/5">
+      <div className="px-4 pt-4 pb-3 border-b border-white/[0.07]">
         <h3 className="font-bold text-sm">Layers</h3>
-        <p className="text-xs text-muted-foreground mt-0.5">Top of the list is the front-most element.</p>
+        <p className="text-xs text-white/50 mt-0.5">Top of the list is the front-most element.</p>
       </div>
-      <div className="flex-1 overflow-y-auto cv-scroll p-2">
+      <div className="flex-1 overflow-y-auto cv-scroll-dark p-2">
         {ordered.length === 0 && (
-          <div className="text-center text-xs text-muted-foreground pt-10">Nothing on this page yet.<br />Add text, shapes or images.</div>
+          <div className="text-center text-xs text-white/40 pt-10">Nothing on this page yet.<br />Add text, shapes or images.</div>
         )}
         {ordered.map((el) => {
           const Icon = elementIcon(el)
@@ -57,7 +59,7 @@ export function LayersPanel() {
               key={el.id}
               className={cn(
                 'group flex items-center gap-2 rounded-lg px-2 py-2 cursor-pointer text-sm',
-                selected ? 'bg-[#E6FAFB] text-[#0A8F96]' : 'hover:bg-black/[0.04]'
+                selected ? 'bg-[#7630D7]/25 text-white' : 'text-white/75 hover:bg-white/[0.06]'
               )}
               onClick={() => setSelection([el.id])}
             >
@@ -65,25 +67,25 @@ export function LayersPanel() {
               <span className={cn('flex-1 truncate', !el.visible && 'opacity-40')}>{elementLabel(el)}</span>
 
               <div className="hidden group-hover:flex items-center gap-0.5">
-                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-black/10" title="Bring to front" aria-label="Bring to front" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'front') }}>
+                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10" title="Bring to front" aria-label="Bring to front" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'front') }}>
                   <ChevronsUp size={13} />
                 </button>
-                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-black/10" title="Move up" aria-label="Move up" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'up') }}>
+                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10" title="Move up" aria-label="Move up" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'up') }}>
                   <ChevronUp size={13} />
                 </button>
-                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-black/10" title="Move down" aria-label="Move down" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'down') }}>
+                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10" title="Move down" aria-label="Move down" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'down') }}>
                   <ChevronDown size={13} />
                 </button>
-                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-black/10" title="Send to back" aria-label="Send to back" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'back') }}>
+                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10" title="Send to back" aria-label="Send to back" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'back') }}>
                   <ChevronsDown size={13} />
                 </button>
-                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-red-50 hover:text-red-600" title="Delete" aria-label="Delete layer" onClick={(e) => { e.stopPropagation(); setSelection([el.id]); deleteSelection() }}>
+                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-red-500/20 hover:text-red-400" title="Delete" aria-label="Delete layer" onClick={(e) => { e.stopPropagation(); setSelection([el.id]); deleteSelection() }}>
                   <Trash2 size={13} />
                 </button>
               </div>
 
               <button
-                className={cn('h-6 w-6 flex items-center justify-center rounded hover:bg-black/10 shrink-0', !el.locked && 'opacity-0 group-hover:opacity-100', el.locked && 'opacity-100')}
+                className={cn('h-6 w-6 flex items-center justify-center rounded hover:bg-white/10 shrink-0', !el.locked && 'opacity-0 group-hover:opacity-100', el.locked && 'opacity-100')}
                 title={el.locked ? 'Unlock' : 'Lock'}
                 aria-label={el.locked ? 'Unlock layer' : 'Lock layer'}
                 onClick={(e) => { e.stopPropagation(); setLock([el.id], !el.locked) }}
@@ -91,7 +93,7 @@ export function LayersPanel() {
                 {el.locked ? <Lock size={12} /> : <LockOpen size={12} />}
               </button>
               <button
-                className={cn('h-6 w-6 flex items-center justify-center rounded hover:bg-black/10 shrink-0', el.visible && 'opacity-0 group-hover:opacity-100', !el.visible && 'opacity-100')}
+                className={cn('h-6 w-6 flex items-center justify-center rounded hover:bg-white/10 shrink-0', el.visible && 'opacity-0 group-hover:opacity-100', !el.visible && 'opacity-100')}
                 title={el.visible ? 'Hide' : 'Show'}
                 aria-label={el.visible ? 'Hide layer' : 'Show layer'}
                 onClick={(e) => { e.stopPropagation(); setVisible([el.id], !el.visible) }}

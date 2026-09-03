@@ -27,8 +27,8 @@ export function PageBar() {
             <button
               onClick={() => setCurrentPage(i)}
               className={cn(
-                'block rounded-md overflow-hidden border-2 transition-all bg-white shadow-sm',
-                i === currentPage ? 'border-[#00C4CC]' : 'border-black/10 hover:border-black/30'
+                'block rounded-md overflow-hidden border-2 transition-all bg-white shadow-md',
+                i === currentPage ? 'border-[#02C0CC]' : 'border-white/20 hover:border-white/45'
               )}
               style={{ height: THUMB_H, width: thumbW }}
               aria-label={`Go to page ${i + 1}`}
@@ -37,7 +37,7 @@ export function PageBar() {
                 <DesignPreview page={p} width={width} height={height} />
               </div>
             </button>
-            <span className="absolute -top-1.5 -left-1.5 h-4 min-w-4 px-0.5 rounded-full bg-[#1F2226] text-white text-[9px] font-bold flex items-center justify-center">
+            <span className="absolute -top-1.5 -left-1.5 h-4 min-w-4 px-0.5 rounded-full bg-[#7630D7] text-white text-[9px] font-bold flex items-center justify-center shadow">
               {i + 1}
             </span>
             {pages.length > 1 && (
@@ -65,7 +65,7 @@ export function PageBar() {
       </div>
       <button
         onClick={addPage}
-        className="h-9 w-9 rounded-lg border-2 border-dashed border-black/25 text-muted-foreground hover:border-[#00C4CC] hover:text-[#0A8F96] flex items-center justify-center shrink-0 bg-white/70"
+        className="h-9 w-9 rounded-lg border-2 border-dashed border-white/25 text-white/60 hover:border-[#02C0CC] hover:text-[#02C0CC] flex items-center justify-center shrink-0 bg-white/[0.06]"
         title="Add page"
         aria-label="Add page"
       >

@@ -66,3 +66,6 @@ agent-ctx/
 *.pid
 .env.local
 mini-services/
+
+# sandbox analysis scripts (contains session credentials — never commit)
+/scripts/

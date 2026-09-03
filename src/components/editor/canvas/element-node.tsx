@@ -1,7 +1,7 @@
 'use client'
 
 import Konva from 'konva'
-import { Circle, Ellipse, Group, Image as KonvaImage, Line, Path, Rect, Star, Text } from 'react-konva'
+import { Ellipse, Group, Image as KonvaImage, Line, Path, Rect, Star, Text } from 'react-konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import type {
   AnyElement,
@@ -9,9 +9,10 @@ import type {
   LineElement,
   ShapeElement,
   StickerElement,
+  StrokeElement,
   TextElement,
 } from '@/lib/types'
-import { isLine } from '@/lib/types'
+import { isLine, withAlpha } from '@/lib/types'
 import { useEditorStore } from '@/store/editor-store'
 import { useLoadedImage } from './use-loaded-image'
 
@@ -45,6 +46,24 @@ function shadowProps(el: AnyElement) {
     shadowBlur: el.shadow.blur,
     shadowOffsetX: el.shadow.offsetX,
     shadowOffsetY: el.shadow.offsetY,
+  }
+}
+
+/** canva-style text effect presets → Konva text attrs */
+function textEffectProps(t: TextElement): Record<string, string | number> {
+  switch (t.effect) {
+    case 'shadow':
+      return { shadowColor: withAlpha('#000000', 0.35), shadowBlur: 14, shadowOffsetX: 0, shadowOffsetY: 5 }
+    case 'lift':
+      return { shadowColor: withAlpha('#000000', 0.55), shadowBlur: 0, shadowOffsetX: 0, shadowOffsetY: 9 }
+    case 'hollow':
+      return { fill: 'transparent', stroke: t.fill, strokeWidth: Math.max(1, t.fontSize * 0.05), lineJoin: 'round' as unknown as string }
+    case 'neon':
+      return { shadowColor: t.fill, shadowBlur: 26, shadowOffsetX: 0, shadowOffsetY: 0 }
+    case 'echo':
+      return { shadowColor: withAlpha(t.fill, 0.45), shadowBlur: 0, shadowOffsetX: Math.max(4, t.fontSize * 0.12), shadowOffsetY: Math.max(4, t.fontSize * 0.12) }
+    default:
+      return {}
   }
 }
 
@@ -108,6 +127,18 @@ export function ElementNode({ element: el, interactive, hiding, registerNode, on
       patch.height = newH
       patch.x = node.x()
       patch.y = node.y()
+    } else if (el.type === 'stroke') {
+      // bake the scale into the point list (points are relative to x/y)
+      const s = el as StrokeElement
+      const scaled = s.points.map((v, i) => (i % 2 === 0 ? v * sx : v * sy))
+      store.updateElementsLive([el.id], {
+        points: scaled,
+        strokeWidth: Math.max(1, s.strokeWidth * (sx + sy) / 2),
+        rotation: node.rotation(),
+        x: node.x(),
+        y: node.y(),
+      })
+      return
     } else if (isLine(el)) {
       patch.width = Math.max(12, el.width * sx)
       patch.x = node.x()
@@ -172,9 +203,11 @@ export function ElementNode({ element: el, interactive, hiding, registerNode, on
   switch (el.type) {
     case 'text': {
       const t = el as TextElement
+      const effect = t.effect && t.effect !== 'none' ? textEffectProps(t) : {}
       return (
         <Text
           {...common}
+          {...effect}
           text={t.text}
           fontSize={t.fontSize}
           fontFamily={t.fontFamily}
@@ -245,6 +278,22 @@ export function ElementNode({ element: el, interactive, hiding, registerNode, on
       return <Line {...shared} hitStrokeWidth={Math.max(12, l.strokeWidth)} />
     }
 
+    case 'stroke': {
+      const s = el as StrokeElement
+      return (
+        <Line
+          {...common}
+          points={s.points}
+          stroke={s.stroke}
+          strokeWidth={s.strokeWidth}
+          lineCap="round"
+          lineJoin="round"
+          tension={0.25}
+          hitStrokeWidth={Math.max(14, s.strokeWidth)}
+        />
+      )
+    }
+
     case 'image': {
       const im = el as ImageElement
       return <KonvaImage {...common} image={image ?? undefined} width={im.width} height={im.height} cornerRadius={im.radius} />
@@ -255,8 +304,10 @@ export function ElementNode({ element: el, interactive, hiding, registerNode, on
       return <Text {...common} text={sk.char} fontSize={sk.fontSize} fontFamily="'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif" width={sk.width} height={sk.height} align="center" />
     }
 
-    default:
-      return <Circle {...common} radius={Math.min(el.width, el.height) / 2} />
+    default: {
+      // exhaustive: every ElementType is handled above
+      return null
+    }
   }
 }
 

@@ -19,18 +19,19 @@ export function ElementsPanel() {
   const [tab, setTab] = useState('shapes')
 
   return (
-    <Tabs value={tab} onValueChange={setTab} className="flex flex-col h-full">
-      <div className="px-4 pt-4 pb-3 border-b border-black/5">
+    <Tabs value={tab} onValueChange={setTab} className="flex flex-col h-full bg-[#16181D] text-[#EDEEF2]">
+      <div className="px-4 pt-4 pb-3 border-b border-white/[0.07]">
         <h3 className="font-bold text-sm">Elements</h3>
-        <TabsList className="mt-3 w-full grid grid-cols-4 h-8">
-          <TabsTrigger value="shapes" className="text-xs">Shapes</TabsTrigger>
-          <TabsTrigger value="lines" className="text-xs">Lines</TabsTrigger>
-          <TabsTrigger value="graphics" className="text-xs">Graphics</TabsTrigger>
-          <TabsTrigger value="stickers" className="text-xs">Stickers</TabsTrigger>
+        <p className="text-xs text-white/50 mt-0.5">Shapes, lines, graphics, stickers.</p>
+        <TabsList className="mt-3 w-full grid grid-cols-4 h-8 bg-white/[0.05]">
+          <TabsTrigger value="shapes" className="text-xs data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Shapes</TabsTrigger>
+          <TabsTrigger value="lines" className="text-xs data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Lines</TabsTrigger>
+          <TabsTrigger value="graphics" className="text-xs data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Graphics</TabsTrigger>
+          <TabsTrigger value="stickers" className="text-xs data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Stickers</TabsTrigger>
         </TabsList>
       </div>
 
-      <TabsContent value="shapes" className="flex-1 overflow-y-auto cv-scroll p-4 mt-0">
+      <TabsContent value="shapes" className="flex-1 overflow-y-auto cv-scroll-dark p-4 mt-0">
         <div className="grid grid-cols-3 gap-2">
           {[
             { id: 'rect', label: 'Square', icon: Square },
@@ -42,21 +43,21 @@ export function ElementsPanel() {
             <button
               key={s.id}
               onClick={() => addShape(s.id as 'rect')}
-              className="flex flex-col items-center gap-1.5 rounded-xl border border-black/8 p-3 hover:border-[#00C4CC] hover:bg-[#F0FBFC] transition-all"
+              className="flex flex-col items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-3 hover:border-[#7630D7] hover:bg-[#7630D7]/10 transition-all"
               aria-label={`Add ${s.label}`}
             >
               {s.icon ? (
-                <s.icon size={26} strokeWidth={1.6} className="text-[#3D3F47]" />
+                <s.icon size={26} strokeWidth={1.6} className="text-white/80" />
               ) : (
-                <span className="h-[22px] w-[22px] rounded-md border-2 border-[#3D3F47]" aria-hidden="true" />
+                <span className="h-[22px] w-[22px] rounded-md border-2 border-white/80" aria-hidden="true" />
               )}
-              <span className="text-[11px] text-muted-foreground">{s.label}</span>
+              <span className="text-[11px] text-white/55">{s.label}</span>
             </button>
           ))}
         </div>
       </TabsContent>
 
-      <TabsContent value="lines" className="flex-1 overflow-y-auto cv-scroll p-4 mt-0">
+      <TabsContent value="lines" className="flex-1 overflow-y-auto cv-scroll-dark p-4 mt-0">
         <div className="grid grid-cols-2 gap-2">
           {[
             { id: 'solid', label: 'Line', icon: Minus },
@@ -67,42 +68,42 @@ export function ElementsPanel() {
             <button
               key={l.id}
               onClick={() => addLine(l.id as 'solid')}
-              className="flex flex-col items-center gap-1.5 rounded-xl border border-black/8 p-4 hover:border-[#00C4CC] hover:bg-[#F0FBFC] transition-all"
+              className="flex flex-col items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-4 hover:border-[#7630D7] hover:bg-[#7630D7]/10 transition-all"
               aria-label={`Add ${l.label}`}
             >
-              <l.icon size={24} strokeWidth={1.6} className="text-[#3D3F47]" />
-              <span className="text-[11px] text-muted-foreground">{l.label}</span>
+              <l.icon size={24} strokeWidth={1.6} className="text-white/80" />
+              <span className="text-[11px] text-white/55">{l.label}</span>
             </button>
           ))}
         </div>
       </TabsContent>
 
-      <TabsContent value="graphics" className="flex-1 overflow-y-auto cv-scroll p-4 mt-0">
+      <TabsContent value="graphics" className="flex-1 overflow-y-auto cv-scroll-dark p-4 mt-0">
         <div className="grid grid-cols-3 gap-2">
           {GRAPHICS.map((g) => (
             <button
               key={g.id}
               onClick={() => addGraphic(g.id)}
-              className="flex flex-col items-center gap-1.5 rounded-xl border border-black/8 p-3 text-[#3D3F47] hover:border-[#00C4CC] hover:bg-[#F0FBFC] transition-all"
+              className="flex flex-col items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-white/80 hover:border-[#7630D7] hover:bg-[#7630D7]/10 hover:text-white transition-all"
               aria-label={`Add ${g.name}`}
             >
               <GraphicIcon path={g.path} />
-              <span className="text-[11px] text-muted-foreground">{g.name}</span>
+              <span className="text-[11px] text-white/55">{g.name}</span>
             </button>
           ))}
         </div>
       </TabsContent>
 
-      <TabsContent value="stickers" className="flex-1 overflow-y-auto cv-scroll p-4 mt-0">
+      <TabsContent value="stickers" className="flex-1 overflow-y-auto cv-scroll-dark p-4 mt-0">
         {STICKER_GROUPS.map((group) => (
           <div key={group.name} className="mb-5">
-            <h4 className="text-xs font-semibold text-muted-foreground mb-2">{group.name}</h4>
+            <h4 className="text-xs font-semibold text-white/50 mb-2">{group.name}</h4>
             <div className="grid grid-cols-6 gap-1">
               {group.emojis.map((e) => (
                 <button
                   key={e}
                   onClick={() => addSticker(e)}
-                  className="h-9 w-9 rounded-lg text-xl leading-none flex items-center justify-center hover:bg-[#F0FBFC] hover:scale-110 transition-all"
+                  className="h-9 w-9 rounded-lg text-xl leading-none flex items-center justify-center hover:bg-[#7630D7]/25 hover:scale-110 transition-all"
                   aria-label={`Add sticker ${e}`}
                 >
                   {e}

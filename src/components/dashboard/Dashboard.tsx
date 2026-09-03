@@ -17,6 +17,10 @@ import {
   FileImage,
   Github,
   LayoutGrid,
+  LayoutTemplate,
+  FolderOpen,
+  BookMarked,
+  CircleHelp,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
@@ -188,43 +192,100 @@ export function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex bg-[#1F142E] text-[#EDEEF2]">
+      {/* ── Canva-style left rail (desktop) ── */}
+      <nav className="hidden md:flex w-[72px] shrink-0 flex-col items-center bg-[#1C1229] border-r border-white/[0.06] py-3 gap-1 sticky top-0 h-screen" aria-label="Primary">
+        <button
+          onClick={() => setCustomOpen(true)}
+          className="h-9 w-9 rounded-full bg-[#7630D7] hover:bg-[#8B5CF6] text-white flex items-center justify-center shadow-lg shadow-[#7630D7]/40 transition-colors"
+          aria-label="Create a design"
+          title="Create a design"
+        >
+          <Plus size={20} />
+        </button>
+        <div className="h-3" />
+        {[
+          { label: 'Home', icon: LayoutGrid, active: true },
+          { label: 'Templates', icon: LayoutTemplate, target: 'templates' },
+          { label: 'Projects', icon: FolderOpen, target: 'recents' },
+          { label: 'Brand', icon: BookMarked, target: 'brand' },
+        ].map((item) => (
+          <button
+            key={item.label}
+            onClick={() => item.target && document.getElementById(`cv-${item.target}`)?.scrollIntoView({ behavior: 'smooth' })}
+            className={cn(
+              'w-14 py-2.5 rounded-2xl flex flex-col items-center gap-1 transition-colors',
+              item.active ? 'bg-[#2A2C35] text-white' : 'text-white/60 hover:text-white hover:bg-white/[0.06]'
+            )}
+            aria-label={item.label}
+            aria-current={item.active ? 'page' : undefined}
+          >
+            <item.icon size={19} />
+            <span className="text-[9px] font-medium leading-none">{item.label}</span>
+          </button>
+        ))}
+        <div className="mt-auto flex flex-col items-center gap-2">
+          <a
+            href="https://github.com/mir-ashiq/canvix"
+            target="_blank"
+            rel="noreferrer"
+            className="w-9 h-9 rounded-full text-white/50 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors"
+            aria-label="GitHub repository"
+            title="GitHub repository"
+          >
+            <Github size={18} />
+          </a>
+          <button
+            onClick={goLanding}
+            className="h-9 w-9 rounded-full cv-topbar-gradient text-white text-[13px] font-bold flex items-center justify-center"
+            aria-label="About Canvix"
+            title="About Canvix"
+          >
+            C
+          </button>
+        </div>
+      </nav>
+
+      <div className="flex-1 min-w-0 flex flex-col">
       {/* ── Header ── */}
-      <header className="sticky top-0 z-40 border-b border-black/5 bg-white/85 backdrop-blur-lg">
+      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#1F142E]/90 backdrop-blur-lg">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 h-16 flex items-center gap-3">
-          <button onClick={goLanding} aria-label="Canvix home" className="shrink-0">
-            <Logo size={28} />
+          <button onClick={goLanding} aria-label="Canvix home" className="shrink-0 md:hidden">
+            <Logo size={26} />
           </button>
           <div className="relative flex-1 max-w-md">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search your designs"
-              className="pl-10 h-10 rounded-full bg-[#F4F5F7] border-black/5 focus-visible:ring-[#00C4CC]/40"
+              className="pl-10 h-10 rounded-full bg-white/[0.06] border-white/10 text-white placeholder:text-white/35 focus-visible:ring-[#7630D7]/50 focus-visible:border-[#7630D7]/60"
               aria-label="Search designs"
             />
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer">
-              <Button variant="ghost" size="icon" className="rounded-full hidden sm:inline-flex" aria-label="GitHub repository">
-                <Github size={18} />
-              </Button>
-            </a>
             <Button
               size="sm"
-              className="btn-brand-gradient rounded-full px-4 gap-1.5"
+              className="btn-cv rounded-full px-4 gap-1.5 h-10"
               onClick={() => setCustomOpen(true)}
             >
-              <Plus size={16} /> Custom size
+              <Plus size={16} /> <span className="hidden sm:inline">Custom size</span>
             </Button>
           </div>
         </div>
       </header>
 
       <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 pb-20">
+        {/* ── Hero — canva “What will you design today?” ── */}
+        <section className="pt-8 pb-2">
+          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-center">
+            What will you <span className="text-brand-gradient">design</span> today?
+          </h1>
+          <p className="mt-2 text-center text-sm text-white/50">Free, open-source, and yours forever.</p>
+        </section>
+
         {/* ── Start a new design ── */}
-        <section className="pt-8">
+        <section className="pt-6">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold">Start a new design</h2>
           </div>
@@ -236,14 +297,14 @@ export function Dashboard() {
                   key={preset.name}
                   onClick={() => startBlank(preset.width, preset.height, preset.name)}
                   disabled={creating}
-                  className="group flex flex-col items-center gap-2 rounded-xl border border-black/8 bg-white p-4 hover:border-[#00C4CC]/50 hover:shadow-md hover:shadow-black/5 transition-all disabled:opacity-50"
+                  className="group flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-[#16171D] p-4 hover:border-[#7630D7]/60 hover:bg-[#1C1E28] transition-all disabled:opacity-50"
                   aria-label={`Create ${preset.name}`}
                 >
-                  <span className="h-10 w-10 rounded-lg bg-brand-gradient-soft text-[#7D2AE8] flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <span className="h-10 w-10 rounded-xl bg-brand-gradient-soft text-[#A78BFA] flex items-center justify-center group-hover:scale-110 transition-transform">
                     <Icon size={19} />
                   </span>
                   <span className="text-[13px] font-semibold text-center leading-tight">{preset.name}</span>
-                  <span className="text-[11px] text-muted-foreground">{preset.hint}</span>
+                  <span className="text-[11px] text-white/40">{preset.hint}</span>
                 </button>
               )
             })}
@@ -251,7 +312,7 @@ export function Dashboard() {
         </section>
 
         {/* ── Templates ── */}
-        <section className="pt-12">
+        <section id="cv-templates" className="pt-12 scroll-mt-20">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <h2 className="text-xl font-bold">Templates</h2>
             <div className="flex items-center gap-2 flex-wrap">
@@ -260,8 +321,8 @@ export function Dashboard() {
                 className={cn(
                   'inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium border transition-colors',
                   category === 'all'
-                    ? 'bg-[#17181D] text-white border-transparent'
-                    : 'bg-white border-black/10 text-muted-foreground hover:border-black/25'
+                    ? 'bg-[#7630D7] text-white border-transparent'
+                    : 'bg-transparent border-white/12 text-white/60 hover:border-white/30 hover:text-white'
                 )}
               >
                 <LayoutGrid size={14} /> All
@@ -275,8 +336,8 @@ export function Dashboard() {
                     className={cn(
                       'inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium border transition-colors',
                       category === c.id
-                        ? 'bg-[#17181D] text-white border-transparent'
-                        : 'bg-white border-black/10 text-muted-foreground hover:border-black/25'
+                        ? 'bg-[#7630D7] text-white border-transparent'
+                        : 'bg-transparent border-white/12 text-white/60 hover:border-white/30 hover:text-white'
                     )}
                   >
                     <Icon size={14} /> {c.label}
@@ -295,32 +356,59 @@ export function Dashboard() {
                 aria-label={`Open template ${t.name}`}
               >
                 <div
-                  className="relative rounded-xl overflow-hidden border border-black/8 shadow-sm group-hover:shadow-lg group-hover:-translate-y-0.5 transition-all bg-white"
+                  className="relative rounded-xl overflow-hidden border border-white/10 shadow-lg shadow-black/30 group-hover:shadow-xl group-hover:-translate-y-0.5 transition-all bg-[#0F1015]"
                   style={{ aspectRatio: `${t.width} / ${t.height}` }}
                 >
                   <DesignPreview page={t.pages[0]} width={t.width} height={t.height} />
-                  <div className="absolute inset-0 bg-[#7D2AE8]/0 group-hover:bg-[#7D2AE8]/10 transition-colors" />
-                  <span className="absolute top-2 right-2 h-6 w-6 rounded-full bg-black/45 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute inset-0 bg-[#7630D7]/0 group-hover:bg-[#7630D7]/15 transition-colors" />
+                  <span className="absolute top-2 right-2 h-6 w-6 rounded-full bg-[#7630D7] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <Plus size={14} />
                   </span>
                 </div>
-                <div className="mt-2 text-sm font-medium truncate group-hover:text-[#7D2AE8] transition-colors">{t.name}</div>
-                <div className="text-xs text-muted-foreground">{t.width} × {t.height}</div>
+                <div className="mt-2 text-sm font-medium truncate text-white/85 group-hover:text-[#A78BFA] transition-colors">{t.name}</div>
+                <div className="text-xs text-white/40">{t.width} × {t.height}</div>
               </button>
             ))}
           </div>
         </section>
 
+        {/* ── Brand kit ── */}
+        <section id="cv-brand" className="pt-12 scroll-mt-20">
+          <h2 className="text-xl font-bold">Brand kit</h2>
+          <div className="mt-4 rounded-2xl border border-white/10 bg-[#16171D] p-5 flex flex-col sm:flex-row items-center gap-6">
+            <div className="flex gap-2">
+              {(['#7630D7', '#02C0CC', '#FF5C8A', '#1F142E', '#FFD166'] as const).map((c) => (
+                <span key={c} className="h-10 w-10 rounded-xl border border-white/15" style={{ background: c }} aria-label={`Brand color ${c}`} />
+              ))}
+            </div>
+            <div className="flex-1 text-center sm:text-left">
+              <div className="text-sm font-semibold">Set your brand colors &amp; fonts in the editor</div>
+              <div className="text-xs text-white/40 mt-0.5">Open any design → Brand tab. Saved locally, applied anywhere.</div>
+            </div>
+            <Button
+              variant="outline"
+              className="rounded-xl border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white"
+              onClick={() => {
+                const first = filteredDesigns[0] ?? null
+                if (first) void openDesign(first.id)
+                else toast({ title: 'Open a design first, then click the Brand tab' })
+              }}
+            >
+              Open editor
+            </Button>
+          </div>
+        </section>
+
         {/* ── Recent designs ── */}
-        <section className="pt-12">
+        <section id="cv-recents" className="pt-12 scroll-mt-20">
           <h2 className="text-xl font-bold">Recent designs</h2>
           {filteredDesigns.length === 0 ? (
-            <div className="mt-6 rounded-2xl border-2 border-dashed border-black/10 p-10 text-center">
-              <div className="mx-auto h-14 w-14 rounded-2xl bg-brand-gradient-soft flex items-center justify-center text-[#7D2AE8]">
+            <div className="mt-6 rounded-2xl border-2 border-dashed border-white/12 p-10 text-center">
+              <div className="mx-auto h-14 w-14 rounded-2xl bg-brand-gradient-soft flex items-center justify-center text-[#A78BFA]">
                 <Plus size={24} />
               </div>
               <p className="mt-4 font-semibold">No designs yet</p>
-              <p className="mt-1 text-sm text-muted-foreground">Pick a preset or template above to get started.</p>
+              <p className="mt-1 text-sm text-white/45">Pick a preset or template above to get started.</p>
             </div>
           ) : (
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -328,34 +416,34 @@ export function Dashboard() {
                 <div key={d.id} className="group">
                   <button
                     onClick={() => openDesign(d.id)}
-                    className="relative block w-full rounded-xl overflow-hidden border border-black/8 shadow-sm group-hover:shadow-lg group-hover:-translate-y-0.5 transition-all bg-[#F4F5F7]"
+                    className="relative block w-full rounded-xl overflow-hidden border border-white/10 shadow-lg shadow-black/30 group-hover:shadow-xl group-hover:-translate-y-0.5 transition-all bg-[#0F1015]"
                     style={{ aspectRatio: `${d.width} / ${d.height}` }}
                     aria-label={`Open ${d.name}`}
                   >
                     {d.thumbnail ? (
                       <img src={d.thumbnail} alt={d.name} className="w-full h-full object-cover" />
                     ) : (
-                      <span className="absolute inset-0 flex items-center justify-center text-muted-foreground text-xs font-medium">
+                      <span className="absolute inset-0 flex items-center justify-center text-white/30 text-xs font-medium">
                         {d.width} × {d.height}
                       </span>
                     )}
                   </button>
                   <div className="mt-2 flex items-start justify-between gap-1">
                     <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">{d.name}</div>
-                      <div className="text-xs text-muted-foreground">{timeAgo(d.updatedAt)}</div>
+                      <div className="text-sm font-medium truncate text-white/85">{d.name}</div>
+                      <div className="text-xs text-white/40">{timeAgo(d.updatedAt)}</div>
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg shrink-0" aria-label={`Options for ${d.name}`}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg shrink-0 text-white/60 hover:bg-white/10 hover:text-white" aria-label={`Options for ${d.name}`}>
                           <MoreHorizontal size={15} />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuContent align="end" className="w-44 bg-[#16181D] border-white/10 text-white">
                         <DropdownMenuItem onClick={() => openDesign(d.id)}>
                           <Pencil size={14} className="mr-2" /> Open
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setRenameTarget({ id: d.id, name: d.name }) || setRenameValue(d.name)}>
+                        <DropdownMenuItem onClick={() => { setRenameTarget({ id: d.id, name: d.name }); setRenameValue(d.name) }}>
                           <Pencil size={14} className="mr-2" /> Rename
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => doDuplicate(d.id)}>
@@ -375,8 +463,8 @@ export function Dashboard() {
       </main>
 
       {/* ── Footer ── */}
-      <footer className="mt-auto border-t border-black/5 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-muted-foreground">
+      <footer className="mt-auto border-t border-white/[0.06] bg-[#1C1229]">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-white/40">
           <div className="flex items-center gap-2.5">
             <Logo size={20} />
             <span>© 2026 · MIT License</span>
@@ -385,34 +473,47 @@ export function Dashboard() {
             href="https://github.com/mir-ashiq/canvix"
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors"
+            className="inline-flex items-center gap-1.5 hover:text-white/80 transition-colors"
           >
             <Github size={14} /> {isMobile ? 'GitHub' : 'github.com/mir-ashiq/canvix'}
           </a>
         </div>
       </footer>
+      </div>{/* end flex-1 column */}
+
+      {/* ── Canva-style “Get help” FAB ── */}
+      <a
+        href="https://github.com/mir-ashiq/canvix/discussions"
+        target="_blank"
+        rel="noreferrer"
+        className="fixed bottom-5 right-5 z-50 h-12 w-12 rounded-full bg-[#7630D7] hover:bg-[#8B5CF6] text-white flex items-center justify-center shadow-xl shadow-[#7630D7]/40 transition-colors"
+        aria-label="Get help — GitHub discussions"
+        title="Get help"
+      >
+        <CircleHelp size={22} />
+      </a>
 
       {/* ── Custom size dialog ── */}
       <Dialog open={customOpen} onOpenChange={setCustomOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
             <DialogTitle>Create a custom design</DialogTitle>
-            <DialogDescription>Pick any pixel size — you can resize later.</DialogDescription>
+            <DialogDescription className="text-white/55">Pick any pixel size — you can resize later.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-sm font-medium" htmlFor="custom-w">Width (px)</label>
-              <Input id="custom-w" type="number" min={40} max={8000} value={customW} onChange={(e) => setCustomW(e.target.value)} className="mt-1" />
+              <Input id="custom-w" type="number" min={40} max={8000} value={customW} onChange={(e) => setCustomW(e.target.value)} className="mt-1 bg-white/[0.06] border-white/10 text-white [color-scheme:dark]" />
             </div>
             <div>
               <label className="text-sm font-medium" htmlFor="custom-h">Height (px)</label>
-              <Input id="custom-h" type="number" min={40} max={8000} value={customH} onChange={(e) => setCustomH(e.target.value)} className="mt-1" />
+              <Input id="custom-h" type="number" min={40} max={8000} value={customH} onChange={(e) => setCustomH(e.target.value)} className="mt-1 bg-white/[0.06] border-white/10 text-white [color-scheme:dark]" />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCustomOpen(false)}>Cancel</Button>
+            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setCustomOpen(false)}>Cancel</Button>
             <Button
-              className="btn-brand-gradient"
+              className="btn-cv"
               onClick={() => {
                 const w = parseInt(customW, 10)
                 const h = parseInt(customH, 10)
@@ -432,27 +533,27 @@ export function Dashboard() {
 
       {/* ── Rename dialog ── */}
       <Dialog open={!!renameTarget} onOpenChange={(open) => !open && setRenameTarget(null)}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
             <DialogTitle>Rename design</DialogTitle>
           </DialogHeader>
-          <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus onKeyDown={(e) => e.key === 'Enter' && doRename()} />
+          <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus onKeyDown={(e) => e.key === 'Enter' && doRename()} className="bg-white/[0.06] border-white/10 text-white" />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameTarget(null)}>Cancel</Button>
-            <Button className="btn-brand-gradient" onClick={doRename}>Save</Button>
+            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setRenameTarget(null)}>Cancel</Button>
+            <Button className="btn-cv" onClick={doRename}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* ── Delete confirm dialog ── */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
             <DialogTitle>Delete this design?</DialogTitle>
-            <DialogDescription>This action can&apos;t be undone.</DialogDescription>
+            <DialogDescription className="text-white/55">This action can&apos;t be undone.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button variant="destructive" onClick={() => deleteTarget && doDelete(deleteTarget)}>Delete</Button>
           </DialogFooter>
         </DialogContent>

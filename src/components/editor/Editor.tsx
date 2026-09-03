@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { X } from 'lucide-react'
+import { X, Keyboard } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore, type PanelId } from '@/store/editor-store'
 import { TopBar } from './TopBar'
@@ -10,15 +10,21 @@ import { LeftRail } from './LeftRail'
 import { PropertiesBar } from './PropertiesBar'
 import { PageBar } from './PageBar'
 import { ZoomControls } from './ZoomControls'
+import { PreviewOverlay } from './PreviewOverlay'
 import { TemplatesPanel } from './panels/TemplatesPanel'
 import { ElementsPanel } from './panels/ElementsPanel'
 import { TextPanel } from './panels/TextPanel'
 import { UploadsPanel } from './panels/UploadsPanel'
+import { BrandPanel } from './panels/BrandPanel'
+import { ToolsPanel } from './panels/ToolsPanel'
+import { ProjectsPanel } from './panels/ProjectsPanel'
+import { AppsPanel } from './panels/AppsPanel'
 import { BackgroundPanel } from './panels/BackgroundPanel'
 import { LayersPanel } from './panels/LayersPanel'
 import { captureThumbnail, canvasBridge } from './canvas/canvas-bridge'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from '@/hooks/use-toast'
 
 const CanvasStage = dynamic(() => import('./canvas/CanvasStage'), { ssr: false })
@@ -27,10 +33,27 @@ const PANEL_TITLES: Record<Exclude<PanelId, null>, string> = {
   templates: 'Templates',
   elements: 'Elements',
   text: 'Text',
+  brand: 'Brand',
   uploads: 'Uploads',
+  tools: 'Tools',
+  projects: 'Projects',
+  apps: 'Apps',
   background: 'Background',
   layers: 'Layers',
 }
+
+const SHORTCUTS: [string, string][] = [
+  ['Ctrl + Z / Ctrl + Shift + Z', 'Undo / redo'],
+  ['Ctrl + S', 'Save design'],
+  ['Ctrl + D', 'Duplicate selection'],
+  ['Ctrl + C / X / V', 'Copy / cut / paste elements'],
+  ['Delete / Backspace', 'Delete selection'],
+  ['Arrows (+ Shift ×10)', 'Nudge selection'],
+  ['+ / −', 'Zoom in / out'],
+  ['Double-click text', 'Edit text'],
+  ['Escape', 'Deselect / close'],
+  ['Ctrl + mouse wheel', 'Zoom at cursor'],
+]
 
 export default function Editor() {
   const pendingDesign = useAppStore((s) => s.pendingDesign)
@@ -43,6 +66,7 @@ export default function Editor() {
   const saving = useEditorStore((s) => s.saving)
   const version = useEditorStore((s) => s.version)
   const isMobile = useIsMobile()
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
   const loadedRef = useRef(false)
 
@@ -195,6 +219,10 @@ export default function Editor() {
       case 'elements': return <ElementsPanel />
       case 'text': return <TextPanel />
       case 'uploads': return <UploadsPanel />
+      case 'brand': return <BrandPanel />
+      case 'tools': return <ToolsPanel />
+      case 'projects': return <ProjectsPanel />
+      case 'apps': return <AppsPanel />
       case 'background': return <BackgroundPanel />
       case 'layers': return <LayersPanel />
       default: return null
@@ -204,8 +232,8 @@ export default function Editor() {
   const hasPanel = panel !== null
 
   return (
-    <div className="h-screen w-full flex flex-col bg-[#E9EAF0] overflow-hidden">
-      <TopBar onSave={() => save(true)} />
+    <div className="h-screen w-full flex flex-col bg-[#0F1015] overflow-hidden">
+      <TopBar onSave={() => save(true)} onShortcuts={() => setShortcutsOpen(true)} />
 
       <div className="flex flex-1 min-h-0">
         {/* desktop rail */}
@@ -218,14 +246,14 @@ export default function Editor() {
           <aside
             className={
               isMobile
-                ? 'fixed inset-x-0 bottom-14 top-14 z-40 bg-white shadow-xl flex flex-col'
-                : 'w-[300px] bg-white border-r border-black/8 flex flex-col shrink-0'
+                ? 'fixed inset-x-0 bottom-14 top-14 z-40 bg-[#16181D] shadow-2xl flex flex-col'
+                : 'w-[320px] bg-[#16181D] border-r border-white/[0.07] flex flex-col shrink-0'
             }
           >
             {isMobile && (
-              <div className="flex items-center justify-between px-4 py-3 border-b border-black/5 shrink-0">
-                <h2 className="font-bold text-sm">{PANEL_TITLES[panel]}</h2>
-                <Button variant="ghost" size="icon" className="rounded-full" onClick={() => setPanel(null)} aria-label="Close panel">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.07] shrink-0">
+                <h2 className="font-bold text-sm text-white">{PANEL_TITLES[panel]}</h2>
+                <Button variant="ghost" size="icon" className="rounded-full text-white hover:bg-white/10 hover:text-white" onClick={() => setPanel(null)} aria-label="Close panel">
                   <X size={16} />
                 </Button>
               </div>
@@ -244,16 +272,36 @@ export default function Editor() {
       </div>
 
       {/* mobile rail */}
-      <div className="md:hidden border-t border-black/10">
+      <div className="md:hidden border-t border-white/[0.07]">
         <LeftRail vertical={false} />
       </div>
 
       {/* save indicator (mobile) */}
       {isMobile && saving && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 text-xs bg-black/70 text-white px-3 py-1 rounded-full">
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 text-xs bg-[#7630D7] text-white px-3 py-1 rounded-full">
           Saving…
         </div>
       )}
+
+      <PreviewOverlay />
+
+      <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
+        <DialogContent className="bg-[#16181D] border-white/10 text-white sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <Keyboard size={18} className="text-[#02C0CC]" /> Keyboard shortcuts
+            </DialogTitle>
+          </DialogHeader>
+          <div className="divide-y divide-white/[0.07]">
+            {SHORTCUTS.map(([keys, label]) => (
+              <div key={keys} className="flex items-center justify-between py-2">
+                <span className="text-[13px] text-white/70">{label}</span>
+                <kbd className="text-[11px] font-semibold bg-white/[0.08] border border-white/10 rounded-md px-2 py-1">{keys}</kbd>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

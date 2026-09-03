@@ -56,7 +56,7 @@ export function ElementNode({ element: el, interactive, hiding, registerNode, on
   const handleClick = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
     if (!interactive) return
     e.cancelBubble = true
-    const additive = 'shiftKey' in e.evt && (e.evt as MouseEvent).shiftKey
+    const additive = !!e.evt && 'shiftKey' in e.evt && (e.evt as MouseEvent).shiftKey
     if (additive) {
       store.selectToggle(el.id)
     } else {

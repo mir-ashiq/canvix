@@ -14,7 +14,8 @@ import type {
   StrokeElement,
   TextElement,
 } from '@/lib/types'
-import { isLine, withAlpha } from '@/lib/types'
+import { isLine, withAlpha, type GradientFill } from '@/lib/types'
+import { elementGradientProps } from '@/lib/editor-utils'
 import { useEditorStore } from '@/store/editor-store'
 import { useLoadedImage } from './use-loaded-image'
 
@@ -300,6 +301,12 @@ export function ElementNode({ element: el, interactive, hiding, registerNode, on
       const t = el as TextElement
       const effect = t.effect && t.effect !== 'none' ? textEffectProps(t) : {}
       const rendered = t.uppercase ? t.text.toUpperCase() : t.text
+      // gradient fill (skipped for effects that own the fill, e.g. Hollow)
+      const textGrad: GradientFill | null | undefined = t.fillGradient
+      const gradProps =
+        textGrad && (!t.effect || ['none', 'shadow', 'lift', 'echo', 'splice'].includes(t.effect))
+          ? elementGradientProps(textGrad, t.width, Math.max(t.height, t.fontSize * t.lineHeight), 'corner')
+          : {}
 
       if (t.effect === 'background') {
         // canva "Background" effect: solid block behind the text
@@ -342,12 +349,13 @@ export function ElementNode({ element: el, interactive, hiding, registerNode, on
         <Text
           {...common}
           {...effect}
+          {...gradProps}
           text={rendered}
           fontSize={t.fontSize}
           fontFamily={t.fontFamily}
           fontStyle={`${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`}
           textDecoration={[t.underline ? 'underline' : '', t.strike ? 'line-through' : ''].filter(Boolean).join(' ')}
-          fill={t.fill}
+          fill={Object.keys(gradProps).length ? undefined : t.fill}
           align={t.align === 'justify' ? 'left' : t.align}
           width={t.width}
           lineHeight={t.lineHeight}
@@ -360,28 +368,33 @@ export function ElementNode({ element: el, interactive, hiding, registerNode, on
 
     case 'rect': {
       const s = el as ShapeElement
-      return <Rect {...common} width={s.width} height={s.height} fill={s.fill} stroke={s.stroke} strokeWidth={s.strokeWidth} cornerRadius={s.cornerRadius} />
+      const grad = s.fillGradient ? elementGradientProps(s.fillGradient, s.width, s.height, 'corner') : {}
+      return <Rect {...common} width={s.width} height={s.height} {...grad} fill={s.fillGradient ? undefined : s.fill} stroke={s.stroke} strokeWidth={s.strokeWidth} cornerRadius={s.cornerRadius} />
     }
 
     case 'ellipse': {
       const s = el as ShapeElement
-      return <Ellipse {...common} x={s.x + s.width / 2} y={s.y + s.height / 2} radiusX={s.width / 2} radiusY={s.height / 2} fill={s.fill} stroke={s.stroke} strokeWidth={s.strokeWidth} />
+      const grad = s.fillGradient ? elementGradientProps(s.fillGradient, s.width, s.height, 'center') : {}
+      return <Ellipse {...common} x={s.x + s.width / 2} y={s.y + s.height / 2} radiusX={s.width / 2} radiusY={s.height / 2} {...grad} fill={s.fillGradient ? undefined : s.fill} stroke={s.stroke} strokeWidth={s.strokeWidth} />
     }
 
     case 'triangle': {
       const s = el as ShapeElement
-      return <Line {...common} points={[0, s.height, s.width / 2, 0, s.width, s.height]} closed fill={s.fill} stroke={s.stroke} strokeWidth={s.strokeWidth} />
+      const grad = s.fillGradient ? elementGradientProps(s.fillGradient, s.width, s.height, 'corner') : {}
+      return <Line {...common} points={[0, s.height, s.width / 2, 0, s.width, s.height]} closed {...grad} fill={s.fillGradient ? undefined : s.fill} stroke={s.stroke} strokeWidth={s.strokeWidth} />
     }
 
     case 'star': {
       const s = el as ShapeElement
       const outer = Math.min(s.width, s.height) / 2
-      return <Star {...common} x={s.x + s.width / 2} y={s.y + s.height / 2} numPoints={5} innerRadius={outer * 0.55} outerRadius={outer} fill={s.fill} stroke={s.stroke} strokeWidth={s.strokeWidth} />
+      const grad = s.fillGradient ? elementGradientProps(s.fillGradient, s.width, s.height, 'center') : {}
+      return <Star {...common} x={s.x + s.width / 2} y={s.y + s.height / 2} numPoints={5} innerRadius={outer * 0.55} outerRadius={outer} {...grad} fill={s.fillGradient ? undefined : s.fill} stroke={s.stroke} strokeWidth={s.strokeWidth} />
     }
 
     case 'path': {
       const s = el as ShapeElement
-      return <Path {...common} data={s.pathData ?? ''} scaleX={s.width / 100} scaleY={s.height / 100} fill={s.fill} stroke={s.stroke} strokeWidth={s.strokeWidth / (s.width / 100)} />
+      const grad = s.fillGradient ? elementGradientProps(s.fillGradient, s.width, s.height, 'box100') : {}
+      return <Path {...common} data={s.pathData ?? ''} scaleX={s.width / 100} scaleY={s.height / 100} {...grad} fill={s.fillGradient ? undefined : s.fill} stroke={s.stroke} strokeWidth={s.strokeWidth / (s.width / 100)} />
     }
 
     case 'line': {

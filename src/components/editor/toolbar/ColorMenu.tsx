@@ -4,21 +4,24 @@ import { useEffect, useRef, useState } from 'react'
 import { X, Pipette, Plus, ChevronRight, Search } from 'lucide-react'
 import { SOLID_SWATCHES, GRADIENT_PRESETS } from '@/lib/editor-utils'
 import { useEditorStore } from '@/store/editor-store'
+import type { GradientFill } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 interface ColorMenuProps {
   /** current colour value */
   value: string
   onChange: (color: string, committed: boolean) => void
-  /** gradient swatches apply from→to (page background context only) */
-  onGradient?: (from: string, to: string, angle: number) => void
+  /** current gradient of the target element/page (null/undefined = solid fill context) */
+  gradient?: GradientFill | null
+  /** apply a gradient (null removes it and restores the solid fill) */
+  onGradient?: (g: GradientFill | null, committed: boolean) => void
   /** menu title (canva: "Text colour" / "Background colour" / "Fill") */
   title?: string
   children?: React.ReactNode
 }
 
 /** canva-style colour menu: quick row, brand kit, solid grid, gradient rows. */
-export function ColorMenu({ value, onChange, onGradient, title = 'Colour', children }: ColorMenuProps) {
+export function ColorMenu({ value, onChange, gradient, onGradient, title = 'Colour', children }: ColorMenuProps) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const [hex, setHex] = useState(value)
@@ -65,7 +68,15 @@ export function ColorMenu({ value, onChange, onGradient, title = 'Colour', child
         {children ?? (
           <span
             className="block h-[18px] w-[18px] rounded-full border-2 border-white/90 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
-            style={{ background: value === 'transparent' ? 'repeating-conic-gradient(#e3e3e8 0% 25%, #ffffff 0% 50%) 50% / 8px 8px' : value }}
+            style={{
+              background: gradient
+                ? gradient.type === 'radial'
+                  ? `radial-gradient(circle, ${gradient.from}, ${gradient.to})`
+                  : `linear-gradient(${gradient.angle}deg, ${gradient.from}, ${gradient.to})`
+                : value === 'transparent'
+                  ? 'repeating-conic-gradient(#e3e3e8 0% 25%, #ffffff 0% 50%) 50% / 8px 8px'
+                  : value,
+            }}
           />
         )}
       </button>
@@ -150,7 +161,7 @@ export function ColorMenu({ value, onChange, onGradient, title = 'Colour', child
               </div>
             </Section>
 
-            {/* gradients (background context) */}
+            {/* gradients — element fills & page background */}
             {onGradient && (
               <Section label="Default gradient colours" icon="gradient">
                 <div className="grid grid-cols-7 gap-2 px-3 pb-2.5">
@@ -159,11 +170,83 @@ export function ColorMenu({ value, onChange, onGradient, title = 'Colour', child
                       key={i}
                       className="cv-swatch h-7 w-7"
                       style={{ background: `linear-gradient(${g.angle}deg, ${g.from}, ${g.to})` }}
-                      onClick={() => onGradient(g.from, g.to, g.angle)}
+                      onClick={() => onGradient({ type: 'linear', from: g.from, to: g.to, angle: g.angle }, true)}
                       aria-label={`Gradient ${g.from} to ${g.to}`}
                     />
                   ))}
+                  <button
+                    className="cv-swatch h-7 w-7"
+                    style={{ background: `radial-gradient(circle, ${gradient?.from ?? '#7D2AE8'}, ${gradient?.to ?? '#00C4CC'})` }}
+                    onClick={() => onGradient({ type: 'radial', from: gradient?.from ?? '#7D2AE8', to: gradient?.to ?? '#00C4CC', angle: 0 }, true)}
+                    aria-label="Radial gradient"
+                    title="Radial gradient"
+                  />
                 </div>
+
+                {gradient && (
+                  <div className="px-3 pb-3 space-y-2.5 border-t border-white/[0.05] pt-2.5">
+                    {/* type toggle */}
+                    <div className="flex items-center gap-1.5">
+                      {(['linear', 'radial'] as const).map((t) => (
+                        <button
+                          key={t}
+                          onClick={() => onGradient({ ...gradient, type: t }, true)}
+                          className={cn(
+                            'flex-1 h-7 rounded-lg text-[11px] font-semibold capitalize transition-colors',
+                            gradient.type === t ? 'bg-[#7630D7] text-white' : 'bg-white/[0.08] text-white/70 hover:bg-white/[0.14]'
+                          )}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* angle (linear only) */}
+                    {gradient.type === 'linear' && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-white/50 w-8 shrink-0">Angle</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={360}
+                          value={gradient.angle}
+                          onChange={(e) => onGradient({ ...gradient, angle: Number(e.target.value) }, false)}
+                          onPointerUp={() => onGradient(gradient, true)}
+                          className="flex-1 accent-[#7630D7] h-1.5"
+                          aria-label="Gradient angle"
+                        />
+                        <span className="text-[10px] text-white/70 w-8 text-right tabular-nums">{gradient.angle}°</span>
+                      </div>
+                    )}
+
+                    {/* from / to editors */}
+                    <div className="flex items-center gap-2">
+                      {(['from', 'to'] as const).map((stop) => (
+                        <label key={stop} className="relative flex-1 cursor-pointer" title={`Gradient ${stop}`}>
+                          <span className="flex items-center gap-1.5 h-7 rounded-lg bg-white/[0.06] border border-white/10 px-2">
+                            <span className="h-4 w-4 rounded border border-black/10" style={{ background: gradient[stop] }} />
+                            <span className="text-[10px] text-white/60 capitalize">{stop}</span>
+                          </span>
+                          <input
+                            type="color"
+                            value={/^#[0-9a-fA-F]{6}$/.test(gradient[stop]) ? gradient[stop] : '#ffffff'}
+                            onChange={(e) => onGradient({ ...gradient, [stop]: e.target.value }, false)}
+                            onBlur={() => onGradient(gradient, true)}
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            aria-label={`Gradient ${stop} colour`}
+                          />
+                        </label>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={() => onGradient(null, true)}
+                      className="w-full h-7 rounded-lg bg-white/[0.06] border border-white/10 text-[11px] font-semibold text-white/70 hover:text-white hover:bg-white/[0.12]"
+                    >
+                      Remove gradient
+                    </button>
+                  </div>
+                )}
               </Section>
             )}
           </div>

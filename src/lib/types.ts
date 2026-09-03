@@ -41,6 +41,15 @@ export interface ShadowConfig {
   offsetY: number
 }
 
+/** Canva-style element gradient fill (shapes + text) */
+export interface GradientFill {
+  type: 'linear' | 'radial'
+  from: string
+  to: string
+  /** linear direction in degrees (0 = →, 90 = ↓) */
+  angle: number
+}
+
 export interface BaseElement {
   id: string
   type: ElementType
@@ -68,6 +77,8 @@ export interface TextElement extends BaseElement {
   strike: boolean
   uppercase: boolean
   fill: string
+  /** gradient fill — when set, renders instead of the solid fill */
+  fillGradient?: GradientFill | null
   align: TextAlign
   lineHeight: number
   letterSpacing: number
@@ -80,6 +91,8 @@ export interface TextElement extends BaseElement {
 export interface ShapeElement extends BaseElement {
   type: 'rect' | 'ellipse' | 'triangle' | 'star' | 'path'
   fill: string
+  /** gradient fill — when set, renders instead of the solid fill */
+  fillGradient?: GradientFill | null
   stroke: string
   strokeWidth: number
   cornerRadius: number // rect only
@@ -174,11 +187,13 @@ export interface PageData {
   elements: AnyElement[]
 }
 
-/** user-placed ruler guide (position in page px) */
+/** user-placed ruler guide (position in page px; scoped to a page) */
 export interface ManualGuide {
   id: string
   axis: 'x' | 'y'
   position: number
+  /** owning page — guides are per-page since v0.3.2 */
+  pageId: string
 }
 
 /** saved version snapshot (per design, persisted to localStorage) */

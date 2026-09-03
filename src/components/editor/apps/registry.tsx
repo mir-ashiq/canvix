@@ -1,6 +1,6 @@
 'use client'
 
-import { BarChart3, QrCode, Smile, Shapes, Palette, Type } from 'lucide-react'
+import { BarChart3, QrCode, Smile, Shapes, Palette, Type, Wand2, ImageIcon } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 /** ── Canvix app registry ─────────────────────────────────────
@@ -30,8 +30,13 @@ import { IconsApp } from './IconsApp'
 import { PaletteApp } from './PaletteApp'
 import { LoremApp } from './LoremApp'
 import { StickersApp } from './StickersApp'
+import { MagicWriteApp } from './MagicWriteApp'
+import { AIImageApp } from './AIImageApp'
 
 export const CANVIX_APPS: CanvixApp[] = [
+  // AI apps first (canva 2026: “Canva AI” is the flagship surface)
+  { id: 'magic-write', name: 'Magic Write', desc: 'AI copy — headlines, taglines & captions', icon: Wand2, color: '#9B6BFF', content: MagicWriteApp },
+  { id: 'ai-image', name: 'AI image generator', desc: 'Turn a prompt into a design-ready image', icon: ImageIcon, color: '#02C0CC', content: AIImageApp },
   { id: 'charts', name: 'Charts', desc: 'Bar, line & donut charts as editable shapes', icon: BarChart3, color: '#7630D7', content: ChartsApp },
   { id: 'qr', name: 'QR generator', desc: 'Turn any link or text into a QR code', icon: QrCode, color: '#3B82F6', content: QRApp },
   { id: 'icons', name: 'Icons', desc: 'Line & solid icon shapes for any design', icon: Shapes, color: '#02C0CC', content: IconsApp },

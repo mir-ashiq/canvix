@@ -3,6 +3,67 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.2] — 2026-09-03
+
+Fresh canva.com research pass (fonts, design trends 2026, feature taxonomy) plus the
+next tier of editor features: gradient fills, PDF export, a Photos library and AI apps.
+
+### Fonts — 15 → 63 families
+- Font library expanded to **63 families** across five categories with Canva-style
+  pills + search in the font dropdown: 18 sans, 14 serif, 14 display, 14 handwriting
+  and a new **Mono** category (DM Mono, JetBrains Mono, Space Mono).
+- New arrivals include Raleway, Lato, Open Sans, Nunito, Quicksand, Rubik, Work Sans,
+  DM Sans, Josefin Sans, Barlow, Manrope, Outfit, Figtree, Lora, Merriweather, Libre
+  Baskerville, EB Garamond, Cormorant Garamond, DM Serif Display, Prata, Bitter,
+  Fraunces, Bodoni Moda, Cinzel, Alfa Slab One, Bungee, Righteous, Ultra, Passion One,
+  Monoton, Rye, Titan One, Luckiest Guy, Permanent Marker, Great Vibes, Sacramento,
+  Satisfy, Kaushan Script, Alex Brush, Allura, Parisienne, Amatic SC, Shadows Into
+  Light, Indie Flower and Kalam.
+- All fonts load through one consolidated Google-Fonts stylesheet with subset weights.
+
+### Gradient fills (shapes & text)
+- **Linear and radial gradients** on rectangles, ellipses, triangles, stars, paths and
+  text — `fillGradient` on `ShapeElement`/`TextElement`, rendered via Konva
+  `fillLinearGradient*`/`fillRadialGradient*` with per-shape local coordinate frames.
+- The colour menu gains a full **gradient editor**: 12 preset swatches + radial chip,
+  Linear/Radial type toggle, 0-360° angle slider, from/to colour pickers, and
+  *Remove gradient*. The toolbar swatch previews the live gradient.
+- Text effects that own the fill (Hollow, Outline, Neon…) intentionally skip the
+  gradient so the effect stays intact; picking any solid colour clears the gradient.
+
+### PDF export
+- **Multi-page PDF download** in the export dialog (jsPDF, client-side, no watermark):
+  print-ready page-sized PDF, per-page capture at the selected quality, all-pages
+  option, automatic landscape/portrait orientation.
+
+### Photos (new side-panel tab)
+- **Photos rail tab** with Canva-style panel: search + category chips (Nature,
+  Business, People, Food, Travel, Textures, Abstract), hover-to-add grid, broken tiles
+  self-hide. Clicking places a 900×514 image element on the canvas.
+- Bundled **42-photo stock library** (7 categories × 6) — AI-generated for Canvix,
+  license-free, served locally from `public/photos/` (no external requests).
+
+### AI apps (Canva AI parity)
+- **Magic Write** app — prompt + copy kind (headline/tagline/body/caption) + tone;
+  generates 3 options server-side (`/api/ai/write`, z-ai SDK) and adds any option to
+  the canvas as a styled text element.
+- **AI image generator** app — prompt + style chips + size (1:1/16:9/9:16/4:3);
+  server-side generation (`/api/ai/image`) with preview, *Generate another*, and
+  add-to-canvas as an image element.
+- Both apps lead the Apps grid, mirroring Canva's AI-first 2026 navigation.
+
+### Templates — Design Trends 2026
+- Five new templates from Canva's official 2026 trends (research doc): **Prompt
+  Playground** (playful productivity), **Notes App Chic** (raw handwritten notes),
+  **Texture Check** (tactile warm gradients), **Opt Out Era** (structured minimalism),
+  **Granny Wave** (maximalist heritage remix) — several showcase the new gradient
+  fills and new fonts (Fraunces, Cinzel, Kalam, Manrope, Bodoni Moda).
+
+### Guides
+- Manual guides are now **per-page** (`ManualGuide.pageId`): each page owns its own
+  set, snapping only considers the current page's guides, and *Clear guides* clears
+  just the current page.
+
 ## [0.3.1] — 2026-09-03
 
 Editor-completeness release: the remaining gap-analysis features — rulers & guides,

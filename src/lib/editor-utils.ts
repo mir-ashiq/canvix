@@ -2,7 +2,7 @@
 // Canvix editor utilities — fonts, palettes, graphics, helpers
 // ─────────────────────────────────────────────────────────────
 
-import type { AnyElement, PageData } from './types'
+import type { AnyElement, GradientFill, PageData } from './types'
 
 // ── Fonts (loaded in layout via Google Fonts) ────────────────
 
@@ -10,25 +10,78 @@ export interface FontOption {
   family: string
   label: string
   weights: string
-  category: 'sans' | 'serif' | 'display' | 'handwriting'
+  category: 'sans' | 'serif' | 'display' | 'handwriting' | 'mono'
 }
 
 export const FONTS: FontOption[] = [
+  // ── Sans (18) ──
   { family: 'Inter', label: 'Inter', weights: '400,500,600,700,800', category: 'sans' },
   { family: 'Poppins', label: 'Poppins', weights: '400,600,700,800', category: 'sans' },
   { family: 'Montserrat', label: 'Montserrat', weights: '600,700,800,900', category: 'sans' },
   { family: 'Space Grotesk', label: 'Space Grotesk', weights: '500,700', category: 'sans' },
   { family: 'Oswald', label: 'Oswald', weights: '500,700', category: 'sans' },
-  { family: 'Bebas Neue', label: 'Bebas Neue', weights: '400', category: 'display' },
-  { family: 'Anton', label: 'Anton', weights: '400', category: 'display' },
-  { family: 'Archivo Black', label: 'Archivo Black', weights: '400', category: 'display' },
+  { family: 'Raleway', label: 'Raleway', weights: '400,700', category: 'sans' },
+  { family: 'Lato', label: 'Lato', weights: '400,700', category: 'sans' },
+  { family: 'Open Sans', label: 'Open Sans', weights: '400,700', category: 'sans' },
+  { family: 'Nunito', label: 'Nunito', weights: '400,700', category: 'sans' },
+  { family: 'Quicksand', label: 'Quicksand', weights: '400,700', category: 'sans' },
+  { family: 'Rubik', label: 'Rubik', weights: '400,700', category: 'sans' },
+  { family: 'Work Sans', label: 'Work Sans', weights: '400,700', category: 'sans' },
+  { family: 'DM Sans', label: 'DM Sans', weights: '400,700', category: 'sans' },
+  { family: 'Josefin Sans', label: 'Josefin Sans', weights: '400,700', category: 'sans' },
+  { family: 'Barlow', label: 'Barlow', weights: '400,700', category: 'sans' },
+  { family: 'Manrope', label: 'Manrope', weights: '400,700', category: 'sans' },
+  { family: 'Outfit', label: 'Outfit', weights: '400,700', category: 'sans' },
+  { family: 'Figtree', label: 'Figtree', weights: '400,700', category: 'sans' },
+  // ── Serif (14) ──
   { family: 'Playfair Display', label: 'Playfair Display', weights: '400,700,800', category: 'serif' },
   { family: 'Abril Fatface', label: 'Abril Fatface', weights: '400', category: 'serif' },
   { family: 'Roboto Slab', label: 'Roboto Slab', weights: '400,700', category: 'serif' },
+  { family: 'Lora', label: 'Lora', weights: '400,700', category: 'serif' },
+  { family: 'Merriweather', label: 'Merriweather', weights: '400,700', category: 'serif' },
+  { family: 'Libre Baskerville', label: 'Libre Baskerville', weights: '400,700', category: 'serif' },
+  { family: 'EB Garamond', label: 'EB Garamond', weights: '400,700', category: 'serif' },
+  { family: 'Cormorant Garamond', label: 'Cormorant Garamond', weights: '400,700', category: 'serif' },
+  { family: 'DM Serif Display', label: 'DM Serif Display', weights: '400', category: 'serif' },
+  { family: 'Prata', label: 'Prata', weights: '400', category: 'serif' },
+  { family: 'Bitter', label: 'Bitter', weights: '400,700', category: 'serif' },
+  { family: 'Fraunces', label: 'Fraunces', weights: '400,700', category: 'serif' },
+  { family: 'Bodoni Moda', label: 'Bodoni Moda', weights: '400,700', category: 'serif' },
+  { family: 'Cinzel', label: 'Cinzel', weights: '400,700', category: 'serif' },
+  // ── Display (14) ──
+  { family: 'Bebas Neue', label: 'Bebas Neue', weights: '400', category: 'display' },
+  { family: 'Anton', label: 'Anton', weights: '400', category: 'display' },
+  { family: 'Archivo Black', label: 'Archivo Black', weights: '400', category: 'display' },
   { family: 'Lobster', label: 'Lobster', weights: '400', category: 'display' },
+  { family: 'Alfa Slab One', label: 'Alfa Slab One', weights: '400', category: 'display' },
+  { family: 'Bungee', label: 'Bungee', weights: '400', category: 'display' },
+  { family: 'Righteous', label: 'Righteous', weights: '400', category: 'display' },
+  { family: 'Ultra', label: 'Ultra', weights: '400', category: 'display' },
+  { family: 'Passion One', label: 'Passion One', weights: '400,700', category: 'display' },
+  { family: 'Monoton', label: 'Monoton', weights: '400', category: 'display' },
+  { family: 'Rye', label: 'Rye', weights: '400', category: 'display' },
+  { family: 'Titan One', label: 'Titan One', weights: '400', category: 'display' },
+  { family: 'Luckiest Guy', label: 'Luckiest Guy', weights: '400', category: 'display' },
+  { family: 'Permanent Marker', label: 'Permanent Marker', weights: '400', category: 'display' },
+  // ── Handwriting (14) ──
   { family: 'Pacifico', label: 'Pacifico', weights: '400', category: 'handwriting' },
   { family: 'Caveat', label: 'Caveat', weights: '400,700', category: 'handwriting' },
   { family: 'Dancing Script', label: 'Dancing Script', weights: '400,700', category: 'handwriting' },
+  { family: 'Great Vibes', label: 'Great Vibes', weights: '400', category: 'handwriting' },
+  { family: 'Sacramento', label: 'Sacramento', weights: '400', category: 'handwriting' },
+  { family: 'Satisfy', label: 'Satisfy', weights: '400', category: 'handwriting' },
+  { family: 'Kaushan Script', label: 'Kaushan Script', weights: '400', category: 'handwriting' },
+  { family: 'Alex Brush', label: 'Alex Brush', weights: '400', category: 'handwriting' },
+  { family: 'Allura', label: 'Allura', weights: '400', category: 'handwriting' },
+  { family: 'Parisienne', label: 'Parisienne', weights: '400', category: 'handwriting' },
+  { family: 'Amatic SC', label: 'Amatic SC', weights: '400,700', category: 'handwriting' },
+  { family: 'Shadows Into Light', label: 'Shadows Into Light', weights: '400', category: 'handwriting' },
+  { family: 'Indie Flower', label: 'Indie Flower', weights: '400', category: 'handwriting' },
+  { family: 'Kalam', label: 'Kalam', weights: '400,700', category: 'handwriting' },
+  // ── Mono (3) ──
+  { family: 'DM Mono', label: 'DM Mono', weights: '400,500', category: 'mono' },
+  { family: 'JetBrains Mono', label: 'JetBrains Mono', weights: '400,700', category: 'mono' },
+  { family: 'Space Mono', label: 'Space Mono', weights: '400,700', category: 'mono' },
 ]
 
 // Curated "font pairings" shown in the Text panel (Canva-style)
@@ -323,6 +376,46 @@ export function gradientProps(from: string, to: string, angle: number, w: number
     fillLinearGradientStartPoint: { x: cx - ux, y: cy - uy },
     fillLinearGradientEndPoint: { x: cx + ux, y: cy + uy },
     fillLinearGradientColorStops: [0, from, 1, to],
+  }
+}
+
+/**
+ * Konva gradient props for an element's GradientFill.
+ * `origin` selects the shape's local coordinate frame:
+ *  - 'corner'  : rect / triangle / text — (0,0)..(w,h)
+ *  - 'center'  : ellipse / star — local origin is the shape centre
+ *  - 'box100'  : path — authored in a 100×100 box (scaled by shape w/h)
+ */
+export function elementGradientProps(
+  g: GradientFill,
+  w: number,
+  h: number,
+  origin: 'corner' | 'center' | 'box100' = 'corner'
+): Record<string, unknown> {
+  const bw = origin === 'box100' ? 100 : w
+  const bh = origin === 'box100' ? 100 : h
+  const cx = origin === 'center' ? 0 : bw / 2
+  const cy = origin === 'center' ? 0 : bh / 2
+
+  if (g.type === 'radial') {
+    const r = Math.max(bw, bh) / 2
+    return {
+      fillRadialGradientStartPoint: { x: cx, y: cy },
+      fillRadialGradientStartRadius: 0,
+      fillRadialGradientEndPoint: { x: cx, y: cy },
+      fillRadialGradientEndRadius: r,
+      fillRadialGradientColorStops: [0, g.from, 1, g.to],
+    }
+  }
+
+  const rad = (g.angle * Math.PI) / 180
+  const halfLen = Math.sqrt((Math.cos(rad) * bw) ** 2 + (Math.sin(rad) * bh) ** 2) / 2
+  const ux = Math.cos(rad) * halfLen
+  const uy = Math.sin(rad) * halfLen
+  return {
+    fillLinearGradientStartPoint: { x: cx - ux, y: cy - uy },
+    fillLinearGradientEndPoint: { x: cx + ux, y: cy + uy },
+    fillLinearGradientColorStops: [0, g.from, 1, g.to],
   }
 }
 

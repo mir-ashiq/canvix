@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, Loader2, FileImage } from 'lucide-react'
+import { Download, Loader2, FileImage, FileType2 } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { captureStage, canvasBridge } from './canvas/canvas-bridge'
 import { toast } from '@/hooks/use-toast'
@@ -36,9 +36,12 @@ const SCALES = [
 ]
 
 const FORMATS = [
-  { id: 'png', label: 'PNG', hint: 'Lossless · transparency' },
-  { id: 'jpg', label: 'JPG', hint: 'Smaller file' },
+  { id: 'png', label: 'PNG', hint: 'Lossless · transparency', icon: FileImage },
+  { id: 'jpg', label: 'JPG', hint: 'Smaller file', icon: FileImage },
+  { id: 'pdf', label: 'PDF', hint: 'Print-ready · all pages', icon: FileType2 },
 ] as const
+
+type FormatId = (typeof FORMATS)[number]['id']
 
 export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const name = useEditorStore((s) => s.designName)
@@ -46,7 +49,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const setCurrentPage = useEditorStore((s) => s.setCurrentPage)
   const currentPage = useEditorStore((s) => s.currentPage)
 
-  const [format, setFormat] = useState<'png' | 'jpg'>('png')
+  const [format, setFormat] = useState<FormatId>('png')
   const [scale, setScale] = useState(2)
   const [allPages, setAllPages] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -59,6 +62,31 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const run = async () => {
     setBusy(true)
     try {
+      if (format === 'pdf') {
+        // multi-page PDF via jsPDF (client-side, no watermark)
+        const { jsPDF } = await import('jspdf')
+        const pw = canvasBridge.pageWidth
+        const ph = canvasBridge.pageHeight
+        const orientation = pw >= ph ? 'landscape' : 'portrait'
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [pw, ph], compress: true })
+        const savedPage = currentPage
+        const indices = allPages ? pages.map((_, i) => i) : [currentPage]
+        for (let k = 0; k < indices.length; k++) {
+          const idx = indices[k]
+          if (idx !== useEditorStore.getState().currentPage) {
+            setCurrentPage(idx)
+            await new Promise((r) => setTimeout(r, 260))
+          }
+          const url = await captureStage({ pixelScale: scale, mimeType: 'image/jpeg', quality: 0.95 })
+          if (k > 0) pdf.addPage([pw, ph], orientation)
+          pdf.addImage(url, 'JPEG', 0, 0, pw, ph)
+        }
+        if (savedPage !== useEditorStore.getState().currentPage) setCurrentPage(savedPage)
+        pdf.save(`${base}.pdf`)
+        toast({ title: `PDF downloaded (${pageCount} page${pageCount > 1 ? 's' : ''})` })
+        onOpenChange(false)
+        return
+      }
       const mimeType = format === 'png' ? 'image/png' : 'image/jpeg'
       const indices = allPages ? pages.map((_, i) => i) : [currentPage]
       const savedPage = currentPage
@@ -98,20 +126,25 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         <div className="space-y-5 py-2">
           <div>
             <h4 className="text-xs font-semibold text-muted-foreground mb-2">File type</h4>
-            <div className="grid grid-cols-2 gap-2">
-              {FORMATS.map((f) => (
-                <button
-                  key={f.id}
-                  onClick={() => setFormat(f.id)}
-                  className={cn(
-                    'rounded-xl border-2 p-3 text-left transition-all',
-                    format === f.id ? 'border-[#00C4CC] bg-[#F0FBFC]' : 'border-black/10 hover:border-black/25'
-                  )}
-                >
-                  <div className="font-bold text-sm">{f.label}</div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5">{f.hint}</div>
-                </button>
-              ))}
+            <div className="grid grid-cols-3 gap-2">
+              {FORMATS.map((f) => {
+                const Ico = f.icon
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => setFormat(f.id)}
+                    className={cn(
+                      'rounded-xl border-2 p-3 text-left transition-all',
+                      format === f.id ? 'border-[#00C4CC] bg-[#F0FBFC]' : 'border-black/10 hover:border-black/25'
+                    )}
+                  >
+                    <div className="font-bold text-sm flex items-center gap-1.5">
+                      <Ico size={13} className="text-[#7D2AE8]" /> {f.label}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">{f.hint}</div>
+                  </button>
+                )
+              })}
             </div>
           </div>
 
@@ -140,8 +173,8 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           {pages.length > 1 && (
             <label className="flex items-center justify-between rounded-xl border border-black/10 px-4 py-3 cursor-pointer">
               <span className="text-sm font-medium">
-                Download all pages
-                <span className="block text-[11px] text-muted-foreground font-normal">{pages.length} files, one per page</span>
+                {format === 'pdf' ? 'Include all pages' : 'Download all pages'}
+                <span className="block text-[11px] text-muted-foreground font-normal">{format === 'pdf' ? `${pages.length} pages in one PDF file` : `${pages.length} files, one per page`}</span>
               </span>
               <input type="checkbox" checked={allPages} onChange={(e) => setAllPages(e.target.checked)} className="accent-[#00C4CC] h-4 w-4" />
             </label>

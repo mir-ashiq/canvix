@@ -322,6 +322,138 @@ export const TEMPLATES: TemplateDef[] = [
       },
     ],
   },
+
+  // ── Design Trends 2026 (research/CANVA-V032-RESEARCH.md) ──
+  {
+    slug: 'prompt-playground',
+    name: 'Prompt Playground',
+    category: 'social',
+    width: 1080,
+    height: 1080,
+    accent: '#8B3DFF',
+    pages: [
+      {
+        id: 'p1',
+        background: { type: 'solid', color: '#0F1015' },
+        elements: [
+          // playful productivity: gradient blob + prompt-bar aesthetic
+          sh('ellipse', { x: 560, y: -140, width: 620, height: 620, fill: '#8B3DFF', fillGradient: { type: 'radial', from: '#9E9EFF', to: '#8B3DFF', angle: 0 } }),
+          sh('rect', { x: 90, y: 330, width: 900, height: 110, fill: '#FFFFFF', cornerRadius: 55 }),
+          tx({ x: 130, y: 360, width: 700, height: 60, text: 'ask me anything →', fontFamily: 'Manrope', bold: true, fontSize: 38, fill: '#0F1015', align: 'left' }),
+          sh('rect', { x: 90, y: 480, width: 440, height: 90, fill: '#8B3DFF', fillGradient: { type: 'linear', from: '#8B3DFF', to: '#C3A6FF', angle: 90 }, cornerRadius: 24 }),
+          tx({ x: 110, y: 506, width: 400, height: 50, text: 'make it playful', fontFamily: 'Outfit', bold: true, fontSize: 30, fill: '#FFFFFF', align: 'center' }),
+          tx({ x: 90, y: 620, width: 900, height: 130, text: 'PRODUCTIVITY,\nBUT MAKE IT FUN', fontFamily: 'Outfit', bold: true, fontSize: 84, fill: '#FFFFFF', align: 'left', lineHeight: 1.1 }),
+          tx({ x: 90, y: 800, width: 900, height: 60, text: 'the prompt playground trend — canva design trends 2026', fontFamily: 'Figtree', fontSize: 26, fill: '#9E9EFF', align: 'left' }),
+          st('✨', { x: 850, y: 880, width: 160, height: 160, fontSize: 120 }),
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'notes-app-chic',
+    name: 'Notes App Chic',
+    category: 'social',
+    width: 1080,
+    height: 1080,
+    accent: '#E8DFC8',
+    pages: [
+      {
+        id: 'p1',
+        background: { type: 'solid', color: '#F6F0E1' },
+        elements: [
+          // raw, honest, human: paper + handwriting
+          sh('rect', { x: 80, y: 80, width: 920, height: 920, fill: '#FFFDF4', cornerRadius: 28, stroke: '#D9CFB4', strokeWidth: 2 }),
+          tx({ x: 140, y: 150, width: 780, height: 90, text: 'things i want to remember', fontFamily: 'Caveat', fontSize: 76, fill: '#2B2B26', align: 'left' }),
+          ln({ x: 140, y: 280, width: 800, height: 0, stroke: '#E4D9BC', strokeWidth: 3, dashed: true }),
+          tx({ x: 140, y: 320, width: 760, height: 70, text: '◦ slow mornings, good coffee', fontFamily: 'Kalam', fontSize: 42, fill: '#4A4A40', align: 'left' }),
+          tx({ x: 140, y: 420, width: 760, height: 70, text: '◦ calling people back', fontFamily: 'Kalam', fontSize: 42, fill: '#4A4A40', align: 'left' }),
+          tx({ x: 140, y: 520, width: 760, height: 70, text: '◦ less scrolling, more making', fontFamily: 'Kalam', fontSize: 42, fill: '#4A4A40', align: 'left' }),
+          tx({ x: 140, y: 620, width: 760, height: 70, text: '◦ being honest about the mess', fontFamily: 'Kalam', fontSize: 42, fill: '#4A4A40', align: 'left' }),
+          tx({ x: 140, y: 830, width: 500, height: 60, text: '— notes app, 6:41 am', fontFamily: 'Indie Flower', fontSize: 34, fill: '#8A8672', align: 'left' }),
+          sh('rect', { x: 140, y: 740, width: 330, height: 56, fill: '#FFE8A3', rotation: -2, cornerRadius: 10 }),
+          tx({ x: 158, y: 754, width: 300, height: 44, text: 'keep it human ★', fontFamily: 'Caveat', fontSize: 36, fill: '#5C4A00', align: 'left' }),
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'texture-check',
+    name: 'Texture Check',
+    category: 'presentation',
+    width: 1920,
+    height: 1080,
+    accent: '#B86B4F',
+    pages: [
+      {
+        id: 'p1',
+        background: { type: 'solid', color: '#EAD9C2' },
+        elements: [
+          // tactile design: layered warm gradients + serif elegance
+          sh('rect', { x: -80, y: -80, width: 900, height: 1240, rotation: -6, fill: '#D9A47E', fillGradient: { type: 'linear', from: '#D9A47E', to: '#B86B4F', angle: 120 } }),
+          sh('rect', { x: 120, y: 140, width: 1240, height: 800, fill: '#F7EDE0', cornerRadius: 40 }),
+          tx({ x: 200, y: 260, width: 1080, height: 200, text: 'Design you can\nalmost feel', fontFamily: 'Fraunces', bold: true, fontSize: 110, fill: '#3E2A1C', align: 'left', lineHeight: 1.05 }),
+          ln({ x: 200, y: 520, width: 220, height: 0, stroke: '#B86B4F', strokeWidth: 8 }),
+          tx({ x: 200, y: 560, width: 1000, height: 140, text: 'Tactile surfaces, warm neutrals and honest materials — the 2026 answer to cold, flat screens.', fontFamily: 'Lora', fontSize: 38, fill: '#6B5340', align: 'left', lineHeight: 1.5 }),
+          sh('ellipse', { x: 1490, y: 190, width: 260, height: 260, fill: '#E2906B', fillGradient: { type: 'radial', from: '#F3C4A6', to: '#D97747', angle: 0 } }),
+          sh('ellipse', { x: 1560, y: 560, width: 180, height: 180, fill: '#C49A6C' }),
+          st('🌾', { x: 1470, y: 820, width: 200, height: 200, fontSize: 150 }),
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'opt-out-era',
+    name: 'Opt Out Era',
+    category: 'presentation',
+    width: 1920,
+    height: 1080,
+    accent: '#0F1015',
+    pages: [
+      {
+        id: 'p1',
+        background: { type: 'solid', color: '#F4F3EF' },
+        elements: [
+          // structured simplicity: grid lines, whitespace, restraint
+          ln({ x: 960, y: 0, width: 0, height: 1080, stroke: '#E3E1D8', strokeWidth: 2 }),
+          ln({ x: 0, y: 620, width: 1920, height: 0, stroke: '#E3E1D8', strokeWidth: 2 }),
+          tx({ x: 110, y: 170, width: 700, height: 300, text: 'Opt out\nof the noise.', fontFamily: 'Manrope', bold: true, fontSize: 120, fill: '#0F1015', align: 'left', lineHeight: 1.02 }),
+          tx({ x: 110, y: 520, width: 620, height: 120, text: 'Structured simplicity. Fewer things, better made.', fontFamily: 'Manrope', fontSize: 34, fill: '#6E6E66', align: 'left', lineHeight: 1.5 }),
+          tx({ x: 110, y: 900, width: 400, height: 40, text: 'LESS, BETTER — 2026', fontFamily: 'Manrope', bold: true, fontSize: 22, letterSpacing: 4, fill: '#0F1015', align: 'left' }),
+          sh('rect', { x: 1100, y: 180, width: 700, height: 330, fill: '#0F1015', cornerRadius: 0 }),
+          tx({ x: 1140, y: 260, width: 620, height: 80, text: '01 — declutter', fontFamily: 'DM Mono', bold: true, fontSize: 30, fill: '#F4F3EF', align: 'left' }),
+          tx({ x: 1140, y: 340, width: 620, height: 80, text: '02 — slow down', fontFamily: 'DM Mono', bold: true, fontSize: 30, fill: '#F4F3EF', align: 'left' }),
+          tx({ x: 1140, y: 420, width: 620, height: 80, text: '03 — keep what matters', fontFamily: 'DM Mono', bold: true, fontSize: 30, fill: '#F4F3EF', align: 'left' }),
+          tx({ x: 1100, y: 720, width: 700, height: 200, text: '“Simplicity is the\nultimate sophistication.”', fontFamily: 'Bodoni Moda', italic: true, fontSize: 52, fill: '#0F1015', align: 'left', lineHeight: 1.25 }),
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'granny-wave',
+    name: 'Granny Wave',
+    category: 'social',
+    width: 1080,
+    height: 1080,
+    accent: '#8E2A3C',
+    pages: [
+      {
+        id: 'p1',
+        background: { type: 'gradient', from: '#4A0F22', to: '#8E2A3C', angle: 160 },
+        elements: [
+          // maximalist heritage remix: ornamental shapes, gold + heritage tones
+          sh('ellipse', { x: 140, y: 140, width: 800, height: 800, fill: '#C9A24B', fillGradient: { type: 'radial', from: '#E8C877', to: '#A67C2E', angle: 0 } }),
+          sh('ellipse', { x: 190, y: 190, width: 700, height: 700, fill: '#5E1230' }),
+          gr('badge', { x: 415, y: 115, width: 250, height: 250, fill: '#C9A24B' }),
+          tx({ x: 240, y: 420, width: 600, height: 130, text: 'GRANNY', fontFamily: 'Cinzel', bold: true, fontSize: 96, fill: '#F3DFA2', align: 'center' }),
+          tx({ x: 240, y: 550, width: 600, height: 130, text: 'WAVE', fontFamily: 'Cinzel', bold: true, fontSize: 96, fill: '#F3DFA2', align: 'center' }),
+          ln({ x: 300, y: 700, width: 480, height: 0, stroke: '#C9A24B', strokeWidth: 4 }),
+          tx({ x: 240, y: 730, width: 600, height: 90, text: 'heritage remixed for 2026', fontFamily: 'Cormorant Garamond', italic: true, fontSize: 44, fill: '#E8C877', align: 'center' }),
+          st('🌺', { x: 60, y: 800, width: 140, height: 140, fontSize: 100 }),
+          st('🪭', { x: 880, y: 800, width: 140, height: 140, fontSize: 100 }),
+        ],
+      },
+    ],
+  },
 ]
 
 export function templatesAsRecords(): TemplateRecord[] {

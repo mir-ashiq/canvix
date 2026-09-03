@@ -68,6 +68,9 @@ export function CanvasContextMenu({ state, onClose }: { state: ContextMenuState;
 
   const selectedIds = store.selectedIds
   const canGroup = selectedIds.length >= 2
+  // per-page guides (v0.3.2)
+  const pageId = store.pages[store.currentPage]?.id
+  const pageGuidesCount = store.manualGuides.filter((g) => g.pageId === pageId).length
   const canUngroup = store.pages[store.currentPage].elements.some(
     (el) => selectedIds.includes(el.id) && isGroup(el)
   )
@@ -105,8 +108,8 @@ export function CanvasContextMenu({ state, onClose }: { state: ContextMenuState;
   const pageItems: Item[] = [
     { label: 'Paste', icon: ClipboardPaste, kbd: 'Ctrl+V', onSelect: () => store.pasteClipboard() },
     { label: 'Select all', icon: MousePointerClick, kbd: 'Ctrl+A', onSelect: () => store.setSelection(store.pages[store.currentPage].elements.filter((e) => !e.locked).map((e) => e.id)) },
-    ...(store.manualGuides.length > 0
-      ? [{ label: `Clear guides (${store.manualGuides.length})`, icon: Ruler, onSelect: () => store.clearManualGuides() }]
+    ...(pageGuidesCount > 0
+      ? [{ label: `Clear guides (${pageGuidesCount})`, icon: Ruler, onSelect: () => store.clearManualGuides() }]
       : []),
     Sep as unknown as Item,
     { label: 'Add page', icon: FilePlus2, onSelect: () => store.addPage() },

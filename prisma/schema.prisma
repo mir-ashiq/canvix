@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -13,8 +13,8 @@ model Design {
   name       String   @default("Untitled design")
   width      Int      @default(1080)
   height     Int      @default(1080)
-  // Serialized JSON: { pages: PageData[], ... }
-  pages      String   @default("[]")
+  // Structured document: { pages: PageData[], ... } — stored as native jsonb
+  pages      Json     @default("[]")
   thumbnail  String?  // small dataURL preview
   source     String   @default("blank") // blank | template:<id> | duplicate:<id>
   createdAt  DateTime @default(now())
@@ -29,7 +29,7 @@ model Template {
   category  String // social | presentation | print | logo | thumbnail
   width     Int
   height    Int
-  pages     String // serialized JSON — same shape as Design.pages
+  pages     Json // structured document — same shape as Design.pages
   accent    String   @default("#00C4CC") // card decoration
   createdAt DateTime @default(now())
 }

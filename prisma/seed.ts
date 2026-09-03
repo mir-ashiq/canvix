@@ -1,9 +1,13 @@
 // Seed the Canvix database with built-in templates.
 // Run: bun run db:seed
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 import { TEMPLATES } from '../src/lib/templates'
 
 const db = new PrismaClient()
+
+// Typed template list cast for the Postgres jsonb column.
+const pagesOf = (t: (typeof TEMPLATES)[number]) =>
+  t.pages as unknown as Prisma.InputJsonValue
 
 async function main() {
   console.log(`Seeding ${TEMPLATES.length} templates…`)
@@ -16,7 +20,7 @@ async function main() {
         width: t.width,
         height: t.height,
         accent: t.accent,
-        pages: JSON.stringify(t.pages),
+        pages: pagesOf(t),
       },
       create: {
         slug: t.slug,
@@ -25,7 +29,7 @@ async function main() {
         width: t.width,
         height: t.height,
         accent: t.accent,
-        pages: JSON.stringify(t.pages),
+        pages: pagesOf(t),
       },
     })
     console.log(`  ✓ ${t.slug}`)

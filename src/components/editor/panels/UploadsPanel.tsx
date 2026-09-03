@@ -45,7 +45,7 @@ export function UploadsPanel() {
     force((n) => n + 1)
   }
 
-  const useGalleryItem = (item: UploadItem) => {
+  const applyGalleryItem = (item: UploadItem) => {
     if (hasImageSelected) {
       replaceSelectedImage(item.src, item.w, item.h)
       toast({ title: 'Image replaced' })
@@ -138,7 +138,7 @@ export function UploadsPanel() {
               {uploadGallery.items.map((item, i) => (
                 <div key={i} className="group relative">
                   <button
-                    onClick={() => useGalleryItem(item)}
+                    onClick={() => applyGalleryItem(item)}
                     className={cn(
                       'w-full rounded-lg overflow-hidden border transition-all aspect-square bg-[#0F1015]',
                       hasImageSelected

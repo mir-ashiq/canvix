@@ -355,7 +355,7 @@ export default function Editor() {
       <PreviewOverlay />
 
       <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
-        <DialogContent className="bg-[#16181D] border-white/10 text-white sm:max-w-sm">
+        <DialogContent className="rounded-[28px] bg-[#16181D] border-white/10 text-white sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-bold">
               <Keyboard size={18} className="text-[#02C0CC]" /> Keyboard shortcuts

@@ -30,6 +30,44 @@ watermarks, no paywalls.
 
 ## 🎨 Features
 
+### v0.3.0 — deep visual parity & feature expansion
+
+- **Canva-exact selection chrome** — selection border and handles re-skinned to the
+  measured purple `#7630D7` with white circular anchors, 2px border and rotation snapping
+- **Alignment guides** recolored to the measured guide purple `#9954FF` at 2px
+- **Context toolbar in the topbar** — selecting an element swaps the topbar middle for a
+  Canva-style toolbar (32px / r10 buttons): font dropdown with live previews + search +
+  category pills, size stepper, colour menu, B/I/U/S/Uppercase, alignment, spacing,
+  transparency, effects and position
+- **Canva-style colour menu** — spectrum + eyedropper + current colour, Brand Kit
+  swatches, 4×7 default solids and gradient swatch rows
+- **Text effects: 10 presets** — Drop, Lift, Glow, Hollow, Outline, Background, Splice,
+  Neon and Echo in a 3-column thumbnail grid
+- **Position popover** — 2×2 layer ordering (forward/backward/to front/to back),
+  6 align-to-page tiles and W/H/X/Y/Rotate numeric fields with ratio lock
+- **Right-click context menus** — element & page variants with keyboard shortcuts,
+  layer ordering, group/lock/hide and delete (244px, 32px items, 13px)
+- **Groups** — Ctrl+G / Ctrl+Shift+G group & ungroup; children move and scale together
+- **Marquee selection** — drag on empty canvas to box-select; space+drag or middle-mouse
+  to pan; Ctrl+A select-all
+- **Zoom dropdown** — 300%→10% presets plus Fit & Fill (128px listbox, 40px items)
+- **Expanded elements library** — search, basic shapes, polygons (pentagon/hexagon/
+  octagon/diamond/semicircle) and 11 new decorative graphics & icons
+- **Media upgrades** — image brightness/contrast/saturation adjustments, flips,
+  replace-image flow, set-image-as-background and drag-and-drop onto the canvas
+- **Templates panel** — search, category chips, recommended section, skeleton loading
+  and a full-size preview modal with one-click apply
+- **Brand kit 2.0** — colour palettes, logo uploads, and one-click “apply brand style
+  to page” (nearest-colour mapping + font swapping)
+- **Apps ecosystem** — a registry-driven plugin panel: Charts, QR generator, Icons,
+  Colour palette generator, Placeholder text and Stickers. New apps register in
+  `apps/registry.tsx`
+- **Dashboard polish** — account avatar menu, help & shortcuts modal (Get help FAB),
+  skeleton loading states, and toast notifications
+- **Mobile contextual action bar** — selecting an element on phones swaps the bottom
+  navigation for text/shape tools
+- **New keyboard shortcuts** — group/ungroup, select-all, lock, layer ordering (`]`/`[`)
+
 ### v0.2.0 — the Canva-accurate dark refresh
 
 - **Canva-2026 dark theme** — every surface re-skinned from live canva.com research:
@@ -128,13 +166,14 @@ prisma/                     # schema + seed
 
 - [x] Canva-accurate dark theme & 8-tab editor rail *(v0.2.0)*
 - [x] Text effects, draw tool, brand kit, charts, preview & share *(v0.2.0)*
+- [x] Canva-exact selection, context menus, groups, colour menu, apps ecosystem *(v0.3.0)*
 - [ ] PDF export
-- [ ] Multi-select grouping
+- [ ] Rulers & manually placed guides
 - [ ] Gradient fills for shapes & text
 - [ ] Curated stock photo library
 - [ ] Real-time collaboration (CRDT)
 - [ ] AI-assisted design (local models)
-- [ ] Plugin system
+- [ ] Plugin system (external, installable apps)
 
 ## 🤝 Contributing
 

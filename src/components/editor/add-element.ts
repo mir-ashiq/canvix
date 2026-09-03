@@ -57,10 +57,10 @@ export function addShape(kind: 'rect' | 'rounded' | 'ellipse' | 'triangle' | 'st
   else addCentered(createShapeElement('star', { width: size, height: size }))
 }
 
-export function addGraphic(graphicId: string) {
+export function addGraphic(graphicId: string, fill?: string) {
   const def = GRAPHICS.find((g) => g.id === graphicId)
   if (!def) return
-  addCentered(createShapeElement('path', { width: 300, height: 300, pathData: def.path }))
+  addCentered(createShapeElement('path', { width: 300, height: 300, pathData: def.path, ...(fill ? { fill } : {}) }))
 }
 
 export function addLine(variant: 'solid' | 'dashed' | 'arrow' | 'arrowBoth') {

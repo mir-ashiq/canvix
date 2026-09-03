@@ -59,7 +59,10 @@ export function ZoomControls() {
       <span className="h-5 w-px bg-white/15 mx-0.5" aria-hidden="true" />
       <button
         className="h-10 w-10 rounded-xl flex items-center justify-center text-white/75 hover:bg-white/10 hover:text-white"
-        onClick={() => canvasBridge.fitToScreen?.() ?? fitToScreen()}
+        onClick={() => {
+          if (canvasBridge.fitToScreen) canvasBridge.fitToScreen()
+          else fitToScreen()
+        }}
         aria-label="Fit to screen"
         title="Fit to screen"
       >
@@ -90,13 +93,18 @@ export function ZoomControls() {
             <div className="cv-menu-sep" />
             <button
               role="option"
+              aria-selected={isFit}
               className="cv-menu-item !h-10 !justify-between"
-              onClick={() => { canvasBridge.fitToScreen?.() ?? fitToScreen(); setOpen(false) }}
+              onClick={() => {
+          if (canvasBridge.fitToScreen) canvasBridge.fitToScreen()
+          else fitToScreen()
+          setOpen(false)
+        }}
             >
               <span className="flex items-center gap-2"><Scan size={13} /> Fit</span>
               {isFit && <Check size={13} className="text-white/80" />}
             </button>
-            <button role="option" className="cv-menu-item !h-10" onClick={doFill}>
+            <button role="option" aria-selected={false} className="cv-menu-item !h-10" onClick={doFill}>
               Fill
             </button>
           </div>

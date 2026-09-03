@@ -4,6 +4,7 @@ import { LayoutTemplate, Shapes, Type, Upload, Palette, Layers, Wrench, FolderOp
 import { useEditorStore, type PanelId } from '@/store/editor-store'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { Tip } from './tooltip'
 
 /** Canva-2026 rail: 8 tabs (72×72), 72px wide — Templates / Elements / Text / Brand / Uploads / Tools / Projects / Apps */
 const PANELS: { id: Exclude<PanelId, null>; label: string; icon: typeof LayoutTemplate }[] = [
@@ -33,21 +34,21 @@ export function LeftRail({ vertical = true }: { vertical?: boolean }) {
       {PANELS.map((p) => {
         const active = panel === p.id
         return (
-          <button
-            key={p.id}
-            onClick={() => setPanel(p.id)}
-            className={cn(
-              'flex flex-col items-center justify-center gap-1 transition-colors text-white/60 hover:text-white',
-              vertical ? 'w-[72px] h-[72px] rounded-2xl' : 'w-16 h-11 shrink-0 rounded-xl',
-              active && 'bg-[#2A2C35] text-white'
-            )}
-            aria-label={p.label}
-            aria-pressed={active}
-            title={p.label}
-          >
-            <p.icon size={22} strokeWidth={active ? 2.2 : 1.9} />
-            <span className="text-[10px] font-medium leading-none">{p.label}</span>
-          </button>
+          <Tip key={p.id} label={p.label} side={vertical ? 'right' : 'top'}>
+            <button
+              onClick={() => setPanel(p.id)}
+              className={cn(
+                'flex flex-col items-center justify-center gap-1 transition-colors text-white/60 hover:text-white',
+                vertical ? 'w-[72px] h-[72px] rounded-2xl' : 'w-16 h-11 shrink-0 rounded-xl',
+                active && 'bg-[#2A2C35] text-white'
+              )}
+              aria-label={p.label}
+              aria-pressed={active}
+            >
+              <p.icon size={22} strokeWidth={active ? 2.2 : 1.9} />
+              <span className="text-[10px] font-medium leading-none">{p.label}</span>
+            </button>
+          </Tip>
         )
       })}
     </nav>

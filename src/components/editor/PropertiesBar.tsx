@@ -115,7 +115,13 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
             </TBtn>
           </div>
 
-          <ColorMenu value={text.fill} onChange={(c, committed) => committed ? update(ids, { fill: c }) : updateLive(ids, { fill: c })} title="Text colour" />
+          <ColorMenu
+            value={text.fill}
+            gradient={text.fillGradient ?? null}
+            onChange={(c, committed) => committed ? update(ids, { fill: c, fillGradient: null }) : updateLive(ids, { fill: c, fillGradient: null })}
+            onGradient={(g, committed) => { const patch = g ? { fillGradient: g, fill: g.from } : { fillGradient: null }; if (committed) update(ids, patch); else updateLive(ids, patch) }}
+            title="Text colour"
+          />
 
           <TBtn onClick={() => update(ids, { bold: !text.bold })} dataActive={text.bold} title="Bold" ariaLabel="Bold">
             <Bold size={14} />
@@ -225,7 +231,13 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
         <>
           {shape && (
             <>
-              <ColorMenu value={shape.fill} onChange={(c, committed) => committed ? update(ids, { fill: c }) : updateLive(ids, { fill: c })} title="Fill" />
+              <ColorMenu
+                value={shape.fill}
+                gradient={shape.fillGradient ?? null}
+                onChange={(c, committed) => committed ? update(ids, { fill: c, fillGradient: null }) : updateLive(ids, { fill: c, fillGradient: null })}
+                onGradient={(g, committed) => { const patch = g ? { fillGradient: g, fill: g.from } : { fillGradient: null }; if (committed) update(ids, patch); else updateLive(ids, patch) }}
+                title="Fill"
+              />
               {/* border colour + width */}
               <ToolbarPopover trigger={(open) => (
                 <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Border" title="Border">

@@ -1,18 +1,19 @@
 'use client'
 
-import { LayoutTemplate, Shapes, Type, Upload, Palette, Layers, Wrench, FolderOpen, LayoutGrid, BookMarked } from 'lucide-react'
+import { LayoutTemplate, Shapes, Type, Upload, Palette, Layers, Wrench, FolderOpen, LayoutGrid, BookMarked, Image } from 'lucide-react'
 import { useEditorStore, type PanelId } from '@/store/editor-store'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { Tip } from './tooltip'
 
-/** Canva-2026 rail: 8 tabs (72×72), 72px wide — Templates / Elements / Text / Brand / Uploads / Tools / Projects / Apps */
+/** Canva-2026 rail: 9 tabs (72×72), 72px wide — Templates / Elements / Text / Brand / Uploads / Photos / Tools / Projects / Apps */
 const PANELS: { id: Exclude<PanelId, null>; label: string; icon: typeof LayoutTemplate }[] = [
   { id: 'templates', label: 'Templates', icon: LayoutTemplate },
   { id: 'elements', label: 'Elements', icon: Shapes },
   { id: 'text', label: 'Text', icon: Type },
   { id: 'brand', label: 'Brand', icon: BookMarked },
   { id: 'uploads', label: 'Uploads', icon: Upload },
+  { id: 'photos', label: 'Photos', icon: Image },
   { id: 'tools', label: 'Tools', icon: Wrench },
   { id: 'projects', label: 'Projects', icon: FolderOpen },
   { id: 'apps', label: 'Apps', icon: LayoutGrid },

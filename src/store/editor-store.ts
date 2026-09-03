@@ -21,6 +21,7 @@ export type PanelId =
   | 'text'
   | 'brand'
   | 'uploads'
+  | 'photos'
   | 'tools'
   | 'projects'
   | 'apps'
@@ -504,11 +505,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setDrawSize: (n) => set({ drawSize: Math.min(64, Math.max(1, n)) }),
   setBrand: (b) => set({ brand: b }),
 
-  // ── v0.3.1: rulers & manual guides ─────────────────────
+  // ── v0.3.1: rulers & manual guides (per-page since v0.3.2) ─
   toggleRulers: () => set({ showRulers: !get().showRulers }),
   addManualGuide: (axis, position) => {
     const id = uid('guide')
-    set({ manualGuides: [...get().manualGuides, { id, axis, position: Math.round(position) }] })
+    const pageId = get().pages[get().currentPage]?.id ?? ''
+    set({ manualGuides: [...get().manualGuides, { id, axis, position: Math.round(position), pageId }] })
     return id
   },
   moveManualGuide: (id, position) => {
@@ -517,7 +519,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     })
   },
   removeManualGuide: (id) => set({ manualGuides: get().manualGuides.filter((g) => g.id !== id) }),
-  clearManualGuides: () => set({ manualGuides: [] }),
+  clearManualGuides: () => {
+    // clears only the current page's guides
+    const pageId = get().pages[get().currentPage]?.id ?? ''
+    set({ manualGuides: get().manualGuides.filter((g) => g.pageId !== pageId) })
+  },
 
   // ── v0.3.1: version history ────────────────────────────
   saveVersion: (label) => {

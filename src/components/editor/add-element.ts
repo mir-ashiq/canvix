@@ -12,7 +12,7 @@ import { useEditorStore } from '@/store/editor-store'
 import { GRAPHICS } from '@/lib/editor-utils'
 
 /** center-ish placement with a small cascade so stacked adds are visible */
-function placement(width: number, height: number, count: number) {
+export function placement(width: number, height: number, count: number) {
   const state = useEditorStore.getState()
   return {
     x: Math.max(0, (state.width - width) / 2 + ((count % 7) - 3) * 18),

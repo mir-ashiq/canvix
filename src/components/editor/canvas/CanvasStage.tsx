@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type Konva from 'konva'
 import { Group, Layer, Line, Rect, Stage, Transformer } from 'react-konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
@@ -39,9 +39,14 @@ export default function CanvasStage() {
   const drawColor = useEditorStore((s) => s.drawColor)
   const drawSize = useEditorStore((s) => s.drawSize)
   const editingMode = useEditorStore((s) => s.editingMode)
-  // v0.3.1: rulers & manual guides
+  // v0.3.1: rulers & manual guides (v0.3.2: per-page)
   const showRulers = useEditorStore((s) => s.showRulers)
-  const manualGuides = useEditorStore((s) => s.manualGuides)
+  const allGuides = useEditorStore((s) => s.manualGuides)
+  const currentPageId = useEditorStore((s) => s.pages[s.currentPage]?.id)
+  const manualGuides = useMemo(
+    () => allGuides.filter((g) => g.pageId === currentPageId),
+    [allGuides, currentPageId]
+  )
   const addManualGuide = useEditorStore((s) => s.addManualGuide)
   const moveManualGuide = useEditorStore((s) => s.moveManualGuide)
   const removeManualGuide = useEditorStore((s) => s.removeManualGuide)
@@ -217,7 +222,8 @@ export default function CanvasStage() {
       .map((e) => ({ x: e.x, y: e.y, width: e.width, height: e.height, rotation: e.rotation }))
     // v0.3.1: manual guides act as snap targets (zero-size virtual edges)
     if (state.showRulers) {
-      for (const g of state.manualGuides) {
+      const pageId = p.id
+      for (const g of state.manualGuides.filter((gg) => gg.pageId === pageId)) {
         others.push(
           g.axis === 'x'
             ? { x: g.position, y: 0, width: 0, height: 0, rotation: 0 }

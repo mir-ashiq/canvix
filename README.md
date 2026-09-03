@@ -30,6 +30,29 @@ watermarks, no paywalls.
 
 ## 🎨 Features
 
+### v0.3.2 — fonts, gradients, PDF, photos & AI
+
+- **63-font library** — 15 → **63 families** across five categories (sans / serif /
+  display / handwriting / new **Mono**) in a searchable, pill-filtered Canva-style
+  font dropdown
+- **Gradient fills** — linear & radial gradients on all shapes **and text**, edited
+  straight in the colour menu: preset swatches, Linear/Radial toggle, 0-360° angle
+  slider, from/to colour pickers, one-click remove
+- **PDF export** — print-ready, multi-page PDF downloads straight from the browser
+  (jsPDF, zero watermarks)
+- **Photos tab** — new side panel with a bundled, license-free stock library
+  (7 categories × 6 AI-generated photos), tag search, category chips and
+  click-to-place
+- **Magic Write** — AI copywriter app: describe what you need, pick kind (headline /
+  tagline / body / caption) and tone, get 3 on-brand options, add one to the canvas
+- **AI image generator** — prompt + style + aspect ratio → a design-ready image on
+  your canvas
+- **Design Trends 2026 templates** — five templates from Canva's official 2026
+  trend report: Prompt Playground, Notes App Chic, Texture Check, Opt Out Era and
+  Granny Wave
+- **Per-page guides** — ruler guides now belong to their page; snapping and
+  Clear-guides act on the current page only
+
 ### v0.3.1 — editor completeness: rulers, crop, layers rename, version history
 
 - **Rulers & manual guides** — Canva-style ruler strips (top/left) with adaptive tick
@@ -186,11 +209,11 @@ prisma/                     # schema + seed
 - [x] Text effects, draw tool, brand kit, charts, preview & share *(v0.2.0)*
 - [x] Canva-exact selection, context menus, groups, colour menu, apps ecosystem *(v0.3.0)*
 - [x] Rulers & manually placed guides, image crop, layer renaming, version history *(v0.3.1)*
-- [ ] PDF export
-- [ ] Gradient fills for shapes & text
-- [ ] Curated stock photo library
+- [x] 63-font library, gradient fills, PDF export, stock photo library, AI apps *(v0.3.2)*
 - [ ] Real-time collaboration (CRDT)
-- [ ] AI-assisted design (local models)
+- [ ] Comment & annotation mode
+- [ ] SVG export
+- [ ] Video/MP4 export
 - [ ] Plugin system (external, installable apps)
 
 ## 🤝 Contributing

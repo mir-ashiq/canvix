@@ -157,7 +157,7 @@
   --cv-slider-fill: #7630d7;    /* popover slider fill */
 
   /* gradients */
-  --cv-grad-bar: linear-gradient(95deg, #02c0cc 0%, #6425f0 45%, #9333ea 78%, #b04fd7 100%);
+  --cv-grad-bar: linear-gradient(95deg, #0aa8c8 0%, #5b2bd9 26%, #7c3aed 54%, #a855f7 80%, #c86bd9 100%);
   --cv-grad-brand: linear-gradient(120deg, #02c0cc 0%, #7630d7 55%, #ff5c8a 100%);
 }
 

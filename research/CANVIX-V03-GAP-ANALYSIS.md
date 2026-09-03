@@ -55,12 +55,24 @@
 | Group transform rotation | double-rotation fixed; ungroup orbits children around group origin | ✅ |
 | App/chart tile clickability | whole card is role=button + keyboard support | ✅ |
 
+## Remaining gaps — closed by v0.3.2
+
+| Gap (from v0.4.x backlog) | v0.3.2 resolution | Status |
+|---|---|---|
+| Gradient fills for shapes & text | `fillGradient` (linear/radial, angle, from/to) on shapes + text; full gradient editor inside the colour menu | ✅ |
+| PDF export | jsPDF multi-page export from the Download dialog (client-side, no watermark) | ✅ |
+| Curated stock photo library | Photos rail tab + 42 AI-generated license-free photos bundled in `public/photos/` | ✅ |
+| Small font library (15) | 63 families, 5 categories incl. Mono, Canva-style search + pills | ✅ |
+| Design-scoped guides | guides carry `pageId`; snapping + clearing are page-scoped | ✅ |
+| No AI surface (Canva AI is 2026 flagship) | Magic Write + AI image generator apps via server routes | ✅ |
+| Template stagnation | 5 templates from Canva's official Design Trends 2026 | ✅ |
+
 ## Remaining gaps (accepted for v0.4.x)
 - Justify alignment renders as left in Konva (Konva limitation) — kept in the UI for parity
 - Real-time collaboration & comments (need a backend presence channel)
 - Server-side version history (v0.3.1 stores snapshots in localStorage per design)
-- PDF export, gradient fills for shapes & text, curated stock photo library
-- Guides are design-scoped (one set shared across all pages); per-page guide sets in a later release
+- SVG export, video/MP4 export
+- Runtime photo *search* is tag-based over the bundled library (Canva searches millions of licensed photos)
 
 ## Risk register (respected)
 - v0.2 features verified post-upgrade: text effects, freehand draw, charts, autosave, export, preview/share, mobile sheets — all E2E-green.

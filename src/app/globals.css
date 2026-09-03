@@ -149,9 +149,210 @@
   --cv-text-3: rgba(255, 255, 255, 0.55);
   --cv-border: rgba(255, 255, 255, 0.09);
 
+  /* v0.3 interaction tokens — measured on canva.com 2026-09-03 */
+  --cv-selection: #7630d7;      /* element selection border — real rgb(118,48,215) */
+  --cv-guide: #9954ff;          /* alignment guide lines — real rgb(153,84,255) */
+  --cv-menu: #121319;           /* context menu / dropdown surface */
+  --cv-menu-item: #1a1b22;      /* menu item hover */
+  --cv-slider-fill: #7630d7;    /* popover slider fill */
+
   /* gradients */
   --cv-grad-bar: linear-gradient(90deg, #02c0cc 0%, #7b2ff7 100%);
   --cv-grad-brand: linear-gradient(120deg, #02c0cc 0%, #7630d7 55%, #ff5c8a 100%);
+}
+
+/* ── v0.3 shared component classes ─────────────────────────── */
+
+/* canva-style context menu (244px, items 32px, 13px, r10) */
+.cv-menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 224px;
+  max-width: 244px;
+  background: var(--cv-menu);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  padding: 4px;
+  animation: cv-pop-in 0.12s ease-out;
+}
+.cv-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: var(--cv-text);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  transition: background 0.1s ease;
+}
+.cv-menu-item:hover, .cv-menu-item:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+.cv-menu-item .cv-menu-kbd {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--cv-text-3);
+  font-family: var(--font-geist-mono), monospace;
+}
+.cv-menu-sep {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 8px;
+}
+.cv-menu-item-danger { color: #ff8080; }
+.cv-menu-item-danger:hover { background: rgba(255, 90, 90, 0.12); }
+
+/* 32px contextual toolbar button (canva r10) */
+.cv-tbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  min-width: 32px;
+  padding: 0 6px;
+  border-radius: 10px;
+  color: var(--cv-text);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.12s ease, color 0.12s ease;
+  flex-shrink: 0;
+}
+.cv-tbtn:hover { background: rgba(255, 255, 255, 0.1); }
+.cv-tbtn:active { background: rgba(255, 255, 255, 0.16); }
+.cv-tbtn[data-active="true"] { background: rgba(255, 255, 255, 0.18); color: #fff; }
+.cv-tbtn[data-dim="true"] { color: var(--cv-text-3); }
+.cv-tbtn:disabled { opacity: 0.4; pointer-events: none; }
+
+/* popover panels (spacing / transparency / position) */
+.cv-pop {
+  position: absolute;
+  z-index: 60;
+  background: #1e1f26;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  padding: 14px;
+  min-width: 232px;
+  animation: cv-pop-in 0.14s ease-out;
+}
+
+/* canva-style slider: purple fill + white circular handle */
+.cv-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  outline: none;
+  cursor: pointer;
+}
+.cv-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  cursor: grab;
+  border: none;
+}
+.cv-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  border: none;
+  cursor: grab;
+}
+
+/* tooltip (canva: ~45×28, delayed, dark) */
+.cv-tip {
+  position: fixed;
+  z-index: 90;
+  background: #0f1015;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  white-space: nowrap;
+  animation: cv-pop-in 0.1s ease-out;
+}
+
+/* circular swatch (canva color menu) */
+.cv-swatch {
+  border-radius: 50%;
+  border: 2px solid transparent;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+  cursor: pointer;
+}
+.cv-swatch:hover { transform: scale(1.12); border-color: rgba(255, 255, 255, 0.4); }
+.cv-swatch[data-selected="true"] { border-color: #fff; transform: scale(1.08); }
+
+@keyframes cv-pop-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* skeleton shimmer (canva loading state) */
+.cv-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+}
+.cv-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+  animation: cv-shimmer 1.4s infinite;
+}
+@keyframes cv-shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+/* toast (canva-style bottom center) */
+.cv-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 95;
+  background: #26272f;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: cv-toast-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes cv-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* focus-visible ring for a11y (subtle canva-style) */
+:where(button, a, input, select, [tabindex]):focus-visible {
+  outline: 2px solid rgba(118, 48, 215, 0.85);
+  outline-offset: 2px;
 }
 
 .font-sans {

@@ -168,6 +168,56 @@ export const GRAPHICS: GraphicDef[] = [
     name: 'Banner',
     path: 'M2 10 H98 V74 L82 62 L66 74 L50 62 L34 74 L18 62 L2 74 Z',
   },
+  {
+    id: 'pentagon',
+    name: 'Pentagon',
+    path: 'M50 2 L96 36 L78 94 H22 L4 36 Z',
+  },
+  {
+    id: 'hexagon',
+    name: 'Hexagon',
+    path: 'M25 4 H75 L96 50 L75 96 H25 L4 50 Z',
+  },
+  {
+    id: 'octagon',
+    name: 'Octagon',
+    path: 'M30 2 H70 L96 30 V70 L70 98 H30 L4 70 V30 Z',
+  },
+  {
+    id: 'cloud',
+    name: 'Cloud',
+    path: 'M24 76 C10 76 2 66 2 54 C2 42 12 33 24 34 C28 18 42 8 58 8 C76 8 90 20 92 38 C96 44 98 50 96 58 C94 70 84 76 74 76 Z',
+  },
+  {
+    id: 'moon',
+    name: 'Moon',
+    path: 'M62 2 C30 8 6 34 6 62 C6 86 26 98 40 98 C20 88 12 64 22 42 C32 22 52 8 78 8 C74 4 68 2 62 2 Z',
+  },
+  {
+    id: 'bolt',
+    name: 'Bolt',
+    path: 'M56 2 L18 56 H44 L38 98 L82 40 H54 Z',
+  },
+  {
+    id: 'check-circle',
+    name: 'Check circle',
+    path: 'M50 2 C76 2 98 24 98 50 C98 76 76 98 50 98 C24 98 2 76 2 50 C2 24 24 2 50 2 Z M44 72 L76 40 L68 32 L44 56 L32 44 L24 52 Z',
+  },
+  {
+    id: 'diamond',
+    name: 'Diamond',
+    path: 'M50 2 L98 50 L50 98 L2 50 Z',
+  },
+  {
+    id: 'semi-circle',
+    name: 'Semicircle',
+    path: 'M2 50 A48 48 0 0 1 98 50 Z',
+  },
+  {
+    id: 'frame',
+    name: 'Frame',
+    path: 'M2 2 H98 V98 H2 Z M14 14 V86 H86 V14 Z',
+  },
 ]
 
 // ── Stickers (emoji) ─────────────────────────────────────────

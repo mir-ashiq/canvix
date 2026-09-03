@@ -7,7 +7,7 @@ import { useAppStore } from '@/store/app-store'
 import { useEditorStore, type PanelId } from '@/store/editor-store'
 import { TopBar } from './TopBar'
 import { LeftRail } from './LeftRail'
-import { PropertiesBar } from './PropertiesBar'
+import { ContextToolbar } from './PropertiesBar'
 import { PageBar } from './PageBar'
 import { ZoomControls } from './ZoomControls'
 import { PreviewOverlay } from './PreviewOverlay'
@@ -47,9 +47,16 @@ const SHORTCUTS: [string, string][] = [
   ['Ctrl + S', 'Save design'],
   ['Ctrl + D', 'Duplicate selection'],
   ['Ctrl + C / X / V', 'Copy / cut / paste elements'],
+  ['Ctrl + G / Ctrl + Shift + G', 'Group / ungroup selection'],
+  ['Ctrl + A', 'Select all elements'],
+  ['Ctrl + L', 'Lock / unlock selection'],
+  ['Ctrl + ] / [', 'Bring forward / send backward'],
+  ['Shift + Ctrl + ] / [', 'Bring to front / send to back'],
   ['Delete / Backspace', 'Delete selection'],
   ['Arrows (+ Shift ×10)', 'Nudge selection'],
   ['+ / −', 'Zoom in / out'],
+  ['Space + drag', 'Pan the canvas'],
+  ['Drag on empty canvas', 'Marquee (box) select'],
   ['Double-click text', 'Edit text'],
   ['Escape', 'Deselect / close'],
   ['Ctrl + mouse wheel', 'Zoom at cursor'],
@@ -67,6 +74,7 @@ export default function Editor() {
   const version = useEditorStore((s) => s.version)
   const isMobile = useIsMobile()
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const selectedIds = useEditorStore((s) => s.selectedIds)
 
   const loadedRef = useRef(false)
 
@@ -181,6 +189,29 @@ export default function Editor() {
         state.pasteClipboard()
         return
       }
+      if (mod && e.key.toLowerCase() === 'g') {
+        e.preventDefault()
+        if (e.shiftKey) state.ungroupSelection()
+        else state.groupSelection()
+        return
+      }
+      if (mod && e.key.toLowerCase() === 'a') {
+        e.preventDefault()
+        const els = state.pages[state.currentPage].elements.filter((el) => !el.locked)
+        state.setSelection(els.map((el) => el.id))
+        return
+      }
+      if (mod && e.key.toLowerCase() === 'l') {
+        e.preventDefault()
+        const hasLocked = state.pages[state.currentPage].elements.some((el) => state.selectedIds.includes(el.id) && el.locked)
+        state.setLock(state.selectedIds, !hasLocked)
+        return
+      }
+      if (mod && (e.key === ']' || e.key === '[')) {
+        e.preventDefault()
+        for (const id of state.selectedIds) state.moveLayer(id, e.key === ']' ? (e.shiftKey ? 'front' : 'up') : (e.shiftKey ? 'back' : 'down'))
+        return
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (state.selectedIds.length) {
           e.preventDefault()
@@ -211,6 +242,38 @@ export default function Editor() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [save])
+
+  // ── drag & drop image files onto the canvas ───────────────
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes('Files')) {
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+      }
+    }
+    const onDrop = async (e: DragEvent) => {
+      const files = e.dataTransfer?.files
+      if (!files?.length) return
+      e.preventDefault()
+      const images = Array.from(files).filter((f) => f.type.startsWith('image/'))
+      if (!images.length) return
+      const { addImageFromFile } = await import('./add-element')
+      let ok = 0
+      for (const file of images) {
+        try {
+          await addImageFromFile(file)
+          ok += 1
+        } catch { /* ignore */ }
+      }
+      if (ok) toast({ title: `${ok} image${ok > 1 ? 's' : ''} added` })
+    }
+    window.addEventListener('dragover', onDragOver)
+    window.addEventListener('drop', onDrop)
+    return () => {
+      window.removeEventListener('dragover', onDragOver)
+      window.removeEventListener('drop', onDrop)
+    }
+  }, [])
 
   // ── render panel ───────────────────────────────────────────
   const renderPanel = () => {
@@ -264,12 +327,18 @@ export default function Editor() {
 
         {/* canvas workspace */}
         <main className="flex-1 relative min-w-0 min-h-0" aria-label="Design canvas">
-          <PropertiesBar />
           <CanvasStage />
           <PageBar />
           <ZoomControls />
         </main>
       </div>
+
+      {/* mobile contextual action bar (canva mobile: bottom bar on selection) */}
+      {isMobile && selectedIds.length > 0 && (
+        <div className="fixed inset-x-0 bottom-14 z-40">
+          <ContextToolbar variant="mobile" />
+        </div>
+      )}
 
       {/* mobile rail */}
       <div className="md:hidden border-t border-white/[0.07]">

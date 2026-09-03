@@ -13,17 +13,22 @@ export type ElementType =
   | 'stroke'
   | 'image'
   | 'sticker'
+  | 'group'
 
-export type TextAlign = 'left' | 'center' | 'right'
+export type TextAlign = 'left' | 'center' | 'right' | 'justify'
 
-/** Canva-style text effects */
-export type TextEffect = 'none' | 'shadow' | 'lift' | 'hollow' | 'neon' | 'echo'
+/** Canva-style text effects (v0.3: aligned to canva 2026 naming) */
+export type TextEffect = 'none' | 'shadow' | 'lift' | 'hollow' | 'neon' | 'echo' | 'glow' | 'outline' | 'background' | 'splice'
 
 export const TEXT_EFFECTS: { id: TextEffect; label: string }[] = [
   { id: 'none', label: 'None' },
-  { id: 'shadow', label: 'Shadow' },
+  { id: 'shadow', label: 'Drop' },
   { id: 'lift', label: 'Lift' },
+  { id: 'glow', label: 'Glow' },
   { id: 'hollow', label: 'Hollow' },
+  { id: 'outline', label: 'Outline' },
+  { id: 'background', label: 'Background' },
+  { id: 'splice', label: 'Splice' },
   { id: 'neon', label: 'Neon' },
   { id: 'echo', label: 'Echo' },
 ]
@@ -59,10 +64,13 @@ export interface TextElement extends BaseElement {
   italic: boolean
   underline: boolean
   strike: boolean
+  uppercase: boolean
   fill: string
   align: TextAlign
   lineHeight: number
   letterSpacing: number
+  /** text background block colour (canva "Background" effect) */
+  effectBackground?: string
   /** canva-style effect preset */
   effect?: TextEffect
 }
@@ -92,12 +100,26 @@ export interface ImageElement extends BaseElement {
   radius: number // corner clip
   naturalWidth: number
   naturalHeight: number
+  flipH?: boolean
+  flipV?: boolean
+  /** basic adjustments (0 = neutral, applied via Konva filters) */
+  brightness?: number // -100..100
+  contrast?: number // -100..100
+  saturation?: number // -100..100
 }
 
 export interface StickerElement extends BaseElement {
   type: 'sticker'
   char: string // emoji glyph
   fontSize: number
+}
+
+/** A group nests child elements at their original page coordinates.
+ *  Selecting/moving/transforming the group transforms children with it. */
+export interface GroupElement extends BaseElement {
+  type: 'group'
+  /** full child elements (positions relative to the page, same as before grouping) */
+  children: AnyElement[]
 }
 
 /** Freehand stroke — points are [x0,y0,x1,y1,…] relative to (x, y). */
@@ -128,6 +150,7 @@ export type AnyElement =
   | StrokeElement
   | ImageElement
   | StickerElement
+  | GroupElement
 
 export type Background =
   | { type: 'solid'; color: string }
@@ -223,6 +246,7 @@ export function createTextElement(init: BaseInit & Partial<TextElement> = {}): T
     italic: false,
     underline: false,
     strike: false,
+    uppercase: false,
     fill: '#1F2226',
     align: 'center',
     lineHeight: 1.25,
@@ -273,7 +297,27 @@ export function createImageElement(
     radius: 12,
     naturalWidth,
     naturalHeight,
+    flipH: false,
+    flipV: false,
+    brightness: 0,
+    contrast: 0,
+    saturation: 0,
     ...init,
+  }
+}
+
+/** wrap child elements into a group; children keep page coords */
+export function createGroupElement(children: AnyElement[]): GroupElement {
+  const xs = children.map((c) => c.x)
+  const ys = children.map((c) => c.y)
+  const x1 = Math.min(...xs)
+  const y1 = Math.min(...ys)
+  const x2 = Math.max(...children.map((c) => c.x + c.width))
+  const y2 = Math.max(...children.map((c) => c.y + c.height))
+  return {
+    ...baseElement('group', { x: x1, y: y1, width: x2 - x1, height: y2 - y1 }),
+    type: 'group',
+    children: children.map((c) => ({ ...c })),
   }
 }
 
@@ -335,4 +379,7 @@ export function isImage(el: AnyElement): el is ImageElement {
 }
 export function isSticker(el: AnyElement): el is StickerElement {
   return el.type === 'sticker'
+}
+export function isGroup(el: AnyElement): el is GroupElement {
+  return el.type === 'group'
 }

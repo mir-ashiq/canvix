@@ -10,8 +10,11 @@ import { canvasBridge } from './canvas-bridge'
 import { ElementNode } from './element-node'
 import type { TextElement } from '@/lib/types'
 import { createStrokeElement } from '@/lib/types'
+import { CanvasContextMenu, type ContextMenuState } from './context-menu'
 
-const GUIDE_COLOR = '#FF33AA'
+/** canva-measured tokens */
+const GUIDE_COLOR = '#9954FF' // rgb(153,84,255) — measured 2026-09-03
+const SELECTION_COLOR = '#7630D7' // rgb(118,48,215) — measured
 
 export default function CanvasStage() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -26,7 +29,10 @@ export default function CanvasStage() {
   const height = useEditorStore((s) => s.height)
   const zoom = useEditorStore((s) => s.zoom)
   const setZoom = useEditorStore((s) => s.setZoom)
+  const setViewport = useEditorStore((s) => s.setViewport)
   const clearSelection = useEditorStore((s) => s.clearSelection)
+  const setSelection = useEditorStore((s) => s.setSelection)
+  const selectToggle = useEditorStore((s) => s.selectToggle)
   const selectedIds = useEditorStore((s) => s.selectedIds)
   const tool = useEditorStore((s) => s.tool)
   const drawColor = useEditorStore((s) => s.drawColor)
@@ -40,7 +46,12 @@ export default function CanvasStage() {
   const [editValue, setEditValue] = useState('')
   /** freehand draft: [x0,y0,x1,y1,…] in page coords */
   const [draft, setDraft] = useState<number[] | null>(null)
+  /** marquee draft in PAGE coords */
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null)
   const drawingRef = useRef(false)
+  const marqueeRef = useRef(false)
+  const spaceRef = useRef(false)
 
   const interactive = editingMode === 'editing' && tool === 'select'
 
@@ -62,6 +73,35 @@ export default function CanvasStage() {
     })
     ro.observe(el)
     return () => ro.disconnect()
+  }, [])
+
+  // report viewport size to the store (zoom menu "Fit")
+  useEffect(() => {
+    setViewport({ width: containerSize.w, height: containerSize.h })
+  }, [containerSize, setViewport])
+
+  // ── space key tracking (space+drag = pan) ──────────────────
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        const target = e.target as HTMLElement
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+        spaceRef.current = true
+        containerRef.current?.style.setProperty('cursor', 'grab')
+      }
+    }
+    const up = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        spaceRef.current = false
+        if (!panGestureRef.current?.active) containerRef.current?.style.setProperty('cursor', 'default')
+      }
+    }
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+    }
   }, [])
 
   // ── fit to screen ──────────────────────────────────────────
@@ -146,27 +186,6 @@ export default function CanvasStage() {
     }
   }, [refreshTransformer])
 
-  // transformer visual scale compensation
-  useEffect(() => {
-    const tr = trRef.current
-    if (!tr) return
-    tr.setAttrs({
-      anchorSize: 11 / zoom,
-      anchorStrokeWidth: 1.5 / zoom,
-      anchorCornerRadius: 12 / zoom,
-      rotateAnchorOffset: 28 / zoom,
-      borderWidth: 1.5 / zoom,
-      padding: 5 / zoom,
-      anchorStroke: '#00C4CC',
-      anchorFill: '#FFFFFF',
-      borderStroke: '#00C4CC',
-      rotateEnabled: true,
-      keepRatio: true,
-      flipEnabled: false,
-    })
-    tr.forceUpdate()
-  }, [zoom, selectedIds, pages])
-
   // ── node registry ──────────────────────────────────────────
   const registerNode = useCallback((id: string, node: Konva.Node | null) => {
     if (node) nodesRef.current.set(id, node)
@@ -200,6 +219,7 @@ export default function CanvasStage() {
     const p = currentPageData(state)
     const el = p.elements.find((e) => e.id === id)
     if (!el || el.type !== 'text' || el.locked) return
+    // if the text lives inside a group, edit via double-click is disabled for simplicity
     state.pushHistory()
     setEditingTextId(id)
     setEditValue((el as TextElement).text)
@@ -222,7 +242,7 @@ export default function CanvasStage() {
     )
   }, [editingTextId, editValue])
 
-  // ── empty-area pan (mouse + single touch) ──────────────────
+  // ── empty-area pan (space+drag / middle-mouse / touch) ─────
   const beginPan = (clientX: number, clientY: number) => {
     panGestureRef.current = { active: true, startX: clientX, startY: clientY, baseX: pan.x, baseY: pan.y }
     containerRef.current?.style.setProperty('cursor', 'grabbing')
@@ -239,6 +259,28 @@ export default function CanvasStage() {
     containerRef.current?.style.setProperty('cursor', 'default')
   }
 
+  // ── marquee helpers (page coords) ──────────────────────────
+  const pagePoint = (clientX: number, clientY: number) => {
+    const container = containerRef.current?.getBoundingClientRect()
+    if (!container) return null
+    return {
+      x: (clientX - container.left - pan.x) / zoom,
+      y: (clientY - container.top - pan.y) / zoom,
+    }
+  }
+
+  const selectInMarquee = (a: { x0: number; y0: number; x1: number; y1: number }) => {
+    const x = Math.min(a.x0, a.x1), y = Math.min(a.y0, a.y1)
+    const w = Math.abs(a.x1 - a.x0), h = Math.abs(a.y1 - a.y0)
+    if (w < 4 && h < 4) return
+    const hits = page.elements
+      .filter((e) => e.visible && !e.locked)
+      .filter((e) => e.x < x + w && e.x + e.width > x && e.y < y + h && e.y + e.height > y)
+      .map((e) => e.id)
+    if (hits.length) setSelection(hits)
+    else clearSelection()
+  }
+
   const handleStageMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     if (editingMode !== 'editing') return
     if (tool === 'draw') {
@@ -246,17 +288,32 @@ export default function CanvasStage() {
       const pointer = stage?.getPointerPosition()
       if (!pointer) return
       const px = (pointer.x - pan.x) / zoom
-        const py = (pointer.y - pan.y) / zoom
+      const py = (pointer.y - pan.y) / zoom
       drawingRef.current = true
       setDraft([px, py, px, py])
       return
     }
     const target = e.target
-    if (target === e.target.getStage() || target.name() === 'page-bg') {
+    const onEmpty = target === e.target.getStage() || target.name() === 'page-bg'
+    if (!onEmpty) return
+
+    const middleButton = e.evt.button === 1
+    if (middleButton || spaceRef.current) {
       clearSelection()
       beginPan(e.evt.clientX, e.evt.clientY)
+      e.evt.preventDefault()
+      return
+    }
+
+    if (e.evt.button === 0) {
+      // left button on empty area → marquee selection (canva behaviour)
+      const pt = pagePoint(e.evt.clientX, e.evt.clientY)
+      if (!pt) return
+      marqueeRef.current = true
+      setMarquee({ x0: pt.x, y0: pt.y, x1: pt.x, y1: pt.y })
     }
   }
+
   const handleStageTouchStart = (e: KonvaEventObject<TouchEvent>) => {
     if (editingMode !== 'editing' || tool === 'draw') return
     if (e.evt.touches.length === 2) {
@@ -279,10 +336,27 @@ export default function CanvasStage() {
     }
   }
 
-  // window-level gesture listeners (pan + pinch)
+  // window-level gesture listeners (pan + pinch + marquee)
   useEffect(() => {
-    const onMove = (e: MouseEvent) => movePan(e.clientX, e.clientY)
-    const onUp = () => endPan()
+    const onMove = (e: MouseEvent) => {
+      if (marqueeRef.current) {
+        const pt = pagePoint(e.clientX, e.clientY)
+        if (pt) setMarquee((m) => (m ? { ...m, x1: pt.x, y1: pt.y } : m))
+        return
+      }
+      movePan(e.clientX, e.clientY)
+    }
+    const onUp = () => {
+      if (marqueeRef.current) {
+        marqueeRef.current = false
+        setMarquee((m) => {
+          if (m) selectInMarquee(m)
+          return null
+        })
+        return
+      }
+      endPan()
+    }
     const onTouchMove = (e: TouchEvent) => {
       const pinch = pinchRef.current
       if (pinch && e.touches.length === 2) {
@@ -322,7 +396,24 @@ export default function CanvasStage() {
       window.removeEventListener('touchend', onTouchEnd)
       window.removeEventListener('touchcancel', onTouchEnd)
     }
-  }, [pan, zoom])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pan, zoom, page])
+
+  // ── right-click context menu ───────────────────────────────
+  const handleContextMenu = (e: KonvaEventObject<PointerEvent>) => {
+    e.evt.preventDefault()
+    if (editingMode !== 'editing') return
+    const target = e.target
+    const isElement = target.name() === 'cv-element'
+    if (isElement) {
+      const id = target.id()
+      if (id && !selectedIds.includes(id)) setSelection([id])
+      setCtxMenu({ x: e.evt.clientX, y: e.evt.clientY, kind: 'element' })
+    } else {
+      clearSelection()
+      setCtxMenu({ x: e.evt.clientX, y: e.evt.clientY, kind: 'page' })
+    }
+  }
 
   // ── wheel: ctrl/cmd = zoom, plain = pan ────────────────────
   const handleWheel = (e: KonvaEventObject<WheelEvent>) => {
@@ -413,9 +504,16 @@ export default function CanvasStage() {
         lineHeight: `${editingText.lineHeight}`,
         letterSpacing: `${editingText.letterSpacing * zoom}px`,
         color: editingText.fill,
-        textAlign: editingText.align,
+        textAlign: editingText.align === 'justify' ? 'left' : editingText.align,
       }
     : null
+
+  /** canva-style circle anchors on the transformer */
+  const anchorStyleFunc = useCallback((anchor: Konva.Shape) => {
+    const a = anchor as Konva.Rect
+    a.cornerRadius(a.width() / 2)
+    a.strokeWidth(0)
+  }, [])
 
   return (
     <div
@@ -430,6 +528,7 @@ export default function CanvasStage() {
           height={containerSize.h}
           onMouseDown={handleStageMouseDown}
           onTouchStart={handleStageTouchStart}
+          onContextMenu={handleContextMenu}
           onWheel={handleWheel}
         >
           <Layer ref={layerRef}>
@@ -450,15 +549,46 @@ export default function CanvasStage() {
               <Transformer
                 ref={trRef}
                 keepRatio
+                rotateEnabled
+                flipEnabled={false}
                 boundBoxFunc={(oldBox, newBox) => (newBox.width < 8 || newBox.height < 8 ? oldBox : newBox)}
+                // canva-measured selection chrome: #7630D7 2px border + white circle handles
+                borderStroke={SELECTION_COLOR}
+                borderStrokeWidth={2 / zoom}
+                borderDash={undefined}
+                anchorStroke={SELECTION_COLOR}
+                anchorFill="#FFFFFF"
+                anchorSize={10 / zoom}
+                anchorCornerRadius={5 / zoom}
+                anchorStyleFunc={anchorStyleFunc}
+                anchorStrokeWidth={0}
+                rotateAnchorOffset={26 / zoom}
+                rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+                rotationSnapTolerance={4}
+                padding={2 / zoom}
+                useSingleNodeRotation
               />
-              {/* snapping guides */}
+              {/* snapping guides — canva #9954FF 2px */}
               {guides.map((g, i) =>
                 g.axis === 'x' ? (
-                  <Rect key={i} x={g.position} y={0} width={1 / zoom} height={height} fill={GUIDE_COLOR} listening={false} />
+                  <Rect key={i} x={g.position} y={0} width={2 / zoom} height={height} fill={GUIDE_COLOR} listening={false} />
                 ) : (
-                  <Rect key={i} x={0} y={g.position} width={width} height={1 / zoom} fill={GUIDE_COLOR} listening={false} />
+                  <Rect key={i} x={0} y={g.position} width={width} height={2 / zoom} fill={GUIDE_COLOR} listening={false} />
                 )
+              )}
+              {/* marquee selection rect (canva: #7630D7 border, translucent fill) */}
+              {marquee && (
+                <Rect
+                  x={Math.min(marquee.x0, marquee.x1)}
+                  y={Math.min(marquee.y0, marquee.y1)}
+                  width={Math.abs(marquee.x1 - marquee.x0)}
+                  height={Math.abs(marquee.y1 - marquee.y0)}
+                  fill="rgba(118,48,215,0.08)"
+                  stroke={SELECTION_COLOR}
+                  strokeWidth={1.5 / zoom}
+                  dash={[4 / zoom, 3 / zoom]}
+                  listening={false}
+                />
               )}
               {/* freehand draft */}
               {draft && draft.length >= 4 && (
@@ -475,6 +605,14 @@ export default function CanvasStage() {
             </Group>
           </Layer>
         </Stage>
+      )}
+
+      {/* canva-style right-click context menu */}
+      {ctxMenu && (
+        <CanvasContextMenu
+          state={ctxMenu}
+          onClose={() => setCtxMenu(null)}
+        />
       )}
 
       {/* text editing overlay */}

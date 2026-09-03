@@ -5,11 +5,12 @@ import { Home, MessageCircle, Play, Share2, ChevronDown, Undo2, Redo2, Download,
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { ExportDialog } from './ExportDialog'
 import { ResizeDialog } from './ResizeDialog'
 import { ShareDialog } from './ShareDialog'
+import { ContextToolbar } from './PropertiesBar'
 
 /** Canva-2026 editor topbar: 56px cyan→purple gradient, white text, File/Resize/Editing left, Preview/Share right. */
 export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; onShortcuts: () => void }) {
@@ -27,6 +28,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
   const setEditingMode = useEditorStore((s) => s.setEditingMode)
   const setPreviewOpen = useEditorStore((s) => s.setPreviewOpen)
   const setPanel = useEditorStore((s) => s.setPanel)
+  const selectedIds = useEditorStore((s) => s.selectedIds)
 
   const [exportOpen, setExportOpen] = useState(false)
   const [resizeOpen, setResizeOpen] = useState(false)
@@ -34,12 +36,22 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
 
   const item = 'h-10 px-3 rounded-xl text-white/95 hover:bg-white/15 transition-colors text-sm font-semibold flex items-center gap-1.5 select-none'
 
+  // canva behaviour: an element selection replaces the topbar middle section with the context toolbar
+  const hasSelection = selectedIds.length > 0
+
   return (
     <header className="h-14 cv-topbar-gradient flex items-center gap-1 px-2 sm:px-3 z-40 shrink-0 shadow-[0_1px_0_rgba(0,0,0,0.15)]">
       <Button variant="ghost" size="icon" className="rounded-full text-white hover:bg-white/15 hover:text-white shrink-0" onClick={goDashboard} aria-label="Back to home" title="Home">
         <Home size={19} />
       </Button>
 
+      {hasSelection ? (
+        /* context toolbar occupies the middle (desktop only; mobile gets the bottom bar) */
+        <div className="hidden md:flex flex-1 min-w-0 overflow-hidden">
+          <ContextToolbar />
+        </div>
+      ) : (
+        <>
       {/* File menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -119,6 +131,8 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           ) : null}
         </span>
       </div>
+      </>
+      )}
 
       <div className="ml-auto flex items-center gap-0.5 sm:gap-1 shrink-0">
         <Button variant="ghost" size="icon" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={undo} disabled={!canUndo} aria-label="Undo" title="Undo (Ctrl+Z)">

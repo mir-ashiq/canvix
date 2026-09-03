@@ -6,6 +6,7 @@ import {
   type AnyElement,
   type Background,
   type BrandKit,
+  createGroupElement,
   DEFAULT_BRAND,
   type DesignRecord,
   type PageData,
@@ -81,11 +82,16 @@ interface EditorState {
   deleteSelection: () => void
   duplicateSelection: () => void
   copySelection: () => void
+  cutSelection: () => void
   pasteClipboard: () => void
   moveLayer: (id: string, dir: 'up' | 'down' | 'front' | 'back') => void
   reorderLayer: (dragId: string, targetIndex: number) => void
   setLock: (ids: string[], locked: boolean) => void
   setVisible: (ids: string[], visible: boolean) => void
+  groupSelection: () => void
+  ungroupSelection: () => void
+  alignElements: (ids: string[], mode: 'left' | 'cx' | 'right' | 'top' | 'cy' | 'bottom') => void
+  flipSelection: (axis: 'h' | 'v') => void
 
   // page ops
   addPage: () => void
@@ -100,6 +106,10 @@ interface EditorState {
   zoomIn: () => void
   zoomOut: () => void
   resetZoom: () => void
+  fitToScreen: () => void
+  /** workspace viewport size (set by CanvasStage for fit-to-screen) */
+  viewport: { width: number; height: number }
+  setViewport: (v: { width: number; height: number }) => void
 
   // canva-2026 chrome
   setEditingMode: (m: 'editing' | 'viewing') => void
@@ -266,6 +276,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     clipboard = clone(pages[currentPage].elements.filter((e) => selectedIds.includes(e.id)))
   },
 
+  cutSelection: () => {
+    const { selectedIds, pages, currentPage } = get()
+    if (!selectedIds.length) return
+    clipboard = clone(pages[currentPage].elements.filter((e) => selectedIds.includes(e.id)))
+    get().deleteSelection()
+  },
+
   pasteClipboard: () => {
     if (!clipboard.length) return
     get().pushHistory()
@@ -307,6 +324,68 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setLock: (ids, locked) => get().updateElements(ids, { locked }),
   setVisible: (ids, visible) => get().updateElements(ids, { visible }),
+
+  groupSelection: () => {
+    const { selectedIds, pages, currentPage } = get()
+    const page = pages[currentPage]
+    const children = page.elements.filter((e) => selectedIds.includes(e.id) && !e.locked)
+    if (children.length < 2) return
+    get().pushHistory()
+    const group = createGroupElement(children)
+    const next = clone(pages)
+    next[currentPage].elements = [...next[currentPage].elements.filter((e) => !selectedIds.includes(e.id)), group]
+    set({ pages: next, selectedIds: [group.id] })
+  },
+
+  ungroupSelection: () => {
+    const { selectedIds, pages, currentPage } = get()
+    const page = pages[currentPage]
+    const groups = page.elements.filter((e) => selectedIds.includes(e.id) && e.type === 'group')
+    if (!groups.length) return
+    get().pushHistory()
+    const next = clone(pages)
+    let released: string[] = []
+    for (const g of groups) {
+      if (g.type !== 'group') continue
+      next[currentPage].elements = next[currentPage].elements.filter((e) => e.id !== g.id)
+      next[currentPage].elements.push(...g.children.map((c) => ({ ...clone(c) })))
+      released = [...released, ...g.children.map((c) => c.id)]
+    }
+    set({ pages: next, selectedIds: released })
+  },
+
+  alignElements: (ids, mode) => {
+    if (!ids.length) return
+    get().pushHistory()
+    const { pages, currentPage, width, height } = get()
+    const next = clone(pages)
+    next[currentPage].elements = next[currentPage].elements.map((el) => {
+      if (!ids.includes(el.id)) return el
+      switch (mode) {
+        case 'left': return { ...el, x: 0 }
+        case 'cx': return { ...el, x: Math.round((width - el.width) / 2) }
+        case 'right': return { ...el, x: width - el.width }
+        case 'top': return { ...el, y: 0 }
+        case 'cy': return { ...el, y: Math.round((height - el.height) / 2) }
+        case 'bottom': return { ...el, y: height - el.height }
+      }
+    })
+    set({ pages: next })
+  },
+
+  flipSelection: (axis) => {
+    const { selectedIds, pages, currentPage } = get()
+    if (!selectedIds.length) return
+    get().pushHistory()
+    const next = clone(pages)
+    next[currentPage].elements = next[currentPage].elements.map((el) => {
+      if (!selectedIds.includes(el.id)) return el
+      if (el.type === 'image') return { ...el, flipH: axis === 'h' ? !el.flipH : el.flipH, flipV: axis === 'v' ? !el.flipV : el.flipV }
+      // shapes/text: mirror via negative scale is not in the model; rotate 180 for symmetric flip feel
+      return { ...el, rotation: (el.rotation + (axis === 'h' ? 0 : 180)) % 360 }
+    })
+    set({ pages: next })
+  },
 
   addPage: () => {
     get().pushHistory()
@@ -359,6 +438,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   zoomIn: () => set({ zoom: Math.min(ZOOM_MAX, get().zoom * 1.2) }),
   zoomOut: () => set({ zoom: Math.max(ZOOM_MIN, get().zoom / 1.2) }),
   resetZoom: () => set({ zoom: 1 }),
+  fitToScreen: () => {
+    const { width, height, viewport } = get()
+    if (!viewport.width || !viewport.height) { set({ zoom: 1 }); return }
+    const z = Math.min((viewport.width - 96) / width, (viewport.height - 96) / height)
+    set({ zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)) })
+  },
+  viewport: { width: 0, height: 0 },
+  setViewport: (v) => set({ viewport: v }),
 
   setEditingMode: (m) => set({ editingMode: m }),
   setPreviewOpen: (open) => set({ previewOpen: open }),

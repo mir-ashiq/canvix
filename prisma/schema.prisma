@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// A user design / project — the core artifact of Canvix.
+model Design {
+  id         String   @id @default(cuid())
+  name       String   @default("Untitled design")
+  width      Int      @default(1080)
+  height     Int      @default(1080)
+  // Serialized JSON: { pages: PageData[], ... }
+  pages      String   @default("[]")
+  thumbnail  String?  // small dataURL preview
+  source     String   @default("blank") // blank | template:<id> | duplicate:<id>
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// Built-in starter templates rendered in the dashboard & editor.
+model Template {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  category  String // social | presentation | print | logo | thumbnail
+  width     Int
+  height    Int
+  pages     String // serialized JSON — same shape as Design.pages
+  accent    String   @default("#00C4CC") // card decoration
+  createdAt DateTime @default(now())
+}

@@ -135,12 +135,22 @@ export interface BrandKit {
   colors: string[]
   headingFont: string
   bodyFont: string
+  /** saved colour palettes (swatch rows) */
+  palettes?: string[][]
+  /** uploaded logo dataURLs */
+  logos?: string[]
 }
 
 export const DEFAULT_BRAND: BrandKit = {
   colors: ['#7630D7', '#02C0CC', '#FF5C8A', '#1F142E', '#FFD166'],
   headingFont: 'Archivo Black',
   bodyFont: 'Inter',
+  palettes: [
+    ['#7630D7', '#02C0CC', '#FF5C8A'],
+    ['#1F142E', '#6E717F', '#E0E1E6'],
+    ['#FF5C8A', '#FFB84C', '#FFE066'],
+  ],
+  logos: [],
 }
 
 export type AnyElement =

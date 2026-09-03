@@ -59,7 +59,7 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#16181D] border-white/10 text-white sm:max-w-md">
+      <DialogContent className="rounded-[28px] bg-[#16181D] border-white/10 text-white sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-lg font-bold">Resize design</DialogTitle>
           <DialogDescription className="text-white/60">

@@ -57,7 +57,10 @@ Caddyfile
 .zscripts/
 .z-ai-config/
 db/
-research/
+research/*
+!research/CANVA-V03-RESEARCH.md
+!research/CANVIX-V03-GAP-ANALYSIS.md
+!research/CANVA-RESEARCH.md
 worklog.md
 download/
 tests/

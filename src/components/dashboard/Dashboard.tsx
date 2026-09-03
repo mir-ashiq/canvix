@@ -21,6 +21,8 @@ import {
   FolderOpen,
   BookMarked,
   CircleHelp,
+  Info,
+  Heart,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
@@ -76,8 +78,9 @@ export function Dashboard() {
   const goLanding = useAppStore((s) => s.goLanding)
   const openEditor = useAppStore((s) => s.openEditor)
   const loadEditorDesign = useEditorStore((s) => s.loadDesign)
-  const { designs, refresh } = useDesigns()
+  const { designs, loading, refresh } = useDesigns()
   const isMobile = useIsMobile()
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<string>('all')
@@ -271,6 +274,40 @@ export function Dashboard() {
             >
               <Plus size={16} /> <span className="hidden sm:inline">Custom size</span>
             </Button>
+            {/* ── account area (canva-style avatar menu) ── */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="h-10 w-10 rounded-full bg-gradient-to-br from-[#02C0CC] to-[#7630D7] text-white text-[13px] font-extrabold flex items-center justify-center shrink-0 hover:brightness-110 transition-all"
+                  aria-label="Account menu"
+                  title="Account"
+                >
+                  CV
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 bg-[#16181D] border-white/10 text-white">
+                <div className="px-3 py-2.5 border-b border-white/[0.07]">
+                  <div className="text-[13px] font-semibold">Canvix creator</div>
+                  <div className="text-[11px] text-white/45">Free · open-source · local-first</div>
+                </div>
+                <DropdownMenuItem className="gap-2" onClick={() => setHelpOpen(true)}>
+                  <CircleHelp size={14} /> Help &amp; shortcuts
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2" onClick={goLanding}>
+                  <Info size={14} /> About Canvix
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2" asChild>
+                  <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer">
+                    <Github size={14} /> GitHub repository
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2" asChild>
+                  <a href="https://github.com/mir-ashiq/canvix/stargazers" target="_blank" rel="noreferrer">
+                    <Heart size={14} /> Star the project
+                  </a>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
@@ -402,7 +439,17 @@ export function Dashboard() {
         {/* ── Recent designs ── */}
         <section id="cv-recents" className="pt-12 scroll-mt-20">
           <h2 className="text-xl font-bold">Recent designs</h2>
-          {filteredDesigns.length === 0 ? (
+          {loading ? (
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i}>
+                  <div className="cv-skeleton w-full aspect-[4/3]" />
+                  <div className="cv-skeleton h-3.5 w-2/3 mt-2.5" />
+                  <div className="cv-skeleton h-2.5 w-1/3 mt-1.5" />
+                </div>
+              ))}
+            </div>
+          ) : filteredDesigns.length === 0 ? (
             <div className="mt-6 rounded-2xl border-2 border-dashed border-white/12 p-10 text-center">
               <div className="mx-auto h-14 w-14 rounded-2xl bg-brand-gradient-soft flex items-center justify-center text-[#A78BFA]">
                 <Plus size={24} />
@@ -482,20 +529,70 @@ export function Dashboard() {
       </div>{/* end flex-1 column */}
 
       {/* ── Canva-style “Get help” FAB ── */}
-      <a
-        href="https://github.com/mir-ashiq/canvix/discussions"
-        target="_blank"
-        rel="noreferrer"
+      <button
+        onClick={() => setHelpOpen(true)}
         className="fixed bottom-5 right-5 z-50 h-12 w-12 rounded-full bg-[#7630D7] hover:bg-[#8B5CF6] text-white flex items-center justify-center shadow-xl shadow-[#7630D7]/40 transition-colors"
-        aria-label="Get help — GitHub discussions"
+        aria-label="Get help"
         title="Get help"
       >
         <CircleHelp size={22} />
-      </a>
+      </button>
+
+      {/* ── Help & shortcuts modal ── */}
+      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+        <DialogContent className="rounded-[28px] sm:max-w-md bg-[#16181D] border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CircleHelp size={18} className="text-[#02C0CC]" /> Help &amp; shortcuts
+            </DialogTitle>
+            <DialogDescription className="text-white/55">Everything you need to design faster.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto cv-scroll-dark">
+            <div>
+              <div className="text-[12px] font-bold text-white/85 mb-2 uppercase tracking-wide">Editor shortcuts</div>
+              <div className="space-y-1.5">
+                {[
+                  ['Ctrl+Z / Ctrl+Shift+Z', 'Undo / redo'],
+                  ['Ctrl+D', 'Duplicate'],
+                  ['Ctrl+G / Ctrl+Shift+G', 'Group / ungroup'],
+                  ['Ctrl+A', 'Select all'],
+                  ['Ctrl+L', 'Lock / unlock'],
+                  ['Delete', 'Delete selection'],
+                  ['Double-click text', 'Edit text inline'],
+                  ['Space + drag', 'Pan the canvas'],
+                  ['Drag empty canvas', 'Marquee select'],
+                ].map(([k, v]) => (
+                  <div key={k} className="flex items-center justify-between text-[12px]">
+                    <span className="text-white/70">{v}</span>
+                    <kbd className="text-[10px] font-semibold bg-white/[0.08] border border-white/10 rounded-md px-2 py-1">{k}</kbd>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="text-[12px] font-bold text-white/85 mb-2 uppercase tracking-wide">Where things live</div>
+              <ul className="text-[12px] text-white/70 space-y-1.5 leading-relaxed">
+                <li>· <b className="text-white/90">Templates / Elements / Text</b> — left rail in the editor</li>
+                <li>· <b className="text-white/90">Brand</b> — colors, palettes, fonts &amp; logos (saved locally)</li>
+                <li>· <b className="text-white/90">Apps</b> — charts, QR codes, icons, palettes &amp; placeholder text</li>
+                <li>· <b className="text-white/90">Uploads</b> — drop images onto the canvas anytime</li>
+              </ul>
+            </div>
+            <a
+              href="https://github.com/mir-ashiq/canvix/discussions"
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 text-[12px] text-[#02C0CC] hover:underline"
+            >
+              <Github size={13} /> Still stuck? Ask in GitHub discussions
+            </a>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Custom size dialog ── */}
       <Dialog open={customOpen} onOpenChange={setCustomOpen}>
-        <DialogContent className="sm:max-w-sm bg-[#16181D] border-white/10 text-white">
+        <DialogContent className="rounded-[28px] sm:max-w-sm bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
             <DialogTitle>Create a custom design</DialogTitle>
             <DialogDescription className="text-white/55">Pick any pixel size — you can resize later.</DialogDescription>
@@ -533,7 +630,7 @@ export function Dashboard() {
 
       {/* ── Rename dialog ── */}
       <Dialog open={!!renameTarget} onOpenChange={(open) => !open && setRenameTarget(null)}>
-        <DialogContent className="sm:max-w-sm bg-[#16181D] border-white/10 text-white">
+        <DialogContent className="rounded-[28px] sm:max-w-sm bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
             <DialogTitle>Rename design</DialogTitle>
           </DialogHeader>
@@ -547,7 +644,7 @@ export function Dashboard() {
 
       {/* ── Delete confirm dialog ── */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <DialogContent className="sm:max-w-sm bg-[#16181D] border-white/10 text-white">
+        <DialogContent className="rounded-[28px] sm:max-w-sm bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
             <DialogTitle>Delete this design?</DialogTitle>
             <DialogDescription className="text-white/55">This action can&apos;t be undone.</DialogDescription>

@@ -43,7 +43,7 @@ export function ShareDialog({ open, onOpenChange }: { open: boolean; onOpenChang
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#16181D] border-white/10 text-white sm:max-w-md">
+      <DialogContent className="rounded-[28px] bg-[#16181D] border-white/10 text-white sm:max-w-md">
         {open && <ShareBody designId={designId} designName={designName} link={link} copied={copied} onCopy={() => void copy()} />}
       </DialogContent>
     </Dialog>

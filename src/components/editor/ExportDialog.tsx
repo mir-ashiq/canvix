@@ -87,7 +87,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="rounded-[28px] sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileImage size={18} className="text-[#7D2AE8]" /> Download your design

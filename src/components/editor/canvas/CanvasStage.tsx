@@ -396,7 +396,6 @@ export default function CanvasStage() {
       window.removeEventListener('touchend', onTouchEnd)
       window.removeEventListener('touchcancel', onTouchEnd)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pan, zoom, page])
 
   // ── right-click context menu ───────────────────────────────

@@ -151,7 +151,7 @@ watermarks, no paywalls.
 
 ## 🚀 Quick start
 
-> **Prerequisites:** [Node.js 20+](https://nodejs.org) or [Bun](https://bun.sh), and a SQLite-capable machine (any machine).
+> **Prerequisites:** [Node.js 20+](https://nodejs.org) or [Bun](https://bun.sh), and a [PostgreSQL](https://www.postgresql.org) database (local install, Docker, or a free serverless host like [Neon](https://neon.tech)).
 
 ```bash
 git clone https://github.com/mir-ashiq/canvix.git
@@ -159,7 +159,7 @@ cd canvix
 bun install            # or: npm install
 
 # set up the database
-cp .env.example .env   # then edit DATABASE_URL if you like
+cp .env.example .env   # then edit DATABASE_URL with your Postgres connection string
 bun run db:push        # create tables
 bun run db:seed        # load the built-in templates
 
@@ -181,7 +181,7 @@ bun run start
 | Styling | Tailwind CSS 4 + shadcn/ui |
 | Canvas engine | [Konva.js](https://konvajs.org) via react-konva |
 | State | Zustand |
-| Database | Prisma ORM + SQLite |
+| Database | Prisma ORM + PostgreSQL (jsonb) |
 | Fonts | 15 hand-picked Google Fonts |
 
 ## 📁 Project structure

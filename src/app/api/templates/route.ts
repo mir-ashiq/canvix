@@ -16,7 +16,7 @@ export async function GET() {
         width: t.width,
         height: t.height,
         accent: t.accent,
-        pages: JSON.parse(t.pages || '[]'),
+        pages: t.pages ?? [],
       }))
     )
   } catch (error) {

@@ -10,6 +10,7 @@ export interface DesignMeta {
   height: number
   thumbnail: string | null
   source: string
+  deletedAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -81,8 +82,25 @@ export async function duplicateDesign(id: string): Promise<DesignRecord> {
 }
 
 export async function deleteDesign(id: string): Promise<void> {
-  const res = await fetch(`/api/designs/${id}`, { method: 'DELETE' })
+  const res = await fetch(`/api/designs/${id}`, { method: 'DELETE' }) // soft delete -> Trash
   if (!res.ok) throw new Error('Failed to delete design')
+}
+
+/** v0.4: trash list / restore / permanent delete */
+export async function listTrash(): Promise<DesignMeta[]> {
+  const res = await fetch('/api/designs?trash=1', { cache: 'no-store' })
+  if (!res.ok) throw new Error('Failed to list trash')
+  return res.json()
+}
+
+export async function restoreDesign(id: string): Promise<void> {
+  const res = await fetch(`/api/designs/${id}/restore`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to restore design')
+}
+
+export async function deleteDesignForever(id: string): Promise<void> {
+  const res = await fetch(`/api/designs/${id}?permanent=1`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete design permanently')
 }
 
 export async function renameDesign(id: string, name: string): Promise<void> {

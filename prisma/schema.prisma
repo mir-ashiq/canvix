@@ -9,16 +9,34 @@ datasource db {
 
 // A user design / project — the core artifact of Canvix.
 model Design {
-  id         String   @id @default(cuid())
-  name       String   @default("Untitled design")
-  width      Int      @default(1080)
-  height     Int      @default(1080)
+  id         String          @id @default(cuid())
+  name       String          @default("Untitled design")
+  width      Int             @default(1080)
+  height     Int             @default(1080)
   // Structured document: { pages: PageData[], ... } — stored as native jsonb
-  pages      Json     @default("[]")
-  thumbnail  String?  // small dataURL preview
-  source     String   @default("blank") // blank | template:<id> | duplicate:<id>
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  pages      Json            @default("[]")
+  thumbnail  String?         // small dataURL preview
+  source     String          @default("blank") // blank | template:<id> | duplicate:<id> | resize:<id>
+  // soft delete (dashboard Trash) — null = live design
+  deletedAt  DateTime?
+  versions   DesignVersion[]
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+}
+
+// Server-side version snapshots for a design (Canva "Version history").
+model DesignVersion {
+  id        String   @id @default(cuid())
+  designId  String
+  design    Design   @relation(fields: [designId], references: [id], onDelete: Cascade)
+  label     String   @default("Version")
+  name      String
+  width     Int
+  height    Int
+  pages     Json
+  createdAt DateTime @default(now())
+
+  @@index([designId, createdAt(sort: Desc)])
 }
 
 // Built-in starter templates rendered in the dashboard & editor.

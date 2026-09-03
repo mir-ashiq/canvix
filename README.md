@@ -30,6 +30,38 @@ watermarks, no paywalls.
 
 ## 🎨 Features
 
+### v0.4.0 — the Magic Suite: AI editing, PostgreSQL & infrastructure
+
+- **PostgreSQL database** — Prisma migrated from SQLite to Postgres (native `jsonb`
+  documents); one database technology everywhere, local & serverless-ready
+  (Neon / Supabase / RDS). Includes the `.env.example` Postgres URL guide
+- **Magic Resize** — Canva Magic-Switch-style resize dialog: check any of 12
+  channel presets (Story / Reels / posts / A4 / poster / business card…), then
+  **resize in place** or **Copy & resize** — every copy gets an automatic
+  smart re-layout (elements scale, keep their relative positions, fonts &
+  strokes re-proportion)
+- **BG Remover** — one-click background removal on any selected image, powered
+  by an in-browser ONNX segmentation model (real alpha cut-outs, first use
+  downloads the model once, then it's cached)
+- **Magic Eraser** — describe an unwanted object ("the person in the
+  background") and AI removes it, reconstructing the background behind it
+- **Enhance image** — one-click AI photo cleanup: sharpening, lighting and
+  colour balance while keeping the framing identical
+- **Translate design** — File → Translate: pick from 24 languages, and every
+  text across all pages is AI-translated in place (layout intact, one undo)
+- **Canvix AI assistant** — a chat copilot app (Canva AI-style) that sees your
+  design: ask for headlines, palettes or taglines and tap the suggested
+  actions to add text, generate images, save palettes or translate the design
+- **Live photo search** — the Photos panel now searches real web photos (not
+  just the bundled library) with debounced live results
+- **Server-side version history** — snapshots now persist in Postgres
+  (30 per design, cascade-deleted), with localStorage as an offline fallback
+- **Dashboard trash** — deleting a design moves it to a Trash section
+  (restore / delete forever), plus a Recent/Name sort control
+- **5 new document templates** — Minimal Resume, Certificate of Achievement,
+  Clean Invoice, Monthly Calendar and Business Card under a new
+  "Docs & office" category (21 templates total)
+
 ### v0.3.2 — fonts, gradients, PDF, photos & AI
 
 - **63-font library** — 15 → **63 families** across five categories (sans / serif /

@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import { FontDropdown } from './toolbar/FontDropdown'
 import { ColorMenu } from './toolbar/ColorMenu'
 import { ToolbarPopover, SliderRow, IconTile } from './toolbar/popover-kit'
+import { BgRemoverButton, MagicEraserPopover, EnhanceButton } from './ImageAI'
 
 const ALIGN_ICONS = {
   left: AlignLeft,
@@ -301,6 +302,10 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
             <Crop size={14} />
           </TBtn>
           <ImageAdjustPopover el={image} ids={ids} />
+          {/* v0.4 Canva AI image tools */}
+          <BgRemoverButton el={image} />
+          <MagicEraserPopover el={image} />
+          <EnhanceButton el={image} />
           <Divider />
           <ColorMenu value="#FFFFFF" onChange={() => undefined} title="Filter tint (soon)" />
           <ToolbarPopover trigger={(open) => (

@@ -1,6 +1,7 @@
 'use client'
 
-import { ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Lock, LockOpen, Eye, EyeOff, Trash2, Type, Image as ImageIcon, Square, Minus, Smile, PenTool } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Lock, LockOpen, Eye, EyeOff, Trash2, Type, Image as ImageIcon, Square, Minus, Smile, PenTool, Group as GroupIcon } from 'lucide-react'
 import { useEditorStore, currentPageData } from '@/store/editor-store'
 import { cn } from '@/lib/utils'
 import type { AnyElement } from '@/lib/types'
@@ -13,17 +14,20 @@ function elementIcon(el: AnyElement) {
     case 'stroke': return PenTool
     case 'sticker': return Smile
     case 'path': return PenTool
+    case 'group': return GroupIcon
     default: return Square
   }
 }
 
 function elementLabel(el: AnyElement): string {
+  if (el.name) return el.name
   if (el.type === 'text') return (el.text || 'Text').slice(0, 26) || 'Text'
   if (el.type === 'sticker') return `Sticker ${el.char}`
   if (el.type === 'image') return 'Image'
   if (el.type === 'line') return 'Line'
   if (el.type === 'stroke') return 'Stroke'
   if (el.type === 'path') return 'Graphic'
+  if (el.type === 'group') return 'Group'
   return el.type.charAt(0).toUpperCase() + el.type.slice(1)
 }
 
@@ -36,6 +40,18 @@ export function LayersPanel() {
   const setLock = useEditorStore((s) => s.setLock)
   const setVisible = useEditorStore((s) => s.setVisible)
   const deleteSelection = useEditorStore((s) => s.deleteSelection)
+  const updateElements = useEditorStore((s) => s.updateElements)
+
+  /** v0.3.1: inline rename — double-click a layer name to edit it */
+  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null)
+
+  const commitRename = () => {
+    if (!renaming) return
+    const value = renaming.value.trim()
+    // an empty name falls back to the auto label (undefined)
+    updateElements([renaming.id], { name: value || undefined })
+    setRenaming(null)
+  }
 
   const page = currentPageData({ pages, currentPage })
   // render top layer first
@@ -64,7 +80,34 @@ export function LayersPanel() {
               onClick={() => setSelection([el.id])}
             >
               <Icon size={15} className="shrink-0" />
-              <span className={cn('flex-1 truncate', !el.visible && 'opacity-40')}>{elementLabel(el)}</span>
+              {renaming?.id === el.id ? (
+                <input
+                  autoFocus
+                  value={renaming.value}
+                  onChange={(e) => setRenaming((r) => (r ? { ...r, value: e.target.value } : r))}
+                  onBlur={commitRename}
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    e.stopPropagation()
+                    if (e.key === 'Enter') commitRename()
+                    if (e.key === 'Escape') setRenaming(null)
+                  }}
+                  className="flex-1 min-w-0 bg-white/10 border border-[#7630D7] rounded-md px-1.5 py-0.5 text-[13px] outline-none"
+                  aria-label="Layer name"
+                  maxLength={60}
+                />
+              ) : (
+                <span
+                  className={cn('flex-1 truncate', !el.visible && 'opacity-40')}
+                  title="Double-click to rename"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    setRenaming({ id: el.id, value: el.name ?? elementLabel(el) })
+                  }}
+                >
+                  {elementLabel(el)}
+                </span>
+              )}
 
               <div className="hidden group-hover:flex items-center gap-0.5">
                 <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10" title="Bring to front" aria-label="Bring to front" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'front') }}>

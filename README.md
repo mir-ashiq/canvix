@@ -30,6 +30,24 @@ watermarks, no paywalls.
 
 ## 🎨 Features
 
+### v0.3.1 — editor completeness: rulers, crop, layers rename, version history
+
+- **Rulers & manual guides** — Canva-style ruler strips (top/left) with adaptive tick
+  ladders and pointer markers; drag out of a ruler to pull a `#9954FF` guide, drag it
+  to move, drag off-page or double-click to delete, and snap elements to it. Toggle
+  with **Shift+R** or the File menu
+- **Image crop** — select an image → Crop button (or right-click → Crop image): drag
+  handles or draw a brand-new crop region, lock to aspect presets (1:1, 4:3, 16:9…),
+  rule-of-thirds overlay, live pixel readout, flips baked in
+- **Layer renaming** — double-click any row in the Layers list for an inline rename;
+  custom names persist with the design
+- **Version history** — File → Version history (or **Ctrl+Alt+S**): labelled local
+  snapshots per design with restore (undo-able), delete and relative timestamps
+- **Group rotation fixed & refined** — rotating a group no longer double-rotates its
+  children, and ungrouping a rotated group keeps every child exactly where it was
+- **Clickable app tiles** — app cards and chart rows open on any click (not just the
+  Open/Add button), with full keyboard support
+
 ### v0.3.0 — deep visual parity & feature expansion
 
 - **Canva-exact selection chrome** — selection border and handles re-skinned to the
@@ -72,7 +90,7 @@ watermarks, no paywalls.
 
 - **Canva-2026 dark theme** — every surface re-skinned from live canva.com research:
   deep-purple app background `#1F142E`, editor workspace `#0F1015`, rail `#1D1F26`,
-  cards `#16171D` and the signature **cyan→purple gradient topbar** (`#02C0CC → #7B2FF7`)
+  cards `#16171D` and the signature **cyan→purple gradient topbar**
 - **New 8-tab editor rail** (72 px, exactly like Canva): Templates · Elements · Text ·
   Brand · Uploads · Tools · Projects · Apps
 - **New topbar**: File menu, Resize, Editing/Viewing mode toggle, “All changes saved”
@@ -167,8 +185,8 @@ prisma/                     # schema + seed
 - [x] Canva-accurate dark theme & 8-tab editor rail *(v0.2.0)*
 - [x] Text effects, draw tool, brand kit, charts, preview & share *(v0.2.0)*
 - [x] Canva-exact selection, context menus, groups, colour menu, apps ecosystem *(v0.3.0)*
+- [x] Rulers & manually placed guides, image crop, layer renaming, version history *(v0.3.1)*
 - [ ] PDF export
-- [ ] Rulers & manually placed guides
 - [ ] Gradient fills for shapes & text
 - [ ] Curated stock photo library
 - [ ] Real-time collaboration (CRDT)

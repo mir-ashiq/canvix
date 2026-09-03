@@ -557,10 +557,15 @@ export function Dashboard() {
                   ['Ctrl+G / Ctrl+Shift+G', 'Group / ungroup'],
                   ['Ctrl+A', 'Select all'],
                   ['Ctrl+L', 'Lock / unlock'],
+                  ['Ctrl+Alt+S', 'Save a version snapshot'],
+                  ['Shift+R', 'Show / hide rulers'],
+                  ['V', 'Select tool'],
                   ['Delete', 'Delete selection'],
                   ['Double-click text', 'Edit text inline'],
+                  ['Double-click layer', 'Rename a layer'],
                   ['Space + drag', 'Pan the canvas'],
                   ['Drag empty canvas', 'Marquee select'],
+                  ['Drag from ruler', 'Pull out a guide'],
                 ].map(([k, v]) => (
                   <div key={k} className="flex items-center justify-between text-[12px]">
                     <span className="text-white/70">{v}</span>
@@ -576,6 +581,9 @@ export function Dashboard() {
                 <li>· <b className="text-white/90">Brand</b> — colors, palettes, fonts &amp; logos (saved locally)</li>
                 <li>· <b className="text-white/90">Apps</b> — charts, QR codes, icons, palettes &amp; placeholder text</li>
                 <li>· <b className="text-white/90">Uploads</b> — drop images onto the canvas anytime</li>
+                <li>· <b className="text-white/90">Layers</b> — rename (double-click), reorder, lock &amp; hide</li>
+                <li>· <b className="text-white/90">File menu</b> — rulers, version history &amp; downloads</li>
+                <li>· <b className="text-white/90">Crop</b> — select an image → Crop button or right-click</li>
               </ul>
             </div>
             <a

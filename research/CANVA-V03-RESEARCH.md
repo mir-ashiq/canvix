@@ -119,3 +119,28 @@ zoom-menu          w128, item 128×40
 tooltip            ~45-49×28, delayed ~1s
 handles            white circles ~10px on #7630D7 2px solid box
 ```
+
+## v0.3.1 verification addendum (2026-09-03)
+
+Fresh E2E pass (40 checkpoints) + VLM visual QA after implementing the remaining
+gap-analysis features:
+
+- **Rulers & guides** — E2E-verified: Shift+R toggle, guide pulled from the top ruler
+  (drag gesture), `Clear guides (1)` page context-menu entry. Rulers render with
+  adaptive tick ladders and pointer triangles; guides snap elements.
+- **Image crop** — QR-code → select → Crop image → 1:1 → Apply crop pipeline green
+  end-to-end (dialog, aspect lock, px readout, cropped result re-selected on canvas).
+- **Version history** — File → Version history opens, label fills, snapshot saves and
+  lists with Restore/Delete. Note: with a toast visible, the first Escape dismisses
+  the toast (topmost-layer semantics); the dialog's Close button or a second Escape
+  closes it — standard Radix layering, not a defect.
+- **Layers rename** — role-based selectors confirm the panel + rows are a11y-named.
+- **QA score**: 8.5/10 average across 13 key surfaces (see
+  `research/canvix-v03-qa-scores.md`). Remaining VLM deductions are dominated by
+  pixel-estimation noise (it reports the 72px rail as 56-64px and requests context
+  toolbars in selection-free screenshots) and self-contradictory gradient direction
+  notes across runs — the gradient was re-weighted purple→magenta dominant in
+  response to the first run's "too blue" consensus.
+- **Known dev-only artifact**: the Next.js 16 dev overlay badge shows "1 Issue" in
+  `next dev` (its panel lists only Route/Bundler build info; zero page errors across
+  every E2E run and the production build is clean) — not present in production.

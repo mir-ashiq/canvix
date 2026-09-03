@@ -8,6 +8,7 @@ import { useEditorStore, currentPageData } from '@/store/editor-store'
 import { gradientProps, computeSnap, clamp, type GuideLine } from '@/lib/editor-utils'
 import { canvasBridge } from './canvas-bridge'
 import { ElementNode } from './element-node'
+import { Rulers } from './rulers'
 import type { TextElement } from '@/lib/types'
 import { createStrokeElement } from '@/lib/types'
 import { CanvasContextMenu, type ContextMenuState } from './context-menu'
@@ -38,6 +39,12 @@ export default function CanvasStage() {
   const drawColor = useEditorStore((s) => s.drawColor)
   const drawSize = useEditorStore((s) => s.drawSize)
   const editingMode = useEditorStore((s) => s.editingMode)
+  // v0.3.1: rulers & manual guides
+  const showRulers = useEditorStore((s) => s.showRulers)
+  const manualGuides = useEditorStore((s) => s.manualGuides)
+  const addManualGuide = useEditorStore((s) => s.addManualGuide)
+  const moveManualGuide = useEditorStore((s) => s.moveManualGuide)
+  const removeManualGuide = useEditorStore((s) => s.removeManualGuide)
 
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 })
   const [pan, setPan] = useState({ x: 0, y: 0 })
@@ -49,6 +56,8 @@ export default function CanvasStage() {
   /** marquee draft in PAGE coords */
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null)
+  /** v0.3.1: guide being pulled out of a ruler (page coords) */
+  const [draftGuide, setDraftGuide] = useState<{ axis: 'x' | 'y'; position: number } | null>(null)
   const drawingRef = useRef(false)
   const marqueeRef = useRef(false)
   const spaceRef = useRef(false)
@@ -107,7 +116,8 @@ export default function CanvasStage() {
   // ── fit to screen ──────────────────────────────────────────
   const fitToScreen = useCallback(() => {
     if (containerSize.w < 50 || containerSize.h < 50) return
-    const z = Math.min((containerSize.w - 100) / width, (containerSize.h - 100) / height, 1.5)
+    const pad = showRulers ? 128 : 100
+    const z = Math.min((containerSize.w - pad) / width, (containerSize.h - pad) / height, 1.5)
     const clamped = Math.max(0.05, z)
     setZoom(clamped)
     prevZoomRef.current = clamped
@@ -118,7 +128,7 @@ export default function CanvasStage() {
     prevPanRef.current = centered
     setPan(centered)
     userZoomedRef.current = false
-  }, [containerSize, width, height, setZoom])
+  }, [containerSize, width, height, setZoom, showRulers])
 
   // fit on mount & on design size change & on resize (if user hasn't zoomed)
   useEffect(() => {
@@ -205,6 +215,16 @@ export default function CanvasStage() {
     const others = p.elements
       .filter((e) => e.id !== id && e.visible)
       .map((e) => ({ x: e.x, y: e.y, width: e.width, height: e.height, rotation: e.rotation }))
+    // v0.3.1: manual guides act as snap targets (zero-size virtual edges)
+    if (state.showRulers) {
+      for (const g of state.manualGuides) {
+        others.push(
+          g.axis === 'x'
+            ? { x: g.position, y: 0, width: 0, height: 0, rotation: 0 }
+            : { x: 0, y: g.position, width: 0, height: 0, rotation: 0 }
+        )
+      }
+    }
     const { dx, dy, guides: g } = computeSnap(rect, others, { width: state.width, height: state.height })
     if (dx !== 0 || dy !== 0) {
       node.x(node.x() + dx)
@@ -279,6 +299,58 @@ export default function CanvasStage() {
       .map((e) => e.id)
     if (hits.length) setSelection(hits)
     else clearSelection()
+  }
+
+  // ── v0.3.1: pull a guide out of a ruler ──────────────────
+  const guideDragging = draftGuide !== null
+  useEffect(() => {
+    if (!guideDragging) return
+    const onMove = (e: MouseEvent) => {
+      const pt = pagePoint(e.clientX, e.clientY)
+      if (!pt) return
+      setDraftGuide((d) => (d ? { ...d, position: d.axis === 'x' ? pt.x : pt.y } : d))
+    }
+    const onUp = () => {
+      setDraftGuide((d) => {
+        if (d) {
+          const limit = d.axis === 'x' ? width : height
+          if (d.position > -30 && d.position < limit + 30) addManualGuide(d.axis, d.position)
+        }
+        return null
+      })
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDraftGuide(null)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [guideDragging, pan, zoom, width, height, addManualGuide])
+
+  const beginGuideFromRuler = (axis: 'x' | 'y', pagePos: number) => {
+    if (editingMode !== 'editing' || tool === 'draw') return
+    clearSelection()
+    setDraftGuide({ axis, position: pagePos })
+  }
+
+  /** commit / delete a manually-dragged guide line */
+  const commitGuideDrag = (g: { id: string; axis: 'x' | 'y'; position: number }, node: Konva.Node) => {
+    if (g.axis === 'x') {
+      const nx = node.x()
+      node.x(g.position) // restore; state drives the final position
+      if (nx < -40 || nx > width + 40) removeManualGuide(g.id)
+      else moveManualGuide(g.id, nx)
+    } else {
+      const ny = node.y()
+      node.y(g.position)
+      if (ny < -40 || ny > height + 40) removeManualGuide(g.id)
+      else moveManualGuide(g.id, ny)
+    }
   }
 
   const handleStageMouseDown = (e: KonvaEventObject<MouseEvent>) => {
@@ -575,6 +647,61 @@ export default function CanvasStage() {
                   <Rect key={i} x={0} y={g.position} width={width} height={2 / zoom} fill={GUIDE_COLOR} listening={false} />
                 )
               )}
+              {/* v0.3.1: manual ruler guides — draggable; double-click or drag off-page to delete */}
+              {showRulers && manualGuides.map((g) =>
+                g.axis === 'x' ? (
+                  <Line
+                    key={g.id}
+                    x={g.position}
+                    y={0}
+                    points={[0, -40, 0, height + 40]}
+                    stroke={GUIDE_COLOR}
+                    strokeWidth={1 / zoom}
+                    hitStrokeWidth={10 / zoom}
+                    draggable
+                    onDragMove={(e) => e.target.y(0)}
+                    onDragEnd={(e) => commitGuideDrag(g, e.target)}
+                    onDblClick={() => removeManualGuide(g.id)}
+                    onDblTap={() => removeManualGuide(g.id)}
+                  />
+                ) : (
+                  <Line
+                    key={g.id}
+                    x={0}
+                    y={g.position}
+                    points={[-40, 0, width + 40, 0]}
+                    stroke={GUIDE_COLOR}
+                    strokeWidth={1 / zoom}
+                    hitStrokeWidth={10 / zoom}
+                    draggable
+                    onDragMove={(e) => e.target.x(0)}
+                    onDragEnd={(e) => commitGuideDrag(g, e.target)}
+                    onDblClick={() => removeManualGuide(g.id)}
+                    onDblTap={() => removeManualGuide(g.id)}
+                  />
+                )
+              )}
+              {/* v0.3.1: guide currently being pulled from a ruler */}
+              {draftGuide &&
+                (draftGuide.axis === 'x' ? (
+                  <Line
+                    points={[draftGuide.position, -40, draftGuide.position, height + 40]}
+                    stroke={GUIDE_COLOR}
+                    strokeWidth={1 / zoom}
+                    dash={[6 / zoom, 4 / zoom]}
+                    opacity={0.85}
+                    listening={false}
+                  />
+                ) : (
+                  <Line
+                    points={[-40, draftGuide.position, width + 40, draftGuide.position]}
+                    stroke={GUIDE_COLOR}
+                    strokeWidth={1 / zoom}
+                    dash={[6 / zoom, 4 / zoom]}
+                    opacity={0.85}
+                    listening={false}
+                  />
+                ))}
               {/* marquee selection rect (canva: #7630D7 border, translucent fill) */}
               {marquee && (
                 <Rect
@@ -604,6 +731,19 @@ export default function CanvasStage() {
             </Group>
           </Layer>
         </Stage>
+      )}
+
+      {/* v0.3.1: rulers overlay (desktop) */}
+      {showRulers && containerSize.w > 0 && (
+        <Rulers
+          width={width}
+          height={height}
+          zoom={zoom}
+          pan={pan}
+          containerW={containerSize.w}
+          containerH={containerSize.h}
+          onGuideStart={beginGuideFromRuler}
+        />
       )}
 
       {/* canva-style right-click context menu */}

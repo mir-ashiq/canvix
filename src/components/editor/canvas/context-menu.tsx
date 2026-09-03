@@ -21,6 +21,8 @@ import {
   FilePlus2,
   Palette,
   MousePointerClick,
+  Crop,
+  Ruler,
 } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { isGroup } from '@/lib/types'
@@ -76,10 +78,16 @@ export function CanvasContextMenu({ state, onClose }: { state: ContextMenuState;
     (el) => selectedIds.includes(el.id) && !el.visible
   )
 
+  // v0.3.1: crop entry applies to a single selected image
+  const singleImage = selectedIds.length === 1
+    ? store.pages[store.currentPage].elements.find((el) => el.id === selectedIds[0] && el.type === 'image')
+    : undefined
+
   const elementItems: Item[] = [
     { label: 'Copy', icon: Copy, kbd: 'Ctrl+C', onSelect: () => store.copySelection() },
     { label: 'Cut', icon: Scissors, kbd: 'Ctrl+X', onSelect: () => { store.cutSelection() } },
     { label: 'Duplicate', icon: CopyPlus, kbd: 'Ctrl+D', onSelect: () => store.duplicateSelection() },
+    ...(singleImage ? [{ label: 'Crop image', icon: Crop, onSelect: () => store.openCrop(singleImage.id) }] : []),
     Sep as unknown as Item,
     { label: 'Bring to front', icon: BringToFront, onSelect: () => selectedIds.forEach((id) => store.moveLayer(id, 'front')) },
     { label: 'Bring forward', icon: ArrowUpToLine, onSelect: () => selectedIds.forEach((id) => store.moveLayer(id, 'up')) },
@@ -97,6 +105,9 @@ export function CanvasContextMenu({ state, onClose }: { state: ContextMenuState;
   const pageItems: Item[] = [
     { label: 'Paste', icon: ClipboardPaste, kbd: 'Ctrl+V', onSelect: () => store.pasteClipboard() },
     { label: 'Select all', icon: MousePointerClick, kbd: 'Ctrl+A', onSelect: () => store.setSelection(store.pages[store.currentPage].elements.filter((e) => !e.locked).map((e) => e.id)) },
+    ...(store.manualGuides.length > 0
+      ? [{ label: `Clear guides (${store.manualGuides.length})`, icon: Ruler, onSelect: () => store.clearManualGuides() }]
+      : []),
     Sep as unknown as Item,
     { label: 'Add page', icon: FilePlus2, onSelect: () => store.addPage() },
     { label: 'Duplicate page', icon: SquareStack, onSelect: () => store.duplicatePage(store.currentPage) },

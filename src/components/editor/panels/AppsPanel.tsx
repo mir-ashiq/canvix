@@ -52,7 +52,19 @@ function AppCard({ app, onOpen }: { app: CanvixApp; onOpen: () => void }) {
     onOpen()
   }
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 hover:border-[#7630D7] transition-colors flex flex-col">
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${app.name} app`}
+      onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          handleClick()
+        }
+      }}
+      className="rounded-xl border border-white/10 bg-white/[0.03] p-3 hover:border-[#7630D7] transition-colors flex flex-col cursor-pointer focus:outline-none focus-visible:border-[#7630D7]"
+    >
       <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${app.color}22` }}>
         <Icon size={20} style={{ color: app.color }} />
       </div>
@@ -60,7 +72,10 @@ function AppCard({ app, onOpen }: { app: CanvixApp; onOpen: () => void }) {
       <div className="text-[11px] text-white/45 leading-tight flex-1">{app.desc}</div>
       <button
         className={cn('mt-2.5 h-8 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors', soon ? 'bg-white/5 text-white/40' : 'bg-[#7630D7] hover:bg-[#8B5CF6] text-white')}
-        onClick={handleClick}
+        onClick={(e) => {
+          e.stopPropagation()
+          handleClick()
+        }}
       >
         {soon ? 'Soon' : 'Open'} {!soon && <ArrowRight size={11} />}
       </button>

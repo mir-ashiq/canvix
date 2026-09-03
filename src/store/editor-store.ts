@@ -9,6 +9,8 @@ import {
   createGroupElement,
   DEFAULT_BRAND,
   type DesignRecord,
+  type DesignVersion,
+  type ManualGuide,
   type PageData,
 } from '@/lib/types'
 import type { TemplateDef } from '@/lib/templates'
@@ -60,6 +62,26 @@ interface EditorState {
   drawColor: string
   drawSize: number
   brand: BrandKit
+
+  // v0.3.1: rulers & manual guides
+  showRulers: boolean
+  manualGuides: ManualGuide[]
+  toggleRulers: () => void
+  addManualGuide: (axis: 'x' | 'y', position: number) => string
+  moveManualGuide: (id: string, position: number) => void
+  removeManualGuide: (id: string) => void
+  clearManualGuides: () => void
+
+  // v0.3.1: version history (per design, localStorage-persisted)
+  versions: DesignVersion[]
+  saveVersion: (label?: string) => void
+  restoreVersion: (id: string) => void
+  deleteVersion: (id: string) => void
+
+  // v0.3.1: image crop dialog target (set from context menu / toolbar)
+  cropTargetId: string | null
+  openCrop: (id: string) => void
+  closeCrop: () => void
 
   // lifecycle
   loadDesign: (d: DesignRecord) => void
@@ -156,7 +178,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   drawSize: 6,
   brand: DEFAULT_BRAND,
 
-  loadDesign: (d) =>
+  showRulers: false,
+  manualGuides: [],
+  versions: [],
+  cropTargetId: null,
+
+  loadDesign: (d) => {
     set({
       designId: d.id,
       designName: d.name,
@@ -173,7 +200,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       saving: false,
       previewOpen: false,
       tool: 'select',
-    }),
+      cropTargetId: null,
+    })
+    // v0.3.1: load any locally-persisted versions for this design
+    set({ versions: loadVersions(d.id) })
+  },
 
   rename: (name) => set({ designName: name, dirty: true }),
 
@@ -348,8 +379,27 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     for (const g of groups) {
       if (g.type !== 'group') continue
       next[currentPage].elements = next[currentPage].elements.filter((e) => e.id !== g.id)
-      next[currentPage].elements.push(...g.children.map((c) => ({ ...clone(c) })))
-      released = [...released, ...g.children.map((c) => c.id)]
+      // v0.3.1: children live in the group's local (unrotated) space — when the
+      // group has a rotation, orbit each child around the group origin and pass
+      // the rotation on, so nothing jumps on ungroup.
+      const rad = ((g.rotation || 0) * Math.PI) / 180
+      const cos = Math.cos(rad)
+      const sin = Math.sin(rad)
+      const releasedEls = g.children.map((c) => {
+        if (!rad) return { ...clone(c) }
+        const cx = c.x + c.width / 2 - g.x
+        const cy = c.y + c.height / 2 - g.y
+        const nx = g.x + cx * cos - cy * sin - c.width / 2
+        const ny = g.y + cx * sin + cy * cos - c.height / 2
+        return {
+          ...clone(c),
+          x: Math.round(nx),
+          y: Math.round(ny),
+          rotation: (c.rotation + (g.rotation || 0)) % 360,
+        }
+      })
+      next[currentPage].elements.push(...releasedEls)
+      released = [...released, ...releasedEls.map((c) => c.id)]
     }
     set({ pages: next, selectedIds: released })
   },
@@ -454,6 +504,63 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setDrawSize: (n) => set({ drawSize: Math.min(64, Math.max(1, n)) }),
   setBrand: (b) => set({ brand: b }),
 
+  // ── v0.3.1: rulers & manual guides ─────────────────────
+  toggleRulers: () => set({ showRulers: !get().showRulers }),
+  addManualGuide: (axis, position) => {
+    const id = uid('guide')
+    set({ manualGuides: [...get().manualGuides, { id, axis, position: Math.round(position) }] })
+    return id
+  },
+  moveManualGuide: (id, position) => {
+    set({
+      manualGuides: get().manualGuides.map((g) => (g.id === id ? { ...g, position: Math.round(position) } : g)),
+    })
+  },
+  removeManualGuide: (id) => set({ manualGuides: get().manualGuides.filter((g) => g.id !== id) }),
+  clearManualGuides: () => set({ manualGuides: [] }),
+
+  // ── v0.3.1: version history ────────────────────────────
+  saveVersion: (label) => {
+    const { designId, designName, width, height, pages, versions } = get()
+    if (!designId) return
+    const v: DesignVersion = {
+      id: uid('ver'),
+      label: label?.trim() || `Version ${versions.length + 1}`,
+      at: Date.now(),
+      name: designName,
+      width,
+      height,
+      pages: clone(pages),
+    }
+    const next = [v, ...versions].slice(0, 30) // keep the 30 most recent
+    set({ versions: next })
+    persistVersions(designId, next)
+  },
+  restoreVersion: (id) => {
+    const v = get().versions.find((x) => x.id === id)
+    if (!v) return
+    get().pushHistory()
+    set({
+      pages: clone(v.pages),
+      width: v.width,
+      height: v.height,
+      designName: v.name,
+      currentPage: 0,
+      selectedIds: [],
+      dirty: true,
+    })
+  },
+  deleteVersion: (id) => {
+    const { designId, versions } = get()
+    const next = versions.filter((v) => v.id !== id)
+    set({ versions: next })
+    if (designId) persistVersions(designId, next)
+  },
+
+  // v0.3.1: image crop dialog
+  openCrop: (id) => set({ cropTargetId: id }),
+  closeCrop: () => set({ cropTargetId: null }),
+
   resizeDesign: (width, height) => {
     get().pushHistory()
     const { pages } = get()
@@ -482,4 +589,51 @@ export function currentPageData(s: Pick<EditorState, 'pages' | 'currentPage'>): 
 
 export function selectedElements(s: Pick<EditorState, 'pages' | 'currentPage' | 'selectedIds'>): AnyElement[] {
   return currentPageData(s).elements.filter((e) => s.selectedIds.includes(e.id))
+}
+
+// ── v0.3.1: version persistence (localStorage, per design) ──
+
+const VERSIONS_KEY = (designId: string) => `canvix-versions-${designId}`
+const VERSIONS_LIMIT_JSON = 4.5 * 1024 * 1024 // ~4.5 MB safety budget
+
+function loadVersions(designId: string): DesignVersion[] {
+  try {
+    const raw = localStorage.getItem(VERSIONS_KEY(designId))
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as DesignVersion[]) : []
+  } catch {
+    return []
+  }
+}
+
+function persistVersions(designId: string, versions: DesignVersion[]) {
+  try {
+    // guard against quota errors: drop oldest versions until we fit
+    let list = versions
+    while (list.length > 1) {
+      try {
+        localStorage.setItem(VERSIONS_KEY(designId), JSON.stringify(list))
+        return
+      } catch {
+        list = list.slice(0, -1)
+      }
+    }
+    localStorage.setItem(VERSIONS_KEY(designId), JSON.stringify(list))
+  } catch {
+    /* localStorage unavailable (private mode) — versions stay in memory */
+  }
+}
+
+/** drop stored versions above the size budget (called after big saves) */
+export function pruneVersionsIfNeeded(designId: string) {
+  try {
+    const raw = localStorage.getItem(VERSIONS_KEY(designId))
+    if (raw && raw.length > VERSIONS_LIMIT_JSON) {
+      const list = (JSON.parse(raw) as DesignVersion[]).slice(0, -1)
+      persistVersions(designId, list)
+    }
+  } catch {
+    /* ignore */
+  }
 }

@@ -8,7 +8,7 @@ import {
   AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd,
   AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd,
   FlipHorizontal, FlipVertical, Sun, Contrast, Palette, RotateCcw, Replace, Lock, LockOpen,
-  Layers, SquareDashed,
+  Layers, SquareDashed, Crop,
 } from 'lucide-react'
 import { useEditorStore, selectedElements, currentPageData } from '@/store/editor-store'
 import type { ImageElement, LineElement, ShapeElement, StickerElement, TextElement, AnyElement } from '@/lib/types'
@@ -285,6 +285,9 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
         </>
       ) : image ? (
         <>
+          <TBtn onClick={() => state.openCrop(image.id)} title="Crop image" ariaLabel="Crop image">
+            <Crop size={14} />
+          </TBtn>
           <ImageAdjustPopover el={image} ids={ids} />
           <Divider />
           <ColorMenu value="#FFFFFF" onChange={() => undefined} title="Filter tint (soon)" />

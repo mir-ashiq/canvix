@@ -30,6 +30,27 @@ watermarks, no paywalls.
 
 ## 🎨 Features
 
+### v0.2.0 — the Canva-accurate dark refresh
+
+- **Canva-2026 dark theme** — every surface re-skinned from live canva.com research:
+  deep-purple app background `#1F142E`, editor workspace `#0F1015`, rail `#1D1F26`,
+  cards `#16171D` and the signature **cyan→purple gradient topbar** (`#02C0CC → #7B2FF7`)
+- **New 8-tab editor rail** (72 px, exactly like Canva): Templates · Elements · Text ·
+  Brand · Uploads · Tools · Projects · Apps
+- **New topbar**: File menu, Resize, Editing/Viewing mode toggle, “All changes saved”
+  pill, Preview, Share (white Canva pill) and Download
+- **Text effects** — Shadow, Lift, Hollow, Neon and Echo presets from the context toolbar
+- **Draw tool** — freehand brush (color + size) committed as editable vector strokes
+- **Brand kit** — save brand colors & fonts, apply them to any selection (localStorage)
+- **Charts** — bar, line and donut charts built from native editable elements (Apps panel)
+- **Preview mode** — fullscreen presentation with keyboard navigation
+- **Share dialog** — copy link + access levels (local-first)
+- **Resize dialog** — preset sizes or custom, elements stay centered
+- **Canva-style home** — “What will you design today?” hero, left rail with purple
+  Create button, brand-kit section, and the purple “Get help” FAB
+
+### Core (v0.1.0)
+
 - **Drag-and-drop editor** — move, resize and rotate text, shapes, lines, graphics,
   stickers and images on a smooth HTML5 canvas (Konva.js)
 - **Typography** — 15 bundled Google Fonts, bold/italic/underline/strike, letter &
@@ -48,7 +69,6 @@ watermarks, no paywalls.
   generated 100% client-side
 - **Responsive** — the same editor adapts to desktop, tablet and mobile with
   touch gestures (pinch-zoom, drag-to-pan)
-- **Dark tool rail & contextual toolbars** — a UI that will feel instantly familiar
 
 ## 🚀 Quick start
 
@@ -97,7 +117,7 @@ src/
 │   ├── dashboard/          # home screen: presets, templates, recent designs
 │   └── editor/             # the design editor
 │       ├── canvas/         # Konva stage, element renderers, export bridge
-│       └── panels/         # templates / elements / text / uploads / background / layers
+│       └── panels/         # templates / elements / text / brand / uploads / tools / projects / apps
 ├── lib/                    # types, editor utilities, template library
 ├── store/                  # zustand stores (app + editor)
 └── hooks/
@@ -106,13 +126,14 @@ prisma/                     # schema + seed
 
 ## 🧭 Roadmap
 
+- [x] Canva-accurate dark theme & 8-tab editor rail *(v0.2.0)*
+- [x] Text effects, draw tool, brand kit, charts, preview & share *(v0.2.0)*
 - [ ] PDF export
-- [ ] Multi-select grouping & alignment guides toolbar
+- [ ] Multi-select grouping
 - [ ] Gradient fills for shapes & text
 - [ ] Curated stock photo library
 - [ ] Real-time collaboration (CRDT)
-- [ ] Brand kits (saved fonts & colors)
-- [ ] Design duplication & sharing links
+- [ ] AI-assisted design (local models)
 - [ ] Plugin system
 
 ## 🤝 Contributing

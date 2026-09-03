@@ -25,6 +25,7 @@ import {
   CornerDownRight,
   ArrowLeftRight,
   MoveDiagonal,
+  Wand2,
 } from 'lucide-react'
 import { useEditorStore, selectedElements, currentPageData } from '@/store/editor-store'
 import { FONTS } from '@/lib/editor-utils'
@@ -34,6 +35,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Slider } from '@/components/ui/slider'
 import { cn } from '@/lib/utils'
 import type { AnyElement, TextElement, ShapeElement, LineElement, ImageElement, StickerElement } from '@/lib/types'
+import { TEXT_EFFECTS, type TextEffect } from '@/lib/types'
 
 function ToolButton({
   onClick,
@@ -41,7 +43,7 @@ function ToolButton({
   title,
   children,
 }: {
-  onClick: () => void
+  onClick?: () => void
   active?: boolean
   title: string
   children: React.ReactNode
@@ -53,7 +55,7 @@ function ToolButton({
       aria-label={title}
       className={cn(
         'h-8 min-w-8 px-1.5 rounded-lg flex items-center justify-center transition-colors',
-        active ? 'bg-[#E6FAFB] text-[#0A8F96]' : 'text-[#3D3F47] hover:bg-black/[0.06]'
+        active ? 'bg-[#7630D7] text-white' : 'text-white/75 hover:bg-white/10 hover:text-white'
       )}
     >
       {children}
@@ -62,7 +64,7 @@ function ToolButton({
 }
 
 function Divider() {
-  return <span className="h-5 w-px bg-black/10 mx-1 shrink-0" aria-hidden="true" />
+  return <span className="h-5 w-px bg-white/15 mx-1 shrink-0" aria-hidden="true" />
 }
 
 function NumberStepper({
@@ -94,8 +96,8 @@ function NumberStepper({
   }
 
   return (
-    <div className="flex items-center rounded-lg border border-black/10 h-8 bg-white" title={title}>
-      <button className="h-full px-1.5 text-[#3D3F47] hover:text-[#0A8F96]" aria-label="Decrease" onClick={() => commit(String(value - 1))}>
+    <div className="flex items-center rounded-lg border border-white/12 h-8 bg-white/[0.06]" title={title}>
+      <button className="h-full px-1.5 text-white/70 hover:text-white" aria-label="Decrease" onClick={() => commit(String(value - 1))}>
         <Minus size={12} />
       </button>
       <input
@@ -103,12 +105,12 @@ function NumberStepper({
         onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ''))}
         onBlur={() => commit(draft)}
         onKeyDown={(e) => e.key === 'Enter' && commit(draft)}
-        className="w-11 text-center text-xs font-semibold outline-none bg-transparent"
+        className="w-11 text-center text-xs font-semibold text-white outline-none bg-transparent"
         inputMode="numeric"
         aria-label={title}
       />
-      {suffix && <span className="text-[10px] text-muted-foreground pr-1">{suffix}</span>}
-      <button className="h-full px-1.5 text-[#3D3F47] hover:text-[#0A8F96]" aria-label="Increase" onClick={() => commit(String(value + 1))}>
+      {suffix && <span className="text-[10px] text-white/50 pr-1">{suffix}</span>}
+      <button className="h-full px-1.5 text-white/70 hover:text-white" aria-label="Increase" onClick={() => commit(String(value + 1))}>
         <Plus size={12} />
       </button>
     </div>
@@ -126,7 +128,7 @@ function OpacityControl({ opacity, onCommit }: { opacity: number; onCommit: (v: 
           </span>
         </ToolButton>
       </PopoverTrigger>
-      <PopoverContent className="w-52 p-3">
+      <PopoverContent className="w-52 p-3 bg-[#16181D] border-white/10 text-white">
         <div className="flex items-center justify-between text-xs font-medium">
           <span>Transparency</span>
           <span>{Math.round(local * 100)}%</span>
@@ -194,10 +196,10 @@ export function PropertiesBar() {
 
   return (
     <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 max-w-[calc(100%-2rem)]">
-      <div className="flex items-center gap-0.5 rounded-2xl bg-white/95 backdrop-blur border border-black/10 shadow-lg shadow-black/10 px-2 py-1.5 overflow-x-auto cv-scroll">
+      <div className="flex items-center gap-0.5 rounded-2xl bg-[#1D1F26]/95 backdrop-blur border border-white/10 shadow-xl shadow-black/50 px-2 py-1.5 overflow-x-auto cv-scroll-dark">
         {isMulti ? (
           <>
-            <span className="text-xs font-medium text-muted-foreground px-1.5 shrink-0">{sel.length} selected</span>
+            <span className="text-xs font-medium text-white/60 px-1.5 shrink-0">{sel.length} selected</span>
             <Divider />
             <ToolButton title="Align left" onClick={() => alignSelection('left')}><AlignStartVertical size={15} /></ToolButton>
             <ToolButton title="Align centers" onClick={() => alignSelection('cx')}><AlignCenterVertical size={15} /></ToolButton>
@@ -213,7 +215,7 @@ export function PropertiesBar() {
               <select
                 value={text.fontFamily}
                 onChange={(e) => update(ids, { fontFamily: e.target.value })}
-                className="h-8 rounded-lg border border-black/10 bg-white px-2 text-xs font-semibold outline-none cursor-pointer max-w-[130px] truncate"
+                className="h-8 rounded-lg border border-white/12 bg-white/[0.06] text-white px-2 text-xs font-semibold outline-none cursor-pointer max-w-[130px] truncate [color-scheme:dark]"
                 style={{ fontFamily: text.fontFamily }}
                 aria-label="Font family"
               >
@@ -253,6 +255,7 @@ export function PropertiesBar() {
               onChangeLetter={(v) => update(ids, { letterSpacing: v })}
               onChangeLine={(v) => update(ids, { lineHeight: v })}
             />
+            <EffectsControl effect={text.effect ?? 'none'} onChange={(fx) => update(ids, { effect: fx })} />
           </>
         ) : shape ? (
           <>
@@ -342,7 +345,7 @@ function SpacingControl({
           <MoveDiagonal size={14} />
         </ToolButton>
       </PopoverTrigger>
-      <PopoverContent className="w-56 p-3">
+      <PopoverContent className="w-56 p-3 bg-[#16181D] border-white/10 text-white">
         <div className="flex items-center justify-between text-xs font-medium">
           <span>Letter spacing</span>
           <span>{letterSpacing.toFixed(0)}px</span>
@@ -374,7 +377,7 @@ function ShadowControl({ element }: { element: AnyElement }) {
           </svg>
         </ToolButton>
       </PopoverTrigger>
-      <PopoverContent className="w-56 p-3">
+      <PopoverContent className="w-56 p-3 bg-[#16181D] border-white/10 text-white">
         <label className="flex items-center justify-between text-xs font-medium cursor-pointer">
           <span>Shadow</span>
           <input type="checkbox" checked={enabled} onChange={(e) => setShadow({ enabled: e.target.checked })} className="accent-[#00C4CC]" />
@@ -401,6 +404,55 @@ function ShadowControl({ element }: { element: AnyElement }) {
             </div>
           </>
         )}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/** Canva-style text effects: None / Shadow / Lift / Hollow / Neon / Echo */
+function EffectsControl({ effect, onChange }: { effect: TextEffect; onChange: (fx: TextEffect) => void }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <ToolButton title="Effects" active={effect !== 'none'}>
+          <Wand2 size={14} />
+        </ToolButton>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-3 bg-[#16181D] border-white/10 text-white">
+        <div className="text-xs font-bold uppercase tracking-wide text-white/50 mb-2">Text effects</div>
+        <div className="grid grid-cols-3 gap-2">
+          {TEXT_EFFECTS.map((fx) => (
+            <button
+              key={fx.id}
+              onClick={() => onChange(fx.id)}
+              className={cn(
+                'rounded-xl border px-2 py-2.5 text-center transition-colors',
+                effect === fx.id ? 'border-[#7630D7] bg-[#7630D7]/25' : 'border-white/10 bg-white/[0.04] hover:border-white/30'
+              )}
+              aria-pressed={effect === fx.id}
+            >
+              <span
+                className="block text-[15px] font-bold leading-tight"
+                style={
+                  fx.id === 'shadow'
+                    ? { textShadow: '0 3px 5px rgba(0,0,0,0.5)' }
+                    : fx.id === 'lift'
+                      ? { textShadow: '0 4px 0 rgba(0,0,0,0.55)' }
+                      : fx.id === 'hollow'
+                        ? { WebkitTextStroke: '1px #fff', color: 'transparent' }
+                        : fx.id === 'neon'
+                          ? { textShadow: '0 0 10px #02C0CC, 0 0 20px #02C0CC' }
+                          : fx.id === 'echo'
+                            ? { textShadow: '3px 3px 0 rgba(255,255,255,0.4)' }
+                            : undefined
+                }
+              >
+                Aa
+              </span>
+              <span className="block text-[10px] mt-1 text-white/70">{fx.label}</span>
+            </button>
+          ))}
+        </div>
       </PopoverContent>
     </Popover>
   )

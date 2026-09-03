@@ -124,13 +124,34 @@
 /* ── Canvix brand utilities ─────────────────────────────────── */
 
 :root {
-  --cv-teal: #00c4cc;
-  --cv-violet: #7d2ae8;
+  /* core brand */
+  --cv-teal: #02c0cc;
+  --cv-violet: #7630d7;          /* CTA purple — real rgb(118,48,215) from canva.com */
+  --cv-violet-hover: #8b5cf6;
+  --cv-violet-press: #6529c0;
   --cv-magenta: #ff5c8a;
-  --cv-ink: #1f2226;
-  --cv-rail: #17181d;
-  --cv-rail-active: #26272e;
-  --cv-workspace: #e9eaf0;
+
+  /* dark chrome */
+  --cv-app: #1f142e;             /* home app bg — real rgb(31,20,46) */
+  --cv-rail: #1c1229;            /* home left rail */
+  --cv-rail-editor: #1d1f26;     /* editor left rail */
+  --cv-rail-active: #2a2c35;
+  --cv-surface: #16171d;         /* cards / chips / icon buttons — real rgb(22,23,29) */
+  --cv-surface-2: #232530;
+  --cv-panel: #16181d;           /* editor side panel */
+  --cv-panel-header: #101218;
+  --cv-workspace: #0f1015;       /* editor canvas workspace */
+  --cv-ink: #0f1015;
+
+  /* text */
+  --cv-text: rgba(255, 255, 255, 0.9);
+  --cv-text-2: rgba(255, 255, 255, 0.7);
+  --cv-text-3: rgba(255, 255, 255, 0.55);
+  --cv-border: rgba(255, 255, 255, 0.09);
+
+  /* gradients */
+  --cv-grad-bar: linear-gradient(90deg, #02c0cc 0%, #7b2ff7 100%);
+  --cv-grad-brand: linear-gradient(120deg, #02c0cc 0%, #7630d7 55%, #ff5c8a 100%);
 }
 
 .font-sans {
@@ -138,22 +159,65 @@
 }
 
 .bg-brand-gradient {
-  background: linear-gradient(120deg, #00c4cc 0%, #7d2ae8 55%, #ff5c8a 100%);
+  background: var(--cv-grad-bar);
 }
 
 .bg-brand-gradient-soft {
-  background: linear-gradient(120deg, rgba(0, 196, 204, 0.12), rgba(125, 42, 232, 0.12), rgba(255, 92, 138, 0.12));
+  background: linear-gradient(120deg, rgba(2, 192, 204, 0.14), rgba(118, 48, 215, 0.14), rgba(255, 92, 138, 0.14));
 }
 
 .text-brand-gradient {
-  background: linear-gradient(120deg, #00c4cc 0%, #7d2ae8 55%, #ff5c8a 100%);
+  background: var(--cv-grad-brand);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
+/* editor topbar — the signature canva cyan→purple gradient */
+.cv-topbar-gradient {
+  background: var(--cv-grad-bar);
+}
+
+/* primary purple button — canva real CTA style: 14px/600, radius 12 */
+.btn-cv {
+  background: var(--cv-violet);
+  color: #fff;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.btn-cv:hover {
+  background: var(--cv-violet-hover);
+}
+.btn-cv:active {
+  background: var(--cv-violet-press);
+  transform: translateY(1px);
+}
+
+/* white pill button (canva "Share") */
+.btn-cv-white {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--cv-ink);
+  border-radius: 12px;
+  font-weight: 600;
+  transition: background 0.15s ease;
+}
+.btn-cv-white:hover {
+  background: #ffffff;
+}
+
+/* ghost button for dark chrome */
+.btn-cv-ghost {
+  color: var(--cv-text);
+  border-radius: 12px;
+}
+.btn-cv-ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
 .btn-brand-gradient {
-  background: linear-gradient(120deg, #00c4cc 0%, #7d2ae8 100%);
+  background: linear-gradient(120deg, #02c0cc 0%, #7630d7 100%);
   color: #fff;
   transition: filter 0.15s ease, transform 0.1s ease;
 }
@@ -164,24 +228,21 @@
   transform: translateY(1px);
 }
 
-/* thin scrollbars for editor panels */
+/* thin scrollbars (dark chrome everywhere now) */
 .cv-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #c5c7d0 transparent;
+  scrollbar-color: #3a3b45 transparent;
 }
 .cv-scroll::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 .cv-scroll::-webkit-scrollbar-thumb {
-  background: #c5c7d0;
+  background: #3a3b45;
   border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: content-box;
 }
 .cv-scroll::-webkit-scrollbar-thumb:hover {
-  background: #a0a2ae;
-  background-clip: content-box;
+  background: #4a4b58;
 }
 .cv-scroll-dark {
   scrollbar-width: thin;
@@ -248,7 +309,7 @@ input[type="number"] {
   position: absolute;
   background: transparent;
   border: none;
-  outline: 2px solid #00c4cc;
+  outline: 2px solid var(--cv-violet);
   resize: none;
   overflow: hidden;
   white-space: pre-wrap;
@@ -256,4 +317,12 @@ input[type="number"] {
   z-index: 40;
   padding: 0;
   margin: 0;
+}
+
+/* dark surface helpers */
+.cv-surface {
+  background: var(--cv-surface);
+}
+.cv-panel-bg {
+  background: var(--cv-panel);
 }

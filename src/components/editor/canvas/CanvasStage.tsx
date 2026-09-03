@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type Konva from 'konva'
-import { Group, Layer, Rect, Stage, Transformer } from 'react-konva'
+import { Group, Layer, Line, Rect, Stage, Transformer } from 'react-konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import { useEditorStore, currentPageData } from '@/store/editor-store'
 import { gradientProps, computeSnap, clamp, type GuideLine } from '@/lib/editor-utils'
 import { canvasBridge } from './canvas-bridge'
 import { ElementNode } from './element-node'
 import type { TextElement } from '@/lib/types'
+import { createStrokeElement } from '@/lib/types'
 
 const GUIDE_COLOR = '#FF33AA'
 
@@ -27,12 +28,21 @@ export default function CanvasStage() {
   const setZoom = useEditorStore((s) => s.setZoom)
   const clearSelection = useEditorStore((s) => s.clearSelection)
   const selectedIds = useEditorStore((s) => s.selectedIds)
+  const tool = useEditorStore((s) => s.tool)
+  const drawColor = useEditorStore((s) => s.drawColor)
+  const drawSize = useEditorStore((s) => s.drawSize)
+  const editingMode = useEditorStore((s) => s.editingMode)
 
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 })
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [guides, setGuides] = useState<GuideLine[]>([])
   const [editingTextId, setEditingTextId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  /** freehand draft: [x0,y0,x1,y1,…] in page coords */
+  const [draft, setDraft] = useState<number[] | null>(null)
+  const drawingRef = useRef(false)
+
+  const interactive = editingMode === 'editing' && tool === 'select'
 
   const userZoomedRef = useRef(false)
   const prevZoomRef = useRef(zoom)
@@ -230,6 +240,17 @@ export default function CanvasStage() {
   }
 
   const handleStageMouseDown = (e: KonvaEventObject<MouseEvent>) => {
+    if (editingMode !== 'editing') return
+    if (tool === 'draw') {
+      const stage = stageRef.current
+      const pointer = stage?.getPointerPosition()
+      if (!pointer) return
+      const px = (pointer.x - pan.x) / zoom
+        const py = (pointer.y - pan.y) / zoom
+      drawingRef.current = true
+      setDraft([px, py, px, py])
+      return
+    }
     const target = e.target
     if (target === e.target.getStage() || target.name() === 'page-bg') {
       clearSelection()
@@ -237,6 +258,7 @@ export default function CanvasStage() {
     }
   }
   const handleStageTouchStart = (e: KonvaEventObject<TouchEvent>) => {
+    if (editingMode !== 'editing' || tool === 'draw') return
     if (e.evt.touches.length === 2) {
       const [a, b] = [e.evt.touches[0], e.evt.touches[1]]
       const container = containerRef.current?.getBoundingClientRect()
@@ -327,6 +349,47 @@ export default function CanvasStage() {
     }
   }
 
+  // ── freehand drawing (window-level so strokes continue off-element) ────
+  useEffect(() => {
+    if (!drawingRef.current && draft === null) return
+    const onMove = (e: MouseEvent) => {
+      if (!drawingRef.current) return
+      const stage = stageRef.current
+      const container = containerRef.current?.getBoundingClientRect()
+      if (!stage || !container) return
+      const px = (e.clientX - container.left - pan.x) / zoom
+      const py = (e.clientY - container.top - pan.y) / zoom
+      setDraft((d) => (d ? [...d, px, py] : [px, py, px, py]))
+    }
+    const commit = () => {
+      if (!drawingRef.current) return
+      drawingRef.current = false
+      setDraft((d) => {
+        if (d && d.length >= 6) {
+          const minX = Math.min(...d.filter((_, i) => i % 2 === 0))
+          const minY = Math.min(...d.filter((_, i) => i % 2 === 1))
+          const rel = d.map((v, i) => (i % 2 === 0 ? v - minX : v - minY))
+          useEditorStore.getState().addElement(
+            createStrokeElement({
+              x: Math.round(minX),
+              y: Math.round(minY),
+              points: rel.map((v) => Math.round(v)),
+              stroke: drawColor,
+              strokeWidth: drawSize,
+            })
+          )
+        }
+        return null
+      })
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', commit)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', commit)
+    }
+  }, [draft, pan, zoom, drawColor, drawSize])
+
   // ── render ─────────────────────────────────────────────────
   const bg = page.background
   const bgProps =
@@ -355,7 +418,11 @@ export default function CanvasStage() {
     : null
 
   return (
-    <div ref={containerRef} className="relative w-full h-full overflow-hidden" style={{ touchAction: 'none' }}>
+    <div
+      ref={containerRef}
+      className="relative w-full h-full overflow-hidden"
+      style={{ touchAction: 'none', cursor: tool === 'draw' && editingMode === 'editing' ? 'crosshair' : editingMode === 'viewing' ? 'default' : undefined }}
+    >
       {containerSize.w > 0 && (
         <Stage
           ref={stageRef}
@@ -372,7 +439,7 @@ export default function CanvasStage() {
                 <ElementNode
                   key={el.id}
                   element={el}
-                  interactive
+                  interactive={interactive}
                   registerNode={registerNode}
                   onDragMoveNode={handleDragMoveNode}
                   onDragEndNode={() => setGuides([])}
@@ -392,6 +459,18 @@ export default function CanvasStage() {
                 ) : (
                   <Rect key={i} x={0} y={g.position} width={width} height={1 / zoom} fill={GUIDE_COLOR} listening={false} />
                 )
+              )}
+              {/* freehand draft */}
+              {draft && draft.length >= 4 && (
+                <Line
+                  points={draft}
+                  stroke={drawColor}
+                  strokeWidth={drawSize}
+                  lineCap="round"
+                  lineJoin="round"
+                  tension={0.25}
+                  listening={false}
+                />
               )}
             </Group>
           </Layer>

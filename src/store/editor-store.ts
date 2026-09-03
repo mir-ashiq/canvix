@@ -14,6 +14,7 @@ import {
   type PageData,
 } from '@/lib/types'
 import type { TemplateDef } from '@/lib/templates'
+import { magicRelayoutPages } from '@/lib/magic'
 
 export type PanelId =
   | 'templates'
@@ -73,7 +74,7 @@ interface EditorState {
   removeManualGuide: (id: string) => void
   clearManualGuides: () => void
 
-  // v0.3.1: version history (per design, localStorage-persisted)
+  // v0.3.1: version history (server-backed on Postgres since v0.4; localStorage fallback)
   versions: DesignVersion[]
   saveVersion: (label?: string) => void
   restoreVersion: (id: string) => void
@@ -143,6 +144,9 @@ interface EditorState {
   setBrand: (b: BrandKit) => void
   resizeDesign: (width: number, height: number) => void
 
+  // v0.4: magic translate — batch-update text elements across ALL pages
+  translateTexts: (updates: { id: string; text: string }[]) => void
+
   // panels & save
   setPanel: (p: PanelId) => void
   markSaving: () => void
@@ -203,8 +207,27 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       tool: 'select',
       cropTargetId: null,
     })
-    // v0.3.1: load any locally-persisted versions for this design
-    set({ versions: loadVersions(d.id) })
+    // v0.4: load server-side versions (Postgres); local list is the offline fallback
+    const local = loadVersions(d.id)
+    set({ versions: local })
+    fetch(`/api/designs/${d.id}/versions`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: unknown) => {
+        if (Array.isArray(list) && list.length) {
+          set({
+            versions: list.map((v: Record<string, unknown>) => ({
+              id: String(v.id),
+              label: String(v.label ?? 'Version'),
+              at: Date.parse(String(v.createdAt ?? '')) || Date.now(),
+              name: String(v.name ?? d.name),
+              width: Number(v.width) || d.width,
+              height: Number(v.height) || d.height,
+              pages: (v.pages ?? []) as PageData[],
+            })),
+          })
+        }
+      })
+      .catch(() => { /* offline — keep local list */ })
   },
 
   rename: (name) => set({ designName: name, dirty: true }),
@@ -525,7 +548,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({ manualGuides: get().manualGuides.filter((g) => g.pageId !== pageId) })
   },
 
-  // ── v0.3.1: version history ────────────────────────────
+  // ── version history (server-backed; localStorage fallback) ─
   saveVersion: (label) => {
     const { designId, designName, width, height, pages, versions } = get()
     if (!designId) return
@@ -541,6 +564,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const next = [v, ...versions].slice(0, 30) // keep the 30 most recent
     set({ versions: next })
     persistVersions(designId, next)
+    // server snapshot (best-effort; replaces the optimistic entry on success)
+    fetch(`/api/designs/${designId}/versions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: v.label, name: designName, width, height, pages }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((saved: { id?: string } | null) => {
+        if (!saved?.id) return
+        set({ versions: [{ ...v, id: saved.id }, ...get().versions.filter((x) => x.id !== v.id)].slice(0, 30) })
+        persistVersions(designId, get().versions)
+      })
+      .catch(() => { /* offline — local entry already stored */ })
   },
   restoreVersion: (id) => {
     const v = get().versions.find((x) => x.id === id)
@@ -561,6 +597,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const next = versions.filter((v) => v.id !== id)
     set({ versions: next })
     if (designId) persistVersions(designId, next)
+    // server snapshots have cuid ids; local ones use the ver_ prefix
+    if (!id.startsWith('ver_')) {
+      fetch(`/api/versions/${id}`, { method: 'DELETE' }).catch(() => {})
+    }
   },
 
   // v0.3.1: image crop dialog
@@ -569,16 +609,26 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   resizeDesign: (width, height) => {
     get().pushHistory()
-    const { pages } = get()
-    const next = clone(pages)
-    // keep elements centered when canvas size changes
-    for (const page of next) {
-      for (const el of page.elements) {
-        el.x = Math.round((width - el.width) / 2)
-        el.y = Math.round((height - el.height) / 2)
-      }
-    }
+    const { pages, width: oldW, height: oldH } = get()
+    // v0.4 magic resize: smart re-layout — elements scale & keep their relative
+    // position instead of all being dumped in the centre
+    const next = magicRelayoutPages(clone(pages), oldW, oldH, width, height)
     set({ width, height, pages: next, selectedIds: [], zoom: 1 })
+  },
+
+  // ── v0.4: magic translate ────────────────────────────
+  translateTexts: (updates) => {
+    if (!updates.length) return
+    get().pushHistory()
+    const { pages, version } = get()
+    const map = new Map(updates.map((u) => [u.id, u.text]))
+    const applyTexts = (els: AnyElement[]): AnyElement[] =>
+      els.map((el) => {
+        if (el.type === 'group') return { ...el, children: applyTexts(el.children) }
+        return map.has(el.id) ? ({ ...el, text: map.get(el.id)! } as AnyElement) : el
+      })
+    const next = clone(pages).map((p) => ({ ...p, elements: applyTexts(p.elements) }))
+    set({ pages: next, version: version + 1, dirty: true })
   },
 
   setPanel: (p) => set({ panel: get().panel === p ? null : p }),

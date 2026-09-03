@@ -45,12 +45,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-// DELETE /api/designs/[id]
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// DELETE /api/designs/[id] — move to Trash (soft delete).
+// ?permanent=1 → delete permanently (also removes version snapshots).
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    await db.design.delete({ where: { id } })
-    return NextResponse.json({ ok: true })
+    if (req.nextUrl.searchParams.get('permanent') === '1') {
+      await db.design.delete({ where: { id } })
+      return NextResponse.json({ ok: true, permanent: true })
+    }
+    await db.design.update({ where: { id }, data: { deletedAt: new Date() } })
+    return NextResponse.json({ ok: true, trashed: true })
   } catch (error) {
     console.error('DELETE /api/designs/[id] failed', error)
     return NextResponse.json({ error: 'Failed to delete design' }, { status: 500 })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   Search,
   Plus,
@@ -8,6 +8,8 @@ import {
   Pencil,
   Copy,
   Trash2,
+  RotateCcw,
+  ChevronDown,
   Presentation,
   Instagram,
   Printer,
@@ -37,11 +39,15 @@ import { cn } from '@/lib/utils'
 import {
   createDesign,
   deleteDesign,
+  deleteDesignForever,
   duplicateDesign,
   fetchDesign,
+  listTrash,
   renameDesign,
+  restoreDesign,
   timeAgo,
   useDesigns,
+  type DesignMeta,
 } from './hooks'
 import {
   Dialog,
@@ -64,6 +70,7 @@ const CATEGORY_ICONS: Record<string, typeof Presentation> = {
   social: Instagram,
   presentation: Presentation,
   print: Printer,
+  document: FileImage,
   logo: BadgeCheck,
   thumbnail: Video,
 }
@@ -91,6 +98,43 @@ export function Dashboard() {
   const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  // v0.4: trash + sort
+  const [trashOpen, setTrashOpen] = useState(false)
+  const [trash, setTrash] = useState<DesignMeta[] | null>(null)
+  const [sort, setSort] = useState<'recent' | 'name'>('recent')
+
+  const refreshTrash = useCallback(async () => {
+    try {
+      setTrash(await listTrash())
+    } catch {
+      setTrash([])
+    }
+  }, [])
+
+  const toggleTrash = (open: boolean) => {
+    setTrashOpen(open)
+    if (open && trash === null) void refreshTrash()
+  }
+
+  const doRestore = async (id: string, name: string) => {
+    try {
+      await restoreDesign(id)
+      await Promise.all([refresh(), refreshTrash()])
+      toast({ title: `“${name}” restored` })
+    } catch {
+      toast({ title: 'Could not restore', variant: 'destructive' })
+    }
+  }
+
+  const doDeleteForever = async (id: string, name: string) => {
+    try {
+      await deleteDesignForever(id)
+      await refreshTrash()
+      toast({ title: `“${name}” deleted forever` })
+    } catch {
+      toast({ title: 'Could not delete', variant: 'destructive' })
+    }
+  }
 
   const filteredTemplates = useMemo<TemplateRecord[]>(
     () =>
@@ -108,8 +152,15 @@ export function Dashboard() {
   )
 
   const filteredDesigns = useMemo(
-    () => (designs ?? []).filter((d) => d.name.toLowerCase().includes(query.toLowerCase())),
-    [designs, query]
+    () =>
+      (designs ?? [])
+        .filter((d) => d.name.toLowerCase().includes(query.toLowerCase()))
+        .sort((a, b) =>
+          sort === 'name'
+            ? a.name.localeCompare(b.name)
+            : new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        ),
+    [designs, query, sort]
   )
 
   // ── actions ─────────────────────────────────────────────────
@@ -438,7 +489,25 @@ export function Dashboard() {
 
         {/* ── Recent designs ── */}
         <section id="cv-recents" className="pt-12 scroll-mt-20">
-          <h2 className="text-xl font-bold">Recent designs</h2>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <h2 className="text-xl font-bold">Recent designs</h2>
+            {/* v0.4: canva-style sort control */}
+            <div className="flex items-center gap-1 rounded-full border border-white/10 p-0.5" role="group" aria-label="Sort designs">
+              {(['recent', 'name'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setSort(mode)}
+                  className={cn(
+                    'h-7 px-3 rounded-full text-[11.5px] font-semibold transition-colors',
+                    sort === mode ? 'bg-[#7630D7] text-white' : 'text-white/55 hover:text-white'
+                  )}
+                  aria-pressed={sort === mode}
+                >
+                  {mode === 'recent' ? 'Recent' : 'Name'}
+                </button>
+              ))}
+            </div>
+          </div>
           {loading ? (
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -504,6 +573,89 @@ export function Dashboard() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </section>
+        {/* ── Trash (v0.4 — soft-deleted designs) ── */}
+        <section id="cv-trash" className="pt-12 scroll-mt-20">
+          <button
+            onClick={() => toggleTrash(!trashOpen)}
+            className="flex items-center gap-2 w-full text-left group"
+            aria-expanded={trashOpen}
+            aria-controls="trash-list"
+          >
+            <ChevronDown size={18} className={cn('text-white/50 transition-transform', trashOpen ? '' : '-rotate-90')} />
+            <h2 className="text-xl font-bold group-hover:text-[#A78BFA] transition-colors">Trash</h2>
+            {trash !== null && (
+              <span className="text-xs text-white/40 font-medium">· {trash.length} item{trash.length === 1 ? '' : 's'}</span>
+            )}
+          </button>
+
+          {trashOpen && (
+            <div id="trash-list" className="mt-4">
+              {trash === null ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i}>
+                      <div className="cv-skeleton w-full aspect-[4/3]" />
+                      <div className="cv-skeleton h-3.5 w-2/3 mt-2.5" />
+                    </div>
+                  ))}
+                </div>
+              ) : trash.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-white/12 p-8 text-center text-sm text-white/45">
+                  Trash is empty. Deleted designs land here first — nothing is lost forever.
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                  {trash.map((d) => (
+                    <div key={d.id} className="group opacity-80 hover:opacity-100 transition-opacity">
+                      <div
+                        className="relative rounded-xl overflow-hidden border border-white/10 bg-[#0F1015] grayscale group-hover:grayscale-0 transition-all"
+                        style={{ aspectRatio: `${d.width} / ${d.height}` }}
+                      >
+                        {d.thumbnail ? (
+                          <img src={d.thumbnail} alt={d.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="absolute inset-0 flex items-center justify-center text-white/30 text-xs font-medium">
+                            {d.width} × {d.height}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-2 flex items-start justify-between gap-1">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate text-white/85">{d.name}</div>
+                          <div className="text-xs text-white/40">
+                            deleted {timeAgo(d.deletedAt ?? d.updatedAt)}
+                          </div>
+                        </div>
+                        <div className="flex gap-0.5 shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 rounded-lg text-white/60 hover:bg-white/10 hover:text-white"
+                            onClick={() => void doRestore(d.id, d.name)}
+                            aria-label={`Restore ${d.name}`}
+                            title="Restore"
+                          >
+                            <RotateCcw size={14} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 rounded-lg text-white/60 hover:bg-red-500/15 hover:text-red-400"
+                            onClick={() => void doDeleteForever(d.id, d.name)}
+                            aria-label={`Delete ${d.name} forever`}
+                            title="Delete forever"
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -650,16 +802,18 @@ export function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Delete confirm dialog ── */}
+      {/* ── Delete confirm dialog (moves to Trash) ── */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent className="rounded-[28px] sm:max-w-sm bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
             <DialogTitle>Delete this design?</DialogTitle>
-            <DialogDescription className="text-white/55">This action can&apos;t be undone.</DialogDescription>
+            <DialogDescription className="text-white/55">
+              It will move to your Trash. You can restore it anytime — or delete it forever from there.
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => deleteTarget && doDelete(deleteTarget)}>Delete</Button>
+            <Button variant="destructive" onClick={() => deleteTarget && doDelete(deleteTarget)}>Move to Trash</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

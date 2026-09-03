@@ -235,6 +235,7 @@ export const TEMPLATE_CATEGORIES = [
   { id: 'social', label: 'Social media', icon: 'instagram' },
   { id: 'presentation', label: 'Presentation', icon: 'presentation' },
   { id: 'print', label: 'Print', icon: 'printer' },
+  { id: 'document', label: 'Docs & office', icon: 'file-text' },
   { id: 'logo', label: 'Logos', icon: 'badge' },
   { id: 'thumbnail', label: 'Video & thumbnails', icon: 'video' },
 ] as const

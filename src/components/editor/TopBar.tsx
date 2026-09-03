@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Home, MessageCircle, Play, Share2, ChevronDown, Undo2, Redo2, Download, Github, Cloud, Check, Loader2, Ruler, History } from 'lucide-react'
+import { Home, MessageCircle, Play, Share2, ChevronDown, Undo2, Redo2, Download, Github, Cloud, Check, Loader2, Ruler, History, Languages } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import { ExportDialog } from './ExportDialog'
 import { ResizeDialog } from './ResizeDialog'
 import { ShareDialog } from './ShareDialog'
 import { VersionHistoryDialog } from './VersionHistoryDialog'
+import { TranslateDialog } from './TranslateDialog'
 import { ContextToolbar } from './PropertiesBar'
 
 /** Canva-2026 editor topbar: 56px cyan→purple gradient, white text, File/Resize/Editing left, Preview/Share right. */
@@ -37,6 +38,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
   const [resizeOpen, setResizeOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [versionsOpen, setVersionsOpen] = useState(false)
+  const [translateOpen, setTranslateOpen] = useState(false)
 
   const item = 'h-10 px-3 rounded-xl text-white/95 hover:bg-white/15 transition-colors text-sm font-semibold flex items-center gap-1.5 select-none'
 
@@ -71,7 +73,10 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
             <Cloud size={15} /> Save changes
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => setResizeOpen(true)}>
-            <Play size={15} /> Resize design
+            <Play size={15} /> Magic Resize
+          </DropdownMenuItem>
+          <DropdownMenuItem className="gap-2" onClick={() => setTranslateOpen(true)}>
+            <Languages size={15} /> Translate design…
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={toggleRulers}>
             <Ruler size={15} /> {showRulers ? 'Hide rulers' : 'Show rulers'}
@@ -96,9 +101,9 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Resize */}
-      <button className={cn(item, 'hidden sm:flex')} onClick={() => setResizeOpen(true)} aria-label="Resize design">
-        Resize
+      {/* Magic Resize */}
+      <button className={cn(item, 'hidden sm:flex')} onClick={() => setResizeOpen(true)} aria-label="Magic Resize">
+        Magic Resize
       </button>
 
       {/* Editing / Viewing mode */}
@@ -170,6 +175,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
       <ResizeDialog open={resizeOpen} onOpenChange={setResizeOpen} />
       <ShareDialog open={shareOpen} onOpenChange={setShareOpen} />
       <VersionHistoryDialog open={versionsOpen} onOpenChange={setVersionsOpen} />
+      <TranslateDialog open={translateOpen} onOpenChange={setTranslateOpen} />
     </header>
   )
 }

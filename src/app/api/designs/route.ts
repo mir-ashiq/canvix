@@ -11,10 +11,13 @@ function toPages(value: unknown): Prisma.InputJsonValue {
   return (value ?? []) as Prisma.InputJsonValue
 }
 
-// GET /api/designs — list all designs (metadata only, newest first)
-export async function GET() {
+// GET /api/designs — list designs (metadata only, newest first)
+// ?trash=1 → only soft-deleted designs; default → only live designs
+export async function GET(req: NextRequest) {
   try {
+    const trash = req.nextUrl.searchParams.get('trash') === '1'
     const designs = await db.design.findMany({
+      where: { deletedAt: trash ? { not: null } : null },
       orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
@@ -23,6 +26,7 @@ export async function GET() {
         height: true,
         thumbnail: true,
         source: true,
+        deletedAt: true,
         createdAt: true,
         updatedAt: true,
       },

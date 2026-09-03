@@ -188,7 +188,9 @@ export function ElementNode({ element: el, interactive, hiding, registerNode, on
     }
 
     if (el.type === 'group') {
-      // bake scale into children (children use page coords relative to group origin)
+      // bake scale into children (children use page coords relative to group origin).
+      // NOTE: children keep their own rotation — they render inside the rotated
+      // Konva group, so adding node.rotation() here would double-rotate them.
       const g = el as GroupElement
       const dx = node.x() - g.x
       const dy = node.y() - g.y
@@ -198,7 +200,6 @@ export function ElementNode({ element: el, interactive, hiding, registerNode, on
         y: Math.round(g.y + dy + (c.y - g.y) * sy),
         width: Math.max(4, c.width * sx),
         height: Math.max(4, c.height * sy),
-        rotation: (c.rotation + node.rotation()) % 360,
       }))
       store.updateElementsLive([el.id], {
         children,

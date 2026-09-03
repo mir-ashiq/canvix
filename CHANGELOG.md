@@ -3,6 +3,64 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.1] — 2026-09-03
+
+Editor-completeness release: the remaining gap-analysis features — rulers & guides,
+image crop, layer renaming, version history — plus correctness fixes found by E2E.
+
+### Rulers & guides
+- **Rulers** along the top/left of the workspace (22px strips, DPR-aware canvas ticks,
+  adaptive major/minor ladder, pointer-tracking triangles). Toggle via File menu or
+  **Shift+R**; fit-to-screen accounts for the ruler inset.
+- **Manual guides**: drag out of either ruler to create a `#9954FF` guide; drag a guide
+  to reposition, drag it off-page (or double-click) to delete; guides act as snap
+  targets for element edges. Right-click the page → **Clear guides (n)**.
+
+### Image crop
+- **Crop dialog** (toolbar button, right-click → Crop image): drag handles or draw a
+  brand-new region anywhere outside the current one, aspect presets (Free/Original/
+  1:1/4:3/3:4/16:9/9:16/3:2/2:3) with locked-ratio drawing, rule-of-thirds overlay,
+  live px readout, baked-in flips, `displayScale`-preserving apply via canvas
+  re-encoding; JPEG/PNG-aware output.
+
+### Layers
+- **Rename layers**: double-click a row (or press Enter on it) — inline edit with the
+  purple focus ring; empty name falls back to the auto label. `name` persisted on
+  `BaseElement`; groups get a dedicated icon + label.
+
+### Version history
+- **File → Version history**: labelled snapshots per design (max 30, ~4.5MB
+  localStorage budget with automatic pruning), restore (undo-able — current state is
+  pushed to history first), delete, relative timestamps, pages × dimensions meta.
+- **Ctrl+Alt+S** saves an instant snapshot.
+
+### Groups (rotation correctness)
+- Fixed double-rotation on group transform (children no longer get the group's angle
+  baked on top of the group's own rotation).
+- Ungrouping a rotated group now **orbits children around the group origin** and
+  transfers the rotation, so nothing jumps.
+
+### Apps & panels polish
+- App cards and chart rows are now fully clickable tiles (role=button, keyboard
+  support) — matching Canva's tile behaviour, not just the inner button.
+- Tools → Layers tab reachable via role-based selectors (a11y names verified by E2E).
+
+### Editor
+- New shortcuts: **Shift+R** (rulers), **V** (select tool), **Ctrl+Alt+S** (version
+  snapshot); shortcut lists in the editor modal and dashboard help modal synced.
+
+### Design system
+- Topbar gradient re-weighted purple→magenta dominant (`#02c0cc → #6425f0 → #9333ea →
+  #b04fd7`) per VLM visual-QA feedback.
+
+### Technical
+- Type-check, ESLint, production build clean.
+- E2E suite extended to **40 checkpoints** (rulers, guide pull, clear-guides menu,
+  layers panel, version history save, QR→crop pipeline) — zero console errors.
+- VLM visual QA: **8.5/10 average** across 13 key surfaces
+  (`research/canvix-v03-qa-scores.md`).
+- `.gitignore`: root `research/*.md` curated docs are now committed by exception.
+
 ## [0.3.0] — 2026-09-03
 
 Deep visual-parity release informed by a fresh live audit of canva.com (logged-in,

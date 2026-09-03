@@ -44,13 +44,23 @@
 | 24 | Toasts/tooltips | toast on key actions, rail tooltips | ✅ |
 | 25 | Mobile contextual bar | bottom action bar on selection | ✅ |
 
-## Remaining gaps (accepted for v0.3.x)
-- Layer-name editing & layer drag in a full Layers panel (current: Tools ▸ Layers list, reorder via drag works, no rename)
+## Remaining gaps — closed by v0.3.1
+
+| Gap (from v0.3.0 audit) | v0.3.1 resolution | Status |
+|---|---|---|
+| Layer-name editing | double-click rename in Tools ▸ Layers (name persists on `BaseElement`) | ✅ |
+| Rulers & manual guides | 22px rulers (Shift+R / File menu), drag-out guides, snap-to-guide, clear-guides menu | ✅ |
+| Image crop UI | Crop dialog: handle drag + draw-new-region + aspect presets + thirds overlay | ✅ |
+| Version history | File → Version history: labelled local snapshots, undo-able restore, Ctrl+Alt+S | ✅ |
+| Group transform rotation | double-rotation fixed; ungroup orbits children around group origin | ✅ |
+| App/chart tile clickability | whole card is role=button + keyboard support | ✅ |
+
+## Remaining gaps (accepted for v0.4.x)
 - Justify alignment renders as left in Konva (Konva limitation) — kept in the UI for parity
-- Rulers & manual guides (Canva has them; Canvix has snap guides only)
-- Real-time collaboration, comments, version history (need a backend presence channel)
-- Image crop UI (adjustments + flips + replace cover the common cases)
-- Group transform is bake-on-commit (children move/scale correctly, but rotation of nested children is approximate)
+- Real-time collaboration & comments (need a backend presence channel)
+- Server-side version history (v0.3.1 stores snapshots in localStorage per design)
+- PDF export, gradient fills for shapes & text, curated stock photo library
+- Guides are design-scoped (one set shared across all pages); per-page guide sets in a later release
 
 ## Risk register (respected)
 - v0.2 features verified post-upgrade: text effects, freehand draw, charts, autosave, export, preview/share, mobile sheets — all E2E-green.

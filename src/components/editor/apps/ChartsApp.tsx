@@ -32,13 +32,25 @@ export function ChartsApp({ onClose }: AppPanelProps) {
 
 function ChartRow({ icon: Icon, name, desc, onAdd }: { icon: typeof BarChart3; name: string; desc: string; onAdd: () => void }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 hover:border-[#7630D7] transition-colors">
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={`Add ${name}`}
+      onClick={onAdd}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onAdd()
+        }
+      }}
+      className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 hover:border-[#7630D7] transition-colors cursor-pointer focus:outline-none focus-visible:border-[#7630D7]"
+    >
       <Icon size={18} className="text-[#02C0CC] shrink-0" />
       <div className="min-w-0 flex-1">
         <div className="text-[13px] font-semibold text-white">{name}</div>
         <div className="text-[11px] text-white/45 truncate">{desc}</div>
       </div>
-      <button className="btn-cv h-8 px-3.5 text-[11px] shrink-0" onClick={onAdd}>
+      <button className="btn-cv h-8 px-3.5 text-[11px] shrink-0" onClick={(e) => { e.stopPropagation(); onAdd() }}>
         Add
       </button>
     </div>

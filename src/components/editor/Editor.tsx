@@ -22,10 +22,12 @@ import { AppsPanel } from './panels/AppsPanel'
 import { BackgroundPanel } from './panels/BackgroundPanel'
 import { LayersPanel } from './panels/LayersPanel'
 import { captureThumbnail, canvasBridge } from './canvas/canvas-bridge'
+import { CropDialog } from './CropDialog'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from '@/hooks/use-toast'
+import type { ImageElement } from '@/lib/types'
 
 const CanvasStage = dynamic(() => import('./canvas/CanvasStage'), { ssr: false })
 
@@ -45,6 +47,7 @@ const PANEL_TITLES: Record<Exclude<PanelId, null>, string> = {
 const SHORTCUTS: [string, string][] = [
   ['Ctrl + Z / Ctrl + Shift + Z', 'Undo / redo'],
   ['Ctrl + S', 'Save design'],
+  ['Ctrl + Alt + S', 'Save a version snapshot'],
   ['Ctrl + D', 'Duplicate selection'],
   ['Ctrl + C / X / V', 'Copy / cut / paste elements'],
   ['Ctrl + G / Ctrl + Shift + G', 'Group / ungroup selection'],
@@ -58,6 +61,10 @@ const SHORTCUTS: [string, string][] = [
   ['Space + drag', 'Pan the canvas'],
   ['Drag on empty canvas', 'Marquee (box) select'],
   ['Double-click text', 'Edit text'],
+  ['Double-click layer name', 'Rename layer'],
+  ['V', 'Select tool'],
+  ['Shift + R', 'Show / hide rulers'],
+  ['Drag from a ruler', 'Pull out a guide line'],
   ['Escape', 'Deselect / close'],
   ['Ctrl + mouse wheel', 'Zoom at cursor'],
 ]
@@ -75,6 +82,15 @@ export default function Editor() {
   const isMobile = useIsMobile()
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const selectedIds = useEditorStore((s) => s.selectedIds)
+
+  // v0.3.1: image crop dialog (opened from the toolbar or context menu)
+  const cropTargetId = useEditorStore((s) => s.cropTargetId)
+  const closeCrop = useEditorStore((s) => s.closeCrop)
+  const cropPages = useEditorStore((s) => s.pages)
+  const cropPageIdx = useEditorStore((s) => s.currentPage)
+  const cropElement = cropTargetId
+    ? (cropPages[cropPageIdx]?.elements.find((e) => e.id === cropTargetId && e.type === 'image') as ImageElement | undefined)
+    : undefined
 
   const loadedRef = useRef(false)
 
@@ -153,6 +169,25 @@ export default function Editor() {
         return
       }
       if (isTyping()) return
+
+      // v0.3.1: Shift+R toggles rulers & guides
+      if (!mod && e.shiftKey && e.key.toLowerCase() === 'r') {
+        e.preventDefault()
+        state.toggleRulers()
+        return
+      }
+      // canva: V switches back to the select tool
+      if (!mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'v') {
+        state.setTool('select')
+        return
+      }
+      // v0.3.1: Ctrl+Alt+S saves a version snapshot
+      if (mod && e.altKey && (e.code === 'KeyS' || e.key.toLowerCase() === 's')) {
+        e.preventDefault()
+        state.saveVersion()
+        toast({ title: 'Version saved' })
+        return
+      }
 
       if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault()
@@ -353,6 +388,11 @@ export default function Editor() {
       )}
 
       <PreviewOverlay />
+
+      {/* v0.3.1: image crop dialog */}
+      {cropElement && (
+        <CropDialog element={cropElement} open onOpenChange={(o) => { if (!o) closeCrop() }} />
+      )}
 
       <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
         <DialogContent className="rounded-[28px] bg-[#16181D] border-white/10 text-white sm:max-w-sm">

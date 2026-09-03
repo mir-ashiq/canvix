@@ -53,6 +53,8 @@ export interface BaseElement {
   locked: boolean
   visible: boolean
   shadow: ShadowConfig
+  /** user-facing layer name (Layers panel; falls back to an auto label) */
+  name?: string
 }
 
 export interface TextElement extends BaseElement {
@@ -170,6 +172,24 @@ export interface PageData {
   id: string
   background: Background
   elements: AnyElement[]
+}
+
+/** user-placed ruler guide (position in page px) */
+export interface ManualGuide {
+  id: string
+  axis: 'x' | 'y'
+  position: number
+}
+
+/** saved version snapshot (per design, persisted to localStorage) */
+export interface DesignVersion {
+  id: string
+  label: string
+  at: number
+  name: string
+  width: number
+  height: number
+  pages: PageData[]
 }
 
 export interface DesignSnapshot {

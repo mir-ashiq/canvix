@@ -58,6 +58,8 @@ Caddyfile
 .z-ai-config/
 db/
 research/*
+# curated research docs are committed; raw captures stay local
+!research/*.md
 !research/CANVA-V03-RESEARCH.md
 !research/CANVIX-V03-GAP-ANALYSIS.md
 !research/CANVA-RESEARCH.md

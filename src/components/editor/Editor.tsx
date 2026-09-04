@@ -307,15 +307,27 @@ export default function Editor() {
       e.preventDefault()
       const images = Array.from(files).filter((f) => f.type.startsWith('image/'))
       if (!images.length) return
-      const { addImageFromFile } = await import('./add-element')
+      const { addImageFromFile, fillFrameAt, readImageFile } = await import('./add-element')
+      const { canvasBridge } = await import('./canvas/canvas-bridge')
       let ok = 0
+      let filled = 0
       for (const file of images) {
         try {
+          // v0.6: dropping over a frame fills the frame instead of adding an image
+          const { src, w, h } = await readImageFile(file)
+          const pageX = (e.clientX - canvasBridge.pan.x) / canvasBridge.zoom
+          const pageY = (e.clientY - canvasBridge.pan.y) / canvasBridge.zoom
+          if (fillFrameAt(pageX, pageY, src, w, h)) {
+            filled += 1
+            ok += 1
+            continue
+          }
           await addImageFromFile(file)
           ok += 1
         } catch { /* ignore */ }
       }
-      if (ok) toast({ title: `${ok} image${ok > 1 ? 's' : ''} added` })
+      if (filled) toast({ title: `Frame filled with ${filled} image${filled > 1 ? 's' : ''}` })
+      else if (ok) toast({ title: `${ok} image${ok > 1 ? 's' : ''} added` })
     }
     window.addEventListener('dragover', onDragOver)
     window.addEventListener('drop', onDrop)

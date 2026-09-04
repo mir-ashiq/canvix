@@ -14,6 +14,9 @@ export type ElementType =
   | 'image'
   | 'sticker'
   | 'group'
+  | 'table'
+  | 'frame'
+  | 'embed'
 
 export type TextAlign = 'left' | 'center' | 'right' | 'justify'
 
@@ -121,6 +124,8 @@ export interface TextElement extends BaseElement {
   align: TextAlign
   lineHeight: number
   letterSpacing: number
+  /** v0.6 canva curved text — arc angle in degrees (−180..180, 0 = straight) */
+  curve?: number
   /** text background block colour (canva "Background" effect) */
   effectBackground?: string
   /** canva-style effect preset */
@@ -184,6 +189,75 @@ export interface StrokeElement extends BaseElement {
   strokeWidth: number
 }
 
+// ── v0.6: canva-parity elements (tables, frames, embeds) ─────
+
+/** One cell of a table. Missing text = empty string. */
+export interface TableCell {
+  text: string
+  /** cell fill — undefined = transparent (table bg shows) */
+  fill?: string
+  bold?: boolean
+}
+
+/** Canva-style native table — rendered as rect + text per cell, every cell editable. */
+export interface TableElement extends BaseElement {
+  type: 'table'
+  rows: number
+  cols: number
+  /** row-major cells, length = rows × cols */
+  cells: TableCell[]
+  /** per-column widths in px — must sum to element width */
+  colWidths: number[]
+  /** uniform row height in px (rows × rowHeight ≈ element height) */
+  rowHeight: number
+  borderColor: string
+  borderWidth: number
+  /** first row fill (header band) */
+  headerFill: string
+  headerTextColor?: string
+  fill: string
+  textColor: string
+  fontSize: number
+  fontFamily: string
+}
+
+export const FRAME_SHAPES = ['rect', 'ellipse', 'triangle', 'hexagon', 'circle'] as const
+export type FrameShape = (typeof FRAME_SHAPES)[number]
+
+export const FRAME_SHAPE_LABELS: Record<FrameShape, string> = {
+  rect: 'Rectangle',
+  ellipse: 'Ellipse',
+  triangle: 'Triangle',
+  hexagon: 'Hexagon',
+  circle: 'Circle',
+}
+
+/** Canva-style frame — an image clipped inside a shape. `src` empty = placeholder. */
+export interface FrameElement extends BaseElement {
+  type: 'frame'
+  frameShape: FrameShape
+  /** image source (dataURL or https) — when unset the frame renders a dashed placeholder */
+  src: string
+  naturalWidth: number
+  naturalHeight: number
+  /** placeholder / empty-frame tint */
+  fill: string
+  radius: number
+}
+
+export type EmbedKind = 'youtube' | 'map' | 'link'
+
+/** Canva-style embed card — a native vector link card (YouTube / Maps / generic).
+ *  Honest scope: a *card* that opens the target in a browser, not an iframe. */
+export interface EmbedElement extends BaseElement {
+  type: 'embed'
+  url: string
+  kind: EmbedKind
+  title?: string
+  /** dominant card tint */
+  tint: string
+}
+
 /** Brand kit — persisted per browser (localStorage) */
 export interface BrandKit {
   colors: string[]
@@ -215,6 +289,9 @@ export type AnyElement =
   | ImageElement
   | StickerElement
   | GroupElement
+  | TableElement
+  | FrameElement
+  | EmbedElement
 
 export type Background =
   | { type: 'solid'; color: string }
@@ -418,6 +495,114 @@ export function createStickerElement(char: string, init: BaseInit & Partial<Stic
   }
 }
 
+/** v0.6: table factory — cells default to empty, header row pre-filled from `header?`. */
+export function createTableElement(
+  init: BaseInit & Partial<TableElement> & { header?: string[] } = {}
+): TableElement {
+  const { header, cells: cellsInit, colWidths: colWidthsInit, ...rest } = init
+  const rows = rest.rows ?? 3
+  const cols = rest.cols ?? 3
+  const width = rest.width ?? 420
+  const rowHeight = rest.rowHeight ?? 44
+  const cells: TableCell[] = []
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const provided = cellsInit?.[r * cols + c]
+      if (r === 0) {
+        const headerText = header ? (header[c] ?? '') : ''
+        cells.push({ text: headerText, bold: true, fill: rest.headerFill ?? '#1F142E', ...provided })
+      } else {
+        cells.push(provided ?? { text: '' })
+      }
+    }
+  }
+  const colWidths = colWidthsInit ?? Array.from({ length: cols }, () => Math.round(width / cols))
+  return {
+    ...baseElement('table', { width, height: rows * rowHeight, ...rest }),
+    type: 'table',
+    borderColor: '#E0E1E6',
+    borderWidth: 1.5,
+    headerFill: '#1F142E',
+    headerTextColor: '#FFFFFF',
+    fill: 'transparent',
+    textColor: '#1F2226',
+    fontSize: 14,
+    fontFamily: 'Inter',
+    ...rest,
+    rows,
+    cols,
+    cells,
+    colWidths,
+    rowHeight,
+    width,
+    height: rest.height ?? rows * rowHeight,
+  }
+}
+
+/** v0.6: frame factory */
+export function createFrameElement(
+  frameShape: FrameShape,
+  init: BaseInit & Partial<FrameElement> = {}
+): FrameElement {
+  const size = init.width ?? 320
+  return {
+    ...baseElement('frame', { width: size, height: init.height ?? Math.round(size * 0.66), ...init }),
+    type: 'frame',
+    frameShape,
+    src: '',
+    naturalWidth: 0,
+    naturalHeight: 0,
+    fill: '#8B5CF6',
+    radius: 0,
+    ...init,
+  }
+}
+
+/** v0.6: embed card factory — kind is auto-detected from the URL when omitted. */
+export function createEmbedElement(url: string, init: BaseInit & Partial<EmbedElement> = {}): EmbedElement {
+  const { kind: kindInit, title, tint, ...rest } = init
+  const kind: EmbedKind = kindInit ?? detectEmbedKind(url)
+  return {
+    ...baseElement('embed', { width: 320, height: 200, ...rest }),
+    type: 'embed',
+    url,
+    title: title ?? embedTitleFrom(url, kind),
+    tint: tint ?? (kind === 'youtube' ? '#FF0033' : kind === 'map' ? '#34A853' : '#7630D7'),
+    ...rest,
+    kind,
+  }
+}
+
+export function detectEmbedKind(url: string): EmbedKind {
+  try {
+    const u = new URL(url)
+    const host = u.hostname.replace(/^www\./, '')
+    if (host === 'youtu.be' || host === 'youtube.com' || host === 'm.youtube.com') return 'youtube'
+    if (host === 'maps.google.com') return 'map'
+    if (host === 'google.com' && u.pathname.startsWith('/maps')) return 'map'
+    return 'link'
+  } catch {
+    return 'link'
+  }
+}
+
+function embedTitleFrom(url: string, kind: EmbedKind): string {
+  try {
+    const u = new URL(url)
+    if (kind === 'youtube') {
+      const v = u.searchParams.get('v') || u.pathname.split('/').pop() || ''
+      return v ? `YouTube video · ${v.slice(0, 20)}` : 'YouTube video'
+    }
+    if (kind === 'map') {
+      const q = u.searchParams.get('q') || u.searchParams.get('query')
+      return q ? `Google Maps · ${q}` : 'Google Maps'
+    }
+    return u.hostname.replace(/^www\./, '')
+  } catch {
+    return 'Link'
+  }
+}
+
 export function createStrokeElement(init: BaseInit & Partial<StrokeElement>): StrokeElement {
   return {
     ...baseElement('stroke', init),
@@ -469,4 +654,13 @@ export function isSticker(el: AnyElement): el is StickerElement {
 }
 export function isGroup(el: AnyElement): el is GroupElement {
   return el.type === 'group'
+}
+export function isTable(el: AnyElement): el is TableElement {
+  return el.type === 'table'
+}
+export function isFrame(el: AnyElement): el is FrameElement {
+  return el.type === 'frame'
+}
+export function isEmbed(el: AnyElement): el is EmbedElement {
+  return el.type === 'embed'
 }

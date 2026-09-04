@@ -147,6 +147,24 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
           >
             <PreviewElements elements={page.elements} />
           </Layer>
+          {/* v0.6: embed cards are clickable in preview — open in a new tab */}
+          <Layer x={offsetX} y={offsetY} scale={{ x: scale, y: scale }}>
+            {page.elements
+              .filter((el): el is import('@/lib/types').EmbedElement => el.type === 'embed' && el.visible)
+              .map((el) => (
+                <Rect
+                  key={el.id}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill="transparent"
+                  cursor="pointer"
+                  onClick={() => window.open(el.url, '_blank', 'noopener,noreferrer')}
+                  onTap={() => window.open(el.url, '_blank', 'noopener,noreferrer')}
+                />
+              ))}
+          </Layer>
         </Stage>
       )}
     </div>

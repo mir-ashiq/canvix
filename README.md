@@ -30,6 +30,43 @@ watermarks, no paywalls.
 
 ## 🎨 Features
 
+### v0.6.0 — the Agent Edition: MCP, tables, frames, curved text & embeds
+
+- **MCP server (Model Context Protocol)** — Canvix becomes an **agent-native design platform**:
+  `POST /api/mcp` speaks standard MCP (JSON-RPC 2.0 over Streamable HTTP, stateless —
+  same transport profile Canva's AI Connector uses), so AI assistants like Claude
+  Desktop, Cursor, ChatGPT and any MCP client can **create and edit real designs on
+  your server**. **20 tools**: browse templates, search/get/create designs, add
+  text/shapes/images/tables/embeds, restyle & move elements, set backgrounds,
+  animate pages, comment, and export (SVG/PNG/JSON) — plus **`generate_design`**,
+  which asks the server AI provider for a structured, fully-validated page layout
+  and materializes it as native editable elements. Every tool maps to a real
+  subsystem; without a provider everything works except `generate_design`, which
+  says so plainly. Agent edits append to the same event log the editor replays, so
+  **a design an agent is editing updates live for humans in the editor**
+- **Security by default** — the endpoint stays disabled until you set
+  `CANVIX_MCP_TOKEN`; requests need `Authorization: Bearer <token>` (timing-safe
+  compare), cross-origin requests are rejected, per-IP rate limits apply, image
+  fetches are SSRF-guarded (private hosts denied, 8 MB cap), patches are
+  whitelisted & clamped per element type, and errors never leak stack traces
+- **Tables** — Canva-style native tables: click any cell on the canvas to edit it,
+  add/remove rows & columns from the toolbar, style borders/header/text, four
+  starter styles. Cells export to SVG and translate with the design
+- **Frames** — image-in-shape frames (rectangle, rounded, ellipse, circle,
+  triangle, hexagon). Drop an upload or photo on a frame to fill it — the image is
+  clipped to the shape with cover-fit (also true vector `<clipPath>` in SVG export)
+- **Curved text** — Canva's signature arc effect: curve any text −180°…+180°
+  (arch up / valley down), rendered as a real text-on-path (Konva `TextPath`, SVG
+  `<textPath>`) so it stays crisp in PNG/PDF/video exports and editable everywhere
+- **Embed cards** — YouTube videos, Google Maps places and any link become native
+  vector link cards (media band, play/pin glyph, title). Clicking a card in Preview
+  or shared views opens the URL — honest scope: a styled card, not an iframe
+- **Translate covers tables** — the AI translator now also walks table cells, not
+  just text boxes
+- **Dashboard “AI agents (MCP)” card** — shows the live endpoint status and a
+  copy-paste client config (endpoint URL + bearer headers) for Claude Desktop /
+  Cursor / any MCP client
+
 ### v0.5.0 — Magic Layers, real-time collaboration & production AI infrastructure
 
 - **Magic Layers** — upload any flat design (or pick an image on your canvas) and a
@@ -332,6 +369,65 @@ limited per IP and logs usage into the `AIUsage` table.
 | Magic Layers, AI Assistant, Magic Write | ⚙️ needs a server AI provider |
 | AI image generation / eraser / enhance | ⚙️ needs a server AI provider |
 | Translate, live photo search | ⚙️ needs a server AI provider |
+| MCP server (agent tools) | ✅ with token set — `generate_design` additionally needs the AI provider |
+
+## 🤖 AI agents (MCP)
+
+Canvix ships a **Model Context Protocol server** — the same interoperability
+standard Canva's “AI Connector” uses. It turns your Canvix instance into a set of
+tools an AI assistant can call: create designs, add elements, restyle, animate,
+comment, export.
+
+### Enable it
+
+```bash
+# 1. set a secret on the server (openssl rand -hex 24)
+CANVIX_MCP_TOKEN=your-long-random-secret
+# 2. restart Canvix — the dashboard "AI agents (MCP)" card flips to Enabled
+```
+
+### Connect a client
+
+Endpoint: `https://your-canvix.example.com/api/mcp` (Streamable HTTP, stateless).
+Client config (Claude Desktop / Cursor / any MCP client that supports remote
+HTTP servers):
+
+```json
+{
+  "mcpServers": {
+    "canvix": {
+      "url": "https://your-canvix.example.com/api/mcp",
+      "headers": { "Authorization": "Bearer <CANVIX_MCP_TOKEN>" }
+    }
+  }
+}
+```
+
+### Tool surface (20 tools)
+
+| Area | Tools |
+|---|---|
+| Discover | `get_capabilities`, `list_templates`, `search_designs`, `get_design`, `get_design_content` |
+| Create | `create_design` (blank or from template), `generate_design` (AI) |
+| Edit | `add_text`, `add_shape`, `add_image`, `add_table`, `add_embed`, `set_background`, `update_element`, `delete_element`, `animate_page` |
+| Export | `export_design` (svg / png / json) |
+| Collaborate | `comment_on_design`, `list_comments` |
+| Reference | `list_fonts` |
+
+Every write tool validates and clamps its arguments (hex colors, coordinates,
+font whitelists, size caps) and appends a `pages:replace` event to the design's
+collab log — so edits by agents appear live in any open editor session, and
+humans can undo or keep refining them.
+
+`generate_design` asks the server's AI provider for a structured page layout,
+normalizes it into native elements (clamped sizes, whitelisted fonts, element
+caps) and saves a real, editable design — not a raster. Without a provider
+configured, the tool returns an honest setup error; template-based creation
+keeps working.
+
+PNG export rasterizes server-side with sharp (system fonts render the text);
+SVG is true vector with font-family references — both caveats are stated in the
+tool descriptions so agents pick the right format.
 
 ## 🔐 Security notes
 
@@ -344,6 +440,11 @@ limited per IP and logs usage into the `AIUsage` table.
   image hrefs only allow `data:`/`https:`; no scripts or event handlers
 - **AI actions are double-validated** (server clamps + client re-checks) and
   always undoable
+- **MCP endpoint hardening** — disabled until `CANVIX_MCP_TOKEN` is set; Bearer
+  auth with timing-safe compare; cross-origin requests rejected (DNS-rebinding
+  guard per the MCP spec); 120 req/min/IP; SSRF-guarded image fetches (private
+  hosts denied, 8 MB/10 s caps); tool arguments whitelisted & clamped per element
+  type; agent writes ride the same validated event log as human edits
 - Known limitation: designs are link-accessible (no per-user ownership yet) —
   the v0.5 identity layer is the migration path; see the security audit
 
@@ -356,8 +457,10 @@ limited per IP and logs usage into the `AIUsage` table.
 - [x] 63-font library, gradient fills, PDF export, stock photo library, AI apps *(v0.3.2)*
 - [x] Magic Suite: AI image editing, Magic Resize, Translate, PostgreSQL *(v0.4.0)*
 - [x] Magic Layers, real-time collaboration, comments, animations, SVG & video export, AI Assistant 2.0 *(v0.5.0)*
+- [x] MCP server (20 agent tools), tables, frames, curved text, embed cards *(v0.6.0)*
 - [ ] Accounts & per-design ownership (identity layer groundwork shipped in v0.5)
 - [ ] Yjs-grade offline merge for collaboration
+- [ ] Audio/video elements & Beat Sync
 - [ ] Plugin system (external, installable apps)
 
 ## 🤝 Contributing

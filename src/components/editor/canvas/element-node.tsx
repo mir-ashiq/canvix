@@ -6,18 +6,22 @@ import { Ellipse, Group, Image as KonvaImage, Line, Path, Rect, Star, Text } fro
 import type { KonvaEventObject } from 'konva/lib/Node'
 import type {
   AnyElement,
+  EmbedElement,
+  FrameElement,
   GroupElement,
   ImageElement,
   LineElement,
   ShapeElement,
   StickerElement,
   StrokeElement,
+  TableElement,
   TextElement,
 } from '@/lib/types'
 import { isLine, withAlpha, type GradientFill } from '@/lib/types'
 import { elementGradientProps } from '@/lib/editor-utils'
 import { useEditorStore } from '@/store/editor-store'
 import { useLoadedImage } from './use-loaded-image'
+import { CurvedTextNode, EmbedNode, FrameNode, TableNode, type TableCellRef } from './v06-nodes'
 
 export interface ElementNodeProps {
   element: AnyElement
@@ -31,8 +35,10 @@ export interface ElementNodeProps {
   onDragMoveNode?: (id: string, node: Konva.Node) => void
   /** called when a drag finishes (parent clears snapping guides) */
   onDragEndNode?: (id: string) => void
-  /** double-click / double-tap (text editing) */
-  onDoubleClick?: (id: string) => void
+  /** double-click / double-tap (text editing; tables report the clicked cell) */
+  onDoubleClick?: (id: string, cell?: TableCellRef) => void
+  /** table cell currently edited via the overlay (its text is hidden underneath) */
+  hideCell?: TableCellRef | null
   /** render nested (inside a group / preview) — page coords are baked by the parent */
   nested?: boolean
 }
@@ -120,7 +126,7 @@ function ImageNode({ el, common }: { el: ImageElement; common: Record<string, un
   )
 }
 
-export function ElementNode({ element: el, interactive, hiding, registerNode, onDragMoveNode, onDragEndNode, onDoubleClick, nested }: ElementNodeProps) {
+export function ElementNode({ element: el, interactive, hiding, hideCell, registerNode, onDragMoveNode, onDragEndNode, onDoubleClick, nested }: ElementNodeProps) {
   const store = useEditorStore()
 
   // ── shared interaction handlers ────────────────────────────
@@ -296,6 +302,13 @@ export function ElementNode({ element: el, interactive, hiding, registerNode, on
     ...shadowProps(el),
   }
 
+  const { curve = 0 } = el as TextElement
+  if (el.type === 'text' && curve !== 0) {
+    // v0.6: curved text (single-line arc — effects fall back to plain fill)
+    const t = el as TextElement
+    return <CurvedTextNode t={t} common={common} />
+  }
+
   switch (el.type) {
     case 'text': {
       const t = el as TextElement
@@ -444,6 +457,29 @@ export function ElementNode({ element: el, interactive, hiding, registerNode, on
     case 'image': {
       const im = el as ImageElement
       return <ImageNode el={im} common={common} />
+    }
+
+    case 'table': {
+      const tb = el as TableElement
+      return (
+        <TableNode
+          el={tb}
+          common={common}
+          interactive={interactive}
+          onCellDoubleClick={(cell) => interactive && onDoubleClick?.(el.id, cell)}
+          hideCell={hideCell ?? null}
+        />
+      )
+    }
+
+    case 'frame': {
+      const fr = el as FrameElement
+      return <FrameNode el={fr} common={common} />
+    }
+
+    case 'embed': {
+      const em = el as EmbedElement
+      return <EmbedNode el={em} common={common} />
     }
 
     case 'sticker': {

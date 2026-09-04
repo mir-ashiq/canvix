@@ -32,6 +32,7 @@ import { Logo } from '@/components/logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DesignPreview } from '@/components/design-preview'
+import { McpCard } from '@/components/dashboard/McpCard'
 import { TEMPLATES } from '@/lib/templates'
 import { createPage, TEMPLATE_CATEGORIES, type TemplateRecord } from '@/lib/types'
 import { PRESET_SIZES } from '@/lib/editor-utils'
@@ -486,6 +487,9 @@ export function Dashboard() {
             </Button>
           </div>
         </section>
+
+        {/* ── AI agents (MCP) ── */}
+        <McpCard />
 
         {/* ── Recent designs ── */}
         <section id="cv-recents" className="pt-12 scroll-mt-20">

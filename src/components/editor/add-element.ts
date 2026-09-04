@@ -6,7 +6,11 @@ import {
   createShapeElement,
   createStickerElement,
   createLineElement,
+  createTableElement,
+  createFrameElement,
+  createEmbedElement,
   type AnyElement,
+  type FrameShape,
 } from '@/lib/types'
 import { useEditorStore } from '@/store/editor-store'
 import { GRAPHICS } from '@/lib/editor-utils'
@@ -79,6 +83,107 @@ export function addLine(variant: 'solid' | 'dashed' | 'arrow' | 'arrowBoth') {
 
 export function addSticker(char: string) {
   addCentered(createStickerElement(char, { width: 200, height: 200, fontSize: 150 }))
+}
+
+// ── v0.6: tables, frames, embeds ───────────────────────────
+
+export type TableStyle = 'classic' | 'minimal' | 'bold' | 'soft'
+
+/** Add a native table — every cell stays editable on the canvas. */
+export function addTable(style: TableStyle = 'classic') {
+  const styles: Record<TableStyle, Partial<import('@/lib/types').TableElement> & { header?: string[] }> = {
+    classic: {
+      header: ['Header 1', 'Header 2', 'Header 3'],
+      rows: 4,
+      cols: 3,
+      headerFill: '#1F142E',
+      borderColor: '#E0E1E6',
+      fill: 'transparent',
+      textColor: '#1F2226',
+    },
+    minimal: {
+      header: ['Item', 'Qty', 'Price'],
+      rows: 4,
+      cols: 3,
+      headerFill: 'transparent',
+      headerTextColor: '#7630D7',
+      borderColor: '#EDEFF2',
+      borderWidth: 1,
+      fill: 'transparent',
+      textColor: '#1F2226',
+    },
+    bold: {
+      header: ['Plan', 'Features', 'Price'],
+      rows: 4,
+      cols: 3,
+      headerFill: '#7630D7',
+      borderColor: '#7630D7',
+      borderWidth: 2,
+      fill: '#F6F2FC',
+      textColor: '#1F142E',
+    },
+    soft: {
+      header: ['Task', 'Owner', 'Due'],
+      rows: 4,
+      cols: 3,
+      headerFill: '#02C0CC',
+      borderColor: '#C8EDF0',
+      borderWidth: 1.5,
+      fill: '#F2FBFC',
+      textColor: '#0E3A40',
+    },
+  }
+  const s = styles[style]
+  addCentered(createTableElement({ width: 480, rowHeight: 46, ...s }))
+}
+
+export function addFrame(frameShape: FrameShape) {
+  const size = 340
+  addCentered(
+    createFrameElement(frameShape, {
+      width: size,
+      height: frameShape === 'circle' || frameShape === 'ellipse' ? size : Math.round(size * 0.66),
+    })
+  )
+}
+
+/** Add an embed link card (YouTube / Maps / generic URL). */
+export function addEmbed(url: string, title?: string) {
+  const trimmed = url.trim()
+  if (!trimmed) return
+  const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  addCentered(createEmbedElement(withProto, { width: 340, height: 214, ...(title ? { title } : {}) }))
+}
+
+/** If a page point lands inside a frame element, fill that frame with the image (canva drop-to-fill). */
+export function fillFrameAt(pageX: number, pageY: number, src: string, naturalWidth: number, naturalHeight: number): boolean {
+  const state = useEditorStore.getState()
+  const page = state.pages[state.currentPage]
+  const hit = [...page.elements]
+    .reverse()
+    .find(
+      (el) =>
+        el.type === 'frame' &&
+        el.visible &&
+        pageX >= el.x &&
+        pageX <= el.x + el.width &&
+        pageY >= el.y &&
+        pageY <= el.y + el.height
+    ) as import('@/lib/types').FrameElement | undefined
+  if (!hit) return false
+  state.updateElements([hit.id], { src, naturalWidth, naturalHeight })
+  return true
+}
+
+/** replace the image inside a selected frame (canva "Fill frame") */
+export function fillSelectedFrame(src: string, naturalWidth: number, naturalHeight: number): boolean {
+  const state = useEditorStore.getState()
+  const sel = state.pages[state.currentPage].elements.find(
+    (e) => state.selectedIds.includes(e.id) && e.type === 'frame'
+  )
+  if (!sel) return false
+  state.updateElements([sel.id], { src, naturalWidth, naturalHeight })
+  return true
 }
 
 /**

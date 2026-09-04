@@ -15,6 +15,7 @@ import { CanvasContextMenu, type ContextMenuState } from './context-menu'
 import { CollabOverlay } from './CollabOverlay'
 import { CommentPins } from './CommentPins'
 import { getActiveCollabSession } from '@/hooks/use-collab'
+import { tableGeometry } from '@/lib/v06-geometry'
 
 /** canva-measured tokens */
 const GUIDE_COLOR = '#9954FF' // rgb(153,84,255) — measured 2026-09-03
@@ -62,6 +63,8 @@ export default function CanvasStage() {
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [guides, setGuides] = useState<GuideLine[]>([])
   const [editingTextId, setEditingTextId] = useState<string | null>(null)
+  /** v0.6: table cell being edited via the overlay ({ id, row, col }) */
+  const [editingCell, setEditingCell] = useState<{ id: string; row: number; col: number } | null>(null)
   const [editValue, setEditValue] = useState('')
   /** freehand draft: [x0,y0,x1,y1,…] in page coords */
   const [draft, setDraft] = useState<number[] | null>(null)
@@ -247,11 +250,20 @@ export default function CanvasStage() {
   }, [])
 
   // ── text editing ───────────────────────────────────────────
-  const startEditText = useCallback((id: string) => {
+  const startEditText = useCallback((id: string, cell?: { row: number; col: number }) => {
     const state = useEditorStore.getState()
     const p = currentPageData(state)
     const el = p.elements.find((e) => e.id === id)
-    if (!el || el.type !== 'text' || el.locked) return
+    if (!el || el.locked) return
+    if (cell && el.type === 'table') {
+      // v0.6: table cell editing
+      state.pushHistory()
+      setEditingCell({ id, row: cell.row, col: cell.col })
+      const tb = el as import('@/lib/types').TableElement
+      setEditValue(tb.cells[cell.row * tb.cols + cell.col]?.text ?? '')
+      return
+    }
+    if (el.type !== 'text') return
     // if the text lives inside a group, edit via double-click is disabled for simplicity
     state.pushHistory()
     setEditingTextId(id)
@@ -259,9 +271,22 @@ export default function CanvasStage() {
   }, [])
 
   const commitEditText = useCallback(async () => {
+    const cellRef = editingCell
     const id = editingTextId
-    if (!id) return
     const text = editValue
+    if (cellRef) {
+      const { id: tid, row, col } = cellRef
+      setEditingCell(null)
+      const state = useEditorStore.getState()
+      const p = currentPageData(state)
+      const el = p.elements.find((e) => e.id === tid) as import('@/lib/types').TableElement | undefined
+      if (el && el.type === 'table') {
+        const cells = el.cells.map((c, i) => (i === row * el.cols + col ? { ...c, text } : c))
+        state.updateElementsLive([tid], { cells })
+      }
+      return
+    }
+    if (!id) return
     setEditingTextId(null)
     useEditorStore.getState().updateElementsLive([id], { text })
     // sync measured height after the Konva text re-renders
@@ -273,7 +298,7 @@ export default function CanvasStage() {
         }
       })
     )
-  }, [editingTextId, editValue])
+  }, [editingTextId, editingCell, editValue])
 
   // ── v0.5: local cursor broadcast (throttled inside the session) ─
   useEffect(() => {
@@ -610,6 +635,32 @@ export default function CanvasStage() {
 
   const editingText = editingTextId ? (page.elements.find((e) => e.id === editingTextId) as TextElement | undefined) : undefined
 
+  // v0.6: table cell overlay geometry
+  const editingTable = editingCell ? (page.elements.find((e) => e.id === editingCell.id) as import('@/lib/types').TableElement | undefined) : undefined
+  const cellStyle: React.CSSProperties | null = editingTable && editingCell
+    ? (() => {
+        const geo = tableGeometry(editingTable)
+        const cell = editingTable.cells[editingCell.row * editingTable.cols + editingCell.col]
+        const isHeader = editingCell.row === 0
+        return {
+          left: pan.x + (editingTable.x + geo.colX[editingCell.col]) * zoom,
+          top: pan.y + (editingTable.y + editingCell.row * geo.rowH) * zoom,
+          width: Math.max(24, (geo.colW[editingCell.col] - 20) * zoom),
+          height: geo.rowH * zoom,
+          transform: `rotate(${editingTable.rotation}deg)`,
+          fontSize: editingTable.fontSize * zoom,
+          fontFamily: editingTable.fontFamily,
+          fontWeight: cell?.bold || isHeader ? 700 : 400,
+          color: isHeader ? (editingTable.headerTextColor ?? '#FFFFFF') : editingTable.textColor,
+          background: (cell?.fill ?? (isHeader ? editingTable.headerFill : editingTable.fill)) === 'transparent' ? 'rgba(255,255,255,0.06)' : (cell?.fill ?? (isHeader ? editingTable.headerFill : '#FFFFFF')),
+          textAlign: 'left' as const,
+          lineHeight: 1.2,
+          padding: '0 10px',
+          borderRadius: 4,
+        }
+      })()
+    : null
+
   const textareaStyle: React.CSSProperties | null = editingText
     ? {
         left: pan.x + editingText.x * zoom,
@@ -666,6 +717,7 @@ export default function CanvasStage() {
                   onDragEndNode={() => setGuides([])}
                   onDoubleClick={startEditText}
                   hiding={editingTextId === el.id}
+                  hideCell={editingCell && editingCell.id === el.id ? { row: editingCell.row, col: editingCell.col } : null}
                 />
               ))}
               <Transformer
@@ -837,6 +889,37 @@ export default function CanvasStage() {
             e.target.setSelectionRange(len, len)
           }}
           aria-label="Edit text"
+        />
+      )}
+
+      {/* v0.6: table cell editing overlay */}
+      {editingTable && editingCell && cellStyle && (
+        <textarea
+          className="cv-textarea-overlay"
+          style={cellStyle}
+          value={editValue}
+          autoFocus
+          onChange={(e) => {
+            setEditValue(e.target.value)
+            // live-update the cell so the rest of the table reflects typing
+            const tb = editingTable
+            const { row, col } = editingCell
+            const cells = tb.cells.map((c, i) => (i === row * tb.cols + col ? { ...c, text: e.target.value } : c))
+            useEditorStore.getState().updateElementsLive([tb.id], { cells })
+          }}
+          onBlur={() => void commitEditText()}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' || e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              void commitEditText()
+            }
+            e.stopPropagation()
+          }}
+          onFocus={(e) => {
+            const len = e.target.value.length
+            e.target.setSelectionRange(len, len)
+          }}
+          aria-label="Edit table cell"
         />
       )}
     </div>

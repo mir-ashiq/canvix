@@ -14,6 +14,8 @@
 
 import type {
   AnyElement,
+  EmbedElement,
+  FrameElement,
   GradientFill,
   ImageElement,
   LineElement,
@@ -21,9 +23,11 @@ import type {
   ShapeElement,
   StrokeElement,
   StickerElement,
+  TableElement,
   TextElement,
   GroupElement,
 } from '@/lib/types'
+import { arcForCurve, embedLayout, frameClipPathD, hostOf, tableGeometry, youtubeThumbUrl } from '@/lib/v06-geometry'
 
 // ── escaping ─────────────────────────────────────────────────
 
@@ -170,6 +174,31 @@ function serializeElement(el: AnyElement, ctx: SvgContext): string {
     case 'text': {
       const t = el as TextElement
       const rendered = t.uppercase ? t.text.toUpperCase() : t.text
+
+      // v0.6: curved text → textPath on an arc (path def carries the translate)
+      const arc = arcForCurve(t.curve ?? 0, t.width)
+      if (arc) {
+        const pathId = refId('arc')
+        ctx.defs.push(`  <path id="${pathId}" transform="translate(${t.x} ${t.y})" d="${arc.data}" fill="none" />`)
+        const fill = t.fillGradient ? gradientRefFor(t, ctx) : t.fill
+        const decor = [t.underline ? 'underline' : '', t.strike ? 'line-through' : ''].filter(Boolean).join(' ')
+        const attrs = [
+          `font-family="${esc(t.fontFamily)}"`,
+          `font-size="${t.fontSize}"`,
+          `font-weight="${t.bold ? 700 : 400}"`,
+          `font-style="${t.italic ? 'italic' : 'normal'}"`,
+          decor ? `text-decoration="${decor}"` : '',
+          t.letterSpacing ? `letter-spacing="${t.letterSpacing}"` : '',
+          `fill="${fill}"`,
+          opacityAttr(t),
+          shadowAttrs(t, ctx),
+        ]
+          .filter(Boolean)
+          .join(' ')
+        const transform = t.rotation ? ` transform="rotate(${t.rotation} ${t.x} ${t.y})"` : ''
+        return `  <text ${attrs}${transform} xml:space="preserve"><textPath href="#${pathId}" xlink:href="#${pathId}">${esc(rendered)}</textPath></text>`
+      }
+
       const lines = wrapText(rendered, t.fontFamily, t.fontSize, t.bold, t.width)
       const lineHeight = t.fontSize * t.lineHeight
       const fill = t.fillGradient ? gradientRefFor(t, ctx) : t.fill
@@ -302,6 +331,100 @@ function serializeElement(el: AnyElement, ctx: SvgContext): string {
         .filter(Boolean)
         .join('\n')
       return `  <g transform="translate(${g.x} ${g.y})${g.rotation ? ` rotate(${g.rotation})` : ''}"${opacityAttr(g)}>\n${children}\n  </g>`
+    }
+
+    case 'table': {
+      const tb = el as TableElement
+      const geo = tableGeometry(tb)
+      const parts: string[] = []
+      for (let idx = 0; idx < tb.rows * tb.cols; idx += 1) {
+        const r = Math.floor(idx / tb.cols)
+        const c = idx % tb.cols
+        const cell = tb.cells[idx] ?? { text: '' }
+        const isHeader = r === 0
+        const cellFill = cell.fill ?? (isHeader ? tb.headerFill : tb.fill)
+        const x = tb.x + geo.colX[c]
+        const y = tb.y + r * geo.rowH
+        const w = geo.colW[c]
+        const h = geo.rowH
+        parts.push(`  <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"${cellFill !== 'transparent' ? ` fill="${cellFill}"` : ' fill="none"'} stroke="${tb.borderColor}" stroke-width="${tb.borderWidth}" />`)
+        if (cell.text) {
+          const textColor = isHeader ? (tb.headerTextColor ?? '#FFFFFF') : tb.textColor
+          const baseline = y + h / 2 + tb.fontSize * 0.35
+          parts.push(`  <text x="${(x + 10).toFixed(1)}" y="${baseline.toFixed(1)}" font-family="${esc(tb.fontFamily)}" font-size="${tb.fontSize}" font-weight="${cell.bold || isHeader ? 700 : 400}" fill="${textColor}">${esc(cell.text)}</text>`)
+        }
+      }
+      const transform = tb.rotation ? ` transform="rotate(${tb.rotation} ${tb.x} ${tb.y})"` : ''
+      const open = `<g${transform}${opacityAttr(tb)}${shadowAttrs(tb, ctx)}>`
+      return `${open}\n${parts.join('\n')}\n  </g>`
+    }
+
+    case 'frame': {
+      const fr = el as FrameElement
+      const clipId = refId('fclip')
+      const d = frameClipPathD(fr.frameShape, fr.width, fr.height, fr.radius)
+      ctx.defs.push(`  <clipPath id="${clipId}"><path transform="translate(${fr.x} ${fr.y})" d="${d}" /></clipPath>`)
+      const rotate = fr.rotation ? ` transform="rotate(${fr.rotation} ${fr.x} ${fr.y})"` : ''
+      const href = fr.src ? safeHref(fr.src) : null
+      let content = ''
+      if (href && fr.naturalWidth > 0 && fr.naturalHeight > 0) {
+        // cover-fit like the canvas renderer
+        const scale = Math.max(fr.width / fr.naturalWidth, fr.height / fr.naturalHeight)
+        const dw = fr.naturalWidth * scale
+        const dh = fr.naturalHeight * scale
+        const dx = fr.x + (fr.width - dw) / 2
+        const dy = fr.y + (fr.height - dh) / 2
+        content = `  <image href="${esc(href)}" x="${dx.toFixed(1)}" y="${dy.toFixed(1)}" width="${dw.toFixed(1)}" height="${dh.toFixed(1)}" clip-path="url(#${clipId})" preserveAspectRatio="none" />`
+      } else {
+        // empty frame placeholder — tinted shape + dashed outline
+        content = `  <path transform="translate(${fr.x} ${fr.y})" d="${d}" fill="${fr.fill}" fill-opacity="0.16" stroke="rgba(255,255,255,0.85)" stroke-width="2" stroke-dasharray="8 6" />`
+      }
+      const open = `<g${rotate}${opacityAttr(fr)}${shadowAttrs(fr, ctx)}>`
+      return `${open}\n${content}\n  </g>`
+    }
+
+    case 'embed': {
+      const em = el as EmbedElement
+      const { bandH, iconR } = embedLayout(em.width, em.height)
+      const x = em.x
+      const y = em.y
+      const w = em.width
+      const h = em.height
+      const cx = x + w / 2
+      const cy = y + bandH / 2
+      const parts: string[] = []
+      parts.push(`  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14" fill="#15171C" />`)
+      const thumb = em.kind === 'youtube' ? youtubeThumbUrl(em.url) : null
+      // top-rounded media band path (bottom edge straight, meets the label area)
+      const bandPath = `M ${x + 14} ${y} H ${x + w - 14} Q ${x + w} ${y} ${x + w} ${y + 14} V ${y + bandH} H ${x} V ${y + 14} Q ${x} ${y} ${x + 14} ${y} Z`
+      if (thumb) {
+        const clipId = refId('eclip')
+        ctx.defs.push(`  <clipPath id="${clipId}"><path d="${bandPath}" /></clipPath>`)
+        parts.push(`  <image href="${esc(thumb)}" x="${x}" y="${y}" width="${w}" height="${bandH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})" />`)
+      } else {
+        parts.push(`  <path d="${bandPath}" fill="${em.tint}" fill-opacity="0.28" />`)
+      }
+      // icon glyph
+      if (em.kind === 'youtube') {
+        parts.push(`  <circle cx="${cx}" cy="${cy}" r="${iconR}" fill="rgba(255,255,255,0.92)" />`)
+        parts.push(`  <polygon points="${cx - iconR * 0.32},${cy - iconR * 0.42} ${cx - iconR * 0.32},${cy + iconR * 0.42} ${cx + iconR * 0.46},${cy}" fill="#FF0033" />`)
+      } else if (em.kind === 'map') {
+        parts.push(`  <circle cx="${cx}" cy="${cy}" r="${iconR}" fill="rgba(255,255,255,0.95)" />`)
+        parts.push(`  <ellipse cx="${cx}" cy="${cy - iconR * 0.12}" rx="${iconR * 0.34}" ry="${iconR * 0.46}" fill="#34A853" />`)
+        parts.push(`  <polygon points="${cx - iconR * 0.24},${cy + iconR * 0.1} ${cx},${cy + iconR * 0.58} ${cx + iconR * 0.24},${cy + iconR * 0.1}" fill="#34A853" />`)
+      } else {
+        const s = iconR * 0.8
+        parts.push(`  <circle cx="${cx}" cy="${cy}" r="${iconR}" fill="rgba(255,255,255,0.14)" stroke="rgba(255,255,255,0.9)" stroke-width="2.5" />`)
+        parts.push(`  <path d="M ${cx - s * 0.4} ${cy + s * 0.4} L ${cx + s * 0.42} ${cy - s * 0.42} M ${cx - s * 0.05} ${cy - s * 0.42} L ${cx + s * 0.42} ${cy - s * 0.42} L ${cx + s * 0.42} ${cy + s * 0.05}" stroke="#FFFFFF" stroke-width="${Math.max(2, iconR * 0.16)}" stroke-linecap="round" stroke-linejoin="round" fill="none" />`)
+      }
+      // labels
+      const host = hostOf(em.url).toUpperCase()
+      const title = em.title ?? em.url
+      parts.push(`  <text x="${x + 14}" y="${y + bandH + 24}" font-family="Inter" font-size="${Math.max(9, Math.round(h * 0.055))}" letter-spacing="1.2" fill="rgba(255,255,255,0.55)">${esc(host)}</text>`)
+      parts.push(`  <text x="${x + 14}" y="${y + bandH + 44}" font-family="Inter" font-size="${Math.max(11, Math.round(h * 0.07))}" font-weight="600" fill="#FFFFFF">${esc(title.length > 46 ? title.slice(0, 46) + '…' : title)}</text>`)
+      const rotate = em.rotation ? ` transform="rotate(${em.rotation} ${x} ${y})"` : ''
+      const open = `<g${rotate}${opacityAttr(em)}${shadowAttrs(em, ctx)}>`
+      return `${open}\n${parts.join('\n')}\n  </g>`
     }
 
     default:

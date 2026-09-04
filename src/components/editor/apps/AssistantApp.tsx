@@ -1,55 +1,89 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bot, Loader2, Plus, Send, Sparkles, User, Palette, Languages, Type, ImageIcon } from 'lucide-react'
-import { createImageElement, createTextElement, type AnyElement, type TextElement } from '@/lib/types'
+import { useEffect, useRef, useState } from 'react'
+import { Bot, Loader2, Plus, Send, Sparkles, User, Wand2 } from 'lucide-react'
+import type { AnyElement, TextElement } from '@/lib/types'
 import { useEditorStore } from '@/store/editor-store'
 import { AppHeader, type AppPanelProps } from './registry'
 import { cn } from '@/lib/utils'
-import { toast } from '@/hooks/use-toast'
-
-type AssistantAction =
-  | { type: 'addText'; text: string; fontSize?: number; bold?: boolean }
-  | { type: 'generateImage'; prompt: string }
-  | { type: 'suggestPalette'; colors: string[] }
-  | { type: 'translate'; language: string }
+import { applyDesignAction, describeAction, type DesignAction } from '@/lib/design-actions'
+import { useAICapabilities } from '@/hooks/use-ai-capabilities'
 
 interface Turn {
   role: 'user' | 'assistant'
   content: string
-  actions?: AssistantAction[]
-  done?: { action: string; msg: string }
+  actions?: DesignAction[]
+  done?: { index: number; msg: string }
 }
 
 const SUGGESTIONS = [
-  'Write a bold headline for a coffee shop sale',
-  'Suggest a colour palette for a beach party poster',
-  'Give me 3 tagline ideas for a fitness app',
-  'What visual should I generate for a tech launch?',
+  'Make this design more modern',
+  'Move the title to the top',
+  'Change all heading colors to purple',
+  'Make the layout more balanced',
+  'Add a CTA button text',
+  'Magic animate this page',
 ]
 
-/** Collect text contents for design context (flattens groups). */
-function collectTexts(els: AnyElement[], out: TextElement[] = []): TextElement[] {
+/** Flatten elements (groups included). */
+function flatElements(els: AnyElement[], out: AnyElement[] = []): AnyElement[] {
   for (const el of els) {
-    if (el.type === 'text') out.push(el)
-    else if (el.type === 'group') collectTexts(el.children, out)
+    out.push(el)
+    if (el.type === 'group') flatElements(el.children, out)
   }
   return out
 }
 
-const ACTION_META: Record<AssistantAction['type'], { icon: typeof Plus; label: (a: never) => string }> = {
-  addText: { icon: Type, label: (a: AssistantAction & { type: 'addText' }) => `Add text: "${a.text.slice(0, 42)}${a.text.length > 42 ? '…' : ''}"` },
-  generateImage: { icon: ImageIcon, label: (a: AssistantAction & { type: 'generateImage' }) => `Generate image: ${a.prompt.slice(0, 48)}${a.prompt.length > 48 ? '…' : ''}` },
-  suggestPalette: { icon: Palette, label: (a: AssistantAction & { type: 'suggestPalette' }) => `Use these colours` },
-  translate: { icon: Languages, label: (a: AssistantAction & { type: 'translate' }) => `Translate design to ${a.language}` },
+/** Build the compact design context the assistant sees. */
+function buildDesignContext() {
+  const s = useEditorStore.getState()
+  const page = s.pages[s.currentPage]
+  const elements = (page?.elements ?? []).slice(0, 80).map((el) => {
+    const base: Record<string, unknown> = {
+      id: el.id,
+      type: el.type,
+      x: Math.round(el.x),
+      y: Math.round(el.y),
+      width: Math.round(el.width),
+      height: Math.round(el.height),
+      locked: el.locked,
+    }
+    if (el.type === 'text') {
+      const t = el as TextElement
+      base.text = t.text.slice(0, 80)
+      base.fill = t.fill
+      base.fontSize = Math.round(t.fontSize)
+      base.bold = t.bold
+      base.fontFamily = t.fontFamily
+    } else if ('fill' in el) {
+      base.fill = (el as { fill: string }).fill
+    }
+    if (el.name) base.name = el.name.slice(0, 30)
+    return base
+  })
+  const texts = flatElements(page?.elements ?? []).filter((e) => e.type === 'text') as TextElement[]
+  const colorsInUse = [...new Set(texts.map((t) => t.fill).concat((page?.elements ?? []).filter((e) => 'fill' in e).map((e) => (e as { fill: string }).fill)))].slice(0, 12)
+  const fontsInUse = [...new Set(texts.map((t) => t.fontFamily))].slice(0, 8)
+  return {
+    name: s.designName,
+    width: s.width,
+    height: s.height,
+    pageCount: s.pages.length,
+    currentPageIndex: s.currentPage,
+    selectedIds: s.selectedIds.slice(0, 20),
+    elements,
+    colorsInUse,
+    fontsInUse,
+  }
 }
 
 export function AssistantApp({ onClose }: AppPanelProps) {
-  const store = useEditorStore()
   const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const { configured: aiConfigured, loaded: aiLoaded } = useAICapabilities()
+  const canUndo = useEditorStore((s) => s.past.length > 0)
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -63,102 +97,31 @@ export function AssistantApp({ onClose }: AppPanelProps) {
     setTurns((ts) => [...ts, { role: 'user', content: text }])
     setBusy(true)
     try {
-      const texts = collectTexts(store.pages.flatMap((p) => p.elements))
       const res = await fetch('/api/ai/assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text,
-          history,
-          design: {
-            name: store.designName,
-            width: store.width,
-            height: store.height,
-            pageCount: store.pages.length,
-            currentPageElements: store.pages[store.currentPage]?.elements.length ?? 0,
-            textContents: texts.map((t) => t.text).slice(0, 40),
-          },
-        }),
+        body: JSON.stringify({ message: text, history, design: buildDesignContext() }),
       })
-      const data = (await res.json()) as { reply?: string; actions?: AssistantAction[]; error?: string }
+      const data = (await res.json()) as { reply?: string; actions?: DesignAction[]; error?: string; code?: string }
       if (!res.ok || !data.reply) throw new Error(data.error ?? 'The assistant could not answer.')
       setTurns((ts) => [...ts, { role: 'assistant', content: data.reply!, actions: data.actions ?? [] }])
     } catch (e) {
-      setTurns((ts) => [...ts, { role: 'assistant', content: e instanceof Error ? e.message : 'Something went wrong.' }])
+      const message = e instanceof Error ? e.message : 'Something went wrong.'
+      setTurns((ts) => [...ts, { role: 'assistant', content: message }])
     } finally {
       setBusy(false)
     }
   }
 
-  /** run an attached action; mark it done on its turn */
-  const runAction = async (turnIndex: number, action: AssistantAction) => {
-    const { pages, designName, designId, width, height } = store
-    let msg = ''
-    if (action.type === 'addText') {
-      const el = createTextElement({
-        text: action.text,
-        fontSize: action.fontSize ?? (action.bold ? 72 : 42),
-        bold: action.bold ?? false,
-        x: width * 0.1,
-        y: height * 0.4,
-        width: width * 0.8,
-        align: 'center',
-      })
-      store.addElement(el)
-      msg = 'Text added to the canvas'
-    } else if (action.type === 'generateImage') {
-      msg = 'Image generated and added'
-      try {
-        const res = await fetch('/api/ai/image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: action.prompt }),
-        })
-        const data = (await res.json()) as { dataUrl?: string; width?: number; height?: number; error?: string }
-        if (!res.ok || !data.dataUrl) throw new Error(data.error ?? 'Generation failed')
-        const iw = data.width ?? 1024
-        const ih = data.height ?? 1024
-        const scale = Math.min((width * 0.7) / iw, (height * 0.7) / ih, 1)
-        store.addElement(
-          createImageElement(data.dataUrl, iw, ih, {
-            x: (width - iw * scale) / 2,
-            y: (height - ih * scale) / 2,
-            width: Math.round(iw * scale),
-            height: Math.round(ih * scale),
-          })
-        )
-      } catch (e) {
-        msg = e instanceof Error ? e.message : 'Image generation failed'
-      }
-    } else if (action.type === 'suggestPalette') {
-      // apply as the page's Brand Kit palette + toast
-      const brand = { ...store.brand, palettes: [action.colors, ...(store.brand.palettes ?? [])].slice(0, 4) }
-      store.setBrand(brand)
-      msg = 'Palette saved to your Brand Kit'
-    } else if (action.type === 'translate') {
-      const texts = collectTexts(pages.flatMap((p) => p.elements))
-      if (!texts.length) {
-        msg = 'No text to translate'
-      } else {
-        msg = `Translated ${texts.length} text${texts.length === 1 ? '' : 's'} to ${action.language}`
-        try {
-          const res = await fetch('/api/ai/translate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ language: action.language, texts: texts.map((t) => t.text) }),
-          })
-          const data = (await res.json()) as { translations?: string[]; error?: string }
-          if (!res.ok || !Array.isArray(data.translations) || data.translations.length !== texts.length) {
-            throw new Error(data.error ?? 'Translation failed')
-          }
-          store.translateTexts(texts.map((t, i) => ({ id: t.id, text: data.translations![i] })))
-        } catch (e) {
-          msg = e instanceof Error ? e.message : 'Translation failed'
-        }
-      }
+  /** Execute one attached action (undoable via Ctrl+Z). */
+  const runAction = async (turnIndex: number, actionIndex: number, action: DesignAction) => {
+    let msg: string
+    try {
+      msg = await applyDesignAction(action)
+    } catch (e) {
+      msg = e instanceof Error ? e.message : 'Action failed'
     }
-    toast({ title: 'Canvix AI', description: msg })
-    setTurns((ts) => ts.map((t, i) => (i === turnIndex ? { ...t, done: { action: action.type, msg } } : t)))
+    setTurns((ts) => ts.map((t, i) => (i === turnIndex ? { ...t, done: { index: actionIndex, msg } } : t)))
   }
 
   const empty = turns.length === 0 && !busy
@@ -167,6 +130,14 @@ export function AssistantApp({ onClose }: AppPanelProps) {
     <div className="flex flex-col">
       <AppHeader icon={Bot} title="Canvix AI assistant" onClose={onClose} />
 
+      {/* AI provider missing — honest notice */}
+      {aiLoaded && !aiConfigured && (
+        <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-2.5 text-[11px] text-amber-200/80 mb-2.5">
+          <strong>AI provider not configured.</strong> Design actions, Magic Write and image generation need a server
+          AI provider. Layout balancing and palettes still work locally.
+        </div>
+      )}
+
       {/* chat log */}
       <div ref={scrollRef} className="h-[340px] overflow-y-auto cv-scroll rounded-xl border border-white/10 bg-white/[0.03] p-2.5 space-y-2.5 mb-2.5">
         {empty && (
@@ -174,10 +145,10 @@ export function AssistantApp({ onClose }: AppPanelProps) {
             <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#7630D7] to-[#02C0CC] flex items-center justify-center shadow-lg">
               <Sparkles size={20} className="text-white" />
             </div>
-            <p className="text-[13px] font-bold text-white">Your creative copilot</p>
+            <p className="text-[13px] font-bold text-white">Your design-aware copilot</p>
             <p className="text-[11px] text-white/50 leading-snug">
-              Ask for headline ideas, colour palettes, taglines — or let it generate images and
-              translate the whole design. It sees your current design.
+              It sees your page — elements, colors, fonts and layout. Ask it to restyle, move, recolor or animate
+              anything. Every change is undoable (Ctrl+Z).
             </p>
           </div>
         )}
@@ -207,28 +178,35 @@ export function AssistantApp({ onClose }: AppPanelProps) {
               {t.actions && t.actions.length > 0 && (
                 <div className="mt-1.5 space-y-1">
                   {t.actions.map((a, j) => {
-                    const meta = ACTION_META[a.type]
-                    const done = t.done?.action === a.type
-                    const Icon = meta.icon
+                    const done = t.done?.index === j
                     return (
-                      <button
-                        key={j}
-                        disabled={done}
-                        onClick={() => void runAction(i, a)}
-                        className={cn(
-                          'w-full flex items-center gap-2 rounded-xl border px-2.5 py-2 text-left text-[11px] font-semibold transition-colors',
-                          done
-                            ? 'border-[#02C0CC]/30 bg-[#02C0CC]/10 text-[#7BE8EC]'
-                            : 'border-[#7630D7]/40 bg-[#7630D7]/15 text-white hover:bg-[#7630D7]/30'
-                        )}
-                      >
-                        <Icon size={13} className="shrink-0" />
-                        <span className="min-w-0 truncate">{done ? t.done?.msg : meta.label(a as never)}</span>
-                        {!done && <Plus size={11} className="ml-auto shrink-0" />}
-                      </button>
+                      <div key={j} className="flex gap-1.5">
+                        <button
+                          disabled={done}
+                          onClick={() => void runAction(i, j, a)}
+                          className={cn(
+                            'flex-1 flex items-center gap-2 rounded-xl border px-2.5 py-2 text-left text-[11px] font-semibold transition-colors',
+                            done
+                              ? 'border-[#02C0CC]/30 bg-[#02C0CC]/10 text-[#7BE8EC]'
+                              : 'border-[#7630D7]/40 bg-[#7630D7]/15 text-white hover:bg-[#7630D7]/30 cursor-pointer'
+                          )}
+                        >
+                          <Wand2 size={12} className="shrink-0" />
+                          <span className="min-w-0 truncate">{done ? t.done?.msg : describeAction(a)}</span>
+                          {!done && <Plus size={11} className="ml-auto shrink-0" />}
+                        </button>
+                      </div>
                     )
                   })}
-                  {a_chipSwatches(t)}
+                  {t.done && canUndo && (
+                    <button
+                      onClick={() => useEditorStore.getState().undo()}
+                      className="text-[10px] font-semibold text-white/40 hover:text-white/80 underline underline-offset-2 cursor-pointer"
+                    >
+                      Undo last change (Ctrl+Z)
+                    </button>
+                  )}
+                  <PaletteSwatches turn={t} />
                 </div>
               )}
             </div>
@@ -256,7 +234,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
             <button
               key={s}
               onClick={() => void send(s)}
-              className="block w-full text-left text-[11px] text-white/55 hover:text-white rounded-lg border border-white/[0.07] hover:border-white/20 px-2.5 py-1.5 transition-colors"
+              className="block w-full text-left text-[11px] text-white/55 hover:text-white rounded-lg border border-white/[0.07] hover:border-white/20 px-2.5 py-1.5 transition-colors cursor-pointer"
             >
               “{s}”
             </button>
@@ -291,12 +269,11 @@ export function AssistantApp({ onClose }: AppPanelProps) {
 }
 
 /** inline palette preview for suggestPalette actions */
-function a_chipSwatches(turn: Turn) {
-  const palette = turn.actions?.find((a) => a.type === 'suggestPalette') as { colors: string[] } | undefined
-  if (!palette) return null
-  const done = turn.done?.action === 'suggestPalette'
+function PaletteSwatches({ turn }: { turn: Turn }) {
+  const palette = turn.actions?.find((a) => a.type === 'suggestPalette') as { colors?: string[] } | undefined
+  if (!palette?.colors?.length) return null
   return (
-    <div className="flex gap-1 pt-0.5" aria-hidden={done}>
+    <div className="flex gap-1 pt-0.5">
       {palette.colors.map((c) => (
         <span key={c} className="flex-1 h-4 rounded-md border border-white/15" style={{ background: c }} title={c} />
       ))}

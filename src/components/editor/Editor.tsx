@@ -25,6 +25,10 @@ import { LayersPanel } from './panels/LayersPanel'
 import { captureThumbnail, canvasBridge } from './canvas/canvas-bridge'
 import { CropDialog } from './CropDialog'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useCollab } from '@/hooks/use-collab'
+import { useComments, markAllCommentsRead } from '@/hooks/use-comments'
+import { CommentsPanel } from './CommentsPanel'
+import { AnimatePanel } from './AnimatePanel'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from '@/hooks/use-toast'
@@ -84,6 +88,9 @@ export default function Editor() {
   const isMobile = useIsMobile()
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const selectedIds = useEditorStore((s) => s.selectedIds)
+  const commentsOpen = useEditorStore((s) => s.commentsOpen)
+  const animateOpen = useEditorStore((s) => s.animateOpen)
+  const setAnimateOpen = useEditorStore((s) => s.setAnimateOpen)
 
   // v0.3.1: image crop dialog (opened from the toolbar or context menu)
   const cropTargetId = useEditorStore((s) => s.cropTargetId)
@@ -95,6 +102,12 @@ export default function Editor() {
     : undefined
 
   const loadedRef = useRef(false)
+
+  // ── v0.5: real-time collaboration session for the open design ──
+  useCollab()
+
+  // ── v0.5: comments (live refresh) ──
+  useComments()
 
   // ── load pending design (from dashboard) ───────────────────
   useEffect(() => {
@@ -342,6 +355,19 @@ export default function Editor() {
           <LeftRail vertical />
         </div>
 
+        {/* v0.5: comments panel — replaces the tool panel while open */}
+        {commentsOpen ? (
+          <aside
+            className={
+              isMobile
+                ? 'fixed inset-x-0 bottom-14 top-14 z-40 bg-[#16181D] shadow-2xl flex flex-col'
+                : 'w-[340px] bg-[#16181D] border-r border-white/[0.07] flex flex-col shrink-0'
+            }
+          >
+            <CommentsPanel />
+          </aside>
+        ) : (
+          <>
         {/* panel — desktop: sidebar; mobile: overlay sheet */}
         {hasPanel && (
           <aside
@@ -362,6 +388,8 @@ export default function Editor() {
             <div className="flex-1 min-h-0">{renderPanel()}</div>
           </aside>
         )}
+          </>
+        )}
 
         {/* canvas workspace */}
         <main className="flex-1 relative min-w-0 min-h-0" aria-label="Design canvas">
@@ -369,6 +397,13 @@ export default function Editor() {
           <PageBar />
           <ZoomControls />
         </main>
+
+        {/* v0.5: Animate panel — canva-style right side panel */}
+        {animateOpen && (
+          <aside className="w-[300px] bg-[#16181D] border-l border-white/[0.07] flex flex-col shrink-0 hidden md:flex">
+            <AnimatePanel onClose={() => setAnimateOpen(false)} />
+          </aside>
+        )}
       </div>
 
       {/* mobile contextual action bar (canva mobile: bottom bar on selection) */}

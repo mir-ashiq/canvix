@@ -30,6 +30,52 @@ watermarks, no paywalls.
 
 ## 🎨 Features
 
+### v0.5.0 — Magic Layers, real-time collaboration & production AI infrastructure
+
+- **Magic Layers** — upload any flat design (or pick an image on your canvas) and a
+  vision model decomposes it into **real, editable Canvix layers**: text becomes
+  live text boxes (color, weight and size recovered), photos become cropped image
+  elements, shapes become native shapes, the background becomes a page background.
+  Every region carries a confidence score — uncertain regions are flagged amber in
+  the review step and can be discarded. Honest limitations are surfaced in-product
+  (fonts are matched by class, not recovered exactly; illustrations become image
+  regions)
+- **Real-time collaboration** — share a design link and edit together: live
+  multiplayer with **colored cursors + name tags**, remote selection outlines,
+  presence avatars in the top bar, a live/offline connection indicator, and
+  gap-free catch-up after disconnects. Architecture: an append-only event log in
+  Postgres + server-sent events downstream + batched op POSTs upstream — works on
+  Vercel serverless and self-hosted Node alike, no WebSocket server required.
+  Optimistic local edits always keep the canvas butter-smooth
+- **Comments & annotations** — a first-class comments mode: click anywhere on the
+  canvas (or on an element — the pin follows it) to drop a threaded comment.
+  Replies, resolve/reopen, delete-own, unread badges, collaborator avatars and
+  live propagation to everyone in the design
+- **Animations — Magic Animate** — an Animate panel (Page / Element tabs) with 9
+  element animations (fade, rise, pan, pop, wipe, zoom, rotate, breathe), speed
+  presets, duration/delay/easing/direction controls, and **page transitions**
+  (fade/slide/morph, 0.1–2.5 s). One-click **Magic Animate** gives the whole page
+  a tasteful animation pass. Animated playback in Preview with autoplay and a
+  reduce-motion accessibility toggle
+- **SVG export** — true vector export: text, shapes, paths, gradients, opacity,
+  transforms, images and shadows serialize to clean, sanitized SVG (no
+  rasterization of vector elements, opens in browsers and vector editors)
+- **Video export (MP4/WebM)** — a real rendering pipeline: the animation timeline
+  is rendered frame-by-frame to an offscreen canvas and encoded locally via
+  MediaRecorder — **MP4 (H.264)** where the browser can encode it, WebM otherwise.
+  Honest format detection is shown before you export. No uploads, no server
+  rendering
+- **AI Assistant 2.0** — the assistant is now design-aware: it sees your page's
+  elements, colors, fonts and selection, and answers with **structured, validated
+  actions** ("move the title to the top", "change all heading colors to purple",
+  "make the layout more balanced", "add a CTA"). Every change lands as a normal,
+  undoable edit
+- **AI provider abstraction** — all AI features route through one server-side
+  provider layer: per-IP rate limits, usage accounting, capability probing and
+  **graceful degradation** when no provider is configured (local features like
+  background removal, palette generation and layout balancing keep working; the
+  rest show a clear "requires an AI provider" notice)
+
 ### v0.4.0 — the Magic Suite: AI editing, PostgreSQL & infrastructure
 
 - **PostgreSQL database** — Prisma migrated from SQLite to Postgres (native `jsonb`
@@ -214,6 +260,8 @@ bun run start
 | Canvas engine | [Konva.js](https://konvajs.org) via react-konva |
 | State | Zustand |
 | Database | Prisma ORM + PostgreSQL (jsonb) |
+| Realtime | Postgres event log + SSE (no WebSocket server needed) |
+| AI | server-side provider layer (z-ai-web-dev-sdk, vision-capable) |
 | Fonts | 15 hand-picked Google Fonts |
 
 ## 📁 Project structure
@@ -221,19 +269,83 @@ bun run start
 ```
 src/
 ├── app/                    # Next.js App Router
-│   ├── page.tsx            # single-page app shell (landing / dashboard / editor)
-│   └── api/                # REST endpoints: designs, templates
+│   ├── page.tsx            # single-page app shell (landing / dashboard / editor + ?design= deep links)
+│   └── api/                # REST endpoints: designs, templates, collab (SSE), comments, ai
 ├── components/
 │   ├── landing/            # marketing page
 │   ├── dashboard/          # home screen: presets, templates, recent designs
 │   └── editor/             # the design editor
-│       ├── canvas/         # Konva stage, element renderers, export bridge
-│       └── panels/         # templates / elements / text / brand / uploads / tools / projects / apps
-├── lib/                    # types, editor utilities, template library
-├── store/                  # zustand stores (app + editor)
+│       ├── canvas/         # Konva stage, element renderers, collab overlay, comment pins, export bridge
+│       └── panels/         # templates / elements / text / brand / uploads / photos / tools / projects / apps / animate
+├── lib/
+│   ├── ai/                 # v0.5 AI provider abstraction (config, rate limits, usage)
+│   ├── collab/             # v0.5 realtime: protocol, client session, participant identity
+│   ├── magic-layers/       # v0.5 image → editable layers pipeline
+│   ├── animations.ts       # v0.5 animation engine (pure functions of time)
+│   ├── svg-export.ts       # v0.5 vector export
+│   ├── video-export.ts     # v0.5 MediaRecorder MP4/WebM pipeline
+│   └── design-actions.ts   # v0.5 validated, undoable AI editor actions
+├── store/                  # zustand stores (app + editor + comments)
 └── hooks/
 prisma/                     # schema + seed
+research/                   # architecture decision records & audits
 ```
+
+## 🤖 AI provider setup
+
+Canvix works fully **without** any AI provider — the editor, templates, exports,
+collaboration and comments need nothing but the database. AI features
+(Magic Layers, Assistant, Magic Write, image generation/editing, translate,
+photo search) activate when a provider is configured **on the server**:
+
+Option A — environment variables (recommended for Vercel etc.):
+
+```bash
+# .env (server-side only — never exposed to the browser)
+ZAI_BASE_URL=https://your-provider.example/v1
+ZAI_API_KEY=your-key
+```
+
+Option B — a `.z-ai-config` JSON file on the server host (checked at the working
+directory, then `~`, then `/etc`):
+
+```json
+{ "baseUrl": "https://your-provider.example/v1", "apiKey": "your-key" }
+```
+
+The provider layer (`src/lib/ai/provider.ts`) resolves credentials in that order,
+probes capabilities at runtime and answers `/api/ai/capabilities` (booleans only —
+never secrets). When no provider is configured, AI features degrade gracefully:
+background removal (local ONNX), color palettes and layout balancing keep working,
+and provider-backed features show a clear setup notice. Every AI route is rate-
+limited per IP and logs usage into the `AIUsage` table.
+
+### Local-only vs provider-backed features
+
+| Feature | Works without a provider? |
+|---|---|
+| Editor, templates, uploads, draw, groups, rulers, crop | ✅ always local |
+| Exports — PNG / JPG / PDF / SVG / video | ✅ always local |
+| Collaboration, presence, comments | ✅ only needs the database |
+| Background remover | ✅ local (in-browser ONNX) |
+| Color palettes, layout balancing | ✅ local (deterministic) |
+| Magic Layers, AI Assistant, Magic Write | ⚙️ needs a server AI provider |
+| AI image generation / eraser / enhance | ⚙️ needs a server AI provider |
+| Translate, live photo search | ⚙️ needs a server AI provider |
+
+## 🔐 Security notes
+
+- **Secrets never reach the browser** — provider credentials are resolved
+  server-side only; the public capabilities endpoint exposes booleans only
+- **Validated collaboration ops** — every realtime event is type-checked,
+  size-capped (256 KB) and dropped (never crashed) if malformed; see
+  `research/V05-SECURITY-AUDIT.md`
+- **Sanitized SVG export** — all text is XML-escaped, path data is whitelisted,
+  image hrefs only allow `data:`/`https:`; no scripts or event handlers
+- **AI actions are double-validated** (server clamps + client re-checks) and
+  always undoable
+- Known limitation: designs are link-accessible (no per-user ownership yet) —
+  the v0.5 identity layer is the migration path; see the security audit
 
 ## 🧭 Roadmap
 
@@ -242,10 +354,10 @@ prisma/                     # schema + seed
 - [x] Canva-exact selection, context menus, groups, colour menu, apps ecosystem *(v0.3.0)*
 - [x] Rulers & manually placed guides, image crop, layer renaming, version history *(v0.3.1)*
 - [x] 63-font library, gradient fills, PDF export, stock photo library, AI apps *(v0.3.2)*
-- [ ] Real-time collaboration (CRDT)
-- [ ] Comment & annotation mode
-- [ ] SVG export
-- [ ] Video/MP4 export
+- [x] Magic Suite: AI image editing, Magic Resize, Translate, PostgreSQL *(v0.4.0)*
+- [x] Magic Layers, real-time collaboration, comments, animations, SVG & video export, AI Assistant 2.0 *(v0.5.0)*
+- [ ] Accounts & per-design ownership (identity layer groundwork shipped in v0.5)
+- [ ] Yjs-grade offline merge for collaboration
 - [ ] Plugin system (external, installable apps)
 
 ## 🤝 Contributing

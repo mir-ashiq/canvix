@@ -17,6 +17,36 @@ export type ElementType =
 
 export type TextAlign = 'left' | 'center' | 'right' | 'justify'
 
+// ── v0.5: animations (model is Konva-independent — pure functions of time) ──
+
+export type AnimationKind = 'none' | 'fade' | 'rise' | 'pan' | 'pop' | 'wipe' | 'zoom' | 'rotate' | 'breathe'
+export type AnimationSpeed = 'slow' | 'medium' | 'fast'
+export type AnimationDirection = 'left' | 'right' | 'up' | 'down'
+export type AnimationEasing = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'spring'
+
+export interface ElementAnimation {
+  kind: AnimationKind
+  /** seconds */
+  duration: number
+  /** seconds — start offset after the page is shown */
+  delay: number
+  easing: AnimationEasing
+  /** pan/rise travel direction */
+  direction?: AnimationDirection
+}
+
+export type TransitionKind = 'none' | 'fade' | 'slide' | 'morph'
+
+export interface PageTransition {
+  kind: TransitionKind
+  /** 0.1–2.5 s */
+  duration: number
+  direction?: AnimationDirection
+}
+
+/** canva speed presets (seconds) */
+export const SPEED_PRESETS: Record<AnimationSpeed, number> = { slow: 1.4, medium: 0.9, fast: 0.5 }
+
 /** Canva-style text effects (v0.3: aligned to canva 2026 naming) */
 export type TextEffect = 'none' | 'shadow' | 'lift' | 'hollow' | 'neon' | 'echo' | 'glow' | 'outline' | 'background' | 'splice'
 
@@ -64,6 +94,15 @@ export interface BaseElement {
   shadow: ShadowConfig
   /** user-facing layer name (Layers panel; falls back to an auto label) */
   name?: string
+  /** v0.5: entry animation (undefined = none) */
+  animation?: ElementAnimation
+  /** v0.5 Magic Layers provenance — set on elements generated from an image analysis */
+  magicLayer?: {
+    sourceRegion: string
+    confidence: number
+    sourceType: string
+    originalBounds: { x: number; y: number; w: number; h: number }
+  }
 }
 
 export interface TextElement extends BaseElement {
@@ -185,6 +224,8 @@ export interface PageData {
   id: string
   background: Background
   elements: AnyElement[]
+  /** v0.5: transition played when this page appears after another */
+  transition?: PageTransition
 }
 
 /** user-placed ruler guide (position in page px; scoped to a page) */

@@ -15,6 +15,13 @@ import {
 } from '@/lib/types'
 import type { TemplateDef } from '@/lib/templates'
 import { magicRelayoutPages } from '@/lib/magic'
+import {
+  clearPageAnimations,
+  magicAnimatePage,
+} from '@/lib/animations'
+import type { ElementAnimation, PageTransition } from '@/lib/types'
+import type { CollabOp, DesignEventRow } from '@/lib/collab/protocol'
+import type { Collaborator, CollabStatus } from '@/lib/collab/protocol'
 
 export type PanelId =
   | 'templates'
@@ -37,6 +44,28 @@ interface HistoryEntry {
 
 // module-level clipboard (not reactive)
 let clipboard: AnyElement[] = []
+
+// ── v0.5 collaboration: op emission ─────────────────
+// The store is the single source of truth for local mutations. After every
+// LOCAL mutation it emits an op through the registered emitter (set by
+// use-collab). Remote ops flow back through `applyRemoteOp`, which never
+// emits — so there is no feedback loop and no re-entry flag needed.
+
+type OpEmitter = (op: CollabOp) => void
+let emitOp: OpEmitter | null = null
+
+/** Register (or clear) the collaboration op emitter. */
+export function setOpEmitter(fn: OpEmitter | null) {
+  emitOp = fn
+}
+
+function emit(op: CollabOp) {
+  try {
+    emitOp?.(op)
+  } catch {
+    /* collab emission must never break local editing */
+  }
+}
 
 interface EditorState {
   designId: string | null
@@ -147,6 +176,33 @@ interface EditorState {
   // v0.4: magic translate — batch-update text elements across ALL pages
   translateTexts: (updates: { id: string; text: string }[]) => void
 
+  // v0.5: magic layers — bulk element insertion + page replacement
+  addElementsBulk: (els: AnyElement[]) => void
+  replaceCurrentPage: (page: PageData) => void
+  appendPage: (page: PageData) => void
+
+  // v0.5: collaboration runtime state (not persisted — per-tab)
+  collaborators: Collaborator[]
+  collabStatus: CollabStatus
+  setCollaborators: (list: Collaborator[]) => void
+  setCollabStatus: (s: CollabStatus) => void
+  /** apply a remote op (never emits, never pushes history) */
+  applyRemoteOp: (event: DesignEventRow) => void
+
+  // v0.5: comments mode
+  commentsOpen: boolean
+  toggleComments: () => void
+  setCommentsOpen: (open: boolean) => void
+
+  // v0.5: animations
+  setElementAnimation: (ids: string[], animation: ElementAnimation | null) => void
+  setPageTransition: (transition: PageTransition | null) => void
+  magicAnimateCurrentPage: (speed?: 'slow' | 'medium' | 'fast') => void
+  clearPageAnimations: () => void
+  animateOpen: boolean
+  toggleAnimate: () => void
+  setAnimateOpen: (open: boolean) => void
+
   // panels & save
   setPanel: (p: PanelId) => void
   markSaving: () => void
@@ -182,6 +238,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   drawColor: '#FFFFFF',
   drawSize: 6,
   brand: DEFAULT_BRAND,
+
+  // v0.5: collaboration runtime
+  collaborators: [],
+  collabStatus: 'offline',
+  commentsOpen: false,
+  animateOpen: false,
 
   showRulers: false,
   manualGuides: [],
@@ -230,7 +292,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       .catch(() => { /* offline — keep local list */ })
   },
 
-  rename: (name) => set({ designName: name, dirty: true }),
+  rename: (name) => {
+    set({ designName: name, dirty: true })
+    emit({ kind: 'design:rename', name: name.slice(0, 80) })
+  },
 
   pushHistory: () => {
     const { pages, currentPage, past, version } = get()
@@ -255,6 +320,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       dirty: true,
       version: version + 1,
     })
+    // undo restores snapshots — op-level undo replay is out of scope (see
+    // COLLABORATION-ARCHITECTURE.md §7), so sync coarse
+    emit({ kind: 'pages:replace', pages: prev.pages, width: get().width, height: get().height })
   },
 
   redo: () => {
@@ -270,6 +338,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       dirty: true,
       version: version + 1,
     })
+    emit({ kind: 'pages:replace', pages: next.pages, width: get().width, height: get().height })
   },
 
   setSelection: (ids) => set({ selectedIds: ids }),
@@ -287,6 +356,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const next = clone(pages)
     next[currentPage].elements.push(el)
     set({ pages: next, selectedIds: [el.id] })
+    emit({ kind: 'element:add', pageId: next[currentPage].id, element: el })
   },
 
   updateElementsLive: (ids, patch) => {
@@ -296,6 +366,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       ids.includes(e.id) ? ({ ...e, ...patch } as AnyElement) : e
     )
     set({ pages: next, version: version + 1, dirty: true })
+    emit({ kind: 'elements:update', pageId: next[currentPage].id, ids: [...ids], patch: { ...patch } })
   },
 
   updateElements: (ids, patch) => {
@@ -311,6 +382,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const next = clone(pages)
     next[currentPage].elements = next[currentPage].elements.filter((e) => !selectedIds.includes(e.id))
     set({ pages: next, selectedIds: [] })
+    emit({ kind: 'element:delete', pageId: next[currentPage].id, ids: [...selectedIds] })
   },
 
   duplicateSelection: () => {
@@ -324,6 +396,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const next = clone(pages)
     next[currentPage].elements = [...next[currentPage].elements, ...clones]
     set({ pages: next, selectedIds: clones.map((c) => c.id) })
+    emit({ kind: 'elements:add', pageId: next[currentPage].id, elements: clones })
   },
 
   copySelection: () => {
@@ -346,6 +419,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const next = clone(pages)
     next[currentPage].elements = [...next[currentPage].elements, ...clones]
     set({ pages: next, selectedIds: clones.map((c) => c.id) })
+    emit({ kind: 'elements:add', pageId: next[currentPage].id, elements: clones })
   },
 
   moveLayer: (id, dir) => {
@@ -362,6 +436,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (dir === 'back') j = 0
     els.splice(j, 0, ...els.splice(i, 1))
     set({ pages: next })
+    emit({ kind: 'elements:reorder', pageId: next[currentPage].id, orderedIds: els.map((e) => e.id) })
   },
 
   reorderLayer: (dragId, targetIndex) => {
@@ -375,6 +450,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const arr = next[currentPage].elements
     arr.splice(targetIndex, 0, ...arr.splice(i, 1))
     set({ pages: next })
+    emit({ kind: 'elements:reorder', pageId: next[currentPage].id, orderedIds: arr.map((e) => e.id) })
   },
 
   setLock: (ids, locked) => get().updateElements(ids, { locked }),
@@ -390,6 +466,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const next = clone(pages)
     next[currentPage].elements = [...next[currentPage].elements.filter((e) => !selectedIds.includes(e.id)), group]
     set({ pages: next, selectedIds: [group.id] })
+    emit({ kind: 'page:replace', pageId: next[currentPage].id, page: next[currentPage] })
   },
 
   ungroupSelection: () => {
@@ -426,6 +503,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       released = [...released, ...releasedEls.map((c) => c.id)]
     }
     set({ pages: next, selectedIds: released })
+    emit({ kind: 'page:replace', pageId: next[currentPage].id, page: next[currentPage] })
   },
 
   alignElements: (ids, mode) => {
@@ -445,6 +523,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       }
     })
     set({ pages: next })
+    emit({ kind: 'page:replace', pageId: next[currentPage].id, page: next[currentPage] })
   },
 
   flipSelection: (axis) => {
@@ -459,21 +538,26 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       return { ...el, rotation: (el.rotation + (axis === 'h' ? 0 : 180)) % 360 }
     })
     set({ pages: next })
+    emit({ kind: 'page:replace', pageId: next[currentPage].id, page: next[currentPage] })
   },
 
   addPage: () => {
     get().pushHistory()
     const { pages } = get()
-    set({ pages: [...clone(pages), { id: uid('page'), background: { type: 'solid', color: '#FFFFFF' }, elements: [] }] })
+    const page: PageData = { id: uid('page'), background: { type: 'solid', color: '#FFFFFF' }, elements: [] }
+    set({ pages: [...clone(pages), page] })
+    emit({ kind: 'page:add', page })
   },
 
   deletePage: (index) => {
     const { pages } = get()
     if (pages.length <= 1) return
     get().pushHistory()
+    const removedId = pages[index].id
     const next = clone(pages)
     next.splice(index, 1)
     set({ pages: next, currentPage: Math.min(index, next.length - 1), selectedIds: [] })
+    emit({ kind: 'page:delete', pageId: removedId })
   },
 
   duplicatePage: (index) => {
@@ -485,6 +569,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     copy.elements = copy.elements.map((e) => ({ ...e, id: uid(e.type) }))
     next.splice(index + 1, 0, copy)
     set({ pages: next, currentPage: index + 1, selectedIds: [] })
+    emit({ kind: 'page:add', page: copy, afterId: next[index].id })
   },
 
   setCurrentPage: (index) => set({ currentPage: index, selectedIds: [] }),
@@ -495,17 +580,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const next = clone(pages)
     next[currentPage].background = bg
     set({ pages: next })
+    emit({ kind: 'page:background', pageId: next[currentPage].id, background: bg })
   },
 
   applyTemplate: (t) => {
     get().pushHistory()
+    const pages = clone(t.pages.map((p) => ({ ...p, id: uid('page') })))
     set({
-      pages: clone(t.pages.map((p) => ({ ...p, id: uid('page') }))),
+      pages,
       width: t.width,
       height: t.height,
       currentPage: 0,
       selectedIds: [],
     })
+    emit({ kind: 'pages:replace', pages, width: t.width, height: t.height })
   },
 
   setZoom: (z) => set({ zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)) }),
@@ -591,6 +679,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       selectedIds: [],
       dirty: true,
     })
+    emit({ kind: 'pages:replace', pages: v.pages, width: v.width, height: v.height })
   },
   deleteVersion: (id) => {
     const { designId, versions } = get()
@@ -614,6 +703,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // position instead of all being dumped in the centre
     const next = magicRelayoutPages(clone(pages), oldW, oldH, width, height)
     set({ width, height, pages: next, selectedIds: [], zoom: 1 })
+    emit({ kind: 'pages:replace', pages: next, width, height })
   },
 
   // ── v0.4: magic translate ────────────────────────────
@@ -629,9 +719,198 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       })
     const next = clone(pages).map((p) => ({ ...p, elements: applyTexts(p.elements) }))
     set({ pages: next, version: version + 1, dirty: true })
+    emit({ kind: 'pages:replace', pages: next })
+  },
+
+  // ── v0.5: magic layers insertion ────────────────────
+  addElementsBulk: (els) => {
+    if (!els.length) return
+    get().pushHistory()
+    const { pages, currentPage } = get()
+    const next = clone(pages)
+    next[currentPage].elements = [...next[currentPage].elements, ...els.map((e) => clone(e))]
+    set({ pages: next, selectedIds: els.map((e) => e.id) })
+    emit({ kind: 'elements:add', pageId: next[currentPage].id, elements: els })
+  },
+  replaceCurrentPage: (page) => {
+    get().pushHistory()
+    const { pages, currentPage } = get()
+    const next = clone(pages)
+    next[currentPage] = clone(page)
+    set({ pages: next, selectedIds: [] })
+    emit({ kind: 'page:replace', pageId: page.id, page })
+  },
+  appendPage: (page) => {
+    get().pushHistory()
+    const { pages } = get()
+    set({ pages: [...clone(pages), clone(page)], currentPage: pages.length, selectedIds: [] })
+    emit({ kind: 'page:add', page })
   },
 
   setPanel: (p) => set({ panel: get().panel === p ? null : p }),
+
+  // ── v0.5: comments mode ─────────────────
+  toggleComments: () => set({ commentsOpen: !get().commentsOpen, panel: null }),
+  setCommentsOpen: (open) => set({ commentsOpen: open }),
+
+  // ── v0.5: animations ─────────────────
+  toggleAnimate: () => set({ animateOpen: !get().animateOpen }),
+  setAnimateOpen: (open) => set({ animateOpen: open }),
+  setElementAnimation: (ids, animation) => {
+    if (!ids.length) return
+    get().pushHistory()
+    const { pages, currentPage } = get()
+    const next = clone(pages)
+    next[currentPage].elements = next[currentPage].elements.map((e) =>
+      ids.includes(e.id) ? { ...e, animation: animation ?? undefined } : e
+    )
+    set({ pages: next })
+    emit({
+      kind: 'page:replace',
+      pageId: next[currentPage].id,
+      page: next[currentPage],
+    })
+  },
+  setPageTransition: (transition) => {
+    get().pushHistory()
+    const { pages, currentPage } = get()
+    const next = clone(pages)
+    next[currentPage] = { ...next[currentPage], transition: transition ?? undefined }
+    set({ pages: next })
+    emit({ kind: 'page:replace', pageId: next[currentPage].id, page: next[currentPage] })
+  },
+  magicAnimateCurrentPage: (speed = 'medium') => {
+    get().pushHistory()
+    const { pages, currentPage, height } = get()
+    const next = clone(pages)
+    const animated = magicAnimatePage(next[currentPage], height, speed)
+    next[currentPage] = animated
+    set({ pages: next })
+    emit({ kind: 'page:replace', pageId: animated.id, page: animated })
+  },
+  clearPageAnimations: () => {
+    get().pushHistory()
+    const { pages, currentPage } = get()
+    const next = clone(pages)
+    const cleared = clearPageAnimations(next[currentPage])
+    next[currentPage] = cleared
+    set({ pages: next })
+    emit({ kind: 'page:replace', pageId: cleared.id, page: cleared })
+  },
+
+  // ── v0.5: collaboration runtime state ─────────
+  setCollaborators: (list) => set({ collaborators: list }),
+  setCollabStatus: (s) => set({ collabStatus: s }),
+  applyRemoteOp: (event) => {
+    const payload = event.payload as Record<string, unknown> | null
+    if (!payload) return
+    const { pages, version } = get()
+    const next = clone(pages)
+
+    const findPage = (pageId: unknown): number =>
+      next.findIndex((p) => p.id === pageId)
+
+    const applyToPage = (pageId: unknown, fn: (page: PageData) => PageData): void => {
+      const i = findPage(pageId)
+      if (i >= 0) next[i] = fn(next[i])
+    }
+
+    switch (event.kind) {
+      case 'elements:update': {
+        const ids = (payload.ids as string[]) ?? []
+        const patch = (payload.patch as Record<string, unknown>) ?? {}
+        applyToPage(payload.pageId, (page) => ({
+          ...page,
+          elements: page.elements.map((e) => (ids.includes(e.id) ? ({ ...e, ...patch } as AnyElement) : e)),
+        }))
+        break
+      }
+      case 'element:add': {
+        const el = payload.element as AnyElement | undefined
+        if (el?.id) {
+          applyToPage(payload.pageId, (page) =>
+            page.elements.some((e) => e.id === el.id) ? page : { ...page, elements: [...page.elements, clone(el)] }
+          )
+        }
+        break
+      }
+      case 'elements:add': {
+        const els = (payload.elements as AnyElement[]) ?? []
+        if (els.length) {
+          applyToPage(payload.pageId, (page) => {
+            const known = new Set(page.elements.map((e) => e.id))
+            return { ...page, elements: [...page.elements, ...els.filter((e) => !known.has(e.id)).map((e) => clone(e))] }
+          })
+        }
+        break
+      }
+      case 'element:delete': {
+        const ids = new Set((payload.ids as string[]) ?? [])
+        applyToPage(payload.pageId, (page) => ({ ...page, elements: page.elements.filter((e) => !ids.has(e.id)) }))
+        break
+      }
+      case 'elements:reorder': {
+        const orderedIds = (payload.orderedIds as string[]) ?? []
+        applyToPage(payload.pageId, (page) => {
+          const byId = new Map(page.elements.map((e) => [e.id, e]))
+          const ordered = orderedIds.map((id) => byId.get(id)).filter((e): e is AnyElement => !!e)
+          const rest = page.elements.filter((e) => !orderedIds.includes(e.id))
+          return { ...page, elements: [...rest, ...ordered] }
+        })
+        break
+      }
+      case 'page:add': {
+        const page = clone(payload.page as PageData)
+        if (page?.id && !next.some((p) => p.id === page.id)) {
+          const afterIdx = payload.afterId ? findPage(payload.afterId) : -1
+          next.splice(afterIdx >= 0 ? afterIdx + 1 : next.length, 0, page)
+        }
+        break
+      }
+      case 'page:delete': {
+        if (next.length > 1) {
+          const i = findPage(payload.pageId)
+          if (i >= 0) next.splice(i, 1)
+        }
+        break
+      }
+      case 'page:background': {
+        applyToPage(payload.pageId, (page) => ({ ...page, background: clone(payload.background as Background) }))
+        break
+      }
+      case 'page:replace': {
+        const page = clone(payload.page as PageData)
+        if (page?.id) {
+          const i = findPage(page.id)
+          if (i >= 0) next[i] = page
+          else next.push(page)
+        }
+        break
+      }
+      case 'pages:replace': {
+        const replaced = clone((payload.pages as PageData[]) ?? [])
+        if (replaced.length) {
+          const currentPage = Math.min(get().currentPage, replaced.length - 1)
+          set({ pages: replaced, currentPage, selectedIds: [], version: version + 1, dirty: true })
+          const w = Number(payload.width)
+          const h = Number(payload.height)
+          if (Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) set({ width: w, height: h })
+          return
+        }
+        break
+      }
+      case 'design:rename': {
+        const name = String(payload.name ?? '').slice(0, 80)
+        if (name) set({ designName: name, dirty: true })
+        return
+      }
+      default:
+        return // unknown op — ignore (forward/backward compatibility)
+    }
+
+    const currentPage = Math.min(get().currentPage, next.length - 1)
+    set({ pages: next, currentPage, version: version + 1, dirty: true })
+  },
 
   markSaving: () => set({ saving: true }),
   markSaved: () => set({ saving: false, dirty: false, savedAt: Date.now() }),

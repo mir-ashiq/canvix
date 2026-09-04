@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Home, MessageCircle, Play, Share2, ChevronDown, Undo2, Redo2, Download, Github, Cloud, Check, Loader2, Ruler, History, Languages } from 'lucide-react'
+import { Home, MessageCircle, Play, Share2, ChevronDown, Undo2, Redo2, Download, Github, Cloud, Check, Loader2, Ruler, History, Languages, Wand2, Zap } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,10 @@ import { ResizeDialog } from './ResizeDialog'
 import { ShareDialog } from './ShareDialog'
 import { VersionHistoryDialog } from './VersionHistoryDialog'
 import { TranslateDialog } from './TranslateDialog'
+import { MagicLayersDialog } from './MagicLayersDialog'
+import { PresenceAvatars } from './PresenceAvatars'
+import { useCommentsStore } from '@/lib/comments-store'
+import { markAllCommentsRead } from '@/hooks/use-comments'
 import { ContextToolbar } from './PropertiesBar'
 
 /** Canva-2026 editor topbar: 56px cyan→purple gradient, white text, File/Resize/Editing left, Preview/Share right. */
@@ -33,12 +37,19 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
   const selectedIds = useEditorStore((s) => s.selectedIds)
   const showRulers = useEditorStore((s) => s.showRulers)
   const toggleRulers = useEditorStore((s) => s.toggleRulers)
+  const commentsOpen = useEditorStore((s) => s.commentsOpen)
+  const toggleComments = useEditorStore((s) => s.toggleComments)
+  const animateOpen = useEditorStore((s) => s.animateOpen)
+  const toggleAnimate = useEditorStore((s) => s.toggleAnimate)
+  const designId = useEditorStore((s) => s.designId)
+  const unreadCount = useCommentsStore((s) => s.unreadIds.size)
 
   const [exportOpen, setExportOpen] = useState(false)
   const [resizeOpen, setResizeOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [versionsOpen, setVersionsOpen] = useState(false)
   const [translateOpen, setTranslateOpen] = useState(false)
+  const [magicLayersOpen, setMagicLayersOpen] = useState(false)
 
   const item = 'h-10 px-3 rounded-xl text-white/95 hover:bg-white/15 transition-colors text-sm font-semibold flex items-center gap-1.5 select-none'
 
@@ -75,6 +86,9 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           <DropdownMenuItem className="gap-2" onClick={() => setResizeOpen(true)}>
             <Play size={15} /> Magic Resize
           </DropdownMenuItem>
+          <DropdownMenuItem className="gap-2" onClick={() => setMagicLayersOpen(true)}>
+            <Wand2 size={15} /> Magic Layers — edit a flat design
+          </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => setTranslateOpen(true)}>
             <Languages size={15} /> Translate design…
           </DropdownMenuItem>
@@ -101,8 +115,13 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
         </DropdownMenuContent>
       </DropdownMenu>
 
+      {/* Magic Layers */}
+      <button className={cn(item, 'hidden sm:flex')} onClick={() => setMagicLayersOpen(true)} aria-label="Magic Layers">
+        <Wand2 size={13} className="text-white/80" /> Magic Layers
+      </button>
+
       {/* Magic Resize */}
-      <button className={cn(item, 'hidden sm:flex')} onClick={() => setResizeOpen(true)} aria-label="Magic Resize">
+      <button className={cn(item, 'hidden md:flex')} onClick={() => setResizeOpen(true)} aria-label="Magic Resize">
         Magic Resize
       </button>
 
@@ -151,15 +170,25 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
       )}
 
       <div className="ml-auto flex items-center gap-0.5 sm:gap-1 shrink-0">
+        {/* v0.5: collaborators + connection status */}
+        <PresenceAvatars />
         <Button variant="ghost" size="icon" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={undo} disabled={!canUndo} aria-label="Undo" title="Undo (Ctrl+Z)">
           <Undo2 size={17} />
         </Button>
         <Button variant="ghost" size="icon" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={redo} disabled={!canRedo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
           <Redo2 size={17} />
         </Button>
-        <Button variant="ghost" size="icon" className="hidden lg:inline-flex rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={() => setPanel('projects')} aria-label="Comments" title="Comments">
-          <MessageCircle size={17} />
+        <Button variant="ghost" size="icon" className={cn('relative rounded-lg hover:bg-white/15 hover:text-white', commentsOpen ? 'text-white bg-white/15' : 'text-white')} onClick={() => { toggleComments(); if (!commentsOpen && designId) markAllCommentsRead(designId) }} aria-label="Comments" title="Comments">
+          <MessageCircle size={17} className={cn(commentsOpen && 'fill-white/20')} />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#FF5C8A] text-white text-[9px] font-bold flex items-center justify-center">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
         </Button>
+        <button className={cn(item, 'hidden sm:flex')} onClick={toggleAnimate} aria-label="Animate">
+          <Zap size={13} className={cn(animateOpen && 'text-[#02C0CC]')} /> Animate
+        </button>
         <button className={cn(item, 'hidden sm:flex')} onClick={() => setPreviewOpen(true)} aria-label="Preview design">
           <Play size={14} /> Preview
         </button>
@@ -176,6 +205,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
       <ShareDialog open={shareOpen} onOpenChange={setShareOpen} />
       <VersionHistoryDialog open={versionsOpen} onOpenChange={setVersionsOpen} />
       <TranslateDialog open={translateOpen} onOpenChange={setTranslateOpen} />
+      <MagicLayersDialog open={magicLayersOpen} onOpenChange={setMagicLayersOpen} />
     </header>
   )
 }

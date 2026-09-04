@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withProvider } from '@/lib/ai/provider'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -46,33 +47,30 @@ const MODE_PROMPTS: Record<string, string> = {
 
 /** POST /api/ai/image-edit — Canva-style AI image tools (BG remover, Magic eraser, enhance). */
 export async function POST(req: NextRequest) {
-  try {
-    const body = (await req.json()) as EditBody
-    const image = (body.image ?? '').trim()
-    if (!image || !/^(data:image\/|https?:\/\/)/.test(image)) {
-      return NextResponse.json({ error: 'A valid image is required.' }, { status: 400 })
-    }
+  const body = (await req.json().catch(() => ({}))) as EditBody
+  const image = (body.image ?? '').trim()
+  if (!image || !/^(data:image\/|https?:\/\/)/.test(image)) {
+    return NextResponse.json({ error: 'A valid image is required.' }, { status: 400 })
+  }
 
-    const mode = body.mode ?? 'edit'
-    let prompt: string
-    if (mode === 'erase') {
-      const target = (body.eraseTarget ?? body.prompt ?? '').trim().slice(0, 300)
-      if (!target) return NextResponse.json({ error: 'Describe what to remove.' }, { status: 400 })
-      prompt = `${MODE_PROMPTS.erase} Object to remove: ${target}`
-    } else if (mode === 'edit') {
-      prompt = (body.prompt ?? '').trim().slice(0, 600)
-      if (!prompt) return NextResponse.json({ error: 'A prompt is required.' }, { status: 400 })
-    } else {
-      prompt = MODE_PROMPTS[mode]
-    }
+  const mode = body.mode ?? 'edit'
+  let prompt: string
+  if (mode === 'erase') {
+    const target = (body.eraseTarget ?? body.prompt ?? '').trim().slice(0, 300)
+    if (!target) return NextResponse.json({ error: 'Describe what to remove.' }, { status: 400 })
+    prompt = `${MODE_PROMPTS.erase} Object to remove: ${target}`
+  } else if (mode === 'edit') {
+    prompt = (body.prompt ?? '').trim().slice(0, 600)
+    if (!prompt) return NextResponse.json({ error: 'A prompt is required.' }, { status: 400 })
+  } else {
+    prompt = MODE_PROMPTS[mode]
+  }
 
-    const w = Number(body.naturalWidth) || 0
-    const h = Number(body.naturalHeight) || 0
-    const size: ImgSize = w && h ? bestSize(w, h) : '1024x1024'
+  const w = Number(body.naturalWidth) || 0
+  const h = Number(body.naturalHeight) || 0
+  const size: ImgSize = w && h ? bestSize(w, h) : '1024x1024'
 
-    const { default: ZAI } = await import('z-ai-web-dev-sdk')
-    const zai = await ZAI.create()
-
+  return withProvider('image-edit', req, { limit: 12, windowSec: 60 }, async (zai) => {
     // NOTE: the SDK's TS type declares `image`, but the backend API requires
     // `images: [{ url }]` (verified — API error 1210 "must provide images").
     // The SDK forwards the body verbatim, so we send the correct runtime shape.
@@ -89,11 +87,5 @@ export async function POST(req: NextRequest) {
 
     const [outW, outH] = size.split('x').map(Number)
     return NextResponse.json({ dataUrl: `data:image/png;base64,${base64}`, width: outW, height: outH })
-  } catch (err) {
-    console.error('[api/ai/image-edit]', err)
-    return NextResponse.json(
-      { error: 'AI image editing is unavailable right now. Please try again.' },
-      { status: 502 }
-    )
-  }
+  })
 }

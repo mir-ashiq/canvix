@@ -167,7 +167,7 @@ export function PhotosPanel() {
                   aria-label={`Add web photo ${p.caption || 'result'}`}
                   title={p.caption}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  { }
                   <img
                     src={p.url}
                     alt={p.caption || 'web photo'}

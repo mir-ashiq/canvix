@@ -3,6 +3,88 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.0] — 2026-09-04
+
+The Agent Edition: Canvix speaks the Model Context Protocol, so AI assistants
+(Claude Desktop, Cursor, ChatGPT, any MCP client) can create and edit real
+designs on your server — and the editor closes the remaining Canva-parity gaps
+with native tables, image frames, curved text and embed cards.
+
+### MCP server — AI agents drive Canvix
+- **`POST /api/mcp`** implements MCP 2025-03-26 *Streamable HTTP* (stateless
+  profile): JSON-RPC 2.0 requests answered with one JSON object, notifications
+  with `202 Accepted`, `GET` → `405` (no server-initiated stream — spec-compliant),
+  full lifecycle (`initialize` → `notifications/initialized` → `tools/list` /
+  `tools/call`), `ping`, empty `resources/list` / `prompts/list`, batches ≤ 32.
+- **20 tools, all backed by real subsystems** — discover (`get_capabilities`,
+  `list_templates`, `search_designs`, `get_design`, `get_design_content`),
+  create (`create_design` blank-or-template — id *or* slug accepted, first page
+  auto-created), edit (`add_text`, `add_shape`, `add_image`, `add_table`,
+  `add_embed`, `set_background`, `update_element`, `delete_element`,
+  `animate_page` — the same Magic Animate engine), export (`export_design`:
+  true-vector SVG server-side, PNG via sharp, JSON), collaborate
+  (`comment_on_design`, `list_comments`) and `list_fonts`.
+- **`generate_design`** — AI-generated designs as *native editable elements*:
+  the provider is asked for a structured page spec (strict JSON mode with
+  repair + one retry), then every field is normalized/clamped (coords, hex
+  colors, whitelisted fonts, ≤ 25 elements) before a real Design row is
+  created. Without a provider the tool errors honestly and points at
+  template-based creation.
+- **Live propagation**: every MCP write appends a `pages:replace` event to the
+  design's collab log (actor `agent:mcp`) — open editor sessions replay agent
+  edits in real time; comments emit `comment:activity` markers.
+- **Hardening** — disabled until `CANVIX_MCP_TOKEN` is set (503 with setup
+  instructions otherwise); Bearer auth with timing-safe comparison; Origin
+  validation (DNS-rebinding guard); 120 req/min/IP; SSRF-guarded image fetch
+  (private hosts denied, 8 MB / 10 s caps, content-type allow-list) → dataURL;
+  per-type patch whitelists with clamps; no stack traces on the wire.
+- **Dashboard "AI agents (MCP)" card** — live status probe (`OPTIONS /api/mcp`),
+  copyable endpoint + client config JSON for Claude Desktop / Cursor / any
+  remote MCP client. `.env.example` documents the token.
+- **Protocol E2E** (`scripts/mcp-e2e.sh`): 37 assertions — initialize handshake,
+  202 notifications, tools/list (20), auth (401), GET 405, unknown method/tool,
+  full create → style → add (text/shape/table/embed) → update (curve) →
+  animate → get → comment → export (svg/png/json) → delete flow, batch, parse
+  errors, AI generation — **37/37 passing**.
+
+### Tables (native, editable)
+- New `table` element: rows × cols with per-cell text/fill/bold, proportional
+  column widths, header band, border color/width, text style — four starter
+  styles (classic / minimal / bold / soft).
+- **Click any cell to edit it in place** (cell-scoped textarea overlay), add /
+  remove rows & columns from the context toolbar, restyle via the Style popover.
+- Renders in editor, previews, thumbnails, PNG/PDF/video exports; SVG export
+  serializes per-cell rects + text; **AI Translate now walks table cells too**.
+
+### Frames (image-in-shape)
+- New `frame` element: rect (with corner radius), ellipse, circle, triangle,
+  hexagon — images clip to the shape with cover-fit (Konva `clipFunc`).
+- **Drop an upload or photo onto a frame to fill it** (drop-to-fill), or use
+  the Fill button / shape switcher in the context toolbar. Empty frames show a
+  dashed placeholder. SVG export uses true vector `<clipPath>`.
+
+### Curved text
+- `TextElement.curve` (−180…180°): arch up or valley down, rendered as real
+  text-on-path (Konva `TextPath`) — editable, transformable, exports to
+  SVG `<textPath>` and rides PNG/PDF/video export unchanged. Curve slider in
+  the text toolbar with live reset.
+
+### Embed cards
+- New `embed` element for YouTube / Google Maps / generic links — a native
+  vector card (tinted media band, play / pin / link glyph, host + title) that
+  opens the URL when clicked in Preview or shared views. YouTube pulls the
+  public thumbnail (CORS-safe, graceful fallback). Honest scope: a styled
+  card, not an iframe.
+
+### Infrastructure
+- **`src/lib/v06-geometry.ts`** — pure shared geometry (arc math, table
+  layout, frame clip paths, embed card metrics) used by BOTH the Konva
+  renderers and the server-side SVG exporter (server-safe, no DOM imports).
+- SVG exporter gained table / frame (clipPath) / embed (band + glyphs) /
+  curved-text (defs path + textPath) serializers, all escaped and
+  `data:`/`https:`-only hrefs.
+- MCP tool schema definitions double as living API documentation for agents.
+
 ## [0.5.0] — 2026-09-04
 
 The AI-native collaborative release: Magic Layers turns flat images into editable

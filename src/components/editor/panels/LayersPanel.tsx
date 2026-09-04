@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Lock, LockOpen, Eye, EyeOff, Trash2, Type, Image as ImageIcon, Square, Minus, Smile, PenTool, Group as GroupIcon } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Lock, LockOpen, Eye, EyeOff, Trash2, Type, Image as ImageIcon, Square, Minus, Smile, PenTool, Group as GroupIcon, Table2, Frame as FrameIcon, ExternalLink } from 'lucide-react'
 import { useEditorStore, currentPageData } from '@/store/editor-store'
 import { cn } from '@/lib/utils'
 import type { AnyElement } from '@/lib/types'
@@ -15,6 +15,9 @@ function elementIcon(el: AnyElement) {
     case 'sticker': return Smile
     case 'path': return PenTool
     case 'group': return GroupIcon
+    case 'table': return Table2
+    case 'frame': return FrameIcon
+    case 'embed': return ExternalLink
     default: return Square
   }
 }
@@ -28,6 +31,9 @@ function elementLabel(el: AnyElement): string {
   if (el.type === 'stroke') return 'Stroke'
   if (el.type === 'path') return 'Graphic'
   if (el.type === 'group') return 'Group'
+  if (el.type === 'table') return 'Table'
+  if (el.type === 'frame') return el.src ? 'Frame' : 'Empty frame'
+  if (el.type === 'embed') return 'Embed card'
   return el.type.charAt(0).toUpperCase() + el.type.slice(1)
 }
 

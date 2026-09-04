@@ -8,11 +8,11 @@ import {
   AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd,
   AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd,
   FlipHorizontal, FlipVertical, Sun, Contrast, Palette, RotateCcw, Replace, Lock, LockOpen,
-  Layers, SquareDashed, Crop,
+  Layers, SquareDashed, Crop, Spline, Table2, Rows3, Columns3, Trash, Upload, ExternalLink,
 } from 'lucide-react'
 import { useEditorStore, selectedElements, currentPageData } from '@/store/editor-store'
-import type { ImageElement, LineElement, ShapeElement, StickerElement, TextElement, AnyElement } from '@/lib/types'
-import { isGroup } from '@/lib/types'
+import type { EmbedElement, FrameElement, ImageElement, LineElement, ShapeElement, StickerElement, TableElement, TextElement, AnyElement, FrameShape } from '@/lib/types'
+import { FRAME_SHAPES, isGroup } from '@/lib/types'
 import { TEXT_EFFECTS } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { FontDropdown } from './toolbar/FontDropdown'
@@ -58,6 +58,9 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
   const image = first.type === 'image' ? (first as ImageElement) : null
   const sticker = first.type === 'sticker' ? (first as StickerElement) : null
   const group = first.type === 'group' ? first : null
+  const table = first.type === 'table' ? (first as TableElement) : null
+  const frame = first.type === 'frame' ? (first as FrameElement) : null
+  const embed = first.type === 'embed' ? (first as EmbedElement) : null
 
   const canGroup = isMulti
   const canUngroup = sel.some((e) => isGroup(e))
@@ -174,6 +177,27 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           >
             <SliderRow label="Letter spacing" value={text.letterSpacing} min={-10} max={80} step={1} onChange={(v) => updateLive(ids, { letterSpacing: v })} onCommit={() => update(ids, { letterSpacing: text.letterSpacing })} />
             <SliderRow label="Line spacing" value={text.lineHeight} min={0.6} max={3} step={0.05} onChange={(v) => updateLive(ids, { lineHeight: v })} onCommit={() => update(ids, { lineHeight: text.lineHeight })} format={(v) => `${v.toFixed(2)}×`} />
+          </ToolbarPopover>
+
+          {/* v0.6: curved text (canva “Curve”) */}
+          <ToolbarPopover
+            width={228}
+            trigger={(open) => (
+              <button className="cv-tbtn" data-active={open || !!text.curve} aria-label="Curve text" title="Curve text">
+                <Spline size={14} />
+              </button>
+            )}
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="text-[12px] font-bold text-white/90">Curved text</div>
+              <button className="text-[11px] text-white/60 hover:text-white" onClick={() => update(ids, { curve: 0 })}>Reset</button>
+            </div>
+            <SliderRow label="Curve" value={text.curve ?? 0} min={-180} max={180} step={5} onChange={(v) => updateLive(ids, { curve: v })} onCommit={() => update(ids, { curve: text.curve ?? 0 })} format={(v) => `${v}°`} />
+            <div className="flex justify-center pt-1.5">
+              <span className="text-[15px] text-white/85" style={{ fontFamily: text.fontFamily, color: text.fill }} aria-hidden="true">
+                {(text.curve ?? 0) >= 0 ? '◠' : '◡'} Curved preview
+              </span>
+            </div>
           </ToolbarPopover>
 
           {/* transparency */}
@@ -321,8 +345,193 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           <Divider />
           <PositionPopover ids={ids} count={1} element={first} />
         </>
+      ) : table ? (
+        <>
+          <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0 flex items-center gap-1.5">
+            <Table2 size={13} /> Table
+          </span>
+          <TableToolbar table={table} ids={ids} />
+          <Divider />
+          <PositionPopover ids={ids} count={1} element={first} />
+        </>
+      ) : frame ? (
+        <>
+          <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0 flex items-center gap-1.5">
+            <SquareDashed size={13} /> Frame
+          </span>
+          <FrameToolbar frame={frame} ids={ids} />
+          <Divider />
+          <PositionPopover ids={ids} count={1} element={first} />
+        </>
+      ) : embed ? (
+        <>
+          <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0 flex items-center gap-1.5 capitalize">
+            <ExternalLink size={13} /> {embed.kind} card
+          </span>
+          <EmbedToolbar embed={embed} ids={ids} />
+          <ToolbarPopover trigger={(open) => (
+            <button className="cv-tbtn" data-active={open} aria-label="Transparency" title="Transparency">
+              <Percent size={14} />
+            </button>
+          )}>
+            <SliderRow label="Transparency" value={Math.round(embed.opacity * 100)} min={0} max={100} step={1}
+              onChange={(v) => updateLive(ids, { opacity: v / 100 })}
+              onCommit={() => update(ids, { opacity: embed.opacity })}
+              format={(v) => `${100 - v}% transparent`} />
+          </ToolbarPopover>
+          <Divider />
+          <PositionPopover ids={ids} count={1} element={first} />
+        </>
       ) : null}
     </div>
+  )
+}
+
+// ── v0.6: table / frame / embed toolbars ──────────────────────
+
+function TableToolbar({ table, ids }: { table: TableElement; ids: string[] }) {
+  const update = useEditorStore((s) => s.updateElements)
+  const updateLive = useEditorStore((s) => s.updateElementsLive)
+
+  const addRow = () => {
+    const cells = [...table.cells]
+    for (let c = 0; c < table.cols; c += 1) cells.push({ text: '' })
+    update(ids, { rows: table.rows + 1, cells, height: Math.round((table.rows + 1) * (table.height / table.rows)) })
+  }
+  const addCol = () => {
+    const cells: typeof table.cells = []
+    for (let r = 0; r < table.rows; r += 1) {
+      for (let c = 0; c < table.cols; c += 1) {
+        cells.push(table.cells[r * table.cols + c] ?? { text: '' })
+      }
+      if (r === 0) cells.push({ text: '', bold: true, fill: table.headerFill })
+      else cells.push({ text: '' })
+    }
+    const colWidths = [...table.colWidths, Math.round(table.width / (table.cols + 1))]
+    update(ids, { cols: table.cols + 1, cells, colWidths, width: table.width + Math.round(table.width / (table.cols + 1)) })
+  }
+  const removeRow = () => {
+    if (table.rows <= 1) return
+    update(ids, { rows: table.rows - 1, cells: table.cells.slice(0, (table.rows - 1) * table.cols), height: Math.round((table.rows - 1) * (table.height / table.rows)) })
+  }
+  const removeCol = () => {
+    if (table.cols <= 1) return
+    const cells: typeof table.cells = []
+    for (let r = 0; r < table.rows; r += 1) {
+      for (let c = 0; c < table.cols - 1; c += 1) cells.push(table.cells[r * table.cols + c] ?? { text: '' })
+    }
+    update(ids, { cols: table.cols - 1, cells, colWidths: table.colWidths.slice(0, -1) })
+  }
+
+  return (
+    <>
+      <TBtn onClick={addRow} title="Add row" ariaLabel="Add row"><Rows3 size={15} /><Plus size={9} className="-ml-1.5 -mb-1.5" /></TBtn>
+      <TBtn onClick={removeRow} title="Remove row" ariaLabel="Remove row"><Rows3 size={15} /><Minus size={9} className="-ml-1.5 -mb-1.5" /></TBtn>
+      <TBtn onClick={addCol} title="Add column" ariaLabel="Add column"><Columns3 size={15} /><Plus size={9} className="-ml-1.5 -mb-1.5" /></TBtn>
+      <TBtn onClick={removeCol} title="Remove column" ariaLabel="Remove column"><Columns3 size={15} /><Minus size={9} className="-ml-1.5 -mb-1.5" /></TBtn>
+      <ToolbarPopover trigger={(open) => (
+        <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Table style" title="Table style">
+          <Palette size={14} /> <span className="text-[12px] hidden lg:inline">Style</span>
+        </button>
+      )}>
+        <div className="text-[12px] font-bold text-white/90 mb-2">Table style</div>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[11px] text-white/60">Border</span>
+          <ColorMenu value={table.borderColor} onChange={(c, committed) => committed ? update(ids, { borderColor: c }) : updateLive(ids, { borderColor: c })} title="Border colour" />
+        </div>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[11px] text-white/60">Header</span>
+          <ColorMenu value={table.headerFill} onChange={(c, committed) => committed ? update(ids, { headerFill: c }) : updateLive(ids, { headerFill: c })} title="Header fill" />
+        </div>
+        <SliderRow label="Border width" value={table.borderWidth} min={0} max={6} step={0.5} onChange={(v) => updateLive(ids, { borderWidth: v })} onCommit={() => update(ids, { borderWidth: table.borderWidth })} />
+        <SliderRow label="Text size" value={table.fontSize} min={8} max={40} step={1} onChange={(v) => updateLive(ids, { fontSize: v })} onCommit={() => update(ids, { fontSize: table.fontSize })} />
+      </ToolbarPopover>
+    </>
+  )
+}
+
+function FrameToolbar({ frame, ids }: { frame: FrameElement; ids: string[] }) {
+  const update = useEditorStore((s) => s.updateElements)
+
+  const onFill = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const src = String(reader.result)
+      const img = new window.Image()
+      img.onload = () => update(ids, { src, naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight })
+      img.src = src
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  return (
+    <>
+      <label className="cv-tbtn gap-1 !px-2.5 cursor-pointer" title="Fill frame with an image" aria-label="Fill frame with an image">
+        <Upload size={14} /> <span className="text-[12px] hidden lg:inline">Fill</span>
+        <input type="file" accept="image/*" className="hidden" onChange={onFill} />
+      </label>
+      <ToolbarPopover trigger={(open) => (
+        <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Frame shape" title="Frame shape">
+          <SquareDashed size={14} /> <span className="text-[12px] hidden lg:inline">Shape</span>
+        </button>
+      )}>
+        <div className="text-[12px] font-bold text-white/90 mb-2">Frame shape</div>
+        <div className="grid grid-cols-3 gap-1.5">
+          {FRAME_SHAPES.map((fs: FrameShape) => (
+            <button
+              key={fs}
+              onClick={() => update(ids, { frameShape: fs })}
+              className={cn(
+                'h-9 rounded-lg text-[11px] font-medium capitalize border transition-colors',
+                frame.frameShape === fs ? 'bg-white/[0.16] border-white/30 text-white' : 'border-white/[0.09] text-white/75 hover:bg-white/[0.07]'
+              )}
+              aria-label={`Frame shape ${fs}`}
+            >
+              {fs}
+            </button>
+          ))}
+        </div>
+        {frame.frameShape === 'rect' && (
+          <div className="mt-2 border-t border-white/[0.08] pt-2">
+            <SliderRow label="Corner radius" value={frame.radius} min={0} max={Math.round(frame.width / 2)} step={1} onChange={(v) => useEditorStore.getState().updateElementsLive(ids, { radius: v })} onCommit={() => update(ids, { radius: frame.radius })} />
+          </div>
+        )}
+      </ToolbarPopover>
+    </>
+  )
+}
+
+function EmbedToolbar({ embed, ids }: { embed: EmbedElement; ids: string[] }) {
+  const update = useEditorStore((s) => s.updateElements)
+  const [editingUrl, setEditingUrl] = useState(embed.url)
+
+  return (
+    <>
+      <ToolbarPopover width={280} trigger={(open) => (
+        <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Edit link" title="Edit link">
+          <ExternalLink size={14} /> <span className="text-[12px] hidden lg:inline">Link</span>
+        </button>
+      )}>
+        <div className="text-[12px] font-bold text-white/90 mb-2">Embed link</div>
+        <input
+          value={editingUrl}
+          onChange={(e) => setEditingUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && editingUrl.trim()) update(ids, { url: editingUrl.trim(), title: undefined })
+          }}
+          className="w-full h-8 rounded-lg bg-white/[0.06] border border-white/10 px-2.5 text-[12px] text-white outline-none focus:border-[#7630D7]"
+          aria-label="Embed URL"
+        />
+        <div className="flex gap-1.5 mt-2">
+          <button className="btn-cv h-8 px-3 text-[11px]" onClick={() => editingUrl.trim() && update(ids, { url: editingUrl.trim(), title: undefined })}>Apply</button>
+          <button className="h-8 px-3 text-[11px] rounded-lg border border-white/10 text-white/70 hover:bg-white/[0.07]" onClick={() => setEditingUrl(embed.url)}>Reset</button>
+        </div>
+        <p className="text-[10px] text-white/40 mt-2 leading-relaxed">Cards open their link in Preview &amp; shared views.</p>
+      </ToolbarPopover>
+    </>
   )
 }
 

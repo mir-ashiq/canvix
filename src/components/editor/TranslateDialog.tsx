@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
-import type { AnyElement, TextElement } from '@/lib/types'
+import type { AnyElement, TableElement, TextElement } from '@/lib/types'
 
 const LANGUAGES: { name: string; native: string; code: string }[] = [
   { name: 'Spanish', native: 'Español', code: 'es' },
@@ -45,6 +45,26 @@ function collectTexts(els: AnyElement[], out: TextElement[] = []): TextElement[]
   return out
 }
 
+/** v0.6: collect table cells with text (tables at top level + inside groups). */
+interface TableCellEntry {
+  id: string
+  index: number
+  text: string
+}
+function collectCellTexts(els: AnyElement[], out: TableCellEntry[] = []): TableCellEntry[] {
+  for (const el of els) {
+    if (el.type === 'table') {
+      const tb = el as TableElement
+      tb.cells.forEach((c, i) => {
+        if (c.text.trim()) out.push({ id: tb.id, index: i, text: c.text })
+      })
+    } else if (el.type === 'group') {
+      collectCellTexts(el.children, out)
+    }
+  }
+  return out
+}
+
 /** Canva "Translate" — AI-translate every text element in the design. */
 export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const pages = useEditorStore((s) => s.pages)
@@ -53,27 +73,54 @@ export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenC
   const [busy, setBusy] = useState(false)
 
   const texts = useMemo(() => collectTexts(pages.flatMap((p) => p.elements)), [pages])
+  const cellEntries = useMemo(() => collectCellTexts(pages.flatMap((p) => p.elements)), [pages])
   const picked = LANGUAGES.find((l) => l.code === lang) ?? null
 
   const run = async () => {
-    if (!picked || !texts.length || busy) return
+    if (!picked || busy) return
+    if (!texts.length && !cellEntries.length) return
     setBusy(true)
     try {
+      const allTexts = [...texts.map((t) => t.text), ...cellEntries.map((c) => c.text)]
       const res = await fetch('/api/ai/translate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           language: `${picked.name} (${picked.native})`,
-          texts: texts.map((t) => t.text),
+          texts: allTexts,
         }),
       })
       const data = (await res.json()) as { translations?: string[]; error?: string }
-      if (!res.ok || !Array.isArray(data.translations) || data.translations.length !== texts.length) {
+      if (!res.ok || !Array.isArray(data.translations) || data.translations.length !== allTexts.length) {
         toast({ title: 'Translate failed', description: data.error ?? 'Please try again.', variant: 'destructive' })
         return
       }
-      translateTexts(texts.map((t, i) => ({ id: t.id, text: data.translations![i] })))
-      toast({ title: `Translated to ${picked.native}`, description: `${texts.length} text${texts.length === 1 ? '' : 's'} updated. Ctrl+Z to undo.` })
+      const translations = data.translations
+      // v0.6: text elements ride the store action (undoable)…
+      if (texts.length) {
+        translateTexts(texts.map((t, i) => ({ id: t.id, text: translations[i] })))
+      }
+      // …and table cell texts apply as element patches
+      const cellsById = new Map<string, { index: number; text: string }[]>()
+      cellEntries.forEach((c, k) => {
+        const translated = translations[texts.length + k]
+        const list = cellsById.get(c.id) ?? []
+        list.push({ index: c.index, text: translated })
+        cellsById.set(c.id, list)
+      })
+      const updateElements = useEditorStore.getState().updateElements
+      const currentPageTables = pages.flatMap((p) => p.elements).filter((e) => e.type === 'table') as TableElement[]
+      for (const [id, list] of cellsById) {
+        const table = currentPageTables.find((t) => t.id === id)
+        if (!table) continue
+        const cells = table.cells.map((c, i) => {
+          const hit = list.find((l) => l.index === i)
+          return hit ? { ...c, text: hit.text } : c
+        })
+        updateElements([id], { cells })
+      }
+      const total = texts.length + cellEntries.length
+      toast({ title: `Translated to ${picked.native}`, description: `${total} text${total === 1 ? '' : 's'} updated. Ctrl+Z to undo.` })
       onOpenChange(false)
     } catch {
       toast({ title: 'Translate is unavailable right now.', variant: 'destructive' })
@@ -90,8 +137,8 @@ export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenC
             <Languages size={17} className="text-[#02C0CC]" /> Translate design
           </DialogTitle>
           <DialogDescription className="text-white/60">
-            {texts.length
-              ? `Translate all ${texts.length} text${texts.length === 1 ? '' : 's'} across ${pages.length} page${pages.length === 1 ? '' : 's'} with AI. Your layout stays intact.`
+            {texts.length + cellEntries.length
+              ? `Translate all ${texts.length + cellEntries.length} text${texts.length + cellEntries.length === 1 ? '' : 's'} (incl. table cells) across ${pages.length} page${pages.length === 1 ? '' : 's'} with AI. Your layout stays intact.`
               : 'This design has no text to translate yet.'}
           </DialogDescription>
         </DialogHeader>
@@ -130,7 +177,7 @@ export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenC
           </span>
           <Button
             className="btn-cv h-11 rounded-xl ml-auto px-5"
-            disabled={!picked || !texts.length || busy}
+            disabled={!picked || (!texts.length && !cellEntries.length) || busy}
             onClick={() => void run()}
           >
             {busy ? <Loader2 size={15} className="mr-1.5 animate-spin" /> : <Languages size={15} className="mr-1.5" />}

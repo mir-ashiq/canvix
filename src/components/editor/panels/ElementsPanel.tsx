@@ -1,11 +1,12 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Square, Circle, Triangle, Star, Minus, ArrowRight, MoveHorizontal, Search, Hexagon, Pentagon, Diamond, CircleDashed } from 'lucide-react'
+import { Square, Circle, Triangle, Star, Minus, ArrowRight, MoveHorizontal, Search, Hexagon, Pentagon, Diamond, CircleDashed, Frame, Youtube, MapPin, Link2 } from 'lucide-react'
 import { GRAPHICS, STICKER_GROUPS } from '@/lib/editor-utils'
-import { addGraphic, addLine, addShape, addSticker } from '../add-element'
+import { addEmbed, addFrame, addGraphic, addLine, addShape, addSticker, addTable, type TableStyle } from '../add-element'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { FRAME_SHAPES } from '@/lib/types'
 
 function GraphicIcon({ path }: { path: string }) {
   return (
@@ -35,6 +36,13 @@ const GRAPHIC_GROUPS: { name: string; ids: string[] }[] = [
   { name: 'Decorative', ids: ['heart', 'blob', 'cloud', 'moon', 'sparkle', 'wave'] },
   { name: 'Badges & labels', ids: ['badge', 'banner', 'ribbon', 'frame', 'speech'] },
   { name: 'Icons', ids: ['bolt', 'check-circle', 'arrow'] },
+]
+
+const TABLE_STYLES: { id: TableStyle; label: string; swatch: React.CSSProperties }[] = [
+  { id: 'classic', label: 'Classic', swatch: { background: '#FFFFFF', border: '1px solid #E0E1E6' } },
+  { id: 'minimal', label: 'Minimal', swatch: { background: '#FFFFFF', borderTop: '2px solid #7630D7' } },
+  { id: 'bold', label: 'Bold', swatch: { background: '#F6F2FC', border: '2px solid #7630D7' } },
+  { id: 'soft', label: 'Soft', swatch: { background: '#F2FBFC', border: '1px solid #02C0CC' } },
 ]
 
 export function ElementsPanel() {
@@ -71,6 +79,9 @@ export function ElementsPanel() {
           <TabsTrigger value="lines" className="text-xs data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Lines</TabsTrigger>
           <TabsTrigger value="graphics" className="text-xs data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Graphics</TabsTrigger>
           <TabsTrigger value="stickers" className="text-xs data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Stickers</TabsTrigger>
+          <TabsTrigger value="tables" className="text-[11px] data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Tables</TabsTrigger>
+          <TabsTrigger value="frames" className="text-[11px] data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Frames</TabsTrigger>
+          <TabsTrigger value="embeds" className="text-[11px] data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Embeds</TabsTrigger>
         </TabsList>
       </div>
 
@@ -160,12 +171,129 @@ export function ElementsPanel() {
           </div>
         ))}
       </TabsContent>
+
+      {/* v0.6: native tables */}
+      <TabsContent value="tables" className="flex-1 overflow-y-auto cv-scroll-dark p-4 mt-0">
+        <p className="text-[11px] text-white/45 leading-relaxed mb-3">
+          Tables are native elements — click a cell on the canvas to edit it. Add or remove rows &amp; columns from the toolbar.
+        </p>
+        <SectionTitle>Styles</SectionTitle>
+        <div className="grid grid-cols-2 gap-2">
+          {TABLE_STYLES.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => addTable(t.id)}
+              className="flex flex-col items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3 h-[92px] hover:border-[#7630D7] hover:bg-[#7630D7]/10 transition-all"
+              aria-label={`Add ${t.label} table`}
+            >
+              <span className="w-14 h-10 rounded-md grid grid-cols-3 grid-rows-2 gap-px overflow-hidden" style={t.swatch} aria-hidden="true">
+                {Array.from({ length: 6 }, (_, i) => (
+                  <span key={i} className={cn('bg-current opacity-10', i < 3 && 'opacity-40')} />
+                ))}
+              </span>
+              <span className="text-[11px] text-white/55">{t.label}</span>
+            </button>
+          ))}
+        </div>
+      </TabsContent>
+
+      {/* v0.6: frames (image-in-shape) */}
+      <TabsContent value="frames" className="flex-1 overflow-y-auto cv-scroll-dark p-4 mt-0">
+        <p className="text-[11px] text-white/45 leading-relaxed mb-3">
+          Drop an upload or photo onto a frame to fill it — the image is clipped to the shape.
+        </p>
+        <SectionTitle>Shapes</SectionTitle>
+        <div className="grid grid-cols-3 gap-2">
+          {FRAME_SHAPES.map((fs) => (
+            <ShapeTile key={fs} label={fs === 'rect' ? 'Rectangle' : fs === 'ellipse' ? 'Ellipse' : fs === 'triangle' ? 'Triangle' : fs === 'hexagon' ? 'Hexagon' : 'Circle'} onClick={() => addFrame(fs)}>
+              <FrameIconFor shape={fs} />
+            </ShapeTile>
+          ))}
+        </div>
+      </TabsContent>
+
+      {/* v0.6: embed link cards */}
+      <TabsContent value="embeds" className="flex-1 overflow-y-auto cv-scroll-dark p-4 mt-0">
+        <p className="text-[11px] text-white/45 leading-relaxed mb-3">
+          Embed cards open their link when clicked in Preview or shared views. Paste any URL — YouTube and Maps get a styled card.
+        </p>
+        <EmbedComposer />
+      </TabsContent>
     </Tabs>
   )
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h4 className="text-[11px] font-bold text-white/45 uppercase tracking-wide mb-2.5">{children}</h4>
+}
+
+function FrameIconFor({ shape }: { shape: string }) {
+  if (shape === 'ellipse') return <span className="h-6 w-6 rounded-full border-2 border-dashed border-white/80" aria-hidden="true" />
+  if (shape === 'circle') return <span className="h-6 w-6 rounded-full border-2 border-dashed border-[#7630D7]" aria-hidden="true" />
+  if (shape === 'triangle') return <span className="w-0 h-0 border-l-[14px] border-r-[14px] border-b-[24px] border-l-transparent border-r-transparent border-b-white/60" aria-hidden="true" />
+  if (shape === 'hexagon') return <Hexagon size={26} strokeWidth={1.8} className="text-white/80" />
+  return <Frame size={26} strokeWidth={1.8} className="text-white/80" />
+}
+
+function EmbedComposer() {
+  const [url, setUrl] = useState('')
+  return (
+    <div>
+      <SectionTitle>Add a link card</SectionTitle>
+      <div className="flex items-center gap-2 h-10 rounded-lg bg-white/[0.06] border border-white/10 px-3">
+        <Link2 size={14} className="text-white/40 shrink-0" />
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && url.trim()) {
+              addEmbed(url)
+              setUrl('')
+            }
+          }}
+          className="bg-transparent outline-none text-[12px] text-white w-full placeholder:text-white/35"
+          placeholder="https://youtube.com/watch?v=…"
+          aria-label="Embed URL"
+        />
+        <button
+          className="btn-cv h-7 px-3 text-[11px] shrink-0"
+          onClick={() => {
+            if (url.trim()) {
+              addEmbed(url)
+              setUrl('')
+            }
+          }}
+        >
+          Add
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-2 mt-4">
+        <QuickEmbed
+          icon={Youtube}
+          label="YouTube video"
+          placeholder="https://youtube.com/watch?v=dQw4w9WgXcQ"
+        />
+        <QuickEmbed
+          icon={MapPin}
+          label="Google Maps"
+          placeholder="https://maps.google.com/?q=Paris"
+        />
+      </div>
+    </div>
+  )
+}
+
+function QuickEmbed({ icon: Icon, label, placeholder }: { icon: typeof Youtube; label: string; placeholder: string }) {
+  return (
+    <button
+      onClick={() => addEmbed(placeholder)}
+      className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-3 h-[92px] hover:border-[#7630D7] hover:bg-[#7630D7]/10 transition-all"
+      aria-label={`Add ${label} embed`}
+    >
+      <Icon size={24} strokeWidth={1.6} className="text-white/80" />
+      <span className="text-[11px] text-white/55">{label}</span>
+    </button>
+  )
 }
 
 function ShapeTile({ label, children, onClick }: { label: string; children: React.ReactNode; onClick: () => void }) {

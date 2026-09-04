@@ -12,6 +12,9 @@ import { Rulers } from './rulers'
 import type { TextElement } from '@/lib/types'
 import { createStrokeElement } from '@/lib/types'
 import { CanvasContextMenu, type ContextMenuState } from './context-menu'
+import { CollabOverlay } from './CollabOverlay'
+import { CommentPins } from './CommentPins'
+import { getActiveCollabSession } from '@/hooks/use-collab'
 
 /** canva-measured tokens */
 const GUIDE_COLOR = '#9954FF' // rgb(153,84,255) — measured 2026-09-03
@@ -50,6 +53,10 @@ export default function CanvasStage() {
   const addManualGuide = useEditorStore((s) => s.addManualGuide)
   const moveManualGuide = useEditorStore((s) => s.moveManualGuide)
   const removeManualGuide = useEditorStore((s) => s.removeManualGuide)
+  // v0.5: collaboration
+  const collaborators = useEditorStore((s) => s.collaborators)
+  // v0.5: comments mode
+  const commentsOpen = useEditorStore((s) => s.commentsOpen)
 
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 })
   const [pan, setPan] = useState({ x: 0, y: 0 })
@@ -67,7 +74,7 @@ export default function CanvasStage() {
   const marqueeRef = useRef(false)
   const spaceRef = useRef(false)
 
-  const interactive = editingMode === 'editing' && tool === 'select'
+  const interactive = editingMode === 'editing' && tool === 'select' && !commentsOpen
 
   const userZoomedRef = useRef(false)
   const prevZoomRef = useRef(zoom)
@@ -268,6 +275,28 @@ export default function CanvasStage() {
     )
   }, [editingTextId, editValue])
 
+  // ── v0.5: local cursor broadcast (throttled inside the session) ─
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const onMove = (e: MouseEvent) => {
+      const rect = container.getBoundingClientRect()
+      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return
+      const px = (e.clientX - rect.left - pan.x) / zoom
+      const py = (e.clientY - rect.top - pan.y) / zoom
+      if (!Number.isFinite(px) || !Number.isFinite(py)) return
+      const session = getActiveCollabSession()
+      session?.sendCursor({
+        page: useEditorStore.getState().currentPage,
+        x: Math.max(-500, Math.min(px, 100000)),
+        y: Math.max(-500, Math.min(py, 100000)),
+        selection: useEditorStore.getState().selectedIds.slice(0, 50),
+      })
+    }
+    container.addEventListener('mousemove', onMove)
+    return () => container.removeEventListener('mousemove', onMove)
+  }, [pan, zoom])
+
   // ── empty-area pan (space+drag / middle-mouse / touch) ─────
   const beginPan = (clientX: number, clientY: number) => {
     panGestureRef.current = { active: true, startX: clientX, startY: clientY, baseX: pan.x, baseY: pan.y }
@@ -361,6 +390,22 @@ export default function CanvasStage() {
 
   const handleStageMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     if (editingMode !== 'editing') return
+    // v0.5: comments mode — clicking the canvas drops a comment pin
+    // (clicking an element anchors the pin to that element — canva behaviour)
+    if (commentsOpen) {
+      if (e.evt.button === 0) {
+        const pt = pagePoint(e.evt.clientX, e.evt.clientY)
+        if (pt) {
+          // resolve the top-level element under the click (walk up from the target)
+          let elementId: string | null = null
+          let node: Konva.Node | null = e.target
+          while (node && node.parent && node.parent !== layerRef.current) node = node.parent
+          if (node && node !== stageRef.current && node.id()) elementId = node.id()
+          window.dispatchEvent(new CustomEvent('canvix:comment-drop', { detail: { ...pt, elementId } }))
+        }
+      }
+      return
+    }
     if (tool === 'draw') {
       const stage = stageRef.current
       const pointer = stage?.getPointerPosition()
@@ -738,6 +783,14 @@ export default function CanvasStage() {
           </Layer>
         </Stage>
       )}
+
+      {/* v0.5: remote collaborator cursors + selections (DOM overlay, never blocks input) */}
+      {collaborators.length > 0 && (
+        <CollabOverlay collaborators={collaborators} currentPage={currentPage} pan={pan} zoom={zoom} elements={page.elements} />
+      )}
+
+      {/* v0.5: comment pins (comments mode) */}
+      {commentsOpen && <CommentPins pan={pan} zoom={zoom} />}
 
       {/* v0.3.1: rulers overlay (desktop) */}
       {showRulers && containerSize.w > 0 && (

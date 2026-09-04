@@ -51,3 +51,64 @@ model Template {
   accent    String   @default("#00C4CC") // card decoration
   createdAt DateTime @default(now())
 }
+
+// ── v0.5.0: collaboration, comments & AI infrastructure ──────
+
+// Append-only operation log — the replication stream for live collaboration.
+// `id` is a global monotonic sequence: clients track their last seen seq and
+// replay from any offset after reconnecting (SSE `?since=<seq>`).
+model DesignEvent {
+  id        BigInt   @id @default(autoincrement())
+  designId  String
+  actorId   String // participant id (client-generated)
+  kind      String // op name — see research/COLLABORATION-ARCHITECTURE.md §3
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@index([designId, id(sort: Desc)])
+}
+
+// Live presence per participant per design (heartbeat-based).
+model Presence {
+  id        String   @id // = participant id
+  designId  String
+  name      String
+  color     String
+  cursor    Json? // { page: number, x: number, y: number, selection?: string[] }
+  lastSeen  DateTime @default(now()) @updatedAt
+
+  @@unique([designId, id])
+  @@index([designId, lastSeen])
+}
+
+// Canvas-anchored comment threads (author identity is the local participant).
+model Comment {
+  id          String    @id @default(cuid())
+  designId    String
+  pageId      String
+  x           Float // anchor in page coordinates (fraction of page size, 0..1)
+  y           Float
+  elementId   String? // optional element anchor — pin follows the element
+  authorId    String
+  authorName  String
+  authorColor String
+  body        String
+  parentId    String? // reply threading
+  resolved    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([designId, createdAt])
+  @@index([designId, resolved])
+}
+
+// Provider accounting + abuse telemetry for AI routes.
+model AIUsage {
+  id        String   @id @default(cuid())
+  feature   String // write | image | image-edit | translate | assistant | magic-layers | search
+  provider  String // zai | local
+  ok        Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

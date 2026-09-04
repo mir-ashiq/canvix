@@ -3,6 +3,148 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0] — 2026-09-04
+
+The AI-native collaborative release: Magic Layers turns flat images into editable
+designs, real-time multiplayer arrives with comments, designs learn to move with
+animations and export as SVG and video, and the AI stack gets a production-grade
+provider abstraction.
+
+### Magic Layers — image → editable design
+- Upload (or select) a flat design and a **vision model decomposes it into real,
+  editable Canvix layers**: text regions become live text elements (color, weight,
+  approximate font size and class recovered), photo regions become cropped image
+  elements, shapes become native shapes, and the background becomes a page
+  background/gradient.
+- The analysis returns a **validated region schema** (bounds, confidence 0–1,
+  layer order) — the client reconstructs native elements, never a raster. Each
+  element carries `magicLayer` provenance metadata (source region, confidence,
+  original bounds) for future tooling.
+- Honest-by-design review UX: region overlays with confidence colors, per-region
+  keep/discard toggles, low-confidence flags, model limitations surfaced in the
+  dialog ("illustrations become image regions", "fonts matched by class").
+- Server route `POST /api/ai/magic-layers`: dataURL-only input, 8 MB cap,
+  `validateAnalysis()` clamps every field (bounds 0..1, hex colors, whitelisted
+  font classes, text ≤ 400 chars, ≤ 40 regions, deduped overlapping text).
+
+### Real-time collaboration
+- **Multiplayer editing on Postgres + SSE** — an append-only `DesignEvent` log
+  (global monotonic seq) is the replication stream; clients subscribe via
+  server-sent events (~800 ms ticks) and push ops via batched POSTs (400 ms flush,
+  coalesced `elements:update` patches). Deployable on Vercel serverless *and*
+  self-hosted Node — no WebSocket server.
+- **Presence**: colored cursors with name tags, remote selection outlines,
+  stacked avatars + connection status (Live/Syncing/Offline) in the top bar,
+  collaborator list popover with per-user page/selection state, editable display
+  name (persisted anonymous identity — no account required).
+- **Gap-free reconnection**: clients track `lastSeq`; on stream drop they
+  reconnect with `?since=<seq>` and replay missed events; offline edits queue and
+  flush on recovery. Local input is never blocked (optimistic, sync in background).
+- Ops are small and explicit (`elements:update`, `element:add`, `page:replace`,
+  `pages:replace`, …) and apply through the existing store actions, so undo stays
+  local and Konva rendering stays fast. Share links now deep-link
+  (`/?design=<id>`); unknown ids stay on the landing page.
+- Abuse hardening: payloads ≤ 256 KB with recursive type/size/depth validation,
+  ≤ 20 events/flush, whitelisted op kinds, presence GC (30 s offline / 24 h rows),
+  event log pruned to 500 per design, malformed events dropped (never crash).
+
+### Comments & annotations
+- First-class **comments mode**: click the canvas to drop a pin (clicking an
+  element anchors the thread to it — the pin follows the element), type and post.
+- Threads with **replies, resolve/reopen, delete-own**, collaborator
+  avatars/colors, relative timestamps; pins keep their anchor when pages resize
+  (coordinates stored as page fractions).
+- **Unread badges** on the topbar icon + open/resolved/all filters in the panel.
+- Live propagation rides the collab event log (`comment:activity` markers →
+  refetch), with optimistic local updates for the author.
+
+### Animations — Magic Animate
+- Animation model on the document (`element.animation`, `page.transition`) that
+  is **independent from Konva** — pure functions of time
+  (`src/lib/animations.ts`), shared by preview playback and video export.
+- 9 element animations — fade, rise, pan, pop, wipe, zoom, rotate, breathe —
+  with duration, delay, easing (linear/ease/spring), direction and speed presets
+  (slow/medium/fast); page transitions none/fade/slide/morph with 0.1–2.5 s
+  durations.
+- **Magic Animate** — one-click deterministic pass: headings rise, body text
+  fades, images pan from their nearest edge, shapes pop, separators wipe,
+  transition fades.
+- Preview gains animated playback, autoplay presentation mode and a
+  reduce-motion accessibility toggle. Static exports (PNG/JPG/PDF/SVG) ignore
+  animations entirely.
+
+### SVG export
+- True vector serialization of every element type: text (word-wrap measured via
+  canvas 2D, per-line tspans, align/letterSpacing/decorations), shapes with
+  gradients + rounded corners, paths (scaled from the 100×100 authoring box),
+  lines with arrowheads, freehand strokes, images (href allowlist, rounded-clip,
+  flips), stickers, groups, shadows (feDropShadow) and page backgrounds.
+- **Sanitized by construction**: all text XML-escaped, path data whitelisted,
+  image hrefs only `data:`/`https:`, no scripts/events/foreignObject. Multi-page
+  exports as one file per page.
+
+### Video export (MP4/WebM)
+- A real, fully-local rendering pipeline: design timeline → headless Konva frame
+  renderer (element animations + page transitions composited per frame) →
+  `canvas.captureStream(0)` + manual `requestFrame()` → **MediaRecorder**.
+- **Honest format detection**: MP4 (H.264) where the browser supports encoding
+  it, WebM (VP9/VP8) otherwise — the export dialog tells you which and why
+  before you start. Real-time pacing keeps duration exact (frames drop to stay
+  on schedule); progress bar with frame counter; nothing leaves the browser.
+- Verified end-to-end: an ffprobe-clean 1080×1080 H.264 MP4 (2.8 s, ~100 KB).
+
+### AI Assistant 2.0
+- The assistant now sees the **live design context** — elements with ids/types/
+  positions/styles, selection, colors and fonts in use, page dimensions.
+- It answers with **structured `DesignAction`s** (addText, updateElements,
+  moveElements, scaleElements, setHeadingsColor, setFont, setBackground,
+  align/distribute, addPage, duplicatePage, generateImage, suggestPalette,
+  translate, magicAnimate, balanceLayout) instead of just chat.
+- **Double validation**: the server clamps every field (hex colors, numeric
+  ranges, id existence) and the client re-validates + resolves ids against the
+  page before executing. Every action applies as a normal undoable edit, with an
+  inline "Undo last change" affordance. Deterministic local fallbacks
+  (balanceLayout, palettes) work without any provider.
+
+### AI provider abstraction & fallbacks
+- `src/lib/ai/provider.ts` centralizes: config resolution (`ZAI_BASE_URL`/
+  `ZAI_API_KEY` env → `.z-ai-config` file → absent), capability probing,
+  per-IP sliding-window rate limits on every AI route (429 + Retry-After) and
+  `AIUsage` accounting.
+- `/api/ai/capabilities` — public, secret-free feature detection; panels show
+  "AI provider not configured" states *before* you try a feature, with local
+  alternatives (background removal ONNX, deterministic palettes/layout) still
+  working. No provider key ever reaches the browser (audited + grep-verified).
+- All five v0.4 AI routes refactored onto the abstraction; no behavioral change
+  when a provider is present.
+
+### Performance
+- **Image downscaling on embed** — uploads > 2048 px longest edge are re-encoded
+  (alpha-preserving PNG / JPEG q0.9) before entering the document; 25 MB input
+  cap; Magic Layers crops capped at 1024 px.
+- Collaboration updates coalesce (consecutive same-id `elements:update` patches
+  merge in the queue), remote batches apply as single store writes, presence
+  rows and the event log are garbage-collected, and collab cursors render in a
+  DOM overlay that never enters Konva's pipeline.
+- Fixed an uncached zustand selector that caused an infinite re-render loop in
+  the editor (Magic Layers dialog).
+
+### Infrastructure
+- Prisma schema gains `DesignEvent`, `Presence`, `Comment` and `AIUsage` models
+  (backward compatible — `prisma db push`, no destructive migrations).
+- Deep links `/?design=<id>` / `?d=<id>` open the editor directly (invalid ids
+  fall back to the landing page).
+- Research docs shipped: current-state audit, AI provider audit, fresh Canva
+  research, collaboration architecture decision record and a full security
+  audit (`research/V05-SECURITY-AUDIT.md`).
+
+## [0.4.0] — 2026-09-03
+
+The Magic Suite release: AI image editing (BG remover, Magic Eraser, Enhance),
+Magic Resize with smart re-layout, design translation, live photo search,
+PostgreSQL migration and server-side version history. (Full notes in the v0.4
+commit message; the feature list also lives in README.md.)
+
 ## [0.3.2] — 2026-09-03
 
 Fresh canva.com research pass (fonts, design trends 2026, feature taxonomy) plus the

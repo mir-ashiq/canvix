@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withProvider } from '@/lib/ai/provider'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -20,19 +21,16 @@ const TONES = ['bold', 'playful', 'elegant', 'minimal', 'corporate', 'warm'] as 
 
 /** POST /api/ai/write — Magic Write: generate on-brand copy variants for designs. */
 export async function POST(req: NextRequest) {
-  try {
-    const body = (await req.json()) as WriteBody
-    const prompt = (body.prompt ?? '').trim().slice(0, 500)
-    const kind = body.kind && KIND_HINTS[body.kind] ? body.kind : 'tagline'
-    const tone = TONES.includes((body.tone ?? '') as (typeof TONES)[number]) ? body.tone! : 'bold'
+  const body = (await req.json().catch(() => ({}))) as WriteBody
+  const prompt = (body.prompt ?? '').trim().slice(0, 500)
+  const kind = body.kind && KIND_HINTS[body.kind] ? body.kind : 'tagline'
+  const tone = TONES.includes((body.tone ?? '') as (typeof TONES)[number]) ? body.tone! : 'bold'
 
-    if (!prompt) {
-      return NextResponse.json({ error: 'A prompt is required.' }, { status: 400 })
-    }
+  if (!prompt) {
+    return NextResponse.json({ error: 'A prompt is required.' }, { status: 400 })
+  }
 
-    const { default: ZAI } = await import('z-ai-web-dev-sdk')
-    const zai = await ZAI.create()
-
+  return withProvider('write', req, { limit: 20, windowSec: 60 }, async (zai) => {
     const completion = await zai.chat.completions.create({
       messages: [
         {
@@ -60,11 +58,5 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ options })
-  } catch (err) {
-    console.error('[api/ai/write]', err)
-    return NextResponse.json(
-      { error: 'Magic Write is unavailable right now. Please try again.' },
-      { status: 502 }
-    )
-  }
+  })
 }

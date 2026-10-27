@@ -25,6 +25,7 @@ import {
   CircleHelp,
   Info,
   Heart,
+  AlertTriangle,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
@@ -38,6 +39,7 @@ import { createPage, TEMPLATE_CATEGORIES, type TemplateRecord } from '@/lib/type
 import { PRESET_SIZES } from '@/lib/editor-utils'
 import { cn } from '@/lib/utils'
 import {
+  ApiError,
   createDesign,
   deleteDesign,
   deleteDesignForever,
@@ -82,11 +84,29 @@ function newBlankPages() {
   return [createPage()]
 }
 
+/** v0.8: translate server-side DB trouble into a toast that says what to DO
+ *  (the #1 confusion after switching database hosts, e.g. Neon → Supabase). */
+function apiErrorToast(error: unknown, fallbackTitle: string) {
+  if (error instanceof ApiError) {
+    const detail =
+      error.code === 'DB_NOT_MIGRATED'
+        ? ' — run  npm run db:setup  once'
+        : error.code === 'DB_UNREACHABLE'
+          ? ' — check DATABASE_URL (see /api/health)'
+          : error.fix
+            ? ` — ${error.fix}`
+            : ''
+    toast({ title: `${error.message}${detail}`, variant: 'destructive' })
+  } else {
+    toast({ title: fallbackTitle, variant: 'destructive' })
+  }
+}
+
 export function Dashboard() {
   const goLanding = useAppStore((s) => s.goLanding)
   const openEditor = useAppStore((s) => s.openEditor)
   const loadEditorDesign = useEditorStore((s) => s.loadDesign)
-  const { designs, loading, refresh } = useDesigns()
+  const { designs, loading, refresh, dbIssue } = useDesigns()
   const isMobile = useIsMobile()
   const [helpOpen, setHelpOpen] = useState(false)
 
@@ -176,8 +196,8 @@ export function Dashboard() {
       })
       openEditor(record)
       loadEditorDesign(record)
-    } catch {
-      toast({ title: 'Could not create design', variant: 'destructive' })
+    } catch (error) {
+      apiErrorToast(error, 'Could not create design')
     } finally {
       setCreating(false)
     }
@@ -195,8 +215,10 @@ export function Dashboard() {
       })
       openEditor(record)
       loadEditorDesign(record)
-    } catch {
-      toast({ title: 'Could not open template', variant: 'destructive' })
+    } catch (error) {
+      // v0.8: “Could not open template” now explains itself (migration/host
+      // switch issues include the exact fix instead of a dead end).
+      apiErrorToast(error, 'Could not open template')
     } finally {
       setCreating(false)
     }
@@ -490,6 +512,24 @@ export function Dashboard() {
 
         {/* ── AI agents (MCP) ── */}
         <McpCard />
+
+        {/* ── v0.8: database setup banner (host switch / missing migration) ── */}
+        {dbIssue && (
+          <section className="mt-6 rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 flex items-start gap-3">
+            <AlertTriangle className="size-5 text-amber-300 shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-semibold text-amber-200">Database needs attention</p>
+              <p className="text-white/70 mt-1">
+                Designs and templates can’t be saved until the database is set up on this host.
+                Run <code className="rounded bg-black/40 px-1.5 py-0.5 text-amber-200">npm run db:setup</code> in the project
+                (migrations + template seed), then reload. Full diagnosis:{' '}
+                <a href="/api/health" target="_blank" rel="noreferrer" className="underline text-amber-200 hover:text-amber-100">
+                  /api/health
+                </a>
+              </p>
+            </div>
+          </section>
+        )}
 
         {/* ── Recent designs ── */}
         <section id="cv-recents" className="pt-12 scroll-mt-20">

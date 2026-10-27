@@ -1,47 +1,14 @@
 // ─────────────────────────────────────────────────────────────
-// Canvix built-in templates (seeded into DB + used client-side)
+// collection-v07 — the original 60-template library shipped in
+// v0.7.0 (21 starters + 39 premium). Kept verbatim; the v0.8
+// collections below extend it to 110.
 // ─────────────────────────────────────────────────────────────
 
-import {
-  createPage,
-  createShapeElement,
-  createTextElement,
-  createLineElement,
-  createStickerElement,
-  type PageData,
-  type TemplateRecord,
-} from './types'
-import { GRAPHICS } from './editor-utils'
+import type { TemplateDef } from './helpers'
+import { tx, sh, ln, st, gr } from './helpers'
+import { GRAPHICS } from '../editor-utils'
 
-export interface TemplateDef {
-  slug: string
-  name: string
-  category: string
-  width: number
-  height: number
-  accent: string
-  /** v0.7: premium library expansion — every template stays 100% free,
-   *  the badge is a quality label only (never a paywall). */
-  badge?: 'premium' | 'new'
-  pages: PageData[]
-}
-
-// compact element builders
-const tx = (o: Record<string, unknown>) =>
-  createTextElement(o as Parameters<typeof createTextElement>[0])
-const sh = (type: 'rect' | 'ellipse' | 'triangle' | 'star' | 'path', o: Record<string, unknown>) =>
-  createShapeElement(type, o as Parameters<typeof createShapeElement>[1])
-const ln = (o: Record<string, unknown>) =>
-  createLineElement(o as Parameters<typeof createLineElement>[0])
-const st = (char: string, o: Record<string, unknown>) =>
-  createStickerElement(char, o as Parameters<typeof createStickerElement>[1])
-const gr = (graphicId: string, o: Record<string, unknown>) =>
-  createShapeElement('path', {
-    pathData: GRAPHICS.find((g) => g.id === graphicId)?.path ?? GRAPHICS[0].path,
-    ...(o as Parameters<typeof createShapeElement>[1]),
-  })
-
-export const TEMPLATES: TemplateDef[] = [
+export const COLLECTION_V07: TemplateDef[] = [
   // ── Social media ───────────────────────────────────────────
   {
     slug: 'mega-sale',
@@ -1801,20 +1768,3 @@ export const TEMPLATES: TemplateDef[] = [
     ],
   },
 ]
-
-export function templatesAsRecords(): TemplateRecord[] {
-  return TEMPLATES.map((t) => ({
-    id: t.slug,
-    slug: t.slug,
-    name: t.name,
-    category: t.category,
-    width: t.width,
-    height: t.height,
-    accent: t.accent,
-    pages: t.pages,
-  }))
-}
-
-export function blankPage(): PageData {
-  return createPage()
-}

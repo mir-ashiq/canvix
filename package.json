@@ -1,8 +1,8 @@
 {
   "name": "canvix",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": false,
-  "description": "Canvix — free & open-source graphic design tool. A community-built Canva alternative.",
+  "description": "Canvix \u2014 free & open-source graphic design tool. A community-built Canva alternative.",
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
@@ -10,14 +10,16 @@
     "lint": "eslint .",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
-    "db:seed": "bun prisma/seed.ts",
+    "db:seed": "tsx prisma/seed.ts",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "playwright test",
     "test:mcp": "bash scripts/mcp-e2e.sh",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:setup": "bash scripts/db-setup.sh",
+    "db:migrate:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@imgly/background-removal": "^1.7.0",
@@ -55,8 +57,12 @@
     "eslint": "^9",
     "eslint-config-next": "^16.1.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "tw-animate-css": "^1.3.5",
     "typescript": "^5",
     "vitest": "^5.0.5"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }

@@ -1,7 +1,11 @@
 // Seed the Canvix database with built-in templates.
-// Run: bun run db:seed
+// Run: npm run db:seed   (or as part of: npm run db:setup)
 import { PrismaClient, Prisma } from '@prisma/client'
 import { TEMPLATES } from '../src/lib/templates'
+import { normalizeDatabaseUrl } from '../src/lib/db-url'
+
+// v0.8: Supabase-ready — apply sslmode/pgbouncer defaults before connecting.
+process.env.DATABASE_URL = normalizeDatabaseUrl(process.env.DATABASE_URL)
 
 const db = new PrismaClient()
 

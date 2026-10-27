@@ -3,6 +3,63 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.0] — 2026-10-28
+
+The "Supabase-ready & 110 Templates" release: switching your database to
+Supabase (or any Postgres host) is now a one-command, self-diagnosing
+operation, and the template library grows from 60 to **110** — still
+100% free forever, no subscriptions, no paywalls.
+
+### Database: Supabase-first infrastructure
+- **Real migrations ship in the repo** (`prisma/migrations/0001_init`) —
+  `npm run db:setup` applies them plus the template seed against any
+  Postgres host: brand-new Supabase project, Neon, RDS, Docker or local.
+  The SQL is idempotent (`IF NOT EXISTS` + guarded constraints), and the
+  setup wrapper self-heals the "old database provisioned via `db push`"
+  case by baselining the migration history (Prisma's documented path)
+  instead of failing with P3005.
+- **Smart connection handling** (`src/lib/db-url.ts`) — copy-pasting a
+  Supabase URI just works: TLS is auto-required for remote hosts, and the
+  transaction pooler (`…pooler.supabase.com:6543`) automatically receives
+  `pgbouncer=true&connection_limit=1` so Prisma's prepared statements
+  survive. Every auto-fix is logged so nothing is silent magic.
+- **`GET /api/health`** — one-page diagnosis: env → connectivity →
+  migration → seed, with the exact fix printed per step (including the
+  Supabase IPv6/pooler hint when a direct connection can't route).
+- **Template-opening failures now explain themselves** — the reported
+  "could not open template" dead end is gone. API errors are classified
+  (`DB_NOT_MIGRATED`, `DB_UNREACHABLE`, `DB_TIMEOUT`), the dashboard
+  shows a persistent setup banner with the command to run, and toasts
+  carry the fix text.
+- **Quieter production Prisma logs** — query logging is dev-only now.
+- `.env.example` rewritten Supabase-first; README quick start covers both
+  pooler and direct connection styles.
+
+### Template library: 60 → 110, all free
+- **50 new original premium-grade templates** (designed in-house, styled
+  after 2026 template-platform trends — nothing copied), organized as
+  collections in the new `src/lib/templates/` module:
+  - **social +14** — podcast quote card, real-estate new listing, bootcamp,
+    restaurant daily special, quiet-luxury lookbook, webinar announcement,
+    LinkedIn banner, recipe pin, birthday story, Black Friday, playlist
+    cover, Monday motivation, flash-sale countdown story, grand opening
+  - **presentation +8** — investor pitch (4-page system), marketing plan,
+    course intro, agency portfolio, quarterly review, demo day, nonprofit
+    impact, product launch keynote
+  - **print +9** — wedding invitation, gym flyer, cafe menu, concert
+    poster, yoga flyer, gift certificate, business card, open mic, moving
+    sale
+  - **documents +9** — executive & creative resumes, matching cover letter,
+    project proposal, invoice, school newsletter, whitepaper, meeting
+    agenda, press release
+  - **thumbnails +7** — gaming, tech review, vlog, tutorial, podcast,
+    fitness, cooking
+  - **logos +3** — roastery badge, geometric tech mark, salon monogram
+- `scripts/validate-templates.ts` — structural validator (unique slugs,
+  pages/backgrounds/element geometry) wired for CI-style checks.
+- Category totals now: social 33 · presentation 17 · print 19 ·
+  documents 22 · thumbnails 12 · logos 7.
+
 ## [0.7.0] — 2026-10-28
 
 The "Fast & Free Forever" release: the canvas rendering hot path is rebuilt

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { dbErrorResponse } from '@/lib/db-errors'
 
 // GET /api/templates — built-in template library (from DB, falls back empty)
 export async function GET() {
@@ -20,7 +21,6 @@ export async function GET() {
       }))
     )
   } catch (error) {
-    console.error('GET /api/templates failed', error)
-    return NextResponse.json({ error: 'Failed to list templates' }, { status: 500 })
+    return dbErrorResponse(error, 'GET /api/templates')
   }
 }

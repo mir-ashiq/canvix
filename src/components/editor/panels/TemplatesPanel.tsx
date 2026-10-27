@@ -175,15 +175,12 @@ export function TemplatesPanel() {
  */
 const LazyPreview = memo(function LazyPreview({ page, width, height }: { page: import('@/lib/types').PageData; width: number; height: number }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [visible, setVisible] = useState(false)
+  // environments without IntersectionObserver (old browsers, tests) render eagerly
+  const [visible, setVisible] = useState(() => typeof IntersectionObserver === 'undefined')
 
   useEffect(() => {
     const el = ref.current
     if (!el || visible) return
-    if (typeof IntersectionObserver === 'undefined') {
-      setVisible(true)
-      return
-    }
     const io = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {

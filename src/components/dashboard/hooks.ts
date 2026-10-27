@@ -20,15 +20,46 @@ function toRecord(row: Record<string, unknown>): DesignRecord {
   return { ...(row as unknown as DesignRecord), pages: pages as PageData[] }
 }
 
+/** v0.8: fetch a JSON error body if the API produced one (server sends
+ *  { error, code, fix } for database trouble) so the UI can show the fix. */
+async function readApiError(res: Response): Promise<{ message: string; code?: string; fix?: string }> {
+  try {
+    const body = (await res.json()) as { error?: string; code?: string; fix?: string }
+    return { message: body.error ?? 'Request failed', code: body.code, fix: body.fix }
+  } catch {
+    return { message: `Request failed (${res.status})` }
+  }
+}
+
+export class ApiError extends Error {
+  code?: string
+  fix?: string
+  constructor(message: string, code?: string, fix?: string) {
+    super(message)
+    this.code = code
+    this.fix = fix
+  }
+}
+
 export function useDesigns() {
   const [designs, setDesigns] = useState<DesignMeta[] | null>(null)
   const [loading, setLoading] = useState(true)
+  // v0.8: null = healthy; otherwise an error code/message from the API
+  const [dbIssue, setDbIssue] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     try {
       const res = await fetch('/api/designs', { cache: 'no-store' })
-      if (res.ok) setDesigns(await res.json())
+      if (res.ok) {
+        setDesigns(await res.json())
+      } else {
+        // v0.8: surface DB setup trouble (host switch, missing migration…)
+        const err = await readApiError(res)
+        setDbIssue(err.code ?? err.message)
+        setDesigns([])
+      }
     } catch {
+      setDbIssue('NETWORK')
       setDesigns([])
     } finally {
       setLoading(false)
@@ -42,7 +73,7 @@ export function useDesigns() {
     void Promise.resolve().then(() => refresh())
   }, [refresh])
 
-  return { designs, loading, refresh }
+  return { designs, loading, refresh, dbIssue, clearDbIssue: () => setDbIssue(null) }
 }
 
 export async function createDesign(opts: {
@@ -63,13 +94,19 @@ export async function createDesign(opts: {
       source: opts.source ?? 'blank',
     }),
   })
-  if (!res.ok) throw new Error('Failed to create design')
+  if (!res.ok) {
+    const err = await readApiError(res)
+    throw new ApiError(err.message, err.code, err.fix)
+  }
   return toRecord(await res.json())
 }
 
 export async function fetchDesign(id: string): Promise<DesignRecord> {
   const res = await fetch(`/api/designs/${id}`, { cache: 'no-store' })
-  if (!res.ok) throw new Error('Failed to fetch design')
+  if (!res.ok) {
+    const err = await readApiError(res)
+    throw new ApiError(err.message, err.code, err.fix)
+  }
   return toRecord(await res.json())
 }
 

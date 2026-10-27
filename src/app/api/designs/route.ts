@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
+import { dbErrorResponse } from '@/lib/db-errors'
 
 // Normalise incoming pages payload (accepts object or legacy JSON string)
 // into a value suitable for the Postgres jsonb column.
@@ -33,8 +34,7 @@ export async function GET(req: NextRequest) {
     })
     return NextResponse.json(designs)
   } catch (error) {
-    console.error('GET /api/designs failed', error)
-    return NextResponse.json({ error: 'Failed to list designs' }, { status: 500 })
+    return dbErrorResponse(error, 'GET /api/designs')
   }
 }
 
@@ -54,7 +54,8 @@ export async function POST(req: NextRequest) {
     })
     return NextResponse.json(design, { status: 201 })
   } catch (error) {
-    console.error('POST /api/designs failed', error)
-    return NextResponse.json({ error: 'Failed to create design' }, { status: 500 })
+    // v0.8: template-opening failures get a classified, actionable payload
+    // (DB_NOT_MIGRATED after a host switch etc.) instead of a bare 500.
+    return dbErrorResponse(error, 'POST /api/designs')
   }
 }

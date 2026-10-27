@@ -35,7 +35,7 @@ Pro tier, no subscription, no trial countdown, no watermark ransom, no
 "premium" element you can drag but not drop. The whole point of this project
 is a design tool that never asks you for a credit card:
 
-- All **60 templates** — including the entire premium collection — are free
+- All **110 templates** — including the entire premium collection — are free
 - All **exports** (PNG, JPG, SVG, PDF, video) are free and unwatermarked
 - All **AI features** (magic edit, magic write, background removal, translate)
   run against your own API keys, so there is nothing for us to meter
@@ -46,6 +46,40 @@ If anyone ever asks you to pay for Canvix, you are being scammed: the source
 is right here.
 
 ## 🎨 Features
+
+### v0.8.0 — Supabase-ready infrastructure & the 110-template library
+
+- **Supabase-first database support** — switching hosts (Neon → Supabase,
+  or anything else) is now a two-command move:
+  - **Real migrations** — `prisma/migrations` ships in the repo, so
+    `npm run db:setup` creates the full schema on a brand-new database
+    (Supabase, Neon, RDS, local…) and seeds the template library in one go
+  - **Self-healing setup** — if your database was provisioned with the
+    pre-v0.8 `db push` flow, `db:setup` detects it, baselines the migration
+    history (Prisma's documented path) and continues instead of dead-ending
+  - **Smart connection handling** (`src/lib/db-url.ts`) — a copy-pasted
+    Supabase connection string just works: TLS is auto-required for remote
+    hosts, and the transaction pooler (port 6543) automatically gets
+    pgbouncer-compatible settings so prepared statements don't break
+  - **`/api/health`** — a one-page diagnosis of env → connectivity →
+    migration → seed, with the exact fix printed at each step
+  - **Actionable errors everywhere** — “Could not open template” is dead:
+    API failures now carry classified codes (`DB_NOT_MIGRATED`,
+    `DB_UNREACHABLE`…), the dashboard shows a setup banner with the fix,
+    and toasts tell you exactly what to run
+- **The template library, ×1.8 — now 110 templates, all free** — 50 new
+  2026-trend originals across every category, authored in-house (podcast
+  quote card, new-listing post, bootcamp, restaurant special, lookbook,
+  webinar, LinkedIn banner, recipe pin, birthday story, Black Friday,
+  playlist cover, flash-sale countdown, grand opening · investor pitch,
+  marketing plan, course, agency portfolio, quarterly review, demo day,
+  nonprofit impact, product launch · wedding invitation, gym flyer, cafe
+  menu, concert poster, yoga flyer, gift certificate, business card, open
+  mic, moving sale · executive & creative resumes, cover letter, proposal,
+  invoice, newsletter, whitepaper, agenda, press release · 7 thumbnails ·
+  3 logos). The library lives in `src/lib/templates/` as collections so it
+  can keep growing, and a validator (`scripts/validate-templates.ts`)
+  checks every entry at CI time
 
 ### v0.7.0 — Fast & Free Forever: rendering performance & the premium template collection
 
@@ -75,7 +109,7 @@ is right here.
   - **`perfectDrawEnabled: false`** on element nodes — skips Konva's
     hit-canvas perfection pass during drag/transform for a big interactive win
   - **Lazy template thumbnails** — preview stages mount via
-    IntersectionObserver (300 px pre-roll), so scrolling the 60-template
+    IntersectionObserver (300 px pre-roll), so scrolling the 110-template
     library stays smooth; only visible cards own a canvas
   - Locked in by tests: `src/store/editor-store.test.ts` asserts the identity
     guarantees (untouched pages/elements keep references, history shares
@@ -329,26 +363,38 @@ is right here.
 
 ## 🚀 Quick start
 
-> **Prerequisites:** [Node.js 20+](https://nodejs.org) or [Bun](https://bun.sh), and a [PostgreSQL](https://www.postgresql.org) database (local install, Docker, or a free serverless host like [Neon](https://neon.tech)).
+> **Prerequisites:** [Node.js 20+](https://nodejs.org) (or [Bun](https://bun.sh)), and a PostgreSQL database — a free [Supabase](https://supabase.com) project is the easiest start (any other Postgres works too: Neon, RDS, Docker, local).
 
 ```bash
 git clone https://github.com/mir-ashiq/canvix.git
 cd canvix
-bun install            # or: npm install
+npm install            # or: bun install
 
-# set up the database
-cp .env.example .env   # then edit DATABASE_URL with your Postgres connection string
-bun run db:push        # create tables
-bun run db:seed        # load the built-in templates
+# set up the database (get a connection string first — see below)
+cp .env.example .env   # then edit DATABASE_URL
+npm run db:setup       # migrations + 110 free templates, in one command
 
-bun run dev            # → http://localhost:3000
+npm run dev            # → http://localhost:3000
 ```
+
+**Getting your Supabase connection string:** Supabase dashboard →
+**Connect** (or Project Settings → Database) → copy the URI. Both styles work
+out of the box — Canvix auto-applies the right flags:
+
+| Style | Looks like | Notes |
+|---|---|---|
+| Transaction pooler *(recommended)* | `…pooler.supabase.com:6543/postgres` | IPv4-friendly; Canvix auto-adds `pgbouncer=true&connection_limit=1` |
+| Direct connection | `db.<ref>.supabase.co:5432/postgres` | IPv6-only on most plans — use it only if your host has an IPv6 route |
+
+Replace `[YOUR-PASSWORD]` with your database password, and you're done. If
+anything looks off later, open **`/api/health`** on your server — it checks
+env → connectivity → migrations → seed and prints the exact fix.
 
 Production build:
 
 ```bash
-bun run build
-bun run start
+npm run build
+npm run start
 ```
 
 ## 🛠 Tech stack
@@ -540,7 +586,8 @@ tool descriptions so agents pick the right format.
 - [x] Magic Suite: AI image editing, Magic Resize, Translate, PostgreSQL *(v0.4.0)*
 - [x] Magic Layers, real-time collaboration, comments, animations, SVG & video export, AI Assistant 2.0 *(v0.5.0)*
 - [x] MCP server (20 agent tools), tables, frames, curved text, embed cards *(v0.6.0)*
-- [x] Rendering performance (structural sharing, memoized nodes, O(1) undo) & the 60-template premium collection, free forever *(v0.7.0)*
+- [x] Rendering performance (structural sharing, memoized nodes, O(1) undo) & the premium collection *(v0.7.0)*
+- [x] 110-template library, Supabase-first migrations & self-diagnosing setup *(v0.8.0)*
 - [ ] Accounts & per-design ownership (identity layer groundwork shipped in v0.5)
 - [ ] Yjs-grade offline merge for collaboration
 - [ ] Audio/video elements & Beat Sync

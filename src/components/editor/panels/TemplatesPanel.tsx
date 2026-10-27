@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { Search, Sparkles, Clock, X, Check } from 'lucide-react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { Search, Sparkles, Clock, X, Check, Gem, BadgeCheck } from 'lucide-react'
 import { TEMPLATES, type TemplateDef } from '@/lib/templates'
 import { useEditorStore } from '@/store/editor-store'
 import { DesignPreview } from '@/components/design-preview'
@@ -34,6 +34,8 @@ export function TemplatesPanel() {
   )
 
   const recommended = useMemo(() => TEMPLATES.slice(0, 4), [])
+  const premiumList = useMemo(() => list.filter((t) => t.badge === 'premium'), [list])
+  const hasPremiumSection = !query && category === 'all'
 
   const designHasContent = pages.some((p) => p.elements.length > 0)
 
@@ -45,7 +47,13 @@ export function TemplatesPanel() {
   return (
     <div className="flex flex-col h-full bg-[#16181D] text-[#EDEEF2]">
       <div className="px-4 pt-4 pb-3 border-b border-white/[0.07] shrink-0">
-        <h3 className="font-bold text-sm">Templates</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-sm">Templates</h3>
+          {/* v0.7: the promise — every template, free forever */}
+          <span className="flex items-center gap-1 text-[10px] font-bold text-[#00E5A0] bg-[#00E5A0]/10 border border-[#00E5A0]/25 rounded-full px-2 py-0.5">
+            <BadgeCheck size={11} /> 100% free forever
+          </span>
+        </div>
         <div className="flex items-center gap-2 h-9 rounded-lg bg-white/[0.06] border border-white/10 px-2.5 mt-2.5">
           <Search size={13} className="text-white/40 shrink-0" />
           <input
@@ -84,7 +92,7 @@ export function TemplatesPanel() {
               <div key={i} className="cv-skeleton aspect-[4/5] w-full" />
             ))}
           </div>
-        ) : !query && category === 'all' ? (
+        ) : hasPremiumSection ? (
           <>
             <SectionLabel icon={<Sparkles size={11} />}>Recommended for you</SectionLabel>
             <div className="grid grid-cols-2 gap-3 mb-5">
@@ -92,9 +100,21 @@ export function TemplatesPanel() {
                 <TemplateCard key={t.slug} t={t} onApply={() => use(t)} onPreview={() => setPreview(t)} />
               ))}
             </div>
+            {premiumList.length > 0 && (
+              <>
+                <SectionLabel icon={<Gem size={11} />}>
+                  Premium collection <span className="text-[#00E5A0] normal-case font-semibold tracking-normal">· free forever</span>
+                </SectionLabel>
+                <div className="grid grid-cols-2 gap-3 mb-5">
+                  {premiumList.map((t) => (
+                    <TemplateCard key={t.slug} t={t} onApply={() => use(t)} onPreview={() => setPreview(t)} />
+                  ))}
+                </div>
+              </>
+            )}
             <SectionLabel icon={<Clock size={11} />}>All templates</SectionLabel>
             <div className="grid grid-cols-2 gap-3">
-              {list.slice(4).map((t) => (
+              {list.filter((t) => !t.badge).slice(4).map((t) => (
                 <TemplateCard key={t.slug} t={t} onApply={() => use(t)} onPreview={() => setPreview(t)} />
               ))}
             </div>
@@ -116,7 +136,14 @@ export function TemplatesPanel() {
           <div className="fixed inset-0 z-[75] bg-black/60 backdrop-blur-[2px]" onClick={() => setPreview(null)} />
           <div className="fixed z-[76] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(520px,92vw)] rounded-2xl bg-[#16181D] border border-white/12 shadow-2xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-bold text-white truncate">{preview.name}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-white truncate">{preview.name}</span>
+                {preview.badge === 'premium' && (
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-[#F5C518] bg-[#F5C518]/10 border border-[#F5C518]/25 rounded-full px-2 py-0.5 shrink-0">
+                    <Gem size={10} /> Premium · Free
+                  </span>
+                )}
+              </div>
               <button className="text-white/60 hover:text-white" onClick={() => setPreview(null)} aria-label="Close preview">
                 <X size={16} />
               </button>
@@ -140,7 +167,44 @@ export function TemplatesPanel() {
   )
 }
 
-function TemplateCard({ t, onApply, onPreview }: { t: TemplateDef; onApply: () => void; onPreview: () => void }) {
+/**
+ * v0.7 rendering performance: preview thumbnails mount their Konva stage only
+ * when scrolled near the viewport (IntersectionObserver). With a 60+ template
+ * library this keeps the panel scroll buttery and the DOM light — only the
+ * visible cards pay the canvas cost.
+ */
+const LazyPreview = memo(function LazyPreview({ page, width, height }: { page: import('@/lib/types').PageData; width: number; height: number }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el || visible) return
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(true)
+      return
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisible(true)
+          io.disconnect()
+        }
+      },
+      { rootMargin: '300px 0px' }
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [visible])
+
+  return (
+    <div ref={ref} className="w-full h-full">
+      {visible ? <DesignPreview page={page} width={width} height={height} /> : null}
+    </div>
+  )
+})
+
+const TemplateCard = memo(function TemplateCard({ t, onApply, onPreview }: { t: TemplateDef; onApply: () => void; onPreview: () => void }) {
   return (
     <div
       className="group relative text-left rounded-lg overflow-hidden border border-white/10 hover:border-[#7630D7] transition-all"
@@ -148,9 +212,15 @@ function TemplateCard({ t, onApply, onPreview }: { t: TemplateDef; onApply: () =
     >
       <button className="block w-full" onClick={onPreview} aria-label={`Preview ${t.name}`}>
         <div className="bg-[#0F1015]" style={{ aspectRatio: `${t.width} / ${t.height}` }}>
-          <DesignPreview page={t.pages[0]} width={t.width} height={t.height} />
+          <LazyPreview page={t.pages[0]} width={t.width} height={t.height} />
         </div>
       </button>
+      {/* v0.7: premium quality badge — a label, never a paywall */}
+      {t.badge === 'premium' && (
+        <span className="absolute top-1.5 left-1.5 flex items-center gap-1 text-[9px] font-bold text-[#F5C518] bg-black/70 backdrop-blur-sm border border-[#F5C518]/30 rounded-full px-1.5 py-0.5 pointer-events-none">
+          <Gem size={9} /> PREMIUM
+        </span>
+      )}
       <div className="px-2 py-1.5 text-[11px] font-medium truncate bg-[#16181D] text-white/80 flex items-center justify-between">
         <span className="truncate">{t.name}</span>
       </div>
@@ -165,7 +235,7 @@ function TemplateCard({ t, onApply, onPreview }: { t: TemplateDef; onApply: () =
       </div>
     </div>
   )
-}
+})
 
 function SectionLabel({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (

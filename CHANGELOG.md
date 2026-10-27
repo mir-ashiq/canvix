@@ -3,6 +3,74 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.0] — 2026-10-28
+
+The "Fast & Free Forever" release: the canvas rendering hot path is rebuilt
+(structural sharing, memoized nodes, O(1) history), the template library
+nearly triples to 60 — and the project formally commits to staying
+**100% free forever**: no subscriptions, no paywalls, no locked features.
+
+### Rendering performance
+- **Structural sharing in the editor store** (`src/store/editor-store.ts`) —
+  every mutation (typing, slider drags, align/flip, group/ungroup, remote
+  `applyRemoteOp`, MCP live edits) now performs immutable updates that give
+  new identities *only* to the touched page/elements; untouched objects keep
+  their references. The old code deep-cloned the whole `pages` tree via
+  `structuredClone` on every keystroke. Result: a live edit re-renders exactly
+  one `ElementNode` instead of every node on the canvas.
+- **O(1) undo/redo history** — since pages are never mutated in place any
+  more, history snapshots are plain references (Immer-style structural
+  sharing, zero dependencies). `pushHistory` no longer clones the document;
+  a 60-entry history of a large design costs a fraction of the old memory.
+- **Memoized canvas nodes** (`element-node.tsx`) — `ElementNode` no longer
+  subscribes to the entire editor store (it reads actions at event time via
+  `getState()`), is wrapped in `React.memo`, gets a stable node-ref callback,
+  and `CanvasStage` passes stable handler props — selection changes, panel
+  toggles, collaborator cursors and remote typing no longer re-render any
+  shape they don't affect.
+- **Split Konva layers** (`CanvasStage.tsx`) — interaction chrome (transformer,
+  snap guides, manual ruler guides, marquee, freehand draft) moved to a second
+  `<Layer>`: dragging with snapping active repaints only the overlay canvas,
+  and content edits never repaint the chrome.
+- **Snap-guide equality guard** — `handleDragMoveNode` compares guide sets by
+  value and skips `setGuides` when nothing visibly changed (previously every
+  mousemove created a fresh array and re-rendered the tree).
+- **Shared image cache** (`use-loaded-image.ts`) — module-level cache keyed by
+  URL with in-flight dedup, negative caching of failures and a bounded
+  ~300-entry eviction. Images decode once per URL instead of once per mount.
+- **`perfectDrawEnabled: false`** on element nodes — skips Konva's hit-canvas
+  "perfect draw" pass during drag/transform.
+- **Lazy template thumbnails** (`TemplatesPanel.tsx`) — preview stages mount
+  via `IntersectionObserver` with a 300 px pre-roll; cards are memoized. The
+  60-template panel only pays canvas cost for visible cards.
+- **Regression-locked** — new `src/store/editor-store.test.ts` (5 tests)
+  asserts the identity invariants: patched-only new identities, untouched
+  pages/elements keep references, history shares structure, snapshots never
+  mutate in place, remote ops preserve untouched pages.
+
+### Premium template collection — all free (21 → 60)
+- 39 new templates across every category, each with real copy, considered
+  typography and Canva-grade layouts: **social** (flash-sale story, minimal
+  quote, trattoria special, open house, bootcamp, webinar announcement,
+  podcast cover, birthday story, wanderlust story, LinkedIn banner),
+  **presentation** (pitch deck noir 2-pager, quarterly report, webinar 101,
+  course welcome, product roadmap timeline, meet the team),
+  **print** (neon gig poster, charity gala flyer, artisan cafe menu, spa
+  voucher, open-house yard sign, luxe dark card, wedding thank-you, tear-off
+  coupon), **document** (project proposal, community newsletter, ebook cover,
+  tech whitepaper, press release, meeting agenda, studio invoice, case
+  study), **thumbnail** (gaming, tutorial, podcast episode, unboxing) and
+  **logo** (orbit tech, bloom cafe, apex fitness).
+- `TemplateDef.badge` ('premium' | 'new') is a **quality label only** — the
+  templates panel shows a "Premium collection · free forever" section and
+  premium chips on cards; nothing is ever gated.
+- DB re-seeded (60 templates upserted by slug).
+
+### Free forever — formalized
+- README gains a "Free forever — the promise" section: every feature, every
+  template, every export is free; no Pro tier, no trials, no watermarks,
+  ever. This is a project principle, not a launch promotion.
+
 ## [0.6.1] — 2026-10-28
 
 Hardening & hygiene release: closes a real SSRF bypass in the MCP image

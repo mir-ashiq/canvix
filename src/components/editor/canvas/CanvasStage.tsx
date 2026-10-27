@@ -62,6 +62,8 @@ export default function CanvasStage() {
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 })
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [guides, setGuides] = useState<GuideLine[]>([])
+  /** v0.7: mirror of `guides` for cheap equality checks during drag */
+  const guidesRef = useRef<GuideLine[]>([])
   const [editingTextId, setEditingTextId] = useState<string | null>(null)
   /** v0.6: table cell being edited via the overlay ({ id, row, col }) */
   const [editingCell, setEditingCell] = useState<{ id: string; row: number; col: number } | null>(null)
@@ -246,7 +248,23 @@ export default function CanvasStage() {
       node.x(node.x() + dx)
       node.y(node.y() + dy)
     }
-    setGuides(g)
+    // v0.7: only re-render when the visible guides actually changed — a new
+    // array with identical values used to re-render the whole canvas per frame.
+    const prev = guidesRef.current
+    const same =
+      prev.length === g.length &&
+      prev.every((pg, i) => pg.axis === g[i].axis && pg.position === g[i].position)
+    if (!same) {
+      guidesRef.current = g
+      setGuides(g)
+    }
+  }, [])
+
+  // v0.7: stable callback passed to the memoized ElementNodes — an inline
+  // closure here would defeat React.memo on every canvas re-render.
+  const handleDragEndNode = useCallback(() => {
+    guidesRef.current = []
+    setGuides([])
   }, [])
 
   // ── text editing ───────────────────────────────────────────
@@ -714,12 +732,19 @@ export default function CanvasStage() {
                   interactive={interactive}
                   registerNode={registerNode}
                   onDragMoveNode={handleDragMoveNode}
-                  onDragEndNode={() => setGuides([])}
+                  onDragEndNode={handleDragEndNode}
                   onDoubleClick={startEditText}
                   hiding={editingTextId === el.id}
                   hideCell={editingCell && editingCell.id === el.id ? { row: editingCell.row, col: editingCell.col } : null}
                 />
               ))}
+            </Group>
+          </Layer>
+          {/* v0.7 rendering performance: interaction chrome lives in its own
+              layer (its own <canvas>) — guide/marquee/transformer updates no
+              longer re-draw the content layer, and vice versa. */}
+          <Layer>
+            <Group x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom}>
               <Transformer
                 ref={trRef}
                 keepRatio

@@ -23,12 +23,75 @@ Free & open-source graphic design tool — a community-built [Canva](https://can
 ## ✨ What is Canvix?
 
 Canvix is a browser-based design tool that lets anyone create social media posts,
-presentations, posters, logos and thumbnails — with a drag-and-drop editor, a template
-library and one-click export. It runs entirely on your own infrastructure, stores designs
+presentations, posters, logos and thumbnails — with a drag-and-drop editor, a
+60-template library and one-click export. It runs entirely on your own infrastructure, stores designs
 in your own database, and exports files locally in your browser. No accounts, no
 watermarks, no paywalls.
 
+## 🆓 Free forever — the promise
+
+**Every feature in Canvix is free, and it stays free. Forever.** There is no
+Pro tier, no subscription, no trial countdown, no watermark ransom, no
+"premium" element you can drag but not drop. The whole point of this project
+is a design tool that never asks you for a credit card:
+
+- All **60 templates** — including the entire premium collection — are free
+- All **exports** (PNG, JPG, SVG, PDF, video) are free and unwatermarked
+- All **AI features** (magic edit, magic write, background removal, translate)
+  run against your own API keys, so there is nothing for us to meter
+- **Self-hosting** is first-class: your server, your database, your rules
+- The license is **MIT** — you can even fork it and build a business on it
+
+If anyone ever asks you to pay for Canvix, you are being scammed: the source
+is right here.
+
 ## 🎨 Features
+
+### v0.7.0 — Fast & Free Forever: rendering performance & the premium template collection
+
+- **Rendering performance** — the canvas was rebuilt around three classic
+  hot-path killers, and every one is gone:
+  - **Structural sharing in the editor store** — every mutation now builds
+    only the pages/elements it actually touches; untouched objects keep their
+    identity. A keystroke, a slider drag or a remote/AI live edit re-renders
+    exactly **one** canvas node instead of the whole scene, and deep-cloning
+    the entire document per edit is history
+  - **O(1) undo/redo** — history snapshots now share structure with live state
+    (like Immer, without Immer): pushing history is a reference copy, and a
+    60-step history of a large design costs a fraction of the old memory
+  - **Memoized canvas nodes** — `ElementNode` no longer subscribes to the whole
+    store (it reads actions at event time via `getState()`), is wrapped in
+    `React.memo`, and receives stable callbacks — so selection changes, panel
+    toggles and remote cursors don't re-render a single shape
+  - **Split Konva layers** — interaction chrome (transformer, snap guides,
+    marquee, ruler guides, draw preview) moved to its own `<canvas>` layer:
+    dragging an element no longer repaints the chrome, and guide updates no
+    longer repaint the artwork
+  - **Snap-guide equality guard** — identical guide sets don't trigger a React
+    render; snapping during drag only redraws when something visibly changed
+  - **Shared image cache** — images decode once per URL and are reused across
+    pages, thumbnails and duplicated nodes (with in-flight dedup and a bounded
+    300-entry LRU)
+  - **`perfectDrawEnabled: false`** on element nodes — skips Konva's
+    hit-canvas perfection pass during drag/transform for a big interactive win
+  - **Lazy template thumbnails** — preview stages mount via
+    IntersectionObserver (300 px pre-roll), so scrolling the 60-template
+    library stays smooth; only visible cards own a canvas
+  - Locked in by tests: `src/store/editor-store.test.ts` asserts the identity
+    guarantees (untouched pages/elements keep references, history shares
+    structure, snapshots are never mutated in place)
+- **The premium template collection — all free** — 39 new templates (21 → 60),
+  every one designed to Canva-grade quality and every one unlocked:
+  social (flash sale story, trattoria, open house, bootcamp, webinar, podcast
+  cover, birthday story, wanderlust, LinkedIn banner, minimal quote),
+  presentations (pitch deck noir, quarterly report, webinar deck, course
+  welcome, roadmap, meet-the-team), print (neon gig poster, charity gala,
+  artisan menu, spa voucher, yard sign, luxe card, wedding thank-you, coupon),
+  documents (proposal, newsletter, ebook cover, whitepaper, press release,
+  meeting agenda, studio invoice, case study), thumbnails (gaming, tutorial,
+  podcast episode, unboxing) and logos (orbit, bloom, apex). The templates
+  panel gets a "Premium collection · free forever" section — premium is a
+  quality label here, never a paywall
 
 ### v0.6.0 — the Agent Edition: MCP, tables, frames, curved text & embeds
 
@@ -477,6 +540,7 @@ tool descriptions so agents pick the right format.
 - [x] Magic Suite: AI image editing, Magic Resize, Translate, PostgreSQL *(v0.4.0)*
 - [x] Magic Layers, real-time collaboration, comments, animations, SVG & video export, AI Assistant 2.0 *(v0.5.0)*
 - [x] MCP server (20 agent tools), tables, frames, curved text, embed cards *(v0.6.0)*
+- [x] Rendering performance (structural sharing, memoized nodes, O(1) undo) & the 60-template premium collection, free forever *(v0.7.0)*
 - [ ] Accounts & per-design ownership (identity layer groundwork shipped in v0.5)
 - [ ] Yjs-grade offline merge for collaboration
 - [ ] Audio/video elements & Beat Sync

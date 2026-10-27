@@ -1,7 +1,7 @@
 'use client'
 
 import Konva from 'konva'
-import { useCallback, useEffect, useRef } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Ellipse, Group, Image as KonvaImage, Line, Path, Rect, Star, Text } from 'react-konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import type {
@@ -126,14 +126,20 @@ function ImageNode({ el, common }: { el: ImageElement; common: Record<string, un
   )
 }
 
-export function ElementNode({ element: el, interactive, hiding, hideCell, registerNode, onDragMoveNode, onDragEndNode, onDoubleClick, nested }: ElementNodeProps) {
-  const store = useEditorStore()
+function ElementNodeImpl({ element: el, interactive, hiding, hideCell, registerNode, onDragMoveNode, onDragEndNode, onDoubleClick, nested }: ElementNodeProps) {
+  // v0.7 rendering performance: this component no longer subscribes to the
+  // editor store. Store actions are read at event time via getState(), and
+  // the component is memoized (see bottom of file) — it re-renders only when
+  // its own element changes identity. Combined with structural sharing in
+  // the store, a keystroke or remote live edit re-renders exactly ONE node
+  // instead of the whole canvas.
 
   // ── shared interaction handlers ────────────────────────────
   const handleClick = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
     if (!interactive) return
     e.cancelBubble = true
     const additive = !!e.evt && 'shiftKey' in e.evt && (e.evt as MouseEvent).shiftKey
+    const store = useEditorStore.getState()
     if (additive) {
       store.selectToggle(el.id)
     } else {
@@ -143,6 +149,7 @@ export function ElementNode({ element: el, interactive, hiding, hideCell, regist
 
   const handleDragStart = () => {
     if (!interactive) return
+    const store = useEditorStore.getState()
     store.pushHistory()
     store.setSelection([el.id])
   }
@@ -155,6 +162,7 @@ export function ElementNode({ element: el, interactive, hiding, hideCell, regist
 
   const handleDragEnd = (node: Konva.Node) => {
     if (!interactive) return
+    const store = useEditorStore.getState()
     if (el.type === 'group') {
       // bake drag delta into children so ungroup restores the moved positions
       const g = el as GroupElement
@@ -176,12 +184,14 @@ export function ElementNode({ element: el, interactive, hiding, hideCell, regist
 
   const handleTransformStart = () => {
     if (!interactive) return
+    const store = useEditorStore.getState()
     store.pushHistory()
     store.setSelection([el.id])
   }
 
   const handleTransformEnd = (node: Konva.Node) => {
     if (!interactive) return
+    const store = useEditorStore.getState()
     const sx = Math.abs(node.scaleX())
     const sy = Math.abs(node.scaleY())
     // restore flip sign for images (transformer resets scale)
@@ -277,6 +287,12 @@ export function ElementNode({ element: el, interactive, hiding, hideCell, regist
     store.updateElementsLive([el.id], patch)
   }
 
+  // stable node ref (avoids re-register churn on every render)
+  const setNodeRef = useCallback(
+    (node: Konva.Node | null) => registerNode?.(el.id, node),
+    [registerNode, el.id]
+  )
+
   const common = {
     id: el.id,
     name: 'cv-element',
@@ -286,6 +302,9 @@ export function ElementNode({ element: el, interactive, hiding, hideCell, regist
     opacity: el.opacity,
     visible: el.visible && !hiding,
     draggable: interactive && !el.locked,
+    // v0.7: skip Konva's "perfect draw" hit-canvas pass — big win while
+    // dragging/transforming, no visible change for our node types.
+    perfectDrawEnabled: false,
     onClick: handleClick,
     onTap: handleClick,
     onDragStart: handleDragStart,
@@ -298,7 +317,7 @@ export function ElementNode({ element: el, interactive, hiding, hideCell, regist
     onTransformEnd: (e: KonvaEventObject<Event>) => handleTransformEnd(e.target),
     onDblClick: () => interactive && onDoubleClick?.(el.id),
     onDblTap: () => interactive && onDoubleClick?.(el.id),
-    ref: (node: Konva.Node | null) => registerNode?.(el.id, node),
+    ref: setNodeRef,
     ...shadowProps(el),
   }
 
@@ -512,8 +531,15 @@ export function ElementNode({ element: el, interactive, hiding, hideCell, regist
   }
 }
 
+/**
+ * v0.7 rendering performance: memoized canvas element node. With structural
+ * sharing in the editor store, untouched elements keep referential identity,
+ * so a mutation re-renders only the nodes whose elements actually changed.
+ */
+export const ElementNode = memo(ElementNodeImpl)
+
 /** non-interactive renderer used inside thumbnails / previews */
-export function PreviewElements({ elements }: { elements: AnyElement[] }) {
+export const PreviewElements = memo(function PreviewElements({ elements }: { elements: AnyElement[] }) {
   const reg = useCallback(() => undefined, [])
   return (
     <Group listening={false}>
@@ -522,4 +548,4 @@ export function PreviewElements({ elements }: { elements: AnyElement[] }) {
       ))}
     </Group>
   )
-}
+})

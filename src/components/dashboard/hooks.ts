@@ -36,7 +36,10 @@ export function useDesigns() {
   }, [])
 
   useEffect(() => {
-    void refresh()
+    // kick the fetch off in a microtask so the effect body itself never
+    // calls setState synchronously (react-hooks/set-state-in-effect);
+    // refresh() only sets state after its awaits resolve anyway.
+    void Promise.resolve().then(() => refresh())
   }, [refresh])
 
   return { designs, loading, refresh }

@@ -6,6 +6,7 @@
 
 import type { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
+import { safeFetch } from './ssrf-guard'
 import { FONTS } from '@/lib/editor-utils'
 import { exportPageToSVG } from '@/lib/svg-export'
 import { magicAnimatePage, clearPageAnimations } from '@/lib/animations'
@@ -21,7 +22,7 @@ import {
   type PageData,
 } from '@/lib/types'
 
-export const SERVER_VERSION = '0.6.0'
+export const SERVER_VERSION = '0.6.1'
 
 // ── tool plumbing ────────────────────────────────────────────
 
@@ -190,24 +191,23 @@ function pageTextContent(page: PageData): string[] {
 }
 
 // ── SSRF-guarded image fetch → dataURL ──────────────────────
-
-const PRIVATE_HOST =
-  /^(localhost|127\.|0\.|10\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?)/i
+// All hop-by-hop validation lives in ./ssrf-guard (redirect pinning,
+// DNS checks, IP range blocks). The 8 MB cap is enforced twice:
+// via content-length before the body is streamed, and after read.
 
 async function fetchImageAsDataUrl(url: string): Promise<{ src: string; width: number; height: number }> {
   if (!isHttpsUrl(url)) throw new Error('Only http(s) image URLs are allowed.')
-  const parsed = new URL(url)
-  if (PRIVATE_HOST.test(parsed.hostname)) throw new Error('Private/internal hosts are not allowed.')
-  const res = await fetch(url, {
+  const res = await safeFetch(url, {
     signal: AbortSignal.timeout(10_000),
-    redirect: 'follow',
-    headers: { 'user-agent': 'Canvix-MCP/0.6 (image fetch)' },
+    headers: { 'user-agent': 'Canvix-MCP/0.6.1 (image fetch)' },
   })
   if (!res.ok) throw new Error(`Fetch failed with HTTP ${res.status}.`)
   const type = (res.headers.get('content-type') ?? '').split(';')[0].trim()
   if (!/^image\/(png|jpeg|jpg|webp|gif)$/i.test(type)) {
     throw new Error(`Unsupported content type "${type}" — expected an image.`)
   }
+  const declared = Number(res.headers.get('content-length') ?? '0')
+  if (declared > 8 * 1024 * 1024) throw new Error('Image exceeds the 8 MB cap.')
   const buf = Buffer.from(await res.arrayBuffer())
   if (buf.byteLength > 8 * 1024 * 1024) throw new Error('Image exceeds the 8 MB cap.')
   const src = `data:${type.replace('jpg', 'jpeg')};base64,${buf.toString('base64')}`
@@ -218,7 +218,7 @@ async function fetchImageAsDataUrl(url: string): Promise<{ src: string; width: n
 
 // ── origin resolution (for edit URLs) ─────────────────────────
 
-function originOf(req: NextRequest): string {
+function originOf(req: Pick<NextRequest, 'headers'>): string {
   const proto = req.headers.get('x-forwarded-proto') ?? 'http'
   const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? 'localhost:3000'
   return `${proto}://${host}`
@@ -229,7 +229,8 @@ function originOf(req: NextRequest): string {
 // ═════════════════════════════════════════════════════════════
 
 export interface ToolDeps {
-  req: NextRequest
+  /** only headers are used (origin resolution for edit URLs) */
+  req: Pick<NextRequest, 'headers'>
 }
 
 export function buildTools(deps: ToolDeps): ToolDef[] {

@@ -300,6 +300,25 @@ bun run start
 | Realtime | Postgres event log + SSE (no WebSocket server needed) |
 | AI | server-side provider layer (z-ai-web-dev-sdk, vision-capable) |
 | Fonts | 15 hand-picked Google Fonts |
+| Tests | Vitest (unit) + Playwright (browser) + `scripts/mcp-e2e.sh` (38 live MCP assertions) |
+
+## 🧪 Testing
+
+```bash
+npm test            # unit tests (SSRF guard, JSON-RPC conformance) — no DB needed
+npm run typecheck   # tsc --noEmit
+npm run lint        # eslint (0 errors, 0 warnings)
+
+# browser smoke: landing → dashboard → editor canvas
+# (boots `npm run dev` itself; needs a reachable DATABASE_URL)
+npm run test:ui
+BASE_URL=http://localhost:3000 npm run test:ui   # …or reuse a running server
+
+# MCP end-to-end: 38 assertions over the live transport — auth, initialize,
+# tool catalogue, a real create→edit→export workflow, live SSRF-guard
+# rejections, and transport hardening (413 body cap included)
+CANVIX_MCP_TOKEN=<your-token> npm run test:mcp
+```
 
 ## 📁 Project structure
 

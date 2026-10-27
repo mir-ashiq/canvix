@@ -93,7 +93,7 @@ export interface RateLimitResult {
  * Simple sliding-window limiter. Limits are deliberately generous for a
  * self-hosted design tool but stop runaway loops and abuse.
  */
-export function rateLimit(feature: string, req: NextRequest, limit: number, windowSec: number): RateLimitResult {
+export function rateLimit(feature: string, req: Pick<NextRequest, 'headers'>, limit: number, windowSec: number): RateLimitResult {
   const ip =
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     req.headers.get('x-real-ip') ||

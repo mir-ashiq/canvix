@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { X, Pipette, Plus, ChevronRight, Search } from 'lucide-react'
 import { SOLID_SWATCHES, GRADIENT_PRESETS } from '@/lib/editor-utils'
 import { useEditorStore } from '@/store/editor-store'
@@ -25,10 +25,17 @@ export function ColorMenu({ value, onChange, gradient, onGradient, title = 'Colo
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const [hex, setHex] = useState(value)
+  const [mirrored, setMirrored] = useState(value)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const brand = useEditorStore((s) => s.brand)
 
-  useEffect(() => { setHex(value) }, [value])
+  // prop → state mirror, done during render instead of in an effect
+  // (react-hooks/set-state-in-effect): when the incoming value changes,
+  // reset both the mirror and the editable hex in one pass.
+  if (mirrored !== value) {
+    setMirrored(value)
+    setHex(value)
+  }
 
   const openMenu = () => {
     const r = triggerRef.current?.getBoundingClientRect()

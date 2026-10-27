@@ -45,6 +45,7 @@ const INVALID_PARAMS = -32602
 const INTERNAL_ERROR = -32603
 const SERVER_NOT_CONFIGURED = -32000
 const UNAUTHORIZED = -32001
+const REQUEST_TOO_LARGE = -32002
 
 // ── auth ─────────────────────────────────────────────────────
 
@@ -153,10 +154,10 @@ export function handleInitialize(msg: JsonRpcRequest): JsonRpcResponse {
   }
 }
 
-function toolsList(tools: ToolDef[]): JsonRpcResponse {
+function toolsList(msg: JsonRpcRequest, tools: ToolDef[]): JsonRpcResponse {
   return {
     jsonrpc: '2.0',
-    id: null,
+    id: msg.id ?? null,
     result: {
       tools: tools.map((t) => ({
         name: t.name,
@@ -192,18 +193,52 @@ export interface McpOutcome {
   body: JsonRpcResponse | JsonRpcResponse[] | null
 }
 
-/**
- * Process an HTTP POST body (single message or batch).
- * - notifications / client responses only → 202 Accepted, no body
- * - requests → 200 with one JSON object, or an array for multi-request batches
- */
-export async function handleMcpRequest(req: NextRequest): Promise<McpOutcome> {
-  const parsed: unknown = await req.json().catch(() => null)
-  if (parsed === null) {
-    return {
-      status: 400,
-      body: errorResponse(null, PARSE_ERROR, 'Invalid JSON body.'),
+/** Hard cap on request body size (protects memory; batch is capped at 32 anyway). */
+export const MAX_BODY_BYTES = 1024 * 1024
+
+export class BodyTooLargeError extends Error {
+  constructor() {
+    super(`Request body exceeds the ${Math.round(MAX_BODY_BYTES / 1024)} KB limit.`)
+    this.name = 'BodyTooLargeError'
+  }
+}
+
+/** Read a request body while enforcing a byte cap (works for chunked bodies too). */
+export async function readBodyCapped(req: NextRequest, capBytes: number = MAX_BODY_BYTES): Promise<string> {
+  const declared = Number(req.headers.get('content-length') ?? '0')
+  if (declared > capBytes) throw new BodyTooLargeError()
+  if (!req.body) return ''
+  const reader = req.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (value) {
+      total += value.byteLength
+      if (total > capBytes) {
+        await reader.cancel().catch(() => undefined)
+        throw new BodyTooLargeError()
+      }
+      chunks.push(value)
     }
+  }
+  return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8')
+}
+
+/** Anything handleMcpText needs from the transport layer. */
+export type McpRequestContext = Pick<NextRequest, 'headers'>
+
+/**
+ * Core JSON-RPC processing over an already-read body string.
+ * Exported for unit tests (no HTTP involved).
+ */
+export async function handleMcpText(text: string, req: McpRequestContext): Promise<McpOutcome> {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return { status: 400, body: errorResponse(null, PARSE_ERROR, 'Invalid JSON body.') }
   }
 
   const messages: JsonRpcRequest[] = Array.isArray(parsed) ? (parsed as JsonRpcRequest[]) : [parsed as JsonRpcRequest]
@@ -235,7 +270,7 @@ export async function handleMcpRequest(req: NextRequest): Promise<McpOutcome> {
         responses.push({ jsonrpc: '2.0', id: msg.id ?? null, result: {} })
         break
       case 'tools/list':
-        responses.push(toolsList(buildTools({ req })))
+        responses.push(toolsList(msg, buildTools({ req })))
         break
       case 'tools/call':
         responses.push(await toolsCall(msg, buildTools({ req })))
@@ -262,6 +297,25 @@ export async function handleMcpRequest(req: NextRequest): Promise<McpOutcome> {
     return { status: 202, body: null }
   }
   return { status: 200, body: responses.length === 1 ? responses[0] : responses }
+}
+
+/**
+ * Process an HTTP POST (single message or batch).
+ * - notifications / client responses only → 202 Accepted, no body
+ * - requests → 200 with one JSON object, or an array for multi-request batches
+ * - body over MAX_BODY_BYTES → 413 with a JSON-RPC error
+ */
+export async function handleMcpRequest(req: NextRequest): Promise<McpOutcome> {
+  let text: string
+  try {
+    text = await readBodyCapped(req)
+  } catch (err) {
+    if (err instanceof BodyTooLargeError) {
+      return { status: 413, body: errorResponse(null, REQUEST_TOO_LARGE, err.message) }
+    }
+    throw err
+  }
+  return handleMcpText(text, req)
 }
 
 /** Rate limit for the MCP endpoint (per IP, generous — agents batch). */

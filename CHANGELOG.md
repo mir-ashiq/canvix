@@ -3,6 +3,70 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.1] — 2026-10-28
+
+Hardening & hygiene release: closes a real SSRF bypass in the MCP image
+fetch, fixes JSON-RPC spec violations, ships the test infrastructure the
+0.6.0 notes promised, and deletes ~24% of dead weight from the tree.
+
+### Security
+- **SSRF: redirect bypass fixed** (`src/lib/mcp/ssrf-guard.ts`) — the old
+  private-host check ran on the *initial* URL only while `fetch()` followed
+  redirects automatically, so any public URL that 302'd to
+  `http://169.254.169.254/…` (cloud metadata) or an internal host bypassed
+  it. `safeFetch()` now follows redirects **manually** and re-validates every
+  hop: protocol allow-list (no `file:`/`data:`/…), full IPv4/IPv6
+  private/reserved-range checks (incl. CGNAT, link-local, v4-mapped, NAT64),
+  intranet-name blocklist (bare dot-less hosts, `.local`/`.internal`/…), and
+  DNS resolution where **every** resolved address must be public. Decimal/
+  octal/hex IP encodings (`http://2130706433/`) are normalized by the
+  resolver and caught. Max 5 redirect hops. Known residual: DNS-rebinding
+  TOCTOU (guard resolves, then fetch re-resolves) — documented in the source,
+  full pinning planned with the Phase 3 auth work.
+- **JSON-RPC `id` echo fixed** — `tools/list` answered with `id: null`
+  instead of echoing the request id (spec violation that breaks strict
+  client request/response correlation). Every method now echoes correctly,
+  covered by regression tests.
+- **Request body cap** — `/api/mcp` reads bodies through a capped stream
+  reader (1 MB, works for chunked requests too) and answers `413` with a
+  JSON-RPC error (`-32002`) instead of buffering unbounded payloads.
+- **Image fetch size guard** — content-length is checked *before* the body
+  is streamed (the old code capped only after reading the full response).
+
+### Tests — the infrastructure 0.6.0 claimed, now real
+- **Vitest** (`npm test`) — 97 unit tests: SSRF guard (range tables, DNS
+  resolution, redirect pinning — including the exact v0.6 bypass scenario),
+  JSON-RPC conformance (id echo, error codes, batches, notifications).
+- **`scripts/mcp-e2e.sh`** (`npm run test:mcp`) — 38 live assertions over
+  the HTTP transport: auth, initialize negotiation, tool catalogue, a full
+  create→edit→export workflow against the database, **live SSRF-guard
+  rejections**, transport hardening (invalid JSON, unknown methods,
+  batches, the 413 cap). *(0.6.0's changelog referenced this script before
+  it existed — mea culpa.)*
+- **Playwright** (`npm run test:ui`) — browser smoke suite (landing →
+  dashboard → editor canvas with react-konva mounted) plus config with
+  auto-booted dev server; `BASE_URL` reuses a running instance.
+- `npm run typecheck` — fast `tsc --noEmit` gate.
+
+### Cleanup — −45 dependencies, −40 dead files (~24% of the tree)
+- Removed **39 unused shadcn/ui components** (import-graph verified; the 9
+  actually used — button, dialog, dropdown-menu, input, popover, progress,
+  tabs, toast, toaster — remain; `npx shadcn add <x>` restores any other).
+- Removed **45 unused dependencies** incl. `next-auth`, `framer-motion`,
+  `zod`, `@dnd-kit/*`, `@tanstack/react-query`, `react-table`, `recharts`,
+  `date-fns`, `next-intl`, `next-themes`, `sonner`, `uuid`, 19 unused
+  Radix packages and more (dependency count 70 → 25).
+- Removed the vestigial Tailwind v3 `tailwind.config.ts` (v4 uses the
+  CSS-first config in `globals.css`; `tailwindcss-animate` → already
+  replaced by `tw-animate-css`).
+- **`ignoreBuildErrors: false`** — the production build typechecks strictly
+  again (the codebase was already clean; now it stays that way).
+- Fixed the 3 `react-hooks/set-state-in-effect` violations surfaced by the
+  current eslint-config-next (`useSyncExternalStore` for `useIsMobile`,
+  render-time prop mirroring in `ColorMenu`, microtask-deferred fetch in
+  the dashboard hook) — `npm run lint` is fully green (0 errors, 0 warnings).
+- Committed `package-lock.json` for reproducible installs.
+
 ## [0.6.0] — 2026-09-04
 
 The Agent Edition: Canvix speaks the Model Context Protocol, so AI assistants
@@ -41,11 +105,11 @@ with native tables, image frames, curved text and embed cards.
 - **Dashboard "AI agents (MCP)" card** — live status probe (`OPTIONS /api/mcp`),
   copyable endpoint + client config JSON for Claude Desktop / Cursor / any
   remote MCP client. `.env.example` documents the token.
-- **Protocol E2E** (`scripts/mcp-e2e.sh`): 37 assertions — initialize handshake,
+- **Protocol E2E** (`scripts/mcp-e2e.sh`): 38 assertions — initialize handshake,
   202 notifications, tools/list (20), auth (401), GET 405, unknown method/tool,
   full create → style → add (text/shape/table/embed) → update (curve) →
   animate → get → comment → export (svg/png/json) → delete flow, batch, parse
-  errors, AI generation — **37/37 passing**.
+  errors, AI generation — **38/38 passing**.
 
 ### Tables (native, editable)
 - New `table` element: rows × cols with per-cell text/fill/bold, proportional

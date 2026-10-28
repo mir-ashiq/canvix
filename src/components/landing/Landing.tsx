@@ -291,39 +291,44 @@ export function Landing() {
 
         {/* ── Open source ── */}
         <section id="opensource" className="mx-auto max-w-7xl px-4 sm:px-6 py-20 sm:py-28">
-          <div className="rounded-3xl overflow-hidden bg-[#17181D] text-white relative">
-            <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full blur-3xl opacity-25 bg-[#7D2AE8]" aria-hidden="true" />
-            <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full blur-3xl opacity-25 bg-[#00C4CC]" aria-hidden="true" />
-            <div className="relative px-6 sm:px-12 py-14 sm:py-20 grid lg:grid-cols-2 gap-10 items-center">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-[#00C4CC]">
-                  <Star size={14} /> Built in the open
-                </div>
-                <h2 className="mt-5 text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
-                  The design tool that <span className="text-[#00C4CC]">belongs to you</span>
-                </h2>
-                <p className="mt-5 text-white/70 leading-relaxed">
-                  Commercial design tools lock your creativity behind subscriptions. Canvix is
-                  different — the code is on GitHub, the license is MIT, and every design you make
-                  is exportable at full quality. Self-host it, fork it, improve it.
-                </p>
-                <div className="mt-8 flex flex-col sm:flex-row gap-3">
-                  <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer">
-                    <Button size="lg" className="btn-brand-gradient rounded-full px-8 gap-2 h-12">
-                      <Github size={18} /> View the source
-                    </Button>
-                  </a>
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="rounded-full px-8 h-12 border-white/20 text-white hover:bg-white/10 hover:text-white"
-                    onClick={goDashboard}
-                  >
-                    Try it now
-                  </Button>
-                </div>
+          <div className="grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-1.5 text-xs font-semibold text-[#7D2AE8] shadow-sm">
+                <Star size={14} /> Built in the open
               </div>
-              <div className="font-mono text-xs sm:text-sm leading-relaxed bg-black/40 rounded-xl border border-white/10 p-5 overflow-x-auto">
+              <h2 className="mt-5 text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
+                The design tool that <span className="text-brand-gradient">belongs to you</span>
+              </h2>
+              <p className="mt-5 text-muted-foreground leading-relaxed">
+                Commercial design tools lock your creativity behind subscriptions. Canvix is
+                different — the code is on GitHub, the license is MIT, and every design you make
+                is exportable at full quality. Self-host it, fork it, improve it.
+              </p>
+              <div className="mt-8 flex flex-col sm:flex-row gap-3">
+                <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer">
+                  <Button size="lg" className="btn-brand-gradient rounded-full px-8 gap-2 h-12 w-full sm:w-auto">
+                    <Github size={18} /> View the source
+                  </Button>
+                </a>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="rounded-full px-8 h-12 w-full sm:w-auto"
+                  onClick={goDashboard}
+                >
+                  Try it now
+                </Button>
+              </div>
+            </div>
+            {/* terminal framed like the editor mockup above — same window-chrome motif */}
+            <div className="rounded-2xl border border-black/10 bg-white shadow-2xl shadow-violet-900/10 overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-[#F4F5F7] border-b border-black/5">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#FF5C8A]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#FFD166]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#34C77B]" />
+                <span className="ml-2 text-xs font-medium text-muted-foreground">terminal — canvix</span>
+              </div>
+              <div className="font-mono text-xs sm:text-sm leading-relaxed bg-[#17181D] p-5 overflow-x-auto">
                 <div className="text-white/40"># clone &amp; run your own Canva alternative</div>
                 <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">git clone https://github.com/mir-ashiq/canvix</span></div>
                 <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">cd canvix &amp;&amp; bun install</span></div>

@@ -45,8 +45,14 @@ export function resolveProviderConfig(): AIProviderConfig | null {
       '/etc/.z-ai-config',
     ]
     for (const p of candidates) {
-      if (!p || !existsSync(p)) continue
-      const raw = JSON.parse(readFileSync(p, 'utf8')) as { baseUrl?: string; apiKey?: string }
+      // turbopackIgnore: these paths are only knowable at runtime (cwd/$HOME),
+      // so without the opt-out Turbopack traces the WHOLE project into the
+      // server output (slow, oversized Vercel deploys). The file also holds
+      // credentials and must never be copied into build output — production
+      // configuration is env vars (ZAI_BASE_URL / ZAI_API_KEY); the file
+      // fallback is a local-development convenience only.
+      if (!p || !existsSync(/*turbopackIgnore: true*/ p)) continue
+      const raw = JSON.parse(readFileSync(/*turbopackIgnore: true*/ p, 'utf8')) as { baseUrl?: string; apiKey?: string }
       if (raw.baseUrl && raw.apiKey) return { baseUrl: raw.baseUrl, apiKey: raw.apiKey }
     }
   } catch {

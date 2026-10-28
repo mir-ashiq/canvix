@@ -21,6 +21,22 @@ cd "$(dirname "$0")/.."
 MIGRATION="${1:-0001_init}"
 
 echo "── Canvix database setup ──────────────────────────────"
+
+# Fail fast with an actionable message instead of Prisma's cryptic
+# "Environment variable not found: DATABASE_URL" (or, on GitHub Actions,
+# a confusing P1001 against localhost).
+if [ -z "${DATABASE_URL:-}" ]; then
+  echo "  ERROR: DATABASE_URL is not set."
+  echo "  - locally:            export DATABASE_URL='postgresql://…'"
+  echo "  - GitHub Actions:     add the DATABASE_URL repository secret"
+  echo "    (Settings → Secrets and variables → Actions), then re-run"
+  echo "    the Canvix Database Setup workflow."
+  echo "  Supabase note: either URL works — the pooler (port 6543) or the"
+  echo "  direct connection (port 5432); sslmode/pgbouncer flags are"
+  echo "  applied automatically by src/lib/db-url.ts."
+  exit 1
+fi
+
 echo "  DATABASE_URL host: $(node -e "try{const u=new URL(process.env.DATABASE_URL||'');console.log(u.hostname)}catch{console.log('(unset)')}")"
 
 echo "  [1/2] applying migrations…"

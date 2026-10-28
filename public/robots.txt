@@ -1,14 +1,23 @@
+# Canvix — the app is a single client-rendered page; /api/ is private
+# machinery (designs, auth, AI, collab streams) that crawlers should
+# never enumerate. v0.9.2: politely keeps crawlers off metered routes.
+
 User-agent: Googlebot
 Allow: /
+Disallow: /api/
 
 User-agent: Bingbot
 Allow: /
+Disallow: /api/
 
 User-agent: Twitterbot
 Allow: /
+Disallow: /api/
 
 User-agent: facebookexternalhit
 Allow: /
+Disallow: /api/
 
 User-agent: *
 Allow: /
+Disallow: /api/

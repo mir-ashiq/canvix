@@ -7,7 +7,9 @@ import type { Collaborator, CollabOp, CollabStatus, DesignEventRow, OpEnvelope, 
  *
  * Transport: SSE downstream (Postgres event log), POST upstream (batched).
  * - local ops queue and flush every 400 ms (≤ 20 per flush)
- * - cursor updates throttled (~120 ms), presence heartbeat every 5 s
+ * - cursor updates throttled (~300 ms), presence heartbeat every 15 s
+ *   (v0.9.2: was 120 ms / 5 s — each write is a remote-DB upsert, and
+ *   the old rates let a single moving mouse generate ~8 writes/s)
  * - reconnect with exponential backoff (0.5 s → 8 s), gap-free replay via ?since
  *
  * Zustand stays the local rendering truth; collab never blocks input.
@@ -50,7 +52,9 @@ export class CollabSession {
     if (this.disposed) return
     this.connect()
     this.flushTimer = setInterval(() => void this.flush(), 400)
-    this.heartbeatTimer = setInterval(() => void this.heartbeat(), 5_000)
+    // v0.9.2: 15 s heartbeat — the server treats presence as live for 30 s,
+    // so this still tolerates one lost beat before a collaborator fades out.
+    this.heartbeatTimer = setInterval(() => void this.heartbeat(), 15_000)
   }
 
   dispose() {
@@ -204,11 +208,13 @@ export class CollabSession {
     }
   }
 
-  /** Throttled cursor broadcast (page coords + current selection). */
+  /** Throttled cursor broadcast (page coords + current selection).
+   *  v0.9.2: 300 ms floor — ~3 updates/s is plenty for remote cursors and
+   *  cuts the presence-write storm (each write is a remote-DB upsert). */
   sendCursor(cursor: { page: number; x: number; y: number; selection?: string[] }) {
     this.pendingCursor = cursor
     const now = Date.now()
-    if (now - this.lastCursorSent < 120) return
+    if (now - this.lastCursorSent < 300) return
     this.lastCursorSent = now
     void fetch(`/api/collab/${encodeURIComponent(this.designId)}/presence`, {
       method: 'POST',

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { existsSync, readFileSync } from 'fs'
+import { CSRF_REJECTED } from '@/lib/auth/csrf'
 
 /**
  * Canvix AI provider abstraction (v0.5).
@@ -150,12 +151,45 @@ export function providerUnavailable(res: NextResponse): NextResponse {
 }
 
 /** Helper: wrap a route's provider call with rate limit + usage accounting. */
+
+/**
+ * v0.9.2 abuse guard — strict same-origin check for AI routes.
+ *
+ * Unlike the cookie-CSRF variant in lib/auth/csrf.ts (which lets
+ * Origin-less server-to-server calls through), AI generation is expensive
+ * metered compute that must ONLY be drivable from the app's own pages.
+ * Browsers always send Origin (or Referer) on POST — including same-origin
+ * fetch() — so anything without a matching Origin is a direct API bot and
+ * gets a flat 403 before any provider work happens.
+ */
+function isFromApp(req: NextRequest): boolean {
+  const origin = req.headers.get('origin') ?? req.headers.get('referer')
+  if (!origin) return false
+  try {
+    const parsed = new URL(origin)
+    const hosts = [
+      req.headers.get('host'),
+      req.headers.get('x-forwarded-host')?.split(',')[0]?.trim(),
+    ].filter((h): h is string => Boolean(h))
+    return hosts.includes(parsed.host)
+  } catch {
+    return false
+  }
+}
+
 export async function withProvider(
   feature: string,
   req: NextRequest,
   limits: { limit: number; windowSec: number },
   fn: (zai: NonNullable<Awaited<ReturnType<typeof getZAI>>>) => Promise<NextResponse>
 ): Promise<NextResponse> {
+  // v0.9.2 abuse guard: every AI route is only ever called by the app's own
+  // pages (same origin). Cross-origin or Origin-less POSTs — the signature
+  // of a bot hitting the public endpoint directly — are rejected before any
+  // provider work. Anonymous in-app usage stays fully allowed (free forever).
+  if (req.method === 'POST' && !isFromApp(req)) {
+    return NextResponse.json(CSRF_REJECTED, { status: 403 })
+  }
   const rl = rateLimit(feature, req, limits.limit, limits.windowSec)
   if (!rl.ok) {
     return NextResponse.json(

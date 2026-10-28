@@ -111,7 +111,7 @@ export function Dashboard() {
   const goLanding = useAppStore((s) => s.goLanding)
   const openEditor = useAppStore((s) => s.openEditor)
   const loadEditorDesign = useEditorStore((s) => s.loadDesign)
-  const { designs, loading, refresh, dbIssue } = useDesigns()
+  const { designs, loading, refresh, dbIssue, hasMore, loadMore } = useDesigns()
   const isMobile = useIsMobile()
   const [helpOpen, setHelpOpen] = useState(false)
 
@@ -720,6 +720,17 @@ export function Dashboard() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {hasMore && !loading && (
+            <div className="mt-6 flex justify-center">
+              <Button
+                variant="outline"
+                className="rounded-full px-6 gap-2 border-white/15 text-white/80 hover:bg-white/10 hover:text-white"
+                onClick={() => void loadMore()}
+              >
+                Load more designs
+              </Button>
             </div>
           )}
         </section>

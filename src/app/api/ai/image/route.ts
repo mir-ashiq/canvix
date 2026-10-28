@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'A prompt is required.' }, { status: 400 })
   }
 
-  return withProvider('image', req, { limit: 12, windowSec: 60 }, async (zai) => {
+  return withProvider('image', req, { limit: 5, windowSec: 60 }, async (zai) => {
     const response = await zai.images.generations.create({
       prompt,
       size,

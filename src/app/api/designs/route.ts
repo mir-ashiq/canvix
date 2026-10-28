@@ -17,6 +17,7 @@ function toPages(value: unknown): Prisma.InputJsonValue {
 
 // GET /api/designs — list designs (metadata only, newest first)
 // ?trash=1 → only soft-deleted designs; default → only live designs
+// ?cursor=<updatedAt ISO>&id=<designId> → next page (keyset pagination)
 //
 // v0.9 scoping: signed-in users see their designs + ownerless (shared)
 // designs; anonymous visitors see ownerless designs only. Owned designs
@@ -28,19 +29,45 @@ function toPages(value: unknown): Prisma.InputJsonValue {
 //               (this browser's attribution OR a legacy pre-accounts row)
 //   mine      — attributed to THIS browser; the only rows the bulk
 //               "Save my designs" action will claim
+//
+// v0.9.2 cost fix: the list used to return EVERY matching row including
+// base64 thumbnails — with a crowded shared workspace that was a multi-MB
+// JSON response on every dashboard load (CPU to serialize, bandwidth to
+// ship). It is now keyset-paginated: 60 rows per page, `nextCursor` tells
+// the client there is more. Worst case per page is now ~0.5 MB.
+const DESIGNS_PAGE_SIZE = 60
+
 export async function GET(req: NextRequest) {
   try {
     const trash = req.nextUrl.searchParams.get('trash') === '1'
+    const cursor = req.nextUrl.searchParams.get('cursor')
+    const cursorId = req.nextUrl.searchParams.get('id')
     const user = await getSessionUser(req)
+
+    // Compose scoping + keyset via AND — never spread two `OR` keys into
+    // the same object (the second would silently replace the first and
+    // leak private designs to other accounts).
+    const filters: Prisma.DesignWhereInput[] = [
+      user
+        ? { OR: [{ ownerId: null }, { ownerId: user.id }] }
+        : { ownerId: null },
+    ]
+    if (cursor && !Number.isNaN(Date.parse(cursor))) {
+      filters.push({
+        OR: [
+          { updatedAt: { lt: new Date(cursor) } },
+          ...(cursorId ? [{ updatedAt: new Date(cursor), id: { lt: cursorId } }] : []),
+        ],
+      })
+    }
     const where: Prisma.DesignWhereInput = {
       deletedAt: trash ? { not: null } : null,
-      ...(user
-        ? { OR: [{ ownerId: null }, { ownerId: user.id }] }
-        : { ownerId: null }),
+      AND: filters,
     }
     const designs = await db.design.findMany({
       where,
-      orderBy: { updatedAt: 'desc' },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      take: DESIGNS_PAGE_SIZE + 1,
       select: {
         id: true,
         name: true,
@@ -55,13 +82,22 @@ export async function GET(req: NextRequest) {
         updatedAt: true,
       },
     })
+    const hasMore = designs.length > DESIGNS_PAGE_SIZE
+    const page = hasMore ? designs.slice(0, DESIGNS_PAGE_SIZE) : designs
+    const last = page[page.length - 1]
     const myHash = anonHashFrom(req)
-    const out = designs.map(({ anonKey, ...d }) => ({
+    const out = page.map(({ anonKey, ...d }) => ({
       ...d,
       claimable: d.ownerId === null && (anonKey === null || anonKey === myHash),
       mine: d.ownerId === null && anonKey !== null && anonKey === myHash,
     }))
-    return NextResponse.json(out)
+    return NextResponse.json({
+      designs: out,
+      nextCursor:
+        hasMore && last
+          ? { cursor: last.updatedAt.toISOString(), id: last.id }
+          : null,
+    })
   } catch (error) {
     return dbErrorResponse(error, 'GET /api/designs')
   }

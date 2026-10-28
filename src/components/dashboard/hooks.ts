@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DesignRecord, PageData } from '@/lib/types'
 
 export interface DesignMeta {
@@ -49,28 +49,64 @@ export class ApiError extends Error {
   }
 }
 
+/** v0.9.2: /api/designs is keyset-paginated (60 rows/page) — this is the
+ * cursor the server hands back for the next page. */
+interface DesignsPage {
+  designs: DesignMeta[]
+  nextCursor: { cursor: string; id: string } | null
+}
+
+async function fetchDesignsPage(cursor?: { cursor: string; id: string } | null): Promise<DesignsPage> {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor.cursor)}&id=${encodeURIComponent(cursor.id)}` : ''
+  const res = await fetch(`/api/designs${qs}`, { cache: 'no-store' })
+  if (!res.ok) {
+    const err = await readApiError(res)
+    throw new ApiError(err.message, err.code, err.fix)
+  }
+  const body = (await res.json()) as Partial<DesignsPage>
+  return { designs: body.designs ?? [], nextCursor: body.nextCursor ?? null }
+}
+
 export function useDesigns() {
   const [designs, setDesigns] = useState<DesignMeta[] | null>(null)
   const [loading, setLoading] = useState(true)
   // v0.8: null = healthy; otherwise an error code/message from the API
   const [dbIssue, setDbIssue] = useState<string | null>(null)
+  // v0.9.2: pagination state — true when the server says there is another page
+  const [hasMore, setHasMore] = useState(false)
+  const loadingMoreRef = useRef(false)
+  const nextCursorRef = useRef<{ cursor: string; id: string } | null>(null)
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch('/api/designs', { cache: 'no-store' })
-      if (res.ok) {
-        setDesigns(await res.json())
-      } else {
-        // v0.8: surface DB setup trouble (host switch, missing migration…)
-        const err = await readApiError(res)
-        setDbIssue(err.code ?? err.message)
-        setDesigns([])
-      }
-    } catch {
-      setDbIssue('NETWORK')
+      const page = await fetchDesignsPage()
+      setDesigns(page.designs)
+      setHasMore(page.nextCursor !== null)
+      nextCursorRef.current = page.nextCursor
+    } catch (err) {
+      const e = err as ApiError
+      setDbIssue(e.code ?? e.message)
       setDesigns([])
+      setHasMore(false)
+      nextCursorRef.current = null
     } finally {
       setLoading(false)
+    }
+  }, [])
+
+  /** v0.9.2: append the next page (guard against double-clicks/stale calls). */
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !nextCursorRef.current) return
+    loadingMoreRef.current = true
+    try {
+      const page = await fetchDesignsPage(nextCursorRef.current)
+      nextCursorRef.current = page.nextCursor
+      setHasMore(page.nextCursor !== null)
+      setDesigns((prev) => (prev ? [...prev, ...page.designs] : page.designs))
+    } catch {
+      /* transient — the user can click Load more again */
+    } finally {
+      loadingMoreRef.current = false
     }
   }, [])
 
@@ -81,7 +117,7 @@ export function useDesigns() {
     void Promise.resolve().then(() => refresh())
   }, [refresh])
 
-  return { designs, loading, refresh, dbIssue, clearDbIssue: () => setDbIssue(null) }
+  return { designs, loading, refresh, dbIssue, clearDbIssue: () => setDbIssue(null), hasMore, loadMore }
 }
 
 export async function createDesign(opts: {
@@ -138,7 +174,10 @@ export async function deleteDesign(id: string): Promise<void> {
 export async function listTrash(): Promise<DesignMeta[]> {
   const res = await fetch('/api/designs?trash=1', { cache: 'no-store' })
   if (!res.ok) throw new Error('Failed to list trash')
-  return res.json()
+  // v0.9.2: same paginated envelope as the main list — the trash dialog
+  // only needs the most recent page.
+  const body = (await res.json()) as Partial<DesignsPage>
+  return body.designs ?? []
 }
 
 export async function restoreDesign(id: string): Promise<void> {

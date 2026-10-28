@@ -99,9 +99,19 @@ export async function GET() {
   }
 
   // 5. all green
-  return NextResponse.json({
-    ok: true,
-    database: { kind: info.kind, host: info.host, database: info.database },
-    templates,
-  })
+  return NextResponse.json(
+    {
+      ok: true,
+      database: { kind: info.kind, host: info.host, database: info.database },
+      templates,
+    },
+    {
+      headers: {
+        // v0.9.2: diagnostics must never be cached (stale health is worse
+        // than none) and should not be indexed.
+        'Cache-Control': 'no-store',
+        'X-Robots-Tag': 'noindex',
+      },
+    }
+  )
 }

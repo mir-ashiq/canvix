@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   if (!query) return NextResponse.json({ error: 'A query is required.' }, { status: 400 })
   const count = Math.min(Math.max(Number(body.count) || 24, 1), 40)
 
-  return withProvider('search', req, { limit: 30, windowSec: 60 }, async (zai) => {
+  return withProvider('search', req, { limit: 12, windowSec: 60 }, async (zai) => {
     const response = await zai.images.search.create({ query, count })
 
     const results = (response.results ?? []).map((r) => ({

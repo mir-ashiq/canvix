@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
   const h = Number(body.naturalHeight) || 0
   const size: ImgSize = w && h ? bestSize(w, h) : '1024x1024'
 
-  return withProvider('image-edit', req, { limit: 12, windowSec: 60 }, async (zai) => {
+  return withProvider('image-edit', req, { limit: 5, windowSec: 60 }, async (zai) => {
     // NOTE: the SDK's TS type declares `image`, but the backend API requires
     // `images: [{ url }]` (verified — API error 1210 "must provide images").
     // The SDK forwards the body verbatim, so we send the correct runtime shape.

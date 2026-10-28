@@ -172,7 +172,7 @@ pass "browser B created ownerless design $DESIGN_B"
 TSX="./node_modules/.bin/tsx"
 LEGACY_ID=""
 for attempt in 1 2 3; do
-  LEGACY_ID=$(DATABASE_URL="$DATABASE_URL" "$TSX" -e "
+  if OUT=$(DATABASE_URL="$DATABASE_URL" "$TSX" -e "
 // use the app's own URL normalization (pgbouncer/sslmode) — a raw
 // client against the transaction pooler breaks on prepared statements
 require('./src/lib/db-url').applyDatabaseUrlDefaults()
@@ -183,9 +183,12 @@ const db = new PrismaClient()
   console.log(d.id)
   await db.\$disconnect()
 })().catch((e) => { console.error('legacy insert error:', e); process.exit(1) })
-") && break
-  echo "    legacy insert attempt $attempt failed — retrying in 3s"
-  LEGACY_ID=""
+"); then
+    # stdout may carry the [db] normalization banner — the id is the LAST line
+    LEGACY_ID="$(printf '%s\n' "$OUT" | tail -n 1)"
+    break
+  fi
+  echo "    legacy insert attempt $attempt failed: $OUT — retrying in 3s"
   sleep 3
 done
 [ -n "$LEGACY_ID" ] || fail "could not insert the legacy probe design"

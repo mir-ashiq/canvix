@@ -166,16 +166,29 @@ STATUS=$(curl -s -o /tmp/e2e-xb.json -w '%{http_code}' -c "$JAR_B" \
 DESIGN_B=$(node -e "console.log(JSON.parse(require('fs').readFileSync('/tmp/e2e-xb.json','utf8')).id)")
 pass "browser B created ownerless design $DESIGN_B"
 
-# a LEGACY design (pre-attribution): inserted directly, anonKey NULL
-LEGACY_ID=$(DATABASE_URL="$DATABASE_URL" npx tsx -e "
+# a LEGACY design (pre-attribution): inserted directly, anonKey NULL.
+# Direct binary + retries: `npx tsx` proved flaky on CI runners and the
+# bare catch hid the reason — errors are printed and the insert retried.
+TSX="./node_modules/.bin/tsx"
+LEGACY_ID=""
+for attempt in 1 2 3; do
+  LEGACY_ID=$(DATABASE_URL="$DATABASE_URL" "$TSX" -e "
+// use the app's own URL normalization (pgbouncer/sslmode) — a raw
+// client against the transaction pooler breaks on prepared statements
+require('./src/lib/db-url').applyDatabaseUrlDefaults()
 const { PrismaClient } = require('@prisma/client')
 const db = new PrismaClient()
 ;(async () => {
   const d = await db.design.create({ data: { name: 'E2E legacy (pre-accounts) design', width: 100, height: 100 } })
   console.log(d.id)
   await db.\$disconnect()
-})().catch(() => process.exit(1))
-") || fail "could not insert the legacy probe design"
+})().catch((e) => { console.error('legacy insert error:', e); process.exit(1) })
+") && break
+  echo "    legacy insert attempt $attempt failed — retrying in 3s"
+  LEGACY_ID=""
+  sleep 3
+done
+[ -n "$LEGACY_ID" ] || fail "could not insert the legacy probe design"
 pass "legacy design inserted directly: $LEGACY_ID (anonKey NULL, ownerId NULL)"
 
 # ── 11. register account B from browser B's jar ─────────────
@@ -237,7 +250,12 @@ curl -sf -b "$JAR_B" "$BASE/api/designs/$DESIGN_W" | grep -q '"readOnly":true' \
 pass "B opens C's design in view-only mode (readOnly:true)"
 
 # ── cleanup: remove every probe row (this run AND any leftovers) ──
-DATABASE_URL="$DATABASE_URL" npx tsx -e "
+CLEANUP_OK=0
+for attempt in 1 2 3; do
+  if DATABASE_URL="$DATABASE_URL" "$TSX" -e "
+// use the app's own URL normalization (pgbouncer/sslmode) — a raw
+// client against the transaction pooler breaks on prepared statements
+require('./src/lib/db-url').applyDatabaseUrlDefaults()
 const { PrismaClient } = require('@prisma/client')
 const db = new PrismaClient()
 ;(async () => {
@@ -263,7 +281,12 @@ const db = new PrismaClient()
   await db.user.deleteMany({ where: { username: { startsWith: 'e2e_' } } })
   await db.\$disconnect()
 })().then(() => process.exit(0)).catch((e) => { console.error('cleanup error:', e); process.exit(1) })
-" "$DESIGN_ID" "$DESIGN_A" "$DESIGN_B" "$LEGACY_ID" "$DESIGN_W" "$TS_USER" "$USER_B" "$USER_C" \
-  || fail "cleanup failed"
+" "$DESIGN_ID" "$DESIGN_A" "$DESIGN_B" "$LEGACY_ID" "$DESIGN_W" "$TS_USER" "$USER_B" "$USER_C"; then
+    CLEANUP_OK=1; break
+  fi
+  echo "    cleanup attempt $attempt failed — retrying in 3s"
+  sleep 3
+done
+[ "$CLEANUP_OK" = "1" ] || fail "cleanup failed"
 
 say "all green — accounts, sessions, CSRF, claim eligibility and ownership verified end-to-end."

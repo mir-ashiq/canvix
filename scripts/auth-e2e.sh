@@ -236,17 +236,33 @@ curl -sf -b "$JAR_B" "$BASE/api/designs/$DESIGN_W" | grep -q '"readOnly":true' \
   || fail "B's GET of C's design should report readOnly:true (view-only mode)"
 pass "B opens C's design in view-only mode (readOnly:true)"
 
-# ── cleanup: remove every probe row ──────────────────────────
+# ── cleanup: remove every probe row (this run AND any leftovers) ──
 DATABASE_URL="$DATABASE_URL" npx tsx -e "
 const { PrismaClient } = require('@prisma/client')
 const db = new PrismaClient()
 ;(async () => {
-  const ids = process.argv.slice(1, 6)   // 5 design ids
-  const names = process.argv.slice(6)    // 3 usernames
-  await db.design.deleteMany({ where: { id: { in: ids } } })
-  await db.user.deleteMany({ where: { username: { in: names } } })
+  const ids = process.argv.slice(1, 6).filter(Boolean)   // 5 design ids (this run)
+  const names = process.argv.slice(6).filter(Boolean)    // 3 usernames (this run)
+  console.log('cleanup: designs', ids.length, 'users', names.length)
+  // this run's rows…
+  if (names.length) await db.session.deleteMany({ where: { user: { username: { in: names } } } })
+  if (ids.length) await db.design.deleteMany({ where: { id: { in: ids } } })
+  if (names.length) await db.user.deleteMany({ where: { username: { in: names } } })
+  // …plus any rows a previously failed run may have left behind
+  await db.session.deleteMany({ where: { user: { username: { startsWith: 'e2e_' } } } })
+  await db.design.deleteMany({
+    where: {
+      OR: [
+        { name: { startsWith: 'E2E ownership probe' } },
+        { name: { startsWith: 'E2E browser ' } },
+        { name: { startsWith: 'E2E legacy' } },
+        { name: { startsWith: 'E2E account ' } },
+      ],
+    },
+  })
+  await db.user.deleteMany({ where: { username: { startsWith: 'e2e_' } } })
   await db.\$disconnect()
-})().then(() => process.exit(0)).catch(() => process.exit(1))
+})().then(() => process.exit(0)).catch((e) => { console.error('cleanup error:', e); process.exit(1) })
 " "$DESIGN_ID" "$DESIGN_A" "$DESIGN_B" "$LEGACY_ID" "$DESIGN_W" "$TS_USER" "$USER_B" "$USER_C" \
   || fail "cleanup failed"
 

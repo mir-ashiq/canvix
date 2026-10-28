@@ -55,6 +55,19 @@ called for exists as executable tests.
   **152/152 tests green.**
 - `package-lock.json` version resynced with `package.json` (skew since
   0.8.1 — tolerated by npm but confusing for tooling).
+- **Vercel deployment fix** — v0.9.0/v0.9.1 pushes failed on Vercel
+  (~35s, "Deployment has failed") while building clean everywhere else.
+  Root cause (reproduced locally): Vercel restores a cached
+  `node_modules` between builds; with no `postinstall` hook the
+  Prisma client generated against the pre-v0.9 schema stayed cached,
+  so `next build` typechecked the new `db.user`/`db.session`/
+  `Design.ownerId` code against a client that lacked them and failed.
+  Fresh installs (CI, local) regenerate the client and never see it.
+  Fix: `"postinstall": "prisma generate"` (root lifecycle scripts run
+  on every install, cached or not — Prisma's documented Vercel setup)
+  and removal of the v0.4-era stale `bun.lock` (the repo is
+  npm-first; a second, stale lockfile invites package-manager
+  ambiguity on PaaS detection).
 
 ## [0.9.0] — 2026-10-28
 

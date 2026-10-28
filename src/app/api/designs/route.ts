@@ -3,6 +3,8 @@ import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { dbErrorResponse } from '@/lib/db-errors'
 import { getSessionUser } from '@/lib/auth/session'
+import { readAnonToken, newAnonToken, anonKeyHash, setAnonCookie, anonHashFrom } from '@/lib/auth/anon'
+import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 
 // Normalise incoming pages payload (accepts object or legacy JSON string)
 // into a value suitable for the Postgres jsonb column.
@@ -19,6 +21,11 @@ function toPages(value: unknown): Prisma.InputJsonValue {
 // v0.9 scoping: signed-in users see their designs + ownerless (shared)
 // designs; anonymous visitors see ownerless designs only. Owned designs
 // are private to their account.
+//
+// v0.9.1: each ownerless row carries `claimable` — true when the signed-in
+// (or anonymous) caller's browser is the author of the design, or when the
+// design predates attribution (legacy). The anonKey hash itself is never
+// returned, only the boolean decision.
 export async function GET(req: NextRequest) {
   try {
     const trash = req.nextUrl.searchParams.get('trash') === '1'
@@ -40,12 +47,18 @@ export async function GET(req: NextRequest) {
         thumbnail: true,
         source: true,
         ownerId: true,
+        anonKey: true,
         deletedAt: true,
         createdAt: true,
         updatedAt: true,
       },
     })
-    return NextResponse.json(designs)
+    const myHash = anonHashFrom(req)
+    const out = designs.map(({ anonKey, ...d }) => ({
+      ...d,
+      claimable: d.ownerId === null && (anonKey === null || anonKey === myHash),
+    }))
+    return NextResponse.json(out)
   } catch (error) {
     return dbErrorResponse(error, 'GET /api/designs')
   }
@@ -54,10 +67,32 @@ export async function GET(req: NextRequest) {
 // POST /api/designs — create a new design.
 // v0.9: when signed in, the design is owned by the account (private).
 // Anonymous users keep the link-accessible ownerless mode.
+// v0.9.1: anonymous creations are attributed to the creating browser
+// (anonKey = sha256 of the canvix_anon cookie, minted on first use) so
+// adopt-all can never claim someone else's work.
 export async function POST(req: NextRequest) {
+  if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   try {
     const user = await getSessionUser(req)
     const body = await req.json()
+
+    if (user) {
+      const design = await db.design.create({
+        data: {
+          name: typeof body.name === 'string' && body.name.trim() ? body.name.trim() : 'Untitled design',
+          width: Number.isFinite(body.width) ? Math.round(body.width) : 1080,
+          height: Number.isFinite(body.height) ? Math.round(body.height) : 1080,
+          pages: toPages(body.pages),
+          source: typeof body.source === 'string' ? body.source.slice(0, 120) : 'blank',
+          thumbnail: typeof body.thumbnail === 'string' ? body.thumbnail : null,
+          ownerId: user.id,
+        },
+      })
+      return NextResponse.json(design, { status: 201 })
+    }
+
+    // Anonymous: mint/refresh this browser's attribution, stamp the row.
+    const token = readAnonToken(req) ?? newAnonToken()
     const design = await db.design.create({
       data: {
         name: typeof body.name === 'string' && body.name.trim() ? body.name.trim() : 'Untitled design',
@@ -66,10 +101,12 @@ export async function POST(req: NextRequest) {
         pages: toPages(body.pages),
         source: typeof body.source === 'string' ? body.source.slice(0, 120) : 'blank',
         thumbnail: typeof body.thumbnail === 'string' ? body.thumbnail : null,
-        ...(user ? { ownerId: user.id } : {}),
+        anonKey: anonKeyHash(token),
       },
     })
-    return NextResponse.json(design, { status: 201 })
+    const res = NextResponse.json(design, { status: 201 })
+    setAnonCookie(res, token)
+    return res
   } catch (error) {
     // v0.8: template-opening failures get a classified, actionable payload
     // (DB_NOT_MIGRATED after a host switch etc.) instead of a bare 500.

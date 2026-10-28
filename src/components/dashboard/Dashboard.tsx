@@ -38,7 +38,7 @@ import { Input } from '@/components/ui/input'
 import { DesignPreview } from '@/components/design-preview'
 import { McpCard } from '@/components/dashboard/McpCard'
 import { AuthDialog } from '@/components/auth/AuthDialog'
-import { useAuth, adoptAllDesigns } from '@/lib/auth/client'
+import { useAuth, adoptAllDesigns, adoptDesign } from '@/lib/auth/client'
 import { TEMPLATES } from '@/lib/templates'
 import { createPage, TEMPLATE_CATEGORIES, type TemplateRecord } from '@/lib/types'
 import { PRESET_SIZES } from '@/lib/editor-utils'
@@ -120,7 +120,9 @@ export function Dashboard() {
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [adopting, setAdopting] = useState(false)
-  const ownerlessCount = (designs ?? []).filter((d) => d.ownerId === null).length
+  // v0.9.1: only designs attributed to THIS browser (or legacy rows) are
+  // bulk-claimable — the server enforces the same rule, this is just the count.
+  const claimableCount = (designs ?? []).filter((d) => d.claimable === true).length
 
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<string>('all')
@@ -387,7 +389,7 @@ export function Dashboard() {
                 </div>
                 {user ? (
                   <>
-                    {ownerlessCount > 0 && (
+                    {claimableCount > 0 && (
                       <DropdownMenuItem
                         className="gap-2"
                         disabled={adopting}
@@ -404,7 +406,7 @@ export function Dashboard() {
                           }
                         }}
                       >
-                        <FolderInput size={14} /> {adopting ? 'Adopting…' : `Save all designs to my account (${ownerlessCount})`}
+                        <FolderInput size={14} /> {adopting ? 'Adopting…' : `Save my designs to this account (${claimableCount})`}
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem className="gap-2" onClick={() => void logout().then(() => refresh())}>
@@ -661,6 +663,21 @@ export function Dashboard() {
                         <DropdownMenuItem onClick={() => openDesign(d.id)}>
                           <Pencil size={14} className="mr-2" /> Open
                         </DropdownMenuItem>
+                        {user && d.ownerId === null && d.claimable && (
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              const r = await adoptDesign(d.id)
+                              if (r.ok) {
+                                await refresh()
+                                toast({ title: `“${d.name}” moved into your account` })
+                              } else {
+                                toast({ title: r.error ?? 'Could not save this design', variant: 'destructive' })
+                              }
+                            }}
+                          >
+                            <FolderInput size={14} className="mr-2" /> Save to my account
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem onClick={() => { setRenameTarget({ id: d.id, name: d.name }); setRenameValue(d.name) }}>
                           <Pencil size={14} className="mr-2" /> Rename
                         </DropdownMenuItem>

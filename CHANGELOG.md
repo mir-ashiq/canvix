@@ -3,6 +3,59 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.1] — 2026-10-28
+
+The "never claim someone else's work" release: claim eligibility is now
+enforced, CSRF is closed out, and the verification report the roadmap
+called for exists as executable tests.
+
+### Claim eligibility (adopt-all made safe)
+- **Anonymous attribution** — the first anonymous design creation sets a
+  `canvix_anon` cookie (256-bit, HttpOnly, 1 year); the design row stores
+  sha256(token) in the new indexed `Design.anonKey` (migration
+  `0003_anon_attribution`, purely additive). A database leak never
+  contains usable attribution tokens.
+- **adopt-all is scoped** — `POST /api/designs/adopt-all` now claims only
+  ownerless designs whose `anonKey` matches the caller's own browser.
+  Another person's anonymous work and legacy (pre-attribution) rows are
+  structurally outside the UPDATE. A browser with no attribution cookie
+  claims nothing.
+- **Per-design adoption** — new `POST /api/designs/[id]/adopt` claims ONE
+  ownerless design deliberately: your own browser's designs and legacy
+  rows are claimable; a foreign browser's design answers
+  `403 NOT_ELIGIBLE`; races between two claimants are resolved atomically
+  by a conditional `updateMany` (`409` on loss).
+- **Dashboard** shows the honest claimable count ("Save my designs to
+  this account (N)") and a per-design "Save to my account" action; the
+  list API exposes a boolean `claimable` per design (never the hash).
+
+### CSRF protection for cookie-authenticated writes
+- Every mutating API route (`POST /api/designs`, `PUT`/`DELETE` on a
+  design, restore, adopt, adopt-all, register, login, logout) now
+  enforces same-origin: browsers always attach `Origin` (or `Referer`)
+  to cross-site requests; when present it must match the request's host
+  (`x-forwarded-host` honoured behind proxies). Non-browser clients
+  (curl, MCP, health probes) send neither header and pass — they carry
+  no ambient cookie authority. This is defence-in-depth on top of the
+  existing `SameSite=Lax` session cookie.
+
+### Verification (the pre-Phase-4 gate)
+- `scripts/auth-e2e.sh` now proves, against a real database: register →
+  me → owned create → owner save → anonymous 403 → logout → **revoked
+  token replay is dead** → wrong-password 401 → login → **cross-origin
+  PUT/POST rejected (CSRF)** → same-origin unaffected → **two anonymous
+  browsers: adopt-all claims only the caller's own design** → foreign
+  per-design adopt refused, legacy allowed → **cross-account isolation
+  (B cannot modify/delete/adopt C's design, opens it view-only)**.
+  All probe rows are removed afterwards.
+- New unit suites: session expiry/revocation/cookie hardening (mocked
+  DB), CSRF guard matrix, adopt-all eligibility (the WHERE-clause
+  invariant), per-design adopt matrix. SSRF suite extended with
+  DNS-flip regressions (between requests and mid-redirect-chain).
+  **152/152 tests green.**
+- `package-lock.json` version resynced with `package.json` (skew since
+  0.8.1 — tolerated by npm but confusing for tooling).
+
 ## [0.9.0] — 2026-10-28
 
 The "Your designs, yours" release: free accounts, per-design ownership,

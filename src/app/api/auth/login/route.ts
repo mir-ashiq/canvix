@@ -4,11 +4,14 @@ import { verifyPassword } from '@/lib/auth/passwords'
 import { canonicalUsername, checkUsername } from '@/lib/auth/validate'
 import { createSession } from '@/lib/auth/session'
 import { rateLimit } from '@/lib/ai/provider'
+import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 
 // POST /api/auth/login — exchange username + password for a session cookie.
 // One deliberately generic error message: never reveal whether the
 // username exists (account enumeration).
+// v0.9.1: same-origin enforced (blocks login CSRF / session fixation).
 export async function POST(req: NextRequest) {
+  if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   const rl = rateLimit('auth:login', req, 10, 600)
   if (!rl.ok) {
     return NextResponse.json(

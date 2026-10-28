@@ -63,8 +63,18 @@ is right here.
   anyone else. Share links still open — in view-only mode with an honest
   banner in the editor.
 - **Nothing breaks for existing setups** — ownerless designs keep the exact
-  pre-v0.9 link-editable behaviour. One click (**“Save all designs to my
-  account”**) migrates your existing library into your new account.
+  pre-v0.9 link-editable behaviour. One click (**“Save my designs to this
+  account”**) migrates the designs *this browser created* into your new
+  account — anonymous creations are attributed to the creating browser
+  (`canvix_anon` cookie, sha256-hashed in the DB), so **adopt-all can
+  never sweep up another person's work**. Legacy designs from before
+  attribution exist? Claim those one-by-one with the per-design
+  **“Save to my account”** action (a deliberate, visible action for
+  pre-accounts self-hosters).
+- **CSRF-safe writes** — every mutating API route enforces same-origin on
+  top of the SameSite=Lax session cookie; cross-site POST/PUT/DELETE
+  requests answer `403 CSRF_REJECTED`. Non-browser clients (curl, the MCP
+  endpoint) are unaffected.
 - **Collab identity upgrade** — signed-in users appear under their real
   username in presence, cursors and comments.
 - **DNS-rebinding pinning (SSRF close-out)** — the MCP server's `safeFetch`
@@ -73,8 +83,10 @@ is right here.
   so certificate validation is unaffected.
 - **End-to-end CI verification** — the “Canvix Database Setup” workflow now
   boots the built server against your real database and exercises the whole
-  account + ownership flow (register → me → owned create → owner save →
-  anonymous 403 → logout → login) before cleaning up after itself.
+  account + ownership + claim-safety + CSRF flow (register → me → owned
+  create → owner save → anonymous 403 → logout → revoked-token replay →
+  login → cross-origin rejection → two-browser adopt-all scoping →
+  cross-account isolation) before cleaning up after itself.
 
 ### v0.8.0 — Supabase-ready infrastructure & the 110-template library
 
@@ -619,6 +631,8 @@ tool descriptions so agents pick the right format.
 - [x] 110-template library, Supabase-first migrations & self-diagnosing setup *(v0.8.0)*
 - [x] Accounts & per-design ownership — free username/password accounts, private
       designs, one-click migration of existing work, SSRF DNS pinning *(v0.9.0)*
+- [x] Claim eligibility (browser-attributed adopt-all, per-design adopt),
+      CSRF same-origin enforcement, pre-Phase-4 verification gate *(v0.9.1)*
 - [ ] Yjs-grade offline merge for collaboration
 - [ ] Audio/video elements & Beat Sync
 - [ ] Plugin system (external, installable apps)

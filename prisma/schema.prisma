@@ -48,6 +48,13 @@ model Design {
   // behaviour — anonymous editing keeps working for legacy + shared links).
   ownerId    String?
   owner      User?           @relation("DesignOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  // v0.9.1: anonymous attribution — sha256 of the canvix_anon cookie that
+  // was set when an anonymous browser created this design. adopt-all only
+  // claims rows whose anonKey matches the caller's cookie, so one account
+  // can never sweep up another person's anonymous work. null = legacy
+  // design created before attribution existed (claimable only via the
+  // explicit per-design adopt endpoint).
+  anonKey    String?
   // soft delete (dashboard Trash) — null = live design
   deletedAt  DateTime?
   versions   DesignVersion[]
@@ -55,6 +62,7 @@ model Design {
   updatedAt  DateTime        @updatedAt
 
   @@index([ownerId])
+  @@index([anonKey])
 }
 
 // Server-side version snapshots for a design (Canva "Version history").

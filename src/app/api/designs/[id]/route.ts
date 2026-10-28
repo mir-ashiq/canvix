@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { resolveDesignAccess, NOT_YOUR_DESIGN } from '@/lib/auth/design-guard'
+import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 
 // Normalise incoming pages payload (accepts object or legacy JSON string)
 // into a value suitable for the Postgres jsonb column.
@@ -31,8 +32,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 // PUT /api/designs/[id] — save design (name / pages / thumbnail)
 // v0.9: ownerless designs stay link-editable; owned designs only save
-// for their owner (403 otherwise).
+// for their owner (403 otherwise). v0.9.1: same-origin enforced (CSRF).
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   try {
     const { id } = await params
     const access = await resolveDesignAccess(req, id)
@@ -59,8 +61,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 // DELETE /api/designs/[id] — move to Trash (soft delete).
 // ?permanent=1 → delete permanently (also removes version snapshots).
 // v0.9: ownerless designs stay link-editable; owned designs only delete
-// for their owner (403 otherwise).
+// for their owner (403 otherwise). v0.9.1: same-origin enforced (CSRF).
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   try {
     const { id } = await params
     const access = await resolveDesignAccess(req, id)

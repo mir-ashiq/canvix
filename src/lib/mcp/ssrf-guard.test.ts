@@ -207,6 +207,15 @@ describe('assertPublicHost', () => {
     await expect(assertPublicHost('nonexistent.example.invalid')).rejects.toThrow(/does not resolve/)
   })
 
+  it('rejects hostnames that resolve to loopback / link-local / metadata addresses', async () => {
+    lookupMock.mockResolvedValue([{ address: '127.0.0.1', family: 4 }])
+    await expect(assertPublicHost('loop.example.com')).rejects.toThrow(/resolves to private/)
+    lookupMock.mockResolvedValue([{ address: '169.254.169.254', family: 4 }])
+    await expect(assertPublicHost('meta.example.com')).rejects.toThrow(/resolves to private/)
+    lookupMock.mockResolvedValue([{ address: '::1', family: 6 }])
+    await expect(assertPublicHost('v6loop.example.com')).rejects.toThrow(/resolves to private/)
+  })
+
   it('allows hostnames that resolve only to public addresses', async () => {
     lookupMock.mockResolvedValue([
       { address: '93.184.216.34', family: 4 },
@@ -313,6 +322,29 @@ describe('safeFetch', () => {
     const transport = vi.fn().mockResolvedValue(res(200))
     await safeFetch('https://rebind.example.net/x', { transport })
     expect(transport.mock.calls[0][1]).toBe('203.0.114.10') // the pinned address
+  })
+
+  it('DNS CHANGES BETWEEN REQUESTS: a host that was public earlier is re-validated — and refused once it flips private', async () => {
+    // Request 1 succeeds against the then-public record…
+    lookupMock.mockResolvedValueOnce([{ address: '203.0.114.10', family: 4 }])
+    const transport = vi.fn().mockResolvedValue(res(200))
+    await safeFetch('https://flip.example.net/x', { transport })
+    expect(transport).toHaveBeenCalledTimes(1)
+    // …then DNS changes. The NEXT request must re-resolve and refuse —
+    // validation is per-request, never cached.
+    lookupMock.mockResolvedValueOnce([{ address: '10.0.0.9', family: 4 }])
+    await expect(safeFetch('https://flip.example.net/x', { transport })).rejects.toThrow(/resolves to private/)
+    expect(transport).toHaveBeenCalledTimes(1) // no second connection
+  })
+
+  it('DNS CHANGES MID-CHAIN: a redirect hop whose target has rebound to loopback is refused before connecting', async () => {
+    // initial host resolves public…
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }])
+    const transport = vi.fn().mockResolvedValue(res(302, { location: 'https://hop2.example.net/x' }))
+    // …but the redirect target now resolves to loopback
+    lookupMock.mockResolvedValueOnce([{ address: '127.0.0.1', family: 4 }])
+    await expect(safeFetch('https://start.example.com/r', { transport })).rejects.toThrow(/resolves to private/)
+    expect(transport).toHaveBeenCalledTimes(1) // connected to hop 1 only, never to loopback
   })
 })
 

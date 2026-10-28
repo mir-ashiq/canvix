@@ -11,6 +11,10 @@ export interface DesignMeta {
   thumbnail: string | null
   source: string
   ownerId: string | null
+  /** v0.9.1: ownerless + (this browser's attribution OR legacy) — i.e. the
+   *  signed-in account may claim this design. Foreign anonymous designs
+   *  are view/share-only and can never be claimed from here. */
+  claimable?: boolean
   deletedAt: string | null
   createdAt: string
   updatedAt: string

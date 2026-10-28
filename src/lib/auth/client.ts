@@ -84,10 +84,30 @@ export function useAuth(): AuthState & {
   return { ...state, refresh, login, register, logout }
 }
 
-/** Claim every ownerless design for the signed-in account. */
+/**
+ * Claim the ownerless designs attributed to THIS browser for the signed-in
+ * account (v0.9.1: server-side scoped to the caller's canvix_anon cookie —
+ * another person's anonymous work is never touched).
+ */
 export async function adoptAllDesigns(): Promise<number> {
   const res = await fetch('/api/designs/adopt-all', { method: 'POST' })
   if (!res.ok) throw new Error('adopt failed')
   const data = (await res.json()) as { adopted?: number }
   return data.adopted ?? 0
+}
+
+/**
+ * Deliberately claim ONE ownerless design (your own anonymous work, or a
+ * legacy design from before accounts existed). Foreign-attributed designs
+ * are refused by the server with 403 NOT_ELIGIBLE.
+ */
+export async function adoptDesign(id: string): Promise<{ ok: boolean; status: number; error?: string }> {
+  const res = await fetch(`/api/designs/${id}/adopt`, { method: 'POST' })
+  let data: Record<string, unknown> = {}
+  try {
+    data = (await res.json()) as Record<string, unknown>
+  } catch {
+    /* empty body */
+  }
+  return { ok: res.ok, status: res.status, error: typeof data.error === 'string' ? data.error : undefined }
 }

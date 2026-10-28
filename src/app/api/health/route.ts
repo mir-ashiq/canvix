@@ -16,6 +16,9 @@ const REQUIRED_TABLES = [
   'Presence',
   'Comment',
   'AIUsage',
+  // v0.9: accounts
+  'User',
+  'Session',
 ] as const
 
 export async function GET() {

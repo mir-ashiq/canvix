@@ -339,6 +339,9 @@ export interface DesignRecord extends DesignSnapshot {
   source: string
   createdAt: string
   updatedAt: string
+  /** v0.9: true when the design belongs to another account — the editor
+   * switches to view-only (no saves; mutating APIs answer 403). */
+  readOnly?: boolean
 }
 
 export interface TemplateRecord extends DesignSnapshot {

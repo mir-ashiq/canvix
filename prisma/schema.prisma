@@ -7,6 +7,33 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ── v0.9.0: accounts ─────────────────────────────────────────
+// Username/password accounts — deliberately self-contained (no email,
+// no OAuth, no external provider) so self-hosting stays free forever.
+// Passwords are scrypt hashes from node:crypto (see src/lib/auth/passwords.ts).
+model User {
+  id           String    @id @default(cuid())
+  // lowercase, 3–32 chars, [a-z0-9_-] (enforced in src/lib/auth/validate.ts)
+  username     String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  designs      Design[]  @relation("DesignOwner")
+  sessions     Session[]
+}
+
+// Opaque server-side sessions. The cookie carries the raw token; the row
+// id is sha256(token) — a DB leak never yields usable tokens.
+model Session {
+  id        String   @id // sha256(token) hex
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 // A user design / project — the core artifact of Canvix.
 model Design {
   id         String          @id @default(cuid())
@@ -17,11 +44,17 @@ model Design {
   pages      Json            @default("[]")
   thumbnail  String?         // small dataURL preview
   source     String          @default("blank") // blank | template:<id> | duplicate:<id> | resize:<id>
+  // v0.9: owning account. null = link-accessible design (pre-accounts
+  // behaviour — anonymous editing keeps working for legacy + shared links).
+  ownerId    String?
+  owner      User?           @relation("DesignOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   // soft delete (dashboard Trash) — null = live design
   deletedAt  DateTime?
   versions   DesignVersion[]
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
+
+  @@index([ownerId])
 }
 
 // Server-side version snapshots for a design (Canva "Version history").

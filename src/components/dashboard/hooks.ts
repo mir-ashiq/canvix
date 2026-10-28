@@ -10,6 +10,7 @@ export interface DesignMeta {
   height: number
   thumbnail: string | null
   source: string
+  ownerId: string | null
   deletedAt: string | null
   createdAt: string
   updatedAt: string

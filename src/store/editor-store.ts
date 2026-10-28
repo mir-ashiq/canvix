@@ -114,6 +114,10 @@ interface EditorState {
   openCrop: (id: string) => void
   closeCrop: () => void
 
+  // v0.9: read-only mode — the open design belongs to another account;
+  // autosave is disabled and the editor shows a view-only banner
+  readOnly: boolean
+
   // lifecycle
   loadDesign: (d: DesignRecord) => void
   rename: (name: string) => void
@@ -266,6 +270,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   manualGuides: [],
   versions: [],
   cropTargetId: null,
+  readOnly: false,
 
   loadDesign: (d) => {
     set({
@@ -285,6 +290,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       previewOpen: false,
       tool: 'select',
       cropTargetId: null,
+      readOnly: d.readOnly === true,
     })
     // v0.4: load server-side versions (Postgres); local list is the offline fallback
     const local = loadVersions(d.id)

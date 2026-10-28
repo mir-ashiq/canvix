@@ -10,7 +10,7 @@ permissions:
 jobs:
   setup:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -27,5 +27,13 @@ jobs:
 
       - name: Run database setup
         run: npm run db:setup
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      # v0.9: verify accounts + per-design ownership against the live DB
+      # (boots the built server, exercises register/login/me/adopt/403,
+      # removes its own probe rows afterwards).
+      - name: Smoke-test accounts & ownership
+        run: bash scripts/auth-e2e.sh
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

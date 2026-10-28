@@ -24,6 +24,7 @@ import {
 import { useAppStore } from '@/store/app-store'
 import { Logo } from '@/components/logo'
 import { Button } from '@/components/ui/button'
+import { useAuth } from '@/lib/auth/client'
 
 // ── Editor mockup (pure CSS, zero assets) ────────────────────
 
@@ -136,6 +137,7 @@ const TEMPLATE_SHOWCASE = [
 
 export function Landing() {
   const goDashboard = useAppStore((s) => s.goDashboard)
+  const { user } = useAuth()
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -156,8 +158,13 @@ export function Landing() {
                 <Github size={16} /> <span className="hidden sm:inline">GitHub</span>
               </Button>
             </a>
+            {user && (
+              <span className="hidden sm:inline text-xs font-medium text-muted-foreground">
+                @{user.username}
+              </span>
+            )}
             <Button size="sm" className="btn-brand-gradient rounded-full px-4" onClick={goDashboard}>
-              Start designing
+              {user ? 'Back to your designs' : 'Start designing'}
             </Button>
           </div>
         </nav>

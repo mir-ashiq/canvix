@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { resolveDesignAccess, NOT_YOUR_DESIGN } from '@/lib/auth/design-guard'
 
-// POST /api/designs/[id]/restore — restore a design from the Trash
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// POST /api/designs/[id]/restore — restore a design from the Trash.
+// v0.9: owner-only for owned designs (403 otherwise); ownerless unchanged.
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
+    const access = await resolveDesignAccess(req, id)
+    if (!access) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!access.canEdit) return NextResponse.json(NOT_YOUR_DESIGN, { status: 403 })
     const design = await db.design.update({
       where: { id },
       data: { deletedAt: null },

@@ -24,8 +24,9 @@ Free & open-source graphic design tool — a community-built [Canva](https://can
 
 Canvix is a browser-based design tool that lets anyone create social media posts,
 presentations, posters, logos and thumbnails — with a drag-and-drop editor, a
-60-template library and one-click export. It runs entirely on your own infrastructure, stores designs
-in your own database, and exports files locally in your browser. No accounts, no
+110-template library and one-click export. It runs entirely on your own infrastructure, stores designs
+in your own database, and exports files locally in your browser. Free accounts
+keep your designs yours; anonymous link-editing keeps working too. No
 watermarks, no paywalls.
 
 ## 🆓 Free forever — the promise
@@ -39,6 +40,8 @@ is a design tool that never asks you for a credit card:
 - All **exports** (PNG, JPG, SVG, PDF, video) are free and unwatermarked
 - All **AI features** (magic edit, magic write, background removal, translate)
   run against your own API keys, so there is nothing for us to meter
+- **Accounts are free** — username + password, no email, no verification,
+  no external provider; a self-hoster runs the whole thing for $0
 - **Self-hosting** is first-class: your server, your database, your rules
 - The license is **MIT** — you can even fork it and build a business on it
 
@@ -46,6 +49,32 @@ If anyone ever asks you to pay for Canvix, you are being scammed: the source
 is right here.
 
 ## 🎨 Features
+
+### v0.9.0 — Accounts & per-design ownership
+
+- **Free accounts, zero dependencies** — username + password with scrypt
+  hashing from `node:crypto` and opaque DB-backed sessions (HttpOnly,
+  SameSite=Lax cookies; the DB stores only sha256(token) so a leak never
+  yields usable sessions). No email, no OAuth, no external provider —
+  deliberately self-contained so self-hosting stays free forever.
+- **Per-design ownership** — designs you create while signed in are private
+  to your account: the dashboard scopes to “yours + shared”, and every
+  mutating API (save, delete, restore, version snapshot) answers 403 for
+  anyone else. Share links still open — in view-only mode with an honest
+  banner in the editor.
+- **Nothing breaks for existing setups** — ownerless designs keep the exact
+  pre-v0.9 link-editable behaviour. One click (**“Save all designs to my
+  account”**) migrates your existing library into your new account.
+- **Collab identity upgrade** — signed-in users appear under their real
+  username in presence, cursors and comments.
+- **DNS-rebinding pinning (SSRF close-out)** — the MCP server's `safeFetch`
+  now connects via a custom lookup pinned to the validated IP, closing the
+  TOCTOU window documented in v0.6.1. TLS keeps the real hostname for SNI,
+  so certificate validation is unaffected.
+- **End-to-end CI verification** — the “Canvix Database Setup” workflow now
+  boots the built server against your real database and exercises the whole
+  account + ownership flow (register → me → owned create → owner save →
+  anonymous 403 → logout → login) before cleaning up after itself.
 
 ### v0.8.0 — Supabase-ready infrastructure & the 110-template library
 
@@ -588,7 +617,8 @@ tool descriptions so agents pick the right format.
 - [x] MCP server (20 agent tools), tables, frames, curved text, embed cards *(v0.6.0)*
 - [x] Rendering performance (structural sharing, memoized nodes, O(1) undo) & the premium collection *(v0.7.0)*
 - [x] 110-template library, Supabase-first migrations & self-diagnosing setup *(v0.8.0)*
-- [ ] Accounts & per-design ownership (identity layer groundwork shipped in v0.5)
+- [x] Accounts & per-design ownership — free username/password accounts, private
+      designs, one-click migration of existing work, SSRF DNS pinning *(v0.9.0)*
 - [ ] Yjs-grade offline merge for collaboration
 - [ ] Audio/video elements & Beat Sync
 - [ ] Plugin system (external, installable apps)

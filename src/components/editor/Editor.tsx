@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { X, Keyboard } from 'lucide-react'
+import { X, Keyboard, Eye } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore, type PanelId } from '@/store/editor-store'
 import { TopBar } from './TopBar'
@@ -80,6 +80,7 @@ export default function Editor() {
   const goDashboard = useAppStore((s) => s.goDashboard)
   const loadDesign = useEditorStore((s) => s.loadDesign)
   const designId = useEditorStore((s) => s.designId)
+  const readOnly = useEditorStore((s) => s.readOnly)
   const panel = useEditorStore((s) => s.panel)
   const setPanel = useEditorStore((s) => s.setPanel)
   const dirty = useEditorStore((s) => s.dirty)
@@ -122,10 +123,13 @@ export default function Editor() {
   }, [])
 
   // ── autosave ───────────────────────────────────────────────
+  // v0.9: view-only designs (owned by another account) never autosave —
+  // the API would refuse with 403 anyway; skipping keeps the console
+  // clean and the “saved” indicator honest.
   const save = useCallback(
     async (withThumbnail: boolean) => {
       const state = useEditorStore.getState()
-      if (!state.designId || state.saving) return
+      if (!state.designId || state.saving || state.readOnly) return
       state.markSaving()
       try {
         let thumbnail: string | null = null
@@ -360,6 +364,11 @@ export default function Editor() {
   return (
     <div className="h-screen w-full flex flex-col bg-[#0F1015] overflow-hidden">
       <TopBar onSave={() => save(true)} onShortcuts={() => setShortcutsOpen(true)} />
+      {readOnly && (
+        <div className="flex items-center justify-center gap-2 bg-[#3B2A00] border-b border-[#F59E0B]/25 px-4 py-1.5 text-[12px] text-[#FBBF24]" role="status">
+          <Eye size={13} /> View-only — this design belongs to another account. Sign in as its owner to edit it.
+        </div>
+      )}
 
       <div className="flex flex-1 min-h-0">
         {/* desktop rail */}

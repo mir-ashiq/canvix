@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
+import { resolveDesignAccess, NOT_YOUR_DESIGN } from '@/lib/auth/design-guard'
 
 // GET /api/designs/[id]/versions — list server-side version snapshots (newest first)
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -30,13 +31,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 // POST /api/designs/[id]/versions — save a new version snapshot
+// v0.9: owner-only for owned designs (403 otherwise); ownerless unchanged.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const body = await req.json()
+    const access = await resolveDesignAccess(req, id)
+    if (!access) return NextResponse.json({ error: 'Design not found' }, { status: 404 })
+    if (!access.canEdit) return NextResponse.json(NOT_YOUR_DESIGN, { status: 403 })
 
-    const exists = await db.design.findUnique({ where: { id }, select: { id: true } })
-    if (!exists) return NextResponse.json({ error: 'Design not found' }, { status: 404 })
+    const body = await req.json()
 
     const version = await db.designVersion.create({
       data: {

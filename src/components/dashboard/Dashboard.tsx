@@ -26,6 +26,9 @@ import {
   Info,
   Heart,
   AlertTriangle,
+  LogIn,
+  LogOut,
+  FolderInput,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
@@ -34,6 +37,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DesignPreview } from '@/components/design-preview'
 import { McpCard } from '@/components/dashboard/McpCard'
+import { AuthDialog } from '@/components/auth/AuthDialog'
+import { useAuth, adoptAllDesigns } from '@/lib/auth/client'
 import { TEMPLATES } from '@/lib/templates'
 import { createPage, TEMPLATE_CATEGORIES, type TemplateRecord } from '@/lib/types'
 import { PRESET_SIZES } from '@/lib/editor-utils'
@@ -109,6 +114,13 @@ export function Dashboard() {
   const { designs, loading, refresh, dbIssue } = useDesigns()
   const isMobile = useIsMobile()
   const [helpOpen, setHelpOpen] = useState(false)
+
+  // v0.9: accounts — free forever, username + password
+  const { user, login, register, logout } = useAuth()
+  const [authOpen, setAuthOpen] = useState(false)
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
+  const [adopting, setAdopting] = useState(false)
+  const ownerlessCount = (designs ?? []).filter((d) => d.ownerId === null).length
 
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<string>('all')
@@ -348,22 +360,68 @@ export function Dashboard() {
             >
               <Plus size={16} /> <span className="hidden sm:inline">Custom size</span>
             </Button>
-            {/* ── account area (canva-style avatar menu) ── */}
+            {/* ── account area (v0.9: real accounts, free forever) ── */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   className="h-10 w-10 rounded-full bg-gradient-to-br from-[#02C0CC] to-[#7630D7] text-white text-[13px] font-extrabold flex items-center justify-center shrink-0 hover:brightness-110 transition-all"
                   aria-label="Account menu"
-                  title="Account"
+                  title={user ? `Signed in as ${user.username}` : 'Sign in — free forever'}
                 >
-                  CV
+                  {user ? user.username.slice(0, 2).toUpperCase() : 'CV'}
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 bg-[#16181D] border-white/10 text-white">
+              <DropdownMenuContent align="end" className="w-64 bg-[#16181D] border-white/10 text-white">
                 <div className="px-3 py-2.5 border-b border-white/[0.07]">
-                  <div className="text-[13px] font-semibold">Canvix creator</div>
-                  <div className="text-[11px] text-white/45">Free · open-source · local-first</div>
+                  {user ? (
+                    <>
+                      <div className="text-[13px] font-semibold text-[#00C4CC]">@{user.username}</div>
+                      <div className="text-[11px] text-white/45">Your designs are private to your account</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-[13px] font-semibold">You are browsing anonymously</div>
+                      <div className="text-[11px] text-white/45">Free account — keep your designs yours</div>
+                    </>
+                  )}
                 </div>
+                {user ? (
+                  <>
+                    {ownerlessCount > 0 && (
+                      <DropdownMenuItem
+                        className="gap-2"
+                        disabled={adopting}
+                        onClick={async () => {
+                          setAdopting(true)
+                          try {
+                            const adopted = await adoptAllDesigns()
+                            await refresh()
+                            toast({ title: `${adopted} design${adopted === 1 ? '' : 's'} moved into your account` })
+                          } catch {
+                            toast({ title: 'Could not adopt designs', variant: 'destructive' })
+                          } finally {
+                            setAdopting(false)
+                          }
+                        }}
+                      >
+                        <FolderInput size={14} /> {adopting ? 'Adopting…' : `Save all designs to my account (${ownerlessCount})`}
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem className="gap-2" onClick={() => void logout().then(() => refresh())}>
+                      <LogOut size={14} /> Sign out
+                    </DropdownMenuItem>
+                  </>
+                ) : (
+                  <>
+                    <DropdownMenuItem className="gap-2" onClick={() => { setAuthMode('login'); setAuthOpen(true) }}>
+                      <LogIn size={14} /> Sign in
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="gap-2" onClick={() => { setAuthMode('register'); setAuthOpen(true) }}>
+                      <LogIn size={14} /> Create a free account
+                    </DropdownMenuItem>
+                  </>
+                )}
+                <div className="my-1 border-t border-white/[0.07]" />
                 <DropdownMenuItem className="gap-2" onClick={() => setHelpOpen(true)}>
                   <CircleHelp size={14} /> Help &amp; shortcuts
                 </DropdownMenuItem>
@@ -861,6 +919,17 @@ export function Dashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── v0.9: account sign-in / sign-up ── */}
+      <AuthDialog
+        open={authOpen}
+        onOpenChange={setAuthOpen}
+        initialMode={authMode}
+        onAuthed={() => {
+          // the dashboard scope changes with the session — reload it
+          void refresh()
+        }}
+      />
     </div>
   )
 }

@@ -3,6 +3,85 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.0] — 2026-10-28
+
+The "Your designs, yours" release: free accounts, per-design ownership,
+and the SSRF DNS-pinning close-out promised in the Phase 3 plan.
+
+### Accounts — free forever, zero dependencies
+- **Username + password accounts** with scrypt hashing straight from
+  `node:crypto` (N=16384, r=8, p=1, per-hash random salt, parameters
+  stored alongside the hash for future cost upgrades) — no bcrypt/argon2
+  native builds, no external provider, no email. A self-hoster runs the
+  whole account system for $0.
+- **Opaque DB-backed sessions** — the cookie carries a 256-bit random
+  token; the `Session` row id is sha256(token), so a database leak never
+  contains usable session tokens. 30-day expiry, HttpOnly + SameSite=Lax
+  (+ Secure in production), server-side revocation on logout, and a
+  best-effort expiry sweep on every new session.
+- **Input rules** (NIST SP 800-63B-flavoured): usernames 3–32 chars of
+  `[a-z0-9_-]` canonicalised to lowercase; passwords 8–200 with a tiny
+  top-password blocklist. Login answers one generic error (no account
+  enumeration) and is rate-limited (10/10min/IP); register 5/hour/IP —
+  reusing the existing sliding-window limiter.
+
+### Per-design ownership
+- `Design.ownerId` (nullable FK → `User`, `SetNull` on user deletion,
+  indexed). Migration `0002_accounts` is purely additive.
+- **Three access cases, one helper** (`src/lib/auth/design-guard.ts`):
+  ownerless designs stay link-editable (the exact pre-v0.9 behaviour —
+  existing setups and intentionally shared designs keep working); the
+  owner has full edit; everyone else gets view-only.
+- Enforced at every mutating API — save (PUT), delete (DELETE), restore,
+  version snapshots — with a structured `403 READ_ONLY_DESIGN` body.
+  `GET /api/designs/[id]` still serves share links but now carries a
+  `readOnly` flag.
+- **Dashboard scoping** — signed-in users see their designs plus shared
+  (ownerless) ones; anonymous visitors see ownerless designs only.
+  New designs created while signed in are automatically owned.
+- **One-click migration** — "Save all designs to my account" adopts every
+  ownerless design into the signed-in account (`POST /api/designs/adopt-all`,
+  idempotent, never touches already-owned designs).
+- **Editor view-only mode** — autosave is disabled and an amber banner
+  explains why, instead of silently failing saves.
+
+### Collab identity
+- Signed-in users automatically appear under their real username in
+  presence, cursors and comments (the local participant identity is
+  upgraded on login; anonymous users keep the generated names).
+
+### Security — SSRF DNS-rebinding pinning (the v0.6.1 residual, closed)
+- `safeFetch` no longer uses `fetch()` for the exchange: it connects via
+  `node:http(s)` with a **custom DNS lookup pinned to the validated
+  address**. The guard resolves and range-checks every address, hands the
+  connection exactly that IP, and there is no second resolution — a
+  rebinding attack between validation and connect is now impossible.
+  TLS keeps the real hostname for SNI/Host, so certificate validation is
+  unaffected. The transport is injectable for tests; the suite now asserts
+  the pinned IP on every hop (including the rebinding scenario) and
+  exercises the real transport end-to-end against a local server.
+
+### Verification
+- 115 unit tests (10 new: scrypt round-trip/salting/tamper-resistance,
+  username/password rules, token derivation; SSRF suite upgraded to
+  assert pinning). `tsc --noEmit` clean, production build clean.
+- **`scripts/auth-e2e.sh`** — boots the built standalone server against a
+  real database and drives the whole flow with curl: register → me →
+  owned create → owner save → anonymous `403 READ_ONLY_DESIGN` → logout →
+  me(null) → wrong-password `401` → login → cleanup. Wired into the
+  "Canvix Database Setup" workflow, so every re-run of the workflow now
+  proves accounts + ownership against *your* live database before it
+  reports success.
+- `/api/health` now also checks for the `User` and `Session` tables and
+  tells you to re-run `npm run db:setup` after upgrading.
+
+### Upgrade notes
+- Run `npm run db:setup` once after pulling (applies `0002_accounts`).
+  Existing designs are untouched: they stay link-editable until you
+  choose "Save all designs to my account" while signed in.
+- Nothing else changes — anonymous/local editing works exactly as before
+  for anyone who never creates an account.
+
 ## [0.8.0] — 2026-10-28
 
 The "Supabase-ready & 110 Templates" release: switching your database to

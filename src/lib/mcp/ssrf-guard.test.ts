@@ -23,7 +23,10 @@ import {
   assertPublicHost,
   parseHttpUrl,
   safeFetch,
+  pinnedFetch,
+  type PinnedTransport,
 } from './ssrf-guard'
+import { createServer, type Server } from 'node:http'
 
 const PUBLIC_DNS = [{ address: '93.184.216.34', family: 4 }]
 
@@ -220,89 +223,136 @@ function res(status: number, headers: Record<string, string> = {}): Response {
 }
 
 describe('safeFetch', () => {
-  it('returns a normal 200 response after validating the host', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(res(200, { 'content-type': 'image/png' }))
-    vi.stubGlobal('fetch', fetchMock)
-    const out = await safeFetch('https://cdn.example.com/img.png')
+  it('returns a normal 200 response after validating the host, PINNED to the resolved IP', async () => {
+    const transport = vi.fn().mockResolvedValue(res(200, { 'content-type': 'image/png' }))
+    const out = await safeFetch('https://cdn.example.com/img.png', { transport })
     expect(out.status).toBe(200)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(String(fetchMock.mock.calls[0][0])).toBe('https://cdn.example.com/img.png')
+    expect(transport).toHaveBeenCalledTimes(1)
+    // v0.9: the connection address is the VALIDATED one from DNS
+    expect(transport.mock.calls[0][1]).toBe('93.184.216.34')
+    expect(transport.mock.calls[0][2]).toBe(4)
+    expect(transport.mock.calls[0][0].href).toBe('https://cdn.example.com/img.png')
   })
 
   it('REDIRECT BYPASS (the v0.6 bug): a public URL that 302s to a private IP is refused', async () => {
-    const fetchMock = vi
+    const transport = vi
       .fn()
       .mockResolvedValue(res(302, { location: 'http://169.254.169.254/latest/meta-data/' }))
-    vi.stubGlobal('fetch', fetchMock)
-    await expect(safeFetch('https://evil.example.com/redirect')).rejects.toThrow(
+    await expect(safeFetch('https://evil.example.com/redirect', { transport })).rejects.toThrow(
       /private|blocked/i,
     )
-    expect(fetchMock).toHaveBeenCalledTimes(1) // never connected to the metadata service
+    expect(transport).toHaveBeenCalledTimes(1) // never connected to the metadata service
   })
 
   it('redirect to an internal hostname is refused', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(res(301, { location: 'http://intranet.corp/secret' }))
-    vi.stubGlobal('fetch', fetchMock)
-    await expect(safeFetch('https://evil.example.com/r')).rejects.toThrow(/internal-looking|blocked/i)
+    const transport = vi.fn().mockResolvedValue(res(301, { location: 'http://intranet.corp/secret' }))
+    await expect(safeFetch('https://evil.example.com/r', { transport })).rejects.toThrow(/internal-looking|blocked/i)
   })
 
   it('redirect to a non-http protocol is refused', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(res(302, { location: 'file:///etc/passwd' }))
-    vi.stubGlobal('fetch', fetchMock)
-    await expect(safeFetch('https://evil.example.com/r')).rejects.toThrow(
+    const transport = vi.fn().mockResolvedValue(res(302, { location: 'file:///etc/passwd' }))
+    await expect(safeFetch('https://evil.example.com/r', { transport })).rejects.toThrow(
       /non-http|only http\(s\)/i,
     )
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(transport).toHaveBeenCalledTimes(1)
   })
 
-  it('follows redirects to PUBLIC hosts and returns the final response', async () => {
-    const fetchMock = vi
+  it('follows redirects to PUBLIC hosts — re-pinning on every hop', async () => {
+    const transport = vi
       .fn()
       .mockResolvedValueOnce(res(302, { location: 'https://mirror.example.org/real.png' }))
       .mockResolvedValueOnce(res(200, { 'content-type': 'image/png' }))
-    vi.stubGlobal('fetch', fetchMock)
-    const out = await safeFetch('https://cdn.example.com/img.png')
+    const out = await safeFetch('https://cdn.example.com/img.png', { transport })
     expect(out.status).toBe(200)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(String(fetchMock.mock.calls[1][0])).toBe('https://mirror.example.org/real.png')
+    expect(transport).toHaveBeenCalledTimes(2)
+    expect(transport.mock.calls[1][0].href).toBe('https://mirror.example.org/real.png')
+    // each hop is pinned to ITS OWN validated address
+    expect(transport.mock.calls[1][1]).toBe('93.184.216.34')
   })
 
   it('resolves RELATIVE redirect locations against the current URL', async () => {
-    const fetchMock = vi
+    const transport = vi
       .fn()
       .mockResolvedValueOnce(res(302, { location: '/deep/real.png' }))
       .mockResolvedValueOnce(res(200))
-    vi.stubGlobal('fetch', fetchMock)
-    await safeFetch('https://cdn.example.com/a/b/img.png')
-    expect(String(fetchMock.mock.calls[1][0])).toBe('https://cdn.example.com/deep/real.png')
+    await safeFetch('https://cdn.example.com/a/b/img.png', { transport })
+    expect(transport.mock.calls[1][0].href).toBe('https://cdn.example.com/deep/real.png')
   })
 
   it('refuses after MAX_REDIRECTS hops', async () => {
-    const fetchMock = vi.fn().mockImplementation(async () => res(302, { location: 'https://loop.example.com/next' }))
-    vi.stubGlobal('fetch', fetchMock)
-    await expect(safeFetch('https://loop.example.com/start')).rejects.toThrow(/too many redirects/i)
-    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(6) // 5 hops + initial
+    const transport = vi.fn().mockImplementation(async () => res(302, { location: 'https://loop.example.com/next' }))
+    await expect(safeFetch('https://loop.example.com/start', { transport })).rejects.toThrow(/too many redirects/i)
+    expect(transport.mock.calls.length).toBeLessThanOrEqual(6) // 5 hops + initial
   })
 
   it('refuses the initial URL itself when it is private', async () => {
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
-    await expect(safeFetch('http://192.168.1.1/admin')).rejects.toThrow(/private/i)
-    expect(fetchMock).not.toHaveBeenCalled()
+    const transport = vi.fn()
+    await expect(safeFetch('http://192.168.1.1/admin', { transport })).rejects.toThrow(/private/i)
+    expect(transport).not.toHaveBeenCalled()
   })
 
   it('refuses non-http initial URLs', async () => {
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
-    await expect(safeFetch('file:///etc/passwd')).rejects.toThrow(/only http\(s\)/i)
-    expect(fetchMock).not.toHaveBeenCalled()
+    const transport = vi.fn()
+    await expect(safeFetch('file:///etc/passwd', { transport })).rejects.toThrow(/only http\(s\)/i)
+    expect(transport).not.toHaveBeenCalled()
   })
 
-  it('never sends automatic redirects to fetch() (pinning is manual)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(res(200))
-    vi.stubGlobal('fetch', fetchMock)
-    await safeFetch('https://cdn.example.com/img.png')
-    const init = fetchMock.mock.calls[0][1] as RequestInit
+  it('hands the transport a manual-redirect init (pinning is manual)', async () => {
+    const transport = vi.fn().mockResolvedValue(res(200))
+    await safeFetch('https://cdn.example.com/img.png', { transport })
+    const init = transport.mock.calls[0][3] as RequestInit
     expect(init.redirect).toBe('manual')
+  })
+
+  it('DNS REBINDING (the v0.6.1 residual): a name that flips to a private IP after validation cannot be reached', async () => {
+    // The guard resolves the name (public) and hands the transport the
+    // validated address. Even if real DNS rebound a moment later, the
+    // connection still goes to the validated IP — there is no second
+    // lookup. This test asserts the invariant the pin enforces.
+    lookupMock.mockResolvedValue([{ address: '203.0.114.10', family: 4 }])
+    const transport = vi.fn().mockResolvedValue(res(200))
+    await safeFetch('https://rebind.example.net/x', { transport })
+    expect(transport.mock.calls[0][1]).toBe('203.0.114.10') // the pinned address
+  })
+})
+
+// ── pinnedFetch: the real transport, exercised end-to-end ─────
+
+describe('pinnedFetch (default transport)', () => {
+  let server: Server
+  let port: number
+  let sawHost: string | null = null
+
+  beforeEach(async () => {
+    sawHost = null
+    server = createServer((req, res) => {
+      sawHost = req.headers.host ?? null
+      res.writeHead(200, { 'content-type': 'text/plain' })
+      res.end('hello from pinned')
+    })
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()))
+    port = (server.address() as { port: number }).port
+  })
+
+  afterEach(async () => {
+    await new Promise<void>((r) => server.close(() => r()))
+  })
+
+  it('connects to the PINNED address while sending the real hostname', async () => {
+    // example.test would normally resolve via DNS — but the pin forces the
+    // connection to 127.0.0.1:port. If the lookup were not pinned, this
+    // request would fail (NXDOMAIN / wrong host).
+    const url = new URL(`http://pin-target.example.test:${port}/x`)
+    const out = await pinnedFetch(url, '127.0.0.1', 4, {})
+    expect(out.status).toBe(200)
+    expect(await out.text()).toBe('hello from pinned')
+    // the Host header still carries the ORIGINAL hostname, not the IP
+    expect(sawHost).toBe(`pin-target.example.test:${port}`)
+  })
+
+  it('rejects when the pinned address is unreachable', async () => {
+    // port 1 on loopback: nothing listens there — connection refused
+    const url = new URL('http://pin-target.example.test:1/x')
+    await expect(pinnedFetch(url, '127.0.0.1', 4, {})).rejects.toThrow()
   })
 })

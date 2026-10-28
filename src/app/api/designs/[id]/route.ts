@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
+import { resolveDesignAccess, NOT_YOUR_DESIGN } from '@/lib/auth/design-guard'
 
 // Normalise incoming pages payload (accepts object or legacy JSON string)
 // into a value suitable for the Postgres jsonb column.
@@ -11,13 +12,17 @@ function toPages(value: unknown): Prisma.InputJsonValue {
   return (value ?? []) as Prisma.InputJsonValue
 }
 
-// GET /api/designs/[id] — full design incl. pages
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// GET /api/designs/[id] — full design incl. pages.
+// v0.9: open to anyone with the link (share/view), but carries a
+// `readOnly` flag when the design belongs to another account so the
+// editor can switch to view-only mode.
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const design = await db.design.findUnique({ where: { id } })
-    if (!design) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    return NextResponse.json({ ...design, pages: design.pages ?? [] })
+    const access = await resolveDesignAccess(req, id)
+    if (!access) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const design = access.design
+    return NextResponse.json({ ...design, pages: design.pages ?? [], readOnly: !access.canEdit })
   } catch (error) {
     console.error('GET /api/designs/[id] failed', error)
     return NextResponse.json({ error: 'Failed to get design' }, { status: 500 })
@@ -25,9 +30,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 // PUT /api/designs/[id] — save design (name / pages / thumbnail)
+// v0.9: ownerless designs stay link-editable; owned designs only save
+// for their owner (403 otherwise).
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
+    const access = await resolveDesignAccess(req, id)
+    if (!access) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!access.canEdit) return NextResponse.json(NOT_YOUR_DESIGN, { status: 403 })
+
     const body = await req.json()
     const data: Record<string, unknown> = {}
     if (typeof body.name === 'string' && body.name.trim()) data.name = body.name.trim().slice(0, 120)
@@ -47,9 +58,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 // DELETE /api/designs/[id] — move to Trash (soft delete).
 // ?permanent=1 → delete permanently (also removes version snapshots).
+// v0.9: ownerless designs stay link-editable; owned designs only delete
+// for their owner (403 otherwise).
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
+    const access = await resolveDesignAccess(req, id)
+    if (!access) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!access.canEdit) return NextResponse.json(NOT_YOUR_DESIGN, { status: 403 })
+
     if (req.nextUrl.searchParams.get('permanent') === '1') {
       await db.design.delete({ where: { id } })
       return NextResponse.json({ ok: true, permanent: true })

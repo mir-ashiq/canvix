@@ -13,15 +13,19 @@
 //   3. hostnames are checked against an intranet blocklist and
 //      must NOT be bare (dot-less) names
 //   4. DNS is resolved and EVERY resolved address must be public
-//
-// Known residual risk (documented, accepted for v0.6.1): a DNS
-// rebinding TOCTOU — the guard resolves the name, then fetch()
-// resolves it again. Pinning the connection IP would break TLS
-// SNI for https targets; that is Phase 3 work alongside auth.
+//   5. v0.9 (Phase 3 close-out): the connection is PINNED to the
+//      validated address — the transport uses a custom DNS lookup
+//      that only ever returns the already-validated IP, closing the
+//      DNS-rebinding TOCTOU window (guard resolves, fetch would
+//      re-resolve). TLS keeps the real hostname for SNI, so
+//      certificate validation is unaffected.
 // ─────────────────────────────────────────────────────────────
 
 import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
+import { request as httpRequest } from 'node:http'
+import { request as httpsRequest } from 'node:https'
+import { Readable } from 'node:stream'
 
 export const MAX_REDIRECTS = 5
 
@@ -123,17 +127,19 @@ export function isBlockedHostname(hostname: string): boolean {
  * hostname resolves to must be public, otherwise the request is refused.
  * This also defeats decimal/octal/hex IP encodings (e.g. http://2130706433/)
  * because the resolver normalizes them before the range check.
+ *
+ * v0.9: returns the validated address the connection will be PINNED to.
  */
-export async function assertPublicHost(hostname: string): Promise<void> {
+export async function resolvePublicHost(hostname: string): Promise<{ address: string; family: number }> {
   const h = normalizeHost(hostname)
   const version = isIP(h)
   if (version === 4) {
     if (isPrivateV4(h)) throw new Error(`Blocked target ${h}: private/reserved IP address.`)
-    return
+    return { address: h, family: 4 }
   }
   if (version === 6) {
     if (isPrivateV6(h)) throw new Error(`Blocked target ${h}: private/reserved IP address.`)
-    return
+    return { address: h, family: 6 }
   }
   if (isBlockedHostname(h)) throw new Error(`Blocked hostname "${h}": internal-looking name.`)
   let addrs: Array<{ address: string; family: number }>
@@ -147,6 +153,12 @@ export async function assertPublicHost(hostname: string): Promise<void> {
     const priv = family === 6 ? isPrivateV6(address) : isPrivateV4(address)
     if (priv) throw new Error(`Blocked target "${h}": resolves to private address ${address}.`)
   }
+  return addrs[0]
+}
+
+/** Back-compat wrapper: validate without returning the pin. */
+export async function assertPublicHost(hostname: string): Promise<void> {
+  await resolvePublicHost(hostname)
 }
 
 // ── protocol + URL validation ────────────────────────────────
@@ -166,25 +178,117 @@ export function parseHttpUrl(raw: string): URL {
 
 // ── the safe fetch ───────────────────────────────────────────
 
+/** Connection-layer function: performs the HTTP(S) exchange against a
+ *  pre-validated IP while presenting `url`'s hostname (Host header + TLS SNI). */
+export type PinnedTransport = (
+  url: URL,
+  ip: string,
+  family: number,
+  init: RequestInit
+) => Promise<Response>
+
 export interface SafeFetchOptions extends RequestInit {
   /** max redirect hops that will be followed (default 5) */
   maxRedirects?: number
+  /** @internal transport override — used by the test suite to observe
+   *  the pinned address without real network I/O */
+  transport?: PinnedTransport
 }
 
+function normalizeHeaders(h: HeadersInit | undefined): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!h) return out
+  if (h instanceof Headers) {
+    h.forEach((v, k) => {
+      out[k] = v
+    })
+  } else if (Array.isArray(h)) {
+    for (const [k, v] of h) out[k] = v
+  } else {
+    for (const [k, v] of Object.entries(h)) out[k] = String(v)
+  }
+  return out
+}
+
+/** Default transport: node:http(s) with a DNS lookup pinned to the
+ *  validated address — the connection can never drift to a rebound
+ *  record between validation and connect. */
+export const pinnedFetch: PinnedTransport = (url, ip, family, init) =>
+  new Promise<Response>((resolve, reject) => {
+    const lib = url.protocol === 'https:' ? httpsRequest : httpRequest
+    let settled = false
+    const fail = (err: unknown) => {
+      if (!settled) {
+        settled = true
+        reject(err instanceof Error ? err : new Error(String(err)))
+      }
+    }
+    let req: import('node:http').ClientRequest
+    try {
+      req = lib(url, {
+        method: init.method ?? 'GET',
+        headers: normalizeHeaders(init.headers),
+        signal: init.signal ?? undefined,
+        // THE PIN: net/tls ask this lookup for the address; it can only
+        // ever answer with the address the SSRF validation approved.
+        lookup: (
+          _hostname: string,
+          _opts: unknown,
+          cb: (err: null, addresses: Array<{ address: string; family: number }>) => void
+        ) => {
+          cb(null, [{ address: ip, family }])
+        },
+      })
+    } catch (err) {
+      fail(err)
+      return
+    }
+    req.on('error', fail)
+    req.on('response', (res) => {
+      const headers = new Headers()
+      for (const [k, v] of Object.entries(res.headers)) {
+        if (Array.isArray(v)) v.forEach((x) => headers.append(k, x))
+        else if (v != null) headers.set(k, String(v))
+      }
+      settled = true
+      resolve(
+        new Response(Readable.toWeb(res) as unknown as ReadableStream, {
+          status: res.statusCode ?? 200,
+          statusText: res.statusMessage ?? '',
+          headers,
+        })
+      )
+    })
+    if (init.body != null) {
+      const b = init.body
+      if (typeof b === 'string' || Buffer.isBuffer(b) || b instanceof Uint8Array || b instanceof ArrayBuffer) {
+        req.write(b)
+      } else {
+        fail(new Error('safeFetch: unsupported body type for a pinned request.'))
+        req.destroy()
+        return
+      }
+    }
+    req.end()
+  })
+
 /**
- * fetch() with SSRF-hardened, manually-followed redirects. Every hop
- * (initial URL included) passes assertPublicHost() BEFORE the connection
- * is made. Non-http(s) redirect targets are refused. Callers may pass an
- * AbortSignal in options — it spans the whole hop chain.
+ * fetch() with SSRF-hardened, manually-followed redirects and a connection
+ * pinned to the validated address. Every hop (initial URL included) passes
+ * resolvePublicHost() BEFORE the connection is made, and the connection then
+ * uses that exact address (no second DNS resolution — rebinding between the
+ * check and the connect is no longer possible). Non-http(s) redirect targets
+ * are refused. Callers may pass an AbortSignal in options — it spans the
+ * whole hop chain.
  */
 export async function safeFetch(url: string, options: SafeFetchOptions = {}): Promise<Response> {
-  const { maxRedirects = MAX_REDIRECTS, ...init } = options
+  const { maxRedirects = MAX_REDIRECTS, transport = pinnedFetch, ...init } = options
   let current = parseHttpUrl(url)
 
   for (let hop = 0; ; hop++) {
-    await assertPublicHost(current.hostname)
+    const { address, family } = await resolvePublicHost(current.hostname)
 
-    const res = await fetch(current, { ...init, redirect: 'manual' })
+    const res = await transport(current, address, family, { ...init, redirect: 'manual' })
 
     if (res.status >= 300 && res.status < 400) {
       const location = res.headers.get('location')

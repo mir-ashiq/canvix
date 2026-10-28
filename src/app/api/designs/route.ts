@@ -22,10 +22,12 @@ function toPages(value: unknown): Prisma.InputJsonValue {
 // designs; anonymous visitors see ownerless designs only. Owned designs
 // are private to their account.
 //
-// v0.9.1: each ownerless row carries `claimable` — true when the signed-in
-// (or anonymous) caller's browser is the author of the design, or when the
-// design predates attribution (legacy). The anonKey hash itself is never
-// returned, only the boolean decision.
+// v0.9.1: each ownerless row carries two flags (the anonKey hash itself is
+// never returned):
+//   claimable — eligible for the per-design "Save to my account" action
+//               (this browser's attribution OR a legacy pre-accounts row)
+//   mine      — attributed to THIS browser; the only rows the bulk
+//               "Save my designs" action will claim
 export async function GET(req: NextRequest) {
   try {
     const trash = req.nextUrl.searchParams.get('trash') === '1'
@@ -57,6 +59,7 @@ export async function GET(req: NextRequest) {
     const out = designs.map(({ anonKey, ...d }) => ({
       ...d,
       claimable: d.ownerId === null && (anonKey === null || anonKey === myHash),
+      mine: d.ownerId === null && anonKey !== null && anonKey === myHash,
     }))
     return NextResponse.json(out)
   } catch (error) {

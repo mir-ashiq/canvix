@@ -116,13 +116,15 @@ export function Dashboard() {
   const [helpOpen, setHelpOpen] = useState(false)
 
   // v0.9: accounts — free forever, username + password
-  const { user, login, register, logout } = useAuth()
+  const { user, login, register, logout, refresh: refreshAuth } = useAuth()
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [adopting, setAdopting] = useState(false)
-  // v0.9.1: only designs attributed to THIS browser (or legacy rows) are
-  // bulk-claimable — the server enforces the same rule, this is just the count.
-  const claimableCount = (designs ?? []).filter((d) => d.claimable === true).length
+  // v0.9.1: the BULK action only claims designs attributed to THIS browser
+  // (server enforces the same). Legacy (pre-accounts) designs are claimable
+  // one-by-one, or deliberately in bulk via the explicit legacy item below.
+  const mineCount = (designs ?? []).filter((d) => d.mine === true).length
+  const legacyCount = (designs ?? []).filter((d) => d.ownerId === null && d.claimable === true && d.mine !== true).length
 
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<string>('all')
@@ -389,7 +391,7 @@ export function Dashboard() {
                 </div>
                 {user ? (
                   <>
-                    {claimableCount > 0 && (
+                    {mineCount > 0 && (
                       <DropdownMenuItem
                         className="gap-2"
                         disabled={adopting}
@@ -406,10 +408,36 @@ export function Dashboard() {
                           }
                         }}
                       >
-                        <FolderInput size={14} /> {adopting ? 'Adopting…' : `Save my designs to this account (${claimableCount})`}
+                        <FolderInput size={14} /> {adopting ? 'Adopting…' : `Save my designs to this account (${mineCount})`}
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem className="gap-2" onClick={() => void logout().then(() => refresh())}>
+                    {legacyCount > 0 && (
+                      <DropdownMenuItem
+                        className="gap-2"
+                        disabled={adopting}
+                        onClick={async () => {
+                          const ok = window.confirm(
+                            `Adopt ${legacyCount} legacy design${legacyCount === 1 ? '' : 's'} created before accounts existed?\n\n` +
+                              'Only do this if this Canvix instance (or its shared designs) is yours — ' +
+                              'on a shared deployment, legacy designs may include other people\u2019s work.',
+                          )
+                          if (!ok) return
+                          setAdopting(true)
+                          try {
+                            const adopted = await adoptAllDesigns(true)
+                            await Promise.all([refreshAuth(), refresh()])
+                            toast({ title: `${adopted} design${adopted === 1 ? '' : 's'} moved into your account` })
+                          } catch {
+                            toast({ title: 'Could not adopt designs', variant: 'destructive' })
+                          } finally {
+                            setAdopting(false)
+                          }
+                        }}
+                      >
+                        <FolderInput size={14} /> Adopt legacy (pre-accounts) designs ({legacyCount})
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem className="gap-2" onClick={() => void logout().then(() => { void refreshAuth(); void refresh() })}>
                       <LogOut size={14} /> Sign out
                     </DropdownMenuItem>
                   </>
@@ -943,7 +971,8 @@ export function Dashboard() {
         onOpenChange={setAuthOpen}
         initialMode={authMode}
         onAuthed={() => {
-          // the dashboard scope changes with the session — reload it
+          // the session changed — re-read auth state AND the dashboard scope
+          void refreshAuth()
           void refresh()
         }}
       />

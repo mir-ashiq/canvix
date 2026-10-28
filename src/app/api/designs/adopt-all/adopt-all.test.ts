@@ -22,11 +22,15 @@ import { ANON_COOKIE, anonKeyHash } from '@/lib/auth/anon'
 
 const USER = { id: 'user-1', username: 'ashiq', createdAt: new Date() }
 
-function post(opts: { cookie?: string; origin?: string } = {}) {
+function post(opts: { cookie?: string; origin?: string; body?: unknown } = {}) {
   const headers: Record<string, string> = { host: 'canvix.test' }
   if (opts.cookie) headers.cookie = opts.cookie
   if (opts.origin) headers.origin = opts.origin
-  const req = new NextRequest('http://canvix.test/api/designs/adopt-all', { method: 'POST', headers })
+  const req = new NextRequest('http://canvix.test/api/designs/adopt-all', {
+    method: 'POST',
+    headers,
+    ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+  })
   return POST(req)
 }
 
@@ -67,7 +71,37 @@ describe('POST /api/designs/adopt-all', () => {
     // Foreign anonymous designs (other hashes) and legacy rows (null)
     // are outside this UPDATE by construction.
     expect(dbMock.design.updateMany).toHaveBeenCalledWith({
-      where: { ownerId: null, anonKey: anonKeyHash(token) },
+      where: { ownerId: null, OR: [{ anonKey: anonKeyHash(token) }] },
+      data: { ownerId: USER.id },
+    })
+  })
+
+  it('includeLegacy opt-in adds ONLY legacy rows — foreign attributions still excluded', async () => {
+    const token = 'browser-a-token'
+    dbMock.design.updateMany.mockResolvedValue({ count: 10 })
+    const res = await post({ cookie: `${ANON_COOKIE}=${token}`, body: { includeLegacy: true } })
+    expect(res.status).toBe(200)
+    expect(dbMock.design.updateMany).toHaveBeenCalledWith({
+      where: { ownerId: null, OR: [{ anonKey: anonKeyHash(token) }, { anonKey: null }] },
+      data: { ownerId: USER.id },
+    })
+  })
+
+  it('includeLegacy with NO attribution cookie claims only legacy rows', async () => {
+    dbMock.design.updateMany.mockResolvedValue({ count: 7 })
+    const res = await post({ body: { includeLegacy: true } })
+    expect(res.status).toBe(200)
+    expect(dbMock.design.updateMany).toHaveBeenCalledWith({
+      where: { ownerId: null, OR: [{ anonKey: null }] },
+      data: { ownerId: USER.id },
+    })
+  })
+
+  it('non-boolean includeLegacy is ignored (strict opt-in)', async () => {
+    const res = await post({ cookie: `${ANON_COOKIE}=t`, body: { includeLegacy: 'yes' } })
+    expect(res.status).toBe(200)
+    expect(dbMock.design.updateMany).toHaveBeenCalledWith({
+      where: { ownerId: null, OR: [{ anonKey: anonKeyHash('t') }] },
       data: { ownerId: USER.id },
     })
   })

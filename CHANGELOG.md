@@ -26,8 +26,14 @@ called for exists as executable tests.
   `403 NOT_ELIGIBLE`; races between two claimants are resolved atomically
   by a conditional `updateMany` (`409` on loss).
 - **Dashboard** shows the honest claimable count ("Save my designs to
-  this account (N)") and a per-design "Save to my account" action; the
-  list API exposes a boolean `claimable` per design (never the hash).
+  this account (N)" counts only browser-attributed designs), a per-design
+  "Save to my account" action, and — for self-hosters — a separate,
+  confirmation-guarded "Adopt legacy (pre-accounts) designs" bulk item
+  (`adopt-all { includeLegacy: true }`; foreign attributions remain
+  excluded even then). The list API exposes boolean `claimable` and
+  `mine` flags per design (never the hash). Dialog-driven sign-in/up now
+  refreshes the dashboard's auth state immediately (the account chip no
+  longer waits for a reload).
 
 ### CSRF protection for cookie-authenticated writes
 - Every mutating API route (`POST /api/designs`, `PUT`/`DELETE` on a

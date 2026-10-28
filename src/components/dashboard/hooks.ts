@@ -15,6 +15,9 @@ export interface DesignMeta {
    *  signed-in account may claim this design. Foreign anonymous designs
    *  are view/share-only and can never be claimed from here. */
   claimable?: boolean
+  /** v0.9.1: ownerless AND attributed to this exact browser — the only rows
+   *  the bulk "Save my designs" action will claim. */
+  mine?: boolean
   deletedAt: string | null
   createdAt: string
   updatedAt: string

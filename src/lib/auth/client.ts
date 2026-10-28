@@ -88,9 +88,17 @@ export function useAuth(): AuthState & {
  * Claim the ownerless designs attributed to THIS browser for the signed-in
  * account (v0.9.1: server-side scoped to the caller's canvix_anon cookie —
  * another person's anonymous work is never touched).
+ *
+ * `includeLegacy` additionally claims pre-accounts (legacy) rows — the
+ * deliberate, confirmed path for self-hosters; the UI guards it behind a
+ * confirmation dialog.
  */
-export async function adoptAllDesigns(): Promise<number> {
-  const res = await fetch('/api/designs/adopt-all', { method: 'POST' })
+export async function adoptAllDesigns(includeLegacy = false): Promise<number> {
+  const res = await fetch('/api/designs/adopt-all', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ includeLegacy }),
+  })
   if (!res.ok) throw new Error('adopt failed')
   const data = (await res.json()) as { adopted?: number }
   return data.adopted ?? 0

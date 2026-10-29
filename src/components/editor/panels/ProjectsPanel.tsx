@@ -28,9 +28,16 @@ export function ProjectsPanel() {
 
   useEffect(() => {
     let alive = true
-    fetch('/api/designs')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((rows: DesignRow[]) => { if (alive) setDesigns(rows) })
+    // v0.11.2 fix: /api/designs is keyset-paginated since v0.9.2 and returns
+    // { designs: [...], nextCursor } — this panel still assumed the pre-v0.9.2
+    // bare array, so the envelope object hit `.filter()` and crashed the whole
+    // editor tree ("This page couldn't load"). The panel is a quick switcher;
+    // the first page (60 rows, newest first) is the right scope.
+    fetch('/api/designs', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('failed'))))
+      .then((body: { designs?: DesignRow[] }) => {
+        if (alive) setDesigns(Array.isArray(body?.designs) ? body.designs : [])
+      })
       .catch(() => { if (alive) setDesigns([]) })
     return () => { alive = false }
   }, [])

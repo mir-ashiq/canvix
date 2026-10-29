@@ -12,4 +12,20 @@ import { defineCloudflareConfig } from "@opennextjs/cloudflare";
 // r2IncrementalCache:
 //   import r2IncrementalCache from "@opennextjs/cloudflare/overrides/incremental-cache/r2-incremental-cache";
 //   export default defineCloudflareConfig({ incrementalCache: r2IncrementalCache });
-export default defineCloudflareConfig();
+//
+// v0.11.2: `buildCommand` breaks a recursion. `opennextjs-cloudflare
+// build` builds the Next.js app by spawning the project's own
+// `npm run build` (its default buildCommand). Since scripts/build.mjs
+// routes `npm run build` to `opennextjs-cloudflare build` inside
+// Cloudflare Workers Builds (WORKERS_CI=1), the default would recurse
+// forever: build → opennext build → npm run build → opennext build → …
+// Spawning `next build` directly is equivalent (the env-var standalone
+// mode OpenNext sets still applies) and terminates. This also makes the
+// manual `npm run preview` / `deploy` / `upload` scripts leaner — they
+// no longer re-run the standalone copy steps inside the spawned build.
+const config = {
+  ...defineCloudflareConfig(),
+  buildCommand: "next build",
+};
+
+export default config;

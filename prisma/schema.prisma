@@ -175,6 +175,29 @@ model Comment {
   @@index([designId, resolved])
 }
 
+// ── v0.11: media store (audio/video uploads) ─────────────────
+// A/V files are far too large for the dataURL-in-element pattern images
+// use (multi-MB per autosave). They live here as bytea; elements
+// reference them by id (`/api/media/<id>`). Chunks are appended with a
+// raw `bytes || chunk` UPDATE (offset-guarded) because serverless body
+// limits force chunked uploads. Access mirrors designs: link-accessible
+// once the id is known; ownership columns exist for future GC/quota.
+model Media {
+  id          String    @id @default(cuid())
+  mime        String
+  size        Int
+  bytes       Bytes
+  ownerId     String?
+  anonKey     String?
+  // set by finalize — GET 404s until the upload is complete
+  finalizedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([ownerId])
+  @@index([anonKey])
+  @@index([finalizedAt, createdAt])
+}
+
 // Provider accounting + abuse telemetry for AI routes.
 model AIUsage {
   id        String   @id @default(cuid())

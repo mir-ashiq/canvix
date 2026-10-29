@@ -3,6 +3,53 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.0] — 2026-10-29
+
+The "sound & motion" release: native audio/video elements, a chunked
+media store, and Beat Sync. Full design: `research/MEDIA-AND-BEAT-SYNC.md`.
+
+### Audio & video elements
+- **Audio** renders as a waveform player card (peaks baked in at upload,
+  so every replica draws it without the multi-MB file) with volume,
+  loop, "play on page open" and a BPM chip when a tempo was detected.
+- **Video** renders its poster frame on the canvas (dataURL, replicates
+  through the document) and plays frames in preview/present, with
+  volume, mute, loop, autoplay and a trim window.
+- **Media store** (migration `0005`): A/V files live in Postgres `bytea`
+  behind `/api/media/<id>` — **chunked uploads** (3 MB per PATCH) work
+  within every serverless body limit; appends are offset-guarded so
+  replayed chunks 409 instead of corrupting the stream; GET is
+  Range-aware (206/416) with immutable caching; `CANVIX_MAX_MEDIA_MB`
+  (default 32) caps file size; unfinalized uploads GC after 24 h.
+
+### Beat Sync
+- Uploading audio analyzes it in-browser (pure DSP, unit-tested):
+  onset envelope → mean-centered autocorrelation tempo (60–180 BPM,
+  harmonic-checked toward 90–180) → phase-aligned beat grid, capped at
+  480 beats. No grid detected → the feature simply stays hidden.
+- Any element gets a **Beat** popover (0–100 % pulse) when its page has
+  a beat-carrying audio element; pulses run in preview, presentation
+  and video export, composing with entry animations.
+
+### Playback & export
+- Preview/present plays page audio, swaps video posters for live
+  `<video>` frames, and rAF-drives beat pulses off the audio clock.
+- Video export renders media cards + beat pulses and **muxes the page
+  audio** (best-effort: needs a MediaRecorder mime with an audio codec;
+  otherwise a correct silent video). Honest limitation: exports render
+  the video poster, not moving frames.
+
+### Verification
+- 285 unit tests (18 new: click tracks at 90/120/140/160 BPM, silence,
+  white noise — which caught and fixed a false-tempo autocorrelation
+  bias — grid spacing, envelope decay, source selection).
+- `scripts/verify-media.ts` — live probe, **19/19 green** against the
+  production DB: two-chunk byte-exact round-trip, offset-guard replay
+  → 409, finalize guards, Range 206/416, immutable headers, audio
+  element save/load round-trip, mime/size/CSRF rejections.
+- Offline-merge regression probe still 18/18; Cloudflare 2.14 MB gz /
+  Netlify 19.6 MB zip unchanged.
+
 ## [0.10.1] — 2026-10-29
 
 Production hotfix: the presence P2002 storm + 30-second function hangs.

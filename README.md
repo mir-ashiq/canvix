@@ -245,7 +245,14 @@ is right here.
   is rendered frame-by-frame to an offscreen canvas and encoded locally via
   MediaRecorder — **MP4 (H.264)** where the browser can encode it, WebM otherwise.
   Honest format detection is shown before you export. No uploads, no server
-  rendering
+  rendering. Since **v0.11** the page's audio is muxed into the recording
+  (best-effort per browser) and beat-synced pulses render into the video
+- **Audio/video elements & Beat Sync** *(v0.11)* — upload MP3/WAV/MP4/WebM
+  through the chunked media store (works within every serverless body limit);
+  audio renders as a waveform card with the tempo detected in-browser, video
+  as a poster frame. Media plays in Preview/Present, and **any element can
+  pulse on the music's beats** — in the editor preview, presentation and
+  exported video. See `research/MEDIA-AND-BEAT-SYNC.md`
 - **AI Assistant 2.0** — the assistant is now design-aware: it sees your page's
   elements, colors, fonts and selection, and answers with **structured, validated
   actions** ("move the title to the top", "change all heading colors to purple",
@@ -717,7 +724,9 @@ tool descriptions so agents pick the right format.
 - [x] Yjs-grade offline merge for collaboration — HLC-stamped element
       LWW + delete tombstones, persisted offline doc/op-queue (IndexedDB),
       server-side merge on divergent autosaves *(v0.10.0)*
-- [ ] Audio/video elements & Beat Sync
+- [x] Audio/video elements & Beat Sync — chunked media store (bytea +
+      Range streaming), in-browser tempo/beat analysis, per-element beat
+      pulses in preview/present/export *(v0.11.0)*
 - [ ] Plugin system (external, installable apps)
 
 ## 🤝 Contributing

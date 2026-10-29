@@ -1,13 +1,10 @@
 // Seed the Canvix database with built-in templates.
 // Run: npm run db:seed   (or as part of: npm run db:setup)
-import { PrismaClient, Prisma } from '@prisma/client'
+import { Prisma } from '../src/generated/prisma/client'
 import { TEMPLATES } from '../src/lib/templates'
-import { normalizeDatabaseUrl } from '../src/lib/db-url'
+import { createScriptClient } from '../src/lib/db-script'
 
-// v0.8: Supabase-ready — apply sslmode/pgbouncer defaults before connecting.
-process.env.DATABASE_URL = normalizeDatabaseUrl(process.env.DATABASE_URL)
-
-const db = new PrismaClient()
+const db = createScriptClient()
 
 // Typed template list cast for the Postgres jsonb column.
 const pagesOf = (t: (typeof TEMPLATES)[number]) =>

@@ -1,0 +1,15 @@
+# Canvix — Cloudflare Workers local preview secrets
+#
+# Copy to `.dev.vars` (gitignored) and fill in real values.
+# Used by `npm run preview` (opennextjs-cloudflare preview → wrangler dev).
+# Production equivalents: `npx wrangler secret put <NAME>`.
+
+# ── Database (required) ───────────────────────────────────────
+# Use the Supabase TRANSACTION POOLER URL (port 6543) — Workers cannot
+# reach the IPv6-only direct endpoint, and the pooler multiplexes the
+# many short-lived Worker isolates onto few real Postgres connections.
+DATABASE_URL=postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
+
+# ── AI provider (optional — all local features work without it) ──
+# ZAI_BASE_URL=
+# ZAI_API_KEY=

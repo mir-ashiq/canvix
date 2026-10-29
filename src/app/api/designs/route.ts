@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
+import { Prisma } from '@/generated/prisma/client'
 import { db } from '@/lib/db'
 import { dbErrorResponse } from '@/lib/db-errors'
 import { getSessionUser } from '@/lib/auth/session'

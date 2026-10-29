@@ -8,7 +8,7 @@
 // free forever. Matches the Canva-accurate dark theme.
 // ─────────────────────────────────────────────────────────────
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import {
   Dialog,
@@ -31,21 +31,27 @@ export interface AuthDialogProps {
 }
 
 export function AuthDialog({ open, onOpenChange, onAuthed, initialMode = 'login' }: AuthDialogProps) {
-  const [mode, setMode] = useState<'login' | 'register'>(initialMode)
+  // The form lives INSIDE DialogContent, which Radix unmounts on close —
+  // so every reopen starts from pristine state (mode/inputs/error/busy)
+  // without a reset effect. That is the React-recommended replacement
+  // for the old "reset state in useEffect on open" (which cascaded
+  // renders — flagged by react-hooks/set-state-in-effect).
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[400px] bg-[#16181D] border-white/10 text-white p-0 overflow-hidden">
+        <AuthDialogForm onOpenChange={onOpenChange} onAuthed={onAuthed} initialMode={initialMode} />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function AuthDialogForm({ onOpenChange, onAuthed, initialMode }: Omit<AuthDialogProps, 'open'>) {
+  const [mode, setMode] = useState<'login' | 'register'>(initialMode ?? 'login')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    if (open) {
-      setMode(initialMode)
-      setError(null)
-      setUsername('')
-      setPassword('')
-    }
-  }, [open, initialMode])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -76,9 +82,8 @@ export function AuthDialog({ open, onOpenChange, onAuthed, initialMode = 'login'
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px] bg-[#16181D] border-white/10 text-white p-0 overflow-hidden">
-        <div className="cv-topbar-gradient h-1.5 w-full" />
+    <>
+      <div className="cv-topbar-gradient h-1.5 w-full" />
         <div className="p-6">
           <DialogHeader className="items-start space-y-2">
             <div className="flex items-center gap-2.5">
@@ -160,7 +165,6 @@ export function AuthDialog({ open, onOpenChange, onAuthed, initialMode = 'login'
             </button>
           </p>
         </div>
-      </DialogContent>
-    </Dialog>
+    </>
   )
 }

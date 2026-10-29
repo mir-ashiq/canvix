@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ des
       }
     }
 
-    const { Prisma } = await import('@prisma/client')
+    const { Prisma } = await import('@/generated/prisma/client')
     await db.presence.upsert({
       where: { designId_id: { designId, id: pid } },
       create: { designId, id: pid, name, color, cursor: (cursor ?? undefined) as object },

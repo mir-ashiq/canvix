@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
+import { Prisma } from '@/generated/prisma/client'
 import { db } from '@/lib/db'
 import { resolveDesignAccess, NOT_YOUR_DESIGN } from '@/lib/auth/design-guard'
 

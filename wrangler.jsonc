@@ -1,0 +1,40 @@
+{
+  // Canvix on Cloudflare Workers — via @opennextjs/cloudflare.
+  // Docs: https://opennext.js.org/cloudflare  •  repo guide: research/CLOUDFLARE-WORKERS-PORTABILITY.md
+  //
+  // Build:     npm run preview   (local workerd preview)
+  //            npm run deploy    (build + upload)
+  // Secrets:   npx wrangler secret put DATABASE_URL
+  //            npx wrangler secret put ZAI_BASE_URL   (optional AI provider)
+  //            npx wrangler secret put ZAI_API_KEY    (optional AI provider)
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
+  "name": "canvix",
+  // Matches Prisma's current Cloudflare guide. Any date ≥ 2025-04-01
+  // auto-populates process.env from vars/secrets; ≥ 2024-09-23 enables
+  // nodejs_compat v2 (fuller Node API surface for node:crypto etc.).
+  "compatibility_date": "2026-09-07",
+  "compatibility_flags": [
+    // Node.js APIs for Prisma's pg driver (node:net/node:tls sockets),
+    // node:crypto scrypt auth, node:http MCP transport.
+    "nodejs_compat",
+    // fetch() may only reach the public internet — defense-in-depth for
+    // the MCP fetch tool on runtimes where we cannot pin DNS ourselves.
+    "global_fetch_strictly_public"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  // Self-reference used by OpenNext for internal fetches (tag
+  // revalidation etc.). `service` must match `name` above.
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "canvix"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

@@ -1,9 +1,9 @@
 // scripts/usage-forensics.ts — one-shot DB forensics for the Vercel usage spike.
 // Reads only aggregates (counts/sizes/dates) — no user content, no secrets.
 // Usage: DATABASE_URL=... npx tsx scripts/usage-forensics.ts
-import { PrismaClient } from '@prisma/client'
+import { createScriptClient } from '../src/lib/db-script'
 
-const db = new PrismaClient({ log: ['error'] })
+const db = createScriptClient()
 
 const q = async (label: string, sql: string) => {
   try {
@@ -26,7 +26,9 @@ async function main() {
 
   await q(
     'table sizes (n_live_tup + total_relation_size)',
-    `SELECT relname AS table,
+    // relname::text — the rust-free query compiler refuses catalog `name`
+    // columns in raw results (v0.9.3)
+    `SELECT relname::text AS table,
             n_live_tup AS rows,
             n_tup_ins AS inserts,
             n_tup_upd AS updates,

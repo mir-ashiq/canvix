@@ -46,6 +46,13 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
   const scale = size.w > 0 && size.h > 0 ? Math.min(size.w / designWidth, size.h / designHeight) : 0
   const offsetX = size.w > 0 ? (size.w - designWidth * scale) / 2 : 0
   const offsetY = size.h > 0 ? (size.h - designHeight * scale) / 2 : 0
+  // v0.11.1 fix: the Konva Stage only renders once the ResizeObserver has
+  // measured the container (scale > 0), but both playback effects used to
+  // bail on the first run (layerRef still null) and their deps never changed
+  // afterwards — so preview audio/video and entry animations silently
+  // no-op'd depending on a commit-vs-observer race. `stageReady` flips once
+  // the stage mounts and re-runs the effects with the layer present.
+  const stageReady = scale > 0
 
   const bg = page.background
   const bgProps =
@@ -129,7 +136,7 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
       cancelAnimationFrame(raf)
       resetNodes(layer, page, bases)
     }
-  }, [page, hasAnimations, reduceMotion, playKey, designWidth, designHeight])
+  }, [page, hasAnimations, reduceMotion, playKey, designWidth, designHeight, stageReady])
 
   // ── v0.11: media playback — audio elements, video frames, Beat Sync ──
   // Presentation/preview is where media plays (the editor canvas always
@@ -160,12 +167,17 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
     }
 
     // 2. video: swap the poster Konva image for a live <video> + redraw
-    const videos: Array<{ v: HTMLVideoElement; node: Konva.Image; prev: CanvasImageSource | undefined; trimEnd: number; loop: boolean }> = []
+    const videos: Array<{ v: HTMLVideoElement; node: Konva.Image; prev: CanvasImageSource | undefined; trimStart: number; trimEnd: number; loop: boolean }> = []
     if (!reduceMotion) {
       for (const el of page.elements as PageData['elements']) {
         if (el.type !== 'video' || el.visible === false || !el.autoplay) continue
         const vd = el as VideoElement
-        const node = layer.findOne<Konva.Image>(`#${vd.id}`)
+        // v0.11.1 fix: VideoNode renders a GROUP (poster + play chip + trim
+        // badge) that carries the element id — findOne('#id') returns that
+        // Group, which has no .image(), so the live-frame swap silently
+        // skipped EVERY video. Target the KonvaImage inside the group.
+        const group = layer.findOne<Konva.Group>(`#${vd.id}`)
+        const node = (group?.findOne('Image') as Konva.Image | undefined) ?? undefined
         if (!node || typeof node.image !== 'function') continue
         const v = document.createElement('video')
         v.src = vd.src
@@ -174,9 +186,17 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
         v.volume = clamp01(vd.volume)
         v.playsInline = true
         const prev = node.image() as CanvasImageSource | undefined
+        // v0.11.1 fix: the trim seek must happen ONCE. Seeking inside every
+        // `canplay` event self-sustains a loop (seek completes → readyState
+        // transitions → canplay refires → seek back to trimStart…) that
+        // freezes the video at trimStart with play() re-invoked ~130×/s.
+        let didTrimSeek = false
         const onCanPlay = () => {
           try {
-            v.currentTime = vd.trimStart
+            if (!didTrimSeek && vd.trimStart > 0) {
+              didTrimSeek = true
+              v.currentTime = vd.trimStart
+            }
           } catch {
             /* seek not ready */
           }
@@ -184,7 +204,7 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
         }
         v.addEventListener('canplay', onCanPlay)
         node.image(v)
-        videos.push({ v, node, prev, trimEnd: vd.trimEnd, loop: vd.loop })
+        videos.push({ v, node, prev, trimStart: vd.trimStart, trimEnd: vd.trimEnd, loop: vd.loop })
         cleanups.push(() => {
           v.removeEventListener('canplay', onCanPlay)
           v.pause()
@@ -226,8 +246,18 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
     if (videos.length > 0 || (beatTargets.length > 0 && beatAudio && beats && !reduceMotion)) {
       let raf = 0
       const tick = () => {
-        for (const { v, node, trimEnd, loop } of videos) {
-          if (!loop && trimEnd < v.duration && v.currentTime >= trimEnd) v.pause()
+        for (const { v, node, trimStart, trimEnd, loop } of videos) {
+          // v0.11.1: honour the trim window — non-looping pauses at trimEnd,
+          // looping wraps back to trimStart (the native loop attr wraps to 0)
+          if (trimEnd < v.duration && v.currentTime >= trimEnd) {
+            if (loop) {
+              try {
+                v.currentTime = trimStart
+              } catch {
+                /* seek not ready */
+              }
+            } else v.pause()
+          }
           node.getLayer()?.batchDraw()
         }
         if (beatAudio && beats) {
@@ -254,7 +284,7 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
       for (const fn of cleanups) fn()
       restoreBeatTargets()
     }
-  }, [page, animated, reduceMotion, playKey])
+  }, [page, animated, reduceMotion, playKey, stageReady])
 
   return (
     <div ref={containerRef} className="w-full h-full overflow-hidden" data-testid="preview-stage">

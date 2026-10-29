@@ -1,0 +1,33 @@
+# Canvix on Netlify — via Netlify's OpenNext-based Next.js Runtime.
+# Docs: https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/
+#
+# The runtime auto-installs for Next.js sites connected via the Netlify UI,
+# but we pin it in package.json + this file so builds are reproducible
+# (same adapter version locally, in CI, and on Netlify).
+#
+# One secret to set (Netlify UI → Site settings → Environment variables):
+#   DATABASE_URL = your Supabase *transaction pooler* URL (port 6543)
+# Optional (activates AI features):
+#   ZAI_BASE_URL / ZAI_API_KEY
+#
+# Free-tier notes: 100 GB bandwidth/month, 125 K function invocations/month,
+# 300 build minutes — Canvix fits comfortably. Functions run on AWS Lambda
+# (full Node.js API surface: node:crypto scrypt auth, node:net/node:tls for
+# the pg driver, node:http for the MCP transport — all native there).
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # Netlify runs lifecycle scripts (unlike locked-down local sandboxes),
+  # so postinstall → prisma generate + the wasm portability patch just run.
+  NPM_FLAGS = "--include=dev"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Static-ish route headers stay managed by the Next runtime; nothing else
+# to configure — middleware, route handlers, ISR and streaming all work
+# out of the box with the v5 runtime.

@@ -438,10 +438,11 @@ npm run build
 npm run start
 ```
 
-## ☁️ Deploy — Vercel, Cloudflare Workers, or your own box
+## ☁️ Deploy — Vercel, Netlify, Cloudflare Workers, or your own box
 
 Canvix runs on **any Node host** and — since v0.9.3 — on **Cloudflare
-Workers** too. Same codebase, same database, zero config divergence.
+Workers** too, and — since v0.9.4 — on **Netlify**. Same codebase, same
+database, zero config divergence.
 
 ### Vercel (or any Node host)
 
@@ -469,6 +470,29 @@ npm run deploy                              # → https://canvix.<you>.workers.d
 > Postgres TLS upgrade (a workerd runtime quirk — details in
 > `research/CLOUDFLARE-WORKERS-PORTABILITY.md`). The real deployment is
 > the source of truth: deploy (free), hit `/api/health`.
+
+### Netlify (free tier works)
+
+Zero-config via Netlify's OpenNext-based Next.js runtime — the repo ships
+`netlify.toml` + a pinned `@netlify/plugin-nextjs`, so connecting the repo
+in the Netlify UI is all it takes:
+
+1. Push the repo to GitHub, then **Add new site → Import an existing
+   project** in the Netlify UI (build settings are read from
+   `netlify.toml`).
+2. Set `DATABASE_URL` (the **transaction pooler** URL) under
+   *Site settings → Environment variables* — optionally `ZAI_BASE_URL` /
+   `ZAI_API_KEY`.
+3. Deploy. Open `/api/health` — `{"ok":true}` = full stack green.
+
+Functions run on AWS Lambda (full Node API surface — scrypt auth, `pg`
+sockets, `sharp` PNG export all native). To simulate the exact build
+locally: `npx netlify-cli build --offline` (no account needed) — the
+function bundle lands in `.netlify/functions/` (**20.8 MB zipped**, well
+under the 50 MB limit; v0.9.4's trace diet cut it from 70 MB).
+
+Honest free-tier notes: 100 GB bandwidth/month, 125 K function
+invocations/month, 300 build minutes — comfortable for personal use.
 
 What makes it work (all already wired):
 

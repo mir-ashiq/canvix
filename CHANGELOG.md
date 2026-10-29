@@ -3,6 +3,53 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.4] — 2026-10-29
+
+The "third platform + leaner artifact" release: **Netlify** joins Vercel
+and Cloudflare Workers as a first-class deploy target, and every platform's
+bundle gets ~70 % smaller.
+
+### Netlify, zero-config
+- `netlify.toml` + pinned `@netlify/plugin-nextjs` 5.16.5 (Netlify's
+  OpenNext-based Next.js runtime — officially supports Next.js 16).
+  Connect the repo in the Netlify UI, set `DATABASE_URL`, done.
+- Functions run on AWS Lambda: full Node API surface, so scrypt auth,
+  `pg` sockets and `sharp` PNG export are all native — no runtime
+  guards ever trip.
+- The exact Netlify build pipeline runs locally without an account:
+  `npx netlify-cli build --offline`.
+
+### The 70 MB → 20.8 MB function bundle (why it was 70 MB)
+- Netlify's 50-MB-zipped function limit exposed that the traced
+  `@prisma/client` shipped **~90 MB of wasm the patched client provably
+  never loads** — in BOTH copies Next traces (nft's `node_modules/…` and
+  Turbopack's hashed `.next/node_modules/…`):
+  `*wasm-base64*` compilers for all five dialects, the old
+  `query_engine_bg*` library-engine wasm (dead with `engineType="client"`),
+  and the other dialects' `query_compiler_bg.{mysql,sqlite,…}` wrappers.
+- New `outputFileTracingExcludes` in `next.config.ts` remove exactly
+  those (+ sharp's darwin/win32 binaries), keeping the live files
+  (postgresql wrappers, `raw.wasm`, `wasm-module.mjs`) — verified by
+  booting the rebuilt standalone against the real database: health,
+  designs and templates all green.
+- Netlify function zip: **70.4 → 20.8 MB zipped** (52 MB unzipped, limit
+  250). Cloudflare worker: unchanged **2.13 MB gzipped** (limit 3).
+  Node standalone: proportionally smaller for every self-hoster.
+
+### Deployment verification (all against the live database)
+- `scripts/verify-deploy-readiness.ts` — one command proving migrations
+  applied, schema complete (tables/columns/indexes), data present
+  (110 templates), and parameterized queries through the transaction
+  pooler. Reusable before any deploy, on any host.
+- Production Node standalone: `/api/health` `{"ok":true}`, landing,
+  templates, designs, auth register/login, anonymous `/api/auth/me`,
+  SSE stream sample, MCP 503 (no AI provider configured), cross-origin
+  CSRF rejection — all verified live; probe rows cleaned up.
+- Cloudflare: OpenNext build + `wrangler deploy --dry-run` +
+  workerd preview (landing 200, auth/me works, health degrades to the
+  documented structured 503 — no crashes).
+- Full gate: **232/232 vitest**, `tsc --noEmit` clean, eslint clean.
+
 ## [0.9.3] — 2026-10-29
 
 The "run it anywhere" release: Canvix now deploys to **Cloudflare

@@ -3,6 +3,68 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.10.0] — 2026-10-29
+
+The "no lost work, ever" release: offline and concurrent edits merge
+deterministically — Yjs-grade convergence without leaving the existing
+document model. Full design rationale: `research/OFFLINE-MERGE.md`.
+
+### Offline editing that survives reloads
+- Every collab op is stamped with a **hybrid logical clock**
+  (`w:counter:actor` — `src/lib/collab/hlc.ts`) persisted per browser;
+  causality-aware ordering even with skewed clocks or hours-long offline
+  sessions.
+- The working document **and** the pending op queue persist to IndexedDB
+  (debounced; capped 200 pages / 500 ops) — a crash, reload or offline
+  spell loses nothing. On reopen, local work is restored when it is
+  newer than the server's ("Recovered" chip) and its queue flushes on
+  reconnect.
+- v0.9's three data-loss windows are closed: offline edits are never
+  dropped (the queue persists and retries instead of discarding),
+  autosave no longer clobbers whole documents (see merge below), and
+  fresh tabs no longer replay stale events over a fresh document
+  (`GET /api/designs/[id]` returns the event-log `seq`; the replay
+  cursor survives reloads).
+
+### Deterministic merging (client AND server, one pure function)
+- Elements are last-write-wins registers keyed by id, arbitrated by HLC
+  stamps (`_m`); deletes are **tombstones** that ride the saved document;
+  pages match by id (union). `src/lib/collab/merge.ts` — one rule,
+  applied identically by every replica, so content converges regardless
+  of arrival order.
+- `PUT /api/designs/[id]` carries `baseUpdatedAt`; on divergence (the
+  tab was offline while others saved) the server merges element-wise
+  instead of overwriting and returns `merged:true` + the merged pages.
+- `applyRemoteOp` gates stale updates/adds/deletes by stamp; coarse
+  replace ops (undo, resize, restore, template) broadcast fully-stamped
+  copies so they win/lose deterministically instead of clobbering.
+- Legacy clients/documents: unstamped data reads as epoch (any stamped
+  write beats it); legacy events get a server stamp at persist time.
+
+### Verification
+- 267 unit tests (35 new: HLC monotonicity/absorption/skew, merge
+  matrix incl. delete-vs-edit and re-add resurrection, order-independent
+  `applyRemoteOp`, restore arbitration); tsc + eslint clean.
+- `scripts/verify-offline-merge.ts` — reusable live probe (15 checks)
+  against the production database: fast-path save, divergent-PUT merge
+  (offline edit wins, addition kept, delete tombstoned), converging
+  re-save, SSE stamps (client hlc verbatim, legacy server-stamped).
+  **15/15 green.**
+- Deploy matrix intact: Cloudflare worker 2.14 MB gz (limit 3), Netlify
+  function zip 19.6 MB (limit 50), Node standalone live-verified.
+- **No migration required** — stamps and tombstones ride the existing
+  `pages` jsonb; v0.9.x databases work untouched.
+
+### Honest limitations
+- Element z-order / page order follows the merging side's array; the
+  server is the canonical convergence point (transient divergence in
+  order only, never in content).
+- A page deleted offline can re-appear when the other side held edits
+  to it (the page set is a union; element deletes are exact). Element
+  work is never lost — the page may need re-deleting.
+- Two cursors in one text box still don't merge character-level (that
+  is the Yjs upgrade path; the HLC stamps here are the migration seam).
+
 ## [0.9.4] — 2026-10-29
 
 The "third platform + leaner artifact" release: **Netlify** joins Vercel

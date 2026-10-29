@@ -221,7 +221,13 @@ is right here.
   gap-free catch-up after disconnects. Architecture: an append-only event log in
   Postgres + server-sent events downstream + batched op POSTs upstream — works on
   Vercel serverless and self-hosted Node alike, no WebSocket server required.
-  Optimistic local edits always keep the canvas butter-smooth
+  Optimistic local edits always keep the canvas butter-smooth. Since **v0.10**
+  collaboration is also **offline-safe**: edits made while disconnected (or
+  after a crash/reload) queue in IndexedDB and merge deterministically on
+  reconnect — every element is a hybrid-logical-clock-stamped last-write-wins
+  register with delete tombstones, and the server merges divergent autosaves
+  with the same pure rule every client runs, so no one's work is ever
+  silently overwritten (see `research/OFFLINE-MERGE.md`)
 - **Comments & annotations** — a first-class comments mode: click anywhere on the
   canvas (or on an element — the pin follows it) to drop a threaded comment.
   Replies, resolve/reopen, delete-own, unread badges, collaborator avatars and
@@ -708,7 +714,9 @@ tool descriptions so agents pick the right format.
       designs, one-click migration of existing work, SSRF DNS pinning *(v0.9.0)*
 - [x] Claim eligibility (browser-attributed adopt-all, per-design adopt),
       CSRF same-origin enforcement, pre-Phase-4 verification gate *(v0.9.1)*
-- [ ] Yjs-grade offline merge for collaboration
+- [x] Yjs-grade offline merge for collaboration — HLC-stamped element
+      LWW + delete tombstones, persisted offline doc/op-queue (IndexedDB),
+      server-side merge on divergent autosaves *(v0.10.0)*
 - [ ] Audio/video elements & Beat Sync
 - [ ] Plugin system (external, installable apps)
 

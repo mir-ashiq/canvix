@@ -32,7 +32,7 @@ import { AnimatePanel } from './AnimatePanel'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from '@/hooks/use-toast'
-import type { ImageElement } from '@/lib/types'
+import type { ImageElement, PageData } from '@/lib/types'
 
 const CanvasStage = dynamic(() => import('./canvas/CanvasStage'), { ssr: false })
 
@@ -126,6 +126,27 @@ export default function Editor() {
   // v0.9: view-only designs (owned by another account) never autosave —
   // the API would refuse with 403 anyway; skipping keeps the console
   // clean and the “saved” indicator honest.
+  const persistOfflineDoc = useCallback(async () => {
+    const state = useEditorStore.getState()
+    if (!state.designId || state.readOnly) return
+    try {
+      const { putDoc } = await import('@/lib/collab/offline-store')
+      const { getActiveCollabSession } = await import('@/hooks/use-collab')
+      await putDoc({
+        designId: state.designId,
+        name: state.designName,
+        width: state.width,
+        height: state.height,
+        pages: state.pages,
+        baseUpdatedAt: state.baseUpdatedAt,
+        seq: getActiveCollabSession()?.lastSeq ?? 0,
+        savedAt: Date.now(),
+      })
+    } catch {
+      /* IndexedDB unavailable — offline durability is best-effort */
+    }
+  }, [])
+
   const save = useCallback(
     async (withThumbnail: boolean) => {
       const state = useEditorStore.getState()
@@ -142,17 +163,40 @@ export default function Editor() {
           body: JSON.stringify({
             name: state.designName,
             pages: state.pages,
+            baseUpdatedAt: state.baseUpdatedAt,
             ...(thumbnail ? { thumbnail } : {}),
           }),
         })
         if (!res.ok) throw new Error('save failed')
+        const saved = (await res.json()) as {
+          updatedAt?: string
+          merged?: boolean
+          pages?: PageData[]
+        }
+        // v0.10: the server merged our pages with concurrent edits — adopt
+        // the merged result (applying through the merge gate is a no-op for
+        // our own content and pulls in the kept remote parts)
+        if (saved.merged && Array.isArray(saved.pages) && saved.pages.length) {
+          useEditorStore.getState().applyRemoteOp({
+            seq: 0,
+            id: `save-merge-${Date.now()}`,
+            designId: state.designId,
+            actorId: 'server-merge',
+            kind: 'pages:replace',
+            payload: { pages: saved.pages },
+            createdAt: new Date().toISOString(),
+          })
+        }
+        useEditorStore.getState().setBaseUpdatedAt(saved.updatedAt ?? null)
         useEditorStore.getState().markSaved()
       } catch (err) {
         console.error('Autosave failed', err)
         useEditorStore.setState({ saving: false })
       }
+      // v0.10: keep the offline mirror fresh whether the save landed or not
+      void persistOfflineDoc()
     },
-    []
+    [persistOfflineDoc]
   )
 
   // debounced autosave on changes
@@ -161,6 +205,14 @@ export default function Editor() {
     const t = setTimeout(() => void save(true), 1600)
     return () => clearTimeout(t)
   }, [dirty, designId, version, save])
+
+  // v0.10: offline mirror — persist the working document (debounced) on
+  // every content mutation so a crash/reload/offline spell loses nothing
+  useEffect(() => {
+    if (!dirty || !designId) return
+    const t = setTimeout(() => void persistOfflineDoc(), 700)
+    return () => clearTimeout(t)
+  }, [dirty, designId, version, persistOfflineDoc])
 
   // save when leaving the editor
   useEffect(() => {

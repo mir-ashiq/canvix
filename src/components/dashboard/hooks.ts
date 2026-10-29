@@ -168,6 +168,23 @@ export async function duplicateDesign(id: string): Promise<DesignRecord> {
 export async function deleteDesign(id: string): Promise<void> {
   const res = await fetch(`/api/designs/${id}`, { method: 'DELETE' }) // soft delete -> Trash
   if (!res.ok) throw new Error('Failed to delete design')
+  // v0.10: drop any locally persisted offline state for this design
+  void purgeOfflineState(id)
+}
+
+/** v0.10: remove the IndexedDB offline doc + op queue for a design. */
+async function purgeOfflineState(id: string): Promise<void> {
+  try {
+    const { purge } = await import('@/lib/collab/offline-store')
+    await purge(id)
+  } catch {
+    /* IndexedDB unavailable — nothing persisted */
+  }
+  try {
+    localStorage.removeItem(`canvix-seq-${id}`)
+  } catch {
+    /* storage unavailable */
+  }
 }
 
 /** v0.4: trash list / restore / permanent delete */
@@ -188,6 +205,7 @@ export async function restoreDesign(id: string): Promise<void> {
 export async function deleteDesignForever(id: string): Promise<void> {
   const res = await fetch(`/api/designs/${id}?permanent=1`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete design permanently')
+  void purgeOfflineState(id)
 }
 
 export async function renameDesign(id: string, name: string): Promise<void> {

@@ -45,6 +45,21 @@ interface HistoryEntry {
 // module-level clipboard (not reactive)
 let clipboard: AnyElement[] = []
 
+// ── v0.10 offline merge: stamping choke points ────────────────
+// Local mutations that create/modify/delete elements stamp the change with
+// the session's hybrid logical clock; full-replace ops (undo, resize,
+// restore…) stamp the *broadcast copy* only, so local history snapshots keep
+// their O(1) structural sharing (unstamped local state is content-equal to
+// the stamped replicas — epoch loses to any stamped write, which is exactly
+// the replace-op's intent). See src/lib/collab/{hlc,merge}.ts.
+import { getClock } from '@/lib/collab/hlc'
+import { mergePages, stampPage, stampPages } from '@/lib/collab/merge'
+import { eventHlc } from '@/lib/collab/protocol'
+
+function nowHlc(): string {
+  return getClock().nowHlc()
+}
+
 // ── v0.5 collaboration: op emission ─────────────────
 // The store is the single source of truth for local mutations. After every
 // LOCAL mutation it emits an op through the registered emitter (set by
@@ -193,6 +208,16 @@ interface EditorState {
   /** apply a remote op (never emits, never pushes history) */
   applyRemoteOp: (event: DesignEventRow) => void
 
+  // v0.10: offline merge bookkeeping
+  /** server `updatedAt` our pages are based on (sent with every autosave so
+   *  the server can merge instead of clobber when we were offline) */
+  baseUpdatedAt: string | null
+  setBaseUpdatedAt: (t: string | null) => void
+  /** true when the editor opened with locally persisted offline work */
+  offlineRestored: boolean
+  /** collab ops queued but not yet accepted by the server (offline badge) */
+  pendingOps: number
+
   // v0.5: comments mode
   commentsOpen: boolean
   toggleComments: () => void
@@ -265,6 +290,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   collabStatus: 'offline',
   commentsOpen: false,
   animateOpen: false,
+  baseUpdatedAt: null,
+  offlineRestored: false,
+  pendingOps: 0,
 
   showRulers: false,
   manualGuides: [],
@@ -291,7 +319,59 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       tool: 'select',
       cropTargetId: null,
       readOnly: d.readOnly === true,
+      baseUpdatedAt: d.updatedAt ?? null,
+      offlineRestored: false,
     })
+    // v0.10: seed the collab replay cursor from the server's current seq —
+    // our freshly loaded document already contains every persisted edit,
+    // so replaying older log events is pure staleness (the _m gates would
+    // skip them anyway; the cursor avoids the wasted bandwidth).
+    try {
+      const seq = (d as { seq?: unknown }).seq
+      if (typeof seq === 'number' && seq >= 0) {
+        localStorage.setItem(`canvix-seq-${d.id}`, String(Math.floor(seq)))
+      }
+    } catch {
+      /* storage unavailable — since=0 replay is gate-protected */
+    }
+    // v0.10: offline restore — if this browser holds unsynced work for this
+    // design (persisted while offline), it wins over the server copy and its
+    // op queue replays on reconnect. Fire-and-forget: the editor renders the
+    // server copy immediately and swaps when the local state is newer.
+    if (!d.readOnly && typeof indexedDB !== 'undefined') {
+      void (async () => {
+        const { getDoc, getQueue, decideRestore, purge } = await import('@/lib/collab/offline-store')
+        const [doc, queue] = await Promise.all([getDoc(d.id), getQueue(d.id)])
+        const decision = decideRestore(doc, d.updatedAt, queue.length)
+        if (!decision.restore) {
+          // server copy is authoritative — drop the stale local mirror
+          // (queue empty by the decision rule; nothing unsynced to keep)
+          if (doc || queue.length) void purge(d.id)
+          return
+        }
+        if (doc && Array.isArray(doc.pages) && doc.pages.length) {
+          const s = get()
+          if (s.designId !== d.id) return // user moved on
+          set({
+            designName: doc.name || s.designName,
+            width: doc.width || s.width,
+            height: doc.height || s.height,
+            pages: doc.pages,
+            past: [],
+            future: [],
+            selectedIds: [],
+            dirty: true,
+            baseUpdatedAt: doc.baseUpdatedAt ?? s.baseUpdatedAt,
+            offlineRestored: true,
+          })
+          try {
+            localStorage.setItem(`canvix-seq-${d.id}`, String(doc.seq || 0))
+          } catch {
+            /* keep the seeded cursor */
+          }
+        }
+      })()
+    }
     // v0.4: load server-side versions (Postgres); local list is the offline fallback
     const local = loadVersions(d.id)
     set({ versions: local })
@@ -346,8 +426,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       version: version + 1,
     })
     // undo restores snapshots — op-level undo replay is out of scope (see
-    // COLLABORATION-ARCHITECTURE.md §7), so sync coarse
-    emit({ kind: 'pages:replace', pages: prev.pages, width: get().width, height: get().height })
+    // COLLABORATION-ARCHITECTURE.md §7), so sync coarse. v0.10: the broadcast
+    // copy is stamped fresh (deterministic winner vs concurrent edits); the
+    // local set keeps the snapshot reference for O(1) structural sharing.
+    emit({ kind: 'pages:replace', pages: stampPages(prev.pages, nowHlc()), width: get().width, height: get().height })
   },
 
   redo: () => {
@@ -363,7 +445,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       dirty: true,
       version: version + 1,
     })
-    emit({ kind: 'pages:replace', pages: next.pages, width: get().width, height: get().height })
+    emit({ kind: 'pages:replace', pages: stampPages(next.pages, nowHlc()), width: get().width, height: get().height })
   },
 
   setSelection: (ids) => set({ selectedIds: ids }),
@@ -379,16 +461,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     get().pushHistory()
     const { pages, currentPage } = get()
     const next = editPage(pages, currentPage)
-    next[currentPage].elements.push(el)
-    set({ pages: next, selectedIds: [el.id] })
-    emit({ kind: 'element:add', pageId: next[currentPage].id, element: el })
+    const stamped = { ...el, _m: nowHlc() } as AnyElement
+    next[currentPage].elements.push(stamped)
+    set({ pages: next, selectedIds: [stamped.id], dirty: true, version: get().version + 1 })
+    emit({ kind: 'element:add', pageId: next[currentPage].id, element: stamped })
   },
 
   updateElementsLive: (ids, patch) => {
     // v0.7 hot path (typing, slider drags, remote/MCP live edits):
     // pure immutable update — only the patched elements get new identities,
     // every other page/element keeps its reference so memoized nodes skip.
+    // v0.10: the patch carries an HLC stamp (_m) — it lands on the element
+    // locally AND rides the broadcast, so replicas gate stale replays by it.
     const { pages, currentPage, version } = get()
+    const stampedPatch = { ...patch, _m: nowHlc() } as Partial<Record<string, unknown>>
     const idSet = ids.length > 4 ? new Set(ids) : null
     const hit = idSet ? (id: string) => idSet.has(id) : (id: string) => ids.includes(id)
     const next = pages.map((p, i) =>
@@ -396,11 +482,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         ? p
         : {
             ...p,
-            elements: p.elements.map((e) => (hit(e.id) ? ({ ...e, ...patch } as AnyElement) : e)),
+            elements: p.elements.map((e) => (hit(e.id) ? ({ ...e, ...stampedPatch } as AnyElement) : e)),
           }
     )
     set({ pages: next, version: version + 1, dirty: true })
-    emit({ kind: 'elements:update', pageId: next[currentPage].id, ids: [...ids], patch: { ...patch } })
+    emit({ kind: 'elements:update', pageId: next[currentPage].id, ids: [...ids], patch: stampedPatch })
   },
 
   updateElements: (ids, patch) => {
@@ -415,7 +501,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const { pages, currentPage } = get()
     const next = editPage(pages, currentPage)
     next[currentPage].elements = next[currentPage].elements.filter((e) => !selectedIds.includes(e.id))
-    set({ pages: next, selectedIds: [] })
+    // v0.10: tombstone the deletion so it merges deterministically against
+    // concurrent edits of the same elements (delete wins while it is the
+    // newer write; a later re-add clears it).
+    const h = nowHlc()
+    const tombs: Record<string, string> = {}
+    for (const id of selectedIds) tombs[id] = h
+    next[currentPage] = { ...next[currentPage], tombstones: { ...(next[currentPage].tombstones ?? {}), ...tombs } }
+    set({ pages: next, selectedIds: [], dirty: true, version: get().version + 1 })
     emit({ kind: 'element:delete', pageId: next[currentPage].id, ids: [...selectedIds] })
   },
 
@@ -426,10 +519,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const page = pages[currentPage]
     const clones = page.elements
       .filter((e) => selectedIds.includes(e.id))
-      .map((e) => ({ ...clone(e), id: uid(e.type), x: e.x + 32, y: e.y + 32 }))
+      .map((e) => ({ ...clone(e), id: uid(e.type), x: e.x + 32, y: e.y + 32, _m: nowHlc() }) as AnyElement)
     const next = editPage(pages, currentPage)
     next[currentPage].elements = [...next[currentPage].elements, ...clones]
-    set({ pages: next, selectedIds: clones.map((c) => c.id) })
+    set({ pages: next, selectedIds: clones.map((c) => c.id), dirty: true, version: get().version + 1 })
     emit({ kind: 'elements:add', pageId: next[currentPage].id, elements: clones })
   },
 
@@ -448,11 +541,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   pasteClipboard: () => {
     if (!clipboard.length) return
     get().pushHistory()
-    const clones = clipboard.map((e) => ({ ...clone(e), id: uid(e.type), x: e.x + 32, y: e.y + 32 }))
+    const clones = clipboard.map((e) => ({ ...clone(e), id: uid(e.type), x: e.x + 32, y: e.y + 32, _m: nowHlc() }) as AnyElement)
     const { pages, currentPage } = get()
     const next = editPage(pages, currentPage)
     next[currentPage].elements = [...next[currentPage].elements, ...clones]
-    set({ pages: next, selectedIds: clones.map((c) => c.id) })
+    set({ pages: next, selectedIds: clones.map((c) => c.id), dirty: true, version: get().version + 1 })
     emit({ kind: 'elements:add', pageId: next[currentPage].id, elements: clones })
   },
 
@@ -499,8 +592,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const group = createGroupElement(children)
     const next = editPage(pages, currentPage)
     next[currentPage].elements = [...next[currentPage].elements.filter((e) => !selectedIds.includes(e.id)), group]
-    set({ pages: next, selectedIds: [group.id] })
-    emit({ kind: 'page:replace', pageId: next[currentPage].id, page: next[currentPage] })
+    set({ pages: next, selectedIds: [group.id], dirty: true, version: get().version + 1 })
+    // v0.10: structural page change — broadcast a fully stamped copy
+    emit({ kind: 'page:replace', pageId: next[currentPage].id, page: stampPage(next[currentPage], nowHlc()) })
   },
 
   ungroupSelection: () => {
@@ -536,14 +630,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       next[currentPage].elements.push(...releasedEls)
       released = [...released, ...releasedEls.map((c) => c.id)]
     }
-    set({ pages: next, selectedIds: released })
-    emit({ kind: 'page:replace', pageId: next[currentPage].id, page: next[currentPage] })
+    set({ pages: next, selectedIds: released, dirty: true, version: get().version + 1 })
+    emit({ kind: 'page:replace', pageId: next[currentPage].id, page: stampPage(next[currentPage], nowHlc()) })
   },
 
   alignElements: (ids, mode) => {
     if (!ids.length) return
     get().pushHistory()
-    const { pages, currentPage, width, height } = get()
+    const { pages, currentPage, width, height, version } = get()
+    const h = nowHlc()
     const next = pages.map((p, i) =>
       i !== currentPage
         ? p
@@ -551,25 +646,31 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ...p,
             elements: p.elements.map((el) => {
               if (!ids.includes(el.id)) return el
-              switch (mode) {
-                case 'left': return { ...el, x: 0 }
-                case 'cx': return { ...el, x: Math.round((width - el.width) / 2) }
-                case 'right': return { ...el, x: width - el.width }
-                case 'top': return { ...el, y: 0 }
-                case 'cy': return { ...el, y: Math.round((height - el.height) / 2) }
-                case 'bottom': return { ...el, y: height - el.height }
-              }
+              // v0.10: only the ALIGNED elements get a fresh stamp — untouched
+              // elements keep theirs so concurrent remote edits still win
+              const touched = (() => {
+                switch (mode) {
+                  case 'left': return { x: 0 }
+                  case 'cx': return { x: Math.round((width - el.width) / 2) }
+                  case 'right': return { x: width - el.width }
+                  case 'top': return { y: 0 }
+                  case 'cy': return { y: Math.round((height - el.height) / 2) }
+                  case 'bottom': return { y: height - el.height }
+                }
+              })()
+              return { ...el, ...touched, _m: h } as AnyElement
             }),
           }
     )
-    set({ pages: next })
+    set({ pages: next, dirty: true, version: version + 1 })
     emit({ kind: 'page:replace', pageId: next[currentPage].id, page: next[currentPage] })
   },
 
   flipSelection: (axis) => {
-    const { selectedIds, pages, currentPage } = get()
+    const { selectedIds, pages, currentPage, version } = get()
     if (!selectedIds.length) return
     get().pushHistory()
+    const h = nowHlc()
     const next = pages.map((p, i) =>
       i !== currentPage
         ? p
@@ -577,13 +678,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ...p,
             elements: p.elements.map((el) => {
               if (!selectedIds.includes(el.id)) return el
-              if (el.type === 'image') return { ...el, flipH: axis === 'h' ? !el.flipH : el.flipH, flipV: axis === 'v' ? !el.flipV : el.flipV }
+              if (el.type === 'image') return { ...el, flipH: axis === 'h' ? !el.flipH : el.flipH, flipV: axis === 'v' ? !el.flipV : el.flipV, _m: h } as AnyElement
               // shapes/text: mirror via negative scale is not in the model; rotate 180 for symmetric flip feel
-              return { ...el, rotation: (el.rotation + (axis === 'h' ? 0 : 180)) % 360 }
+              return { ...el, rotation: (el.rotation + (axis === 'h' ? 0 : 180)) % 360, _m: h } as AnyElement
             }),
           }
     )
-    set({ pages: next })
+    set({ pages: next, dirty: true, version: version + 1 })
     emit({ kind: 'page:replace', pageId: next[currentPage].id, page: next[currentPage] })
   },
 
@@ -622,9 +723,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setPageBackground: (bg) => {
     get().pushHistory()
-    const { pages, currentPage } = get()
-    const next = pages.map((p, i) => (i !== currentPage ? p : { ...p, background: bg }))
-    set({ pages: next })
+    const { pages, currentPage, version } = get()
+    const h = nowHlc()
+    const next = pages.map((p, i) => (i !== currentPage ? p : { ...p, background: bg, _pm: h }))
+    set({ pages: next, dirty: true, version: version + 1 })
     emit({ kind: 'page:background', pageId: next[currentPage].id, background: bg })
   },
 
@@ -637,8 +739,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       height: t.height,
       currentPage: 0,
       selectedIds: [],
+      dirty: true,
+      version: get().version + 1,
     })
-    emit({ kind: 'pages:replace', pages, width: t.width, height: t.height })
+    emit({ kind: 'pages:replace', pages: stampPages(pages, nowHlc()), width: t.width, height: t.height })
   },
 
   setZoom: (z) => set({ zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)) }),
@@ -724,7 +828,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       selectedIds: [],
       dirty: true,
     })
-    emit({ kind: 'pages:replace', pages: v.pages, width: v.width, height: v.height })
+    emit({ kind: 'pages:replace', pages: stampPages(v.pages, nowHlc()), width: v.width, height: v.height })
   },
   deleteVersion: (id) => {
     const { designId, versions } = get()
@@ -747,8 +851,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // v0.4 magic resize: smart re-layout — elements scale & keep their relative
     // position instead of all being dumped in the centre
     const next = magicRelayoutPages(cloneAllPages(pages), oldW, oldH, width, height)
-    set({ width, height, pages: next, selectedIds: [], zoom: 1 })
-    emit({ kind: 'pages:replace', pages: next, width, height })
+    set({ width, height, pages: next, selectedIds: [], zoom: 1, dirty: true, version: get().version + 1 })
+    emit({ kind: 'pages:replace', pages: stampPages(next, nowHlc()), width, height })
   },
 
   // ── v0.4: magic translate ────────────────────────────
@@ -757,10 +861,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     get().pushHistory()
     const { pages, version } = get()
     const map = new Map(updates.map((u) => [u.id, u.text]))
+    const h = nowHlc()
     const applyTexts = (els: AnyElement[]): AnyElement[] =>
       els.map((el) => {
         if (el.type === 'group') return { ...el, children: applyTexts(el.children) }
-        return map.has(el.id) ? ({ ...el, text: map.get(el.id)! } as AnyElement) : el
+        return map.has(el.id) ? ({ ...el, text: map.get(el.id)!, _m: h } as AnyElement) : el
       })
     const next = pages.map((p) => ({ ...p, elements: applyTexts(p.elements) }))
     set({ pages: next, version: version + 1, dirty: true })
@@ -773,17 +878,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     get().pushHistory()
     const { pages, currentPage } = get()
     const next = editPage(pages, currentPage)
-    next[currentPage].elements = [...next[currentPage].elements, ...els.map((e) => clone(e))]
-    set({ pages: next, selectedIds: els.map((e) => e.id) })
-    emit({ kind: 'elements:add', pageId: next[currentPage].id, elements: els })
+    const stamped = els.map((e) => ({ ...clone(e), _m: nowHlc() }) as AnyElement)
+    next[currentPage].elements = [...next[currentPage].elements, ...stamped]
+    set({ pages: next, selectedIds: stamped.map((e) => e.id), dirty: true, version: get().version + 1 })
+    emit({ kind: 'elements:add', pageId: next[currentPage].id, elements: stamped })
   },
   replaceCurrentPage: (page) => {
     get().pushHistory()
     const { pages, currentPage } = get()
     const next = [...pages]
     next[currentPage] = clonePage(page)
-    set({ pages: next, selectedIds: [] })
-    emit({ kind: 'page:replace', pageId: page.id, page })
+    set({ pages: next, selectedIds: [], dirty: true, version: get().version + 1 })
+    emit({ kind: 'page:replace', pageId: page.id, page: stampPage(clonePage(page), nowHlc()) })
   },
   appendPage: (page) => {
     get().pushHistory()
@@ -804,18 +910,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setElementAnimation: (ids, animation) => {
     if (!ids.length) return
     get().pushHistory()
-    const { pages, currentPage } = get()
+    const { pages, currentPage, version } = get()
+    const h = nowHlc()
     const next = pages.map((p, i) =>
       i !== currentPage
         ? p
         : {
             ...p,
             elements: p.elements.map((e) =>
-              ids.includes(e.id) ? { ...e, animation: animation ?? undefined } : e
+              ids.includes(e.id) ? ({ ...e, animation: animation ?? undefined, _m: h } as AnyElement) : e
             ),
           }
     )
-    set({ pages: next })
+    set({ pages: next, dirty: true, version: version + 1 })
     emit({
       kind: 'page:replace',
       pageId: next[currentPage].id,
@@ -824,35 +931,42 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
   setPageTransition: (transition) => {
     get().pushHistory()
-    const { pages, currentPage } = get()
-    const next = pages.map((p, i) => (i !== currentPage ? p : { ...p, transition: transition ?? undefined }))
-    set({ pages: next })
+    const { pages, currentPage, version } = get()
+    const h = nowHlc()
+    const next = pages.map((p, i) => (i !== currentPage ? p : { ...p, transition: transition ?? undefined, _pm: h }))
+    set({ pages: next, dirty: true, version: version + 1 })
     emit({ kind: 'page:replace', pageId: next[currentPage].id, page: next[currentPage] })
   },
   magicAnimateCurrentPage: (speed = 'medium') => {
     get().pushHistory()
-    const { pages, currentPage, height } = get()
+    const { pages, currentPage, height, version } = get()
     const next = pages.map((p, i) => (i !== currentPage ? p : magicAnimatePage(p, height, speed)))
     const animated = next[currentPage]
-    set({ pages: next })
-    emit({ kind: 'page:replace', pageId: animated.id, page: animated })
+    set({ pages: next, dirty: true, version: version + 1 })
+    emit({ kind: 'page:replace', pageId: animated.id, page: stampPage(animated, nowHlc()) })
   },
   clearPageAnimations: () => {
     get().pushHistory()
-    const { pages, currentPage } = get()
+    const { pages, currentPage, version } = get()
     const next = pages.map((p, i) => (i !== currentPage ? p : clearPageAnimations(p)))
     const cleared = next[currentPage]
-    set({ pages: next })
-    emit({ kind: 'page:replace', pageId: cleared.id, page: cleared })
+    set({ pages: next, dirty: true, version: version + 1 })
+    emit({ kind: 'page:replace', pageId: cleared.id, page: stampPage(cleared, nowHlc()) })
   },
 
   // ── v0.5: collaboration runtime state ─────────
   setCollaborators: (list) => set({ collaborators: list }),
   setCollabStatus: (s) => set({ collabStatus: s }),
+  setBaseUpdatedAt: (t) => set({ baseUpdatedAt: t }),
   applyRemoteOp: (event) => {
     const payload = event.payload as Record<string, unknown> | null
     if (!payload) return
     const { pages, version } = get()
+
+    // v0.10: absorb the event's HLC into the local clock (causality moves
+    // forward), then read it as this event's write-stamp.
+    const evHlc = eventHlc(event)
+    if (evHlc) getClock().observe(evHlc)
 
     const findPage = (pageId: unknown): number => pages.findIndex((p) => p.id === pageId)
 
@@ -870,18 +984,49 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       case 'elements:update': {
         const ids = (payload.ids as string[]) ?? []
         const patch = (payload.patch as Record<string, unknown>) ?? {}
+        // v0.10 LWW gate: the write-stamp travels in the patch (_m) or, for
+        // server-stamped legacy events, at the payload root (_h). Apply only
+        // to elements whose current stamp is strictly older. No stamp at all
+        // = pre-v0.10 event → legacy passthrough (today's behaviour).
+        const stamp = (typeof patch._m === 'string' && patch._m) || evHlc
+        const gate = (el: AnyElement): boolean => !stamp || !el._m || stamp > el._m
         next = mapPage(payload.pageId, (page) => ({
           ...page,
-          elements: page.elements.map((e) => (ids.includes(e.id) ? ({ ...e, ...patch } as AnyElement) : e)),
+          elements: page.elements.map((e) =>
+            ids.includes(e.id) && gate(e) ? ({ ...e, ...patch, ...(stamp ? { _m: stamp } : {}) } as AnyElement) : e,
+          ),
         }))
         break
       }
       case 'element:add': {
         const el = payload.element as AnyElement | undefined
         if (el?.id) {
-          next = mapPage(payload.pageId, (page) =>
-            page.elements.some((e) => e.id === el.id) ? page : { ...page, elements: [...page.elements, clone(el)] }
-          )
+          const stampedEl = { ...el, _m: el._m ?? evHlc } as AnyElement
+          next = mapPage(payload.pageId, (page) => {
+            const existing = page.elements.find((e) => e.id === el.id)
+            if (!existing) {
+              // re-add clears any tombstone that is older than this write
+              const tombs = { ...(page.tombstones ?? {}) }
+              let mutated = false
+              for (const [id, h] of Object.entries(tombs)) {
+                if (id === el.id && (!stampedEl._m || stampedEl._m > h)) {
+                  delete tombs[id]
+                  mutated = true
+                }
+              }
+              return {
+                ...page,
+                elements: [...page.elements, clone(stampedEl)],
+                ...(mutated ? { tombstones: tombs } : {}),
+              }
+            }
+            // exists: a newer re-add replaces it; an older one is stale
+            if (stampedEl._m && existing._m && stampedEl._m <= existing._m) return page
+            return {
+              ...page,
+              elements: page.elements.map((e) => (e.id === el.id ? clone(stampedEl) : e)),
+            }
+          })
         }
         break
       }
@@ -889,15 +1034,62 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const els = (payload.elements as AnyElement[]) ?? []
         if (els.length) {
           next = mapPage(payload.pageId, (page) => {
-            const known = new Set(page.elements.map((e) => e.id))
-            return { ...page, elements: [...page.elements, ...els.filter((e) => !known.has(e.id)).map((e) => clone(e))] }
+            const known = new Map(page.elements.map((e) => [e.id, e]))
+            const tombs = { ...(page.tombstones ?? {}) }
+            let tombsChanged = false
+            const additions: AnyElement[] = []
+            const replacements = new Map<string, AnyElement>()
+            for (const raw of els) {
+              if (!raw?.id) continue
+              const el = { ...raw, _m: raw._m ?? evHlc } as AnyElement
+              const existing = known.get(raw.id)
+              if (!existing) {
+                const t = tombs[raw.id]
+                if (t && el._m && el._m <= t) continue // tombstone newer — stays deleted
+                if (t && el._m) {
+                  delete tombs[raw.id]
+                  tombsChanged = true
+                }
+                additions.push(clone(el))
+              } else if (!el._m || !existing._m || el._m > existing._m) {
+                replacements.set(raw.id, clone(el))
+              }
+            }
+            if (!additions.length && !replacements.size) return page
+            return {
+              ...page,
+              elements: [
+                ...page.elements.map((e) => replacements.get(e.id) ?? e),
+                ...additions,
+              ],
+              ...(tombsChanged ? { tombstones: tombs } : {}),
+            }
           })
         }
         break
       }
       case 'element:delete': {
         const ids = new Set((payload.ids as string[]) ?? [])
-        next = mapPage(payload.pageId, (page) => ({ ...page, elements: page.elements.filter((e) => !ids.has(e.id)) }))
+        next = mapPage(payload.pageId, (page) => {
+          const tombs = { ...(page.tombstones ?? {}) }
+          let changed = false
+          for (const id of ids) {
+            if (!evHlc) continue // legacy event — no stamp, no tombstone
+            const prev = tombs[id]
+            if (!prev || evHlc > prev) {
+              tombs[id] = evHlc
+              changed = true
+            }
+          }
+          // a delete only removes elements it is NOT older than (a stale
+          // offline delete must not kill a newer re-add)
+          const survivors = page.elements.filter((e) => {
+            if (!ids.has(e.id)) return true
+            return !!(evHlc && e._m && evHlc < e._m)
+          })
+          if (!changed && survivors.length === page.elements.length) return page
+          return { ...page, elements: survivors, tombstones: tombs }
+        })
         break
       }
       case 'elements:reorder': {
@@ -927,22 +1119,37 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         break
       }
       case 'page:background': {
-        next = mapPage(payload.pageId, (page) => ({ ...page, background: clone(payload.background as Background) }))
+        next = mapPage(payload.pageId, (page) =>
+          !evHlc || !page._pm || evHlc > page._pm
+            ? { ...page, background: clone(payload.background as Background), _pm: evHlc ?? page._pm }
+            : page,
+        )
         break
       }
       case 'page:replace': {
         const page = clone(payload.page as PageData)
         if (page?.id) {
           const i = findPage(page.id)
-          next = i >= 0 ? pages.map((p, k) => (k === i ? page : p)) : [...pages, page]
+          if (i < 0) {
+            next = [...pages, page]
+          } else {
+            // v0.10: merge per element by stamp instead of blind replace —
+            // same rule as the server's divergent-PUT merge (merge.ts)
+            const merged = mergePages([pages[i]], [page])[0]
+            next = pages.map((p, k) => (k === i ? merged : p))
+          }
         }
         break
       }
       case 'pages:replace': {
         const replaced = clone((payload.pages as PageData[]) ?? [])
         if (replaced.length) {
-          const currentPage = Math.min(get().currentPage, replaced.length - 1)
-          set({ pages: replaced, currentPage, selectedIds: [], version: version + 1, dirty: true })
+          // v0.10: full-replace ops are stamped broadcasts — merge them per
+          // element/page by stamp so concurrent newer local edits survive
+          // (identical rule to the server-side PUT merge → convergence).
+          next = mergePages(pages, replaced)
+          const currentPage = Math.min(get().currentPage, next.length - 1)
+          set({ pages: next, currentPage, selectedIds: [], version: version + 1, dirty: true })
           const w = Number(payload.width)
           const h = Number(payload.height)
           if (Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) set({ width: w, height: h })

@@ -1,6 +1,12 @@
 'use client'
 
 import type { Collaborator, CollabOp, CollabStatus, DesignEventRow, OpEnvelope, StreamFrame } from './protocol'
+import { getClock } from './hlc'
+import {
+  MAX_QUEUE,
+  getQueue as loadPersistedQueue,
+  putQueue as persistQueue,
+} from './offline-store'
 
 /**
  * CollabSession — one per open design.
@@ -11,6 +17,9 @@ import type { Collaborator, CollabOp, CollabStatus, DesignEventRow, OpEnvelope, 
  *   (v0.9.2: was 120 ms / 5 s — each write is a remote-DB upsert, and
  *   the old rates let a single moving mouse generate ~8 writes/s)
  * - reconnect with exponential backoff (0.5 s → 8 s), gap-free replay via ?since
+ * - v0.10 offline merge: the op queue and the replay cursor persist
+ *   (IndexedDB / localStorage) — edits made offline survive reloads and
+ *   flush on reconnect; nothing is dropped while the network is down
  *
  * Zustand stays the local rendering truth; collab never blocks input.
  */
@@ -33,17 +42,29 @@ export class CollabSession {
   private processedEventIds = new Set<string>()
   private lastCursorSent = 0
   private pendingCursor: { page: number; x: number; y: number; selection?: string[] } | null = null
+  private persistTimer: ReturnType<typeof setTimeout> | null = null
+  private booted = false
 
   // callbacks
   onStatus: ((s: CollabStatus) => void) | null = null
   onEvents: ((events: DesignEventRow[]) => void) | null = null
   onPresence: ((collaborators: Collaborator[]) => void) | null = null
+  /** v0.10: pending-op count changes (offline badge) */
+  onQueueDepth: ((n: number) => void) | null = null
 
   constructor(designId: string, pid: string, name: string, color: string) {
     this.designId = designId
     this.pid = pid
     this.name = name
     this.color = color
+    // v0.10: resume the replay cursor from the last frame we consumed —
+    // a reload must not replay the whole retained log over a fresh document
+    try {
+      const stored = Number(localStorage.getItem(`canvix-seq-${designId}`))
+      if (Number.isFinite(stored) && stored > 0) this.lastSeq = stored
+    } catch {
+      /* storage unavailable — since=0 (gate-protected) */
+    }
   }
 
   // ── lifecycle ─────────────────────────────────────────────
@@ -55,6 +76,23 @@ export class CollabSession {
     // v0.9.2: 15 s heartbeat — the server treats presence as live for 30 s,
     // so this still tolerates one lost beat before a collaborator fades out.
     this.heartbeatTimer = setInterval(() => void this.heartbeat(), 15_000)
+    // v0.10: restore ops persisted while offline and flush them as soon as
+    // we have a connection (they carry HLC stamps, so they merge safely no
+    // matter what happened on the server meanwhile)
+    if (!this.booted) {
+      this.booted = true
+      void loadPersistedQueue(this.designId).then((restored) => {
+        if (this.disposed) return
+        if (restored.length) {
+          // persisted ops are older than anything typed this session —
+          // front of the queue, flushed first
+          this.queue = [...restored, ...this.queue].slice(0, MAX_QUEUE) as OpEnvelope[]
+          this.scheduleQueuePersist()
+          void this.flush()
+        }
+        this.onQueueDepth?.(this.queue.length)
+      })
+    }
   }
 
   dispose() {
@@ -63,6 +101,9 @@ export class CollabSession {
     if (this.flushTimer) clearInterval(this.flushTimer)
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    if (this.persistTimer) clearTimeout(this.persistTimer)
+    // v0.10: flush what we can one last time, then durably persist the rest
+    void this.flush().finally(() => this.scheduleQueuePersist(0))
     this.es?.close()
     this.es = null
   }
@@ -133,6 +174,14 @@ export class CollabSession {
       // server max seq — safe to track even without events (ids are monotonic)
       if (frame.seq > this.lastSeq && (frame.events ?? []).length === 0) this.lastSeq = frame.seq
     }
+    // v0.10: persist the replay cursor (tiny; survives reloads/crashes)
+    if (this.lastSeq > 0) {
+      try {
+        localStorage.setItem(`canvix-seq-${this.designId}`, String(this.lastSeq))
+      } catch {
+        /* storage unavailable */
+      }
+    }
     const now = Date.now()
     this.onPresence?.(
       (frame.presence ?? []).map((p) => ({
@@ -150,6 +199,9 @@ export class CollabSession {
   /** Queue a local op (deduped by eventId, applied optimistically locally). */
   emit(op: CollabOp, eventId: string) {
     if (this.disposed) return
+    // v0.10: every emitted write carries an HLC stamp — replicas (and the
+    // server's PUT merge) arbitrate by it, so replay order never matters
+    const hlc = getClock(this.pid).nowHlc()
     // coalesce consecutive elements:update patches for the same ids (drags/typing) —
     // keeps the event log small and the fan-out cheap
     if (op.kind === 'elements:update') {
@@ -162,16 +214,32 @@ export class CollabSession {
           op.ids.every((id) => prev.ids.includes(id))
         ) {
           last.op = { kind: 'elements:update', pageId: prev.pageId, ids: prev.ids, patch: { ...prev.patch, ...op.patch } }
+          last.hlc = hlc
           return
         }
       }
     }
-    this.queue.push({ eventId, op })
+    this.queue.push({ eventId, hlc, op })
+    if (this.queue.length > MAX_QUEUE) this.queue = this.queue.slice(-MAX_QUEUE)
+    this.onQueueDepth?.(this.queue.length)
+    this.scheduleQueuePersist()
     if (this.queue.length >= 20) void this.flush()
   }
 
+  /** debounced durable persist of the pending queue (offline survival) */
+  private scheduleQueuePersist(delay = 500) {
+    if (this.persistTimer) return
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null
+      void persistQueue(
+        this.designId,
+        this.queue as unknown as Array<{ eventId: string; hlc?: string; op: Record<string, unknown> }>,
+      )
+    }, delay)
+  }
+
   private async flush() {
-    if (this.disposed || !this.queue.length) return
+    if (!this.queue.length) return
     const batch = this.queue.splice(0, 20)
     try {
       const res = await fetch(`/api/collab/${encodeURIComponent(this.designId)}/events`, {
@@ -179,14 +247,25 @@ export class CollabSession {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pid: this.pid, name: this.name, color: this.color, events: batch }),
       })
-      if (!res.ok && (res.status === 404 || res.status === 503)) {
+      if (res.ok) {
+        this.onQueueDepth?.(this.queue.length)
+        this.scheduleQueuePersist(100)
+      } else if (res.status === 404 || res.status === 503) {
         // design gone / db down — drop the queue (local editor still works)
         this.queue = []
+        this.onQueueDepth?.(0)
+        this.scheduleQueuePersist(0)
+      } else {
+        // transient server error — keep the batch for the next tick
+        this.queue = [...batch, ...this.queue].slice(0, MAX_QUEUE)
       }
     } catch {
-      /* offline — re-queue once for a retry on the next tick, else drop */
-      if (this.queue.length < 40) this.queue = [...batch.slice(0, 5), ...this.queue]
-      else this.queue = []
+      // v0.10: OFFLINE — retain the batch at the front of the queue; the
+      // next tick retries. Editing continues and nothing is dropped while
+      // the network is down (bounded by MAX_QUEUE; queue + doc also persist).
+      this.queue = [...batch, ...this.queue].slice(0, MAX_QUEUE)
+      this.onQueueDepth?.(this.queue.length)
+      this.scheduleQueuePersist(0)
     }
   }
 

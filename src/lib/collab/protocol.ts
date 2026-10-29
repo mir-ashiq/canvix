@@ -27,6 +27,10 @@ export type CollabOp =
 export interface OpEnvelope {
   /** client-generated unique id — dedupe on replay */
   eventId: string
+  /** v0.10 offline merge: hybrid-logical-clock stamp of this write.
+  *  Absent on legacy clients — the server stamps those with its own clock
+  *  at persist time (see the events route). */
+  hlc?: string
   op: CollabOp
 }
 
@@ -40,6 +44,12 @@ export interface DesignEventRow {
   kind: string
   payload: unknown
   createdAt: string
+}
+
+/** v0.10: read the HLC stamp off an event payload (server embeds `_h`). */
+export function eventHlc(row: Pick<DesignEventRow, 'payload'>): string | undefined {
+  const p = row.payload as { _h?: unknown } | null | undefined
+  return typeof p?._h === 'string' ? p._h : undefined
 }
 
 export interface PresenceRow {

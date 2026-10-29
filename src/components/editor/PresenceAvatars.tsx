@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Wifi, WifiOff, Loader2, Pencil } from 'lucide-react'
+import { Wifi, WifiOff, Loader2, Pencil, CloudUpload } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { getIdentity, setDisplayName } from '@/lib/collab/identity'
 import { cn } from '@/lib/utils'
@@ -21,24 +21,48 @@ function initials(name: string): string {
 export function PresenceAvatars() {
   const collaborators = useEditorStore((s) => s.collaborators)
   const status = useEditorStore((s) => s.collabStatus)
+  const pendingOps = useEditorStore((s) => s.pendingOps)
+  const offlineRestored = useEditorStore((s) => s.offlineRestored)
   const [open, setOpen] = useState(false)
 
   const me = getIdentity()
 
   return (
     <div className="flex items-center gap-2 mr-1">
+      {/* v0.10: recovered offline work notice */}
+      {offlineRestored && (
+        <span
+          className="hidden lg:flex items-center gap-1 text-[11px] font-semibold text-sky-300/90"
+          title="Unsaved local changes were recovered — they merge automatically on save"
+        >
+          <CloudUpload size={12} /> Recovered
+        </span>
+      )}
       {/* connection status */}
       {status === 'live' ? (
-        <span className="hidden xl:flex items-center gap-1 text-[11px] font-semibold text-emerald-300/90" title={`Live — ${collaborators.length + 1} editing`}>
-          <Wifi size={12} /> Live
-        </span>
+        pendingOps > 0 ? (
+          <span className="hidden xl:flex items-center gap-1 text-[11px] font-semibold text-amber-300/90" title={`${pendingOps} queued change${pendingOps === 1 ? '' : 's'} — syncing`}>
+            <Loader2 size={12} className="animate-spin" /> Syncing {pendingOps}
+          </span>
+        ) : (
+          <span className="hidden xl:flex items-center gap-1 text-[11px] font-semibold text-emerald-300/90" title={`Live — ${collaborators.length + 1} editing`}>
+            <Wifi size={12} /> Live
+          </span>
+        )
       ) : status === 'connecting' ? (
         <span className="hidden xl:flex items-center gap-1 text-[11px] font-semibold text-amber-300/90" title="Reconnecting…">
           <Loader2 size={12} className="animate-spin" /> Syncing
         </span>
       ) : (
-        <span className="hidden xl:flex items-center gap-1 text-[11px] font-semibold text-white/40" title="Offline — edits save locally">
-          <WifiOff size={12} /> Offline
+        <span
+          className="hidden xl:flex items-center gap-1 text-[11px] font-semibold text-white/40"
+          title={
+            pendingOps > 0
+              ? `Offline — ${pendingOps} change${pendingOps === 1 ? '' : 's'} saved locally and will sync automatically`
+              : 'Offline — edits save locally'
+          }
+        >
+          <WifiOff size={12} /> Offline{pendingOps > 0 ? ` · ${pendingOps}` : ''}
         </span>
       )}
 

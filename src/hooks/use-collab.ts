@@ -38,6 +38,7 @@ export function useCollab(): void {
     activeSession = session
 
     session.onStatus = (s) => useEditorStore.getState().setCollabStatus(s)
+    session.onQueueDepth = (n) => useEditorStore.setState({ pendingOps: n })
     session.onEvents = (events) => {
       const store = useEditorStore.getState()
       for (const ev of events) store.applyRemoteOp(ev)

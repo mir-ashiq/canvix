@@ -99,6 +99,11 @@ export interface BaseElement {
   name?: string
   /** v0.5: entry animation (undefined = none) */
   animation?: ElementAnimation
+  /** v0.10 offline-merge: hybrid-logical-clock stamp of the last write to
+   * this element ("w:counter:actor"). Older documents lack it — treated as
+   * epoch "0" so stamped writes deterministically win over legacy state.
+   * See src/lib/collab/hlc.ts + merge.ts. */
+  _m?: string
   /** v0.5 Magic Layers provenance — set on elements generated from an image analysis */
   magicLayer?: {
     sourceRegion: string
@@ -303,6 +308,12 @@ export interface PageData {
   elements: AnyElement[]
   /** v0.5: transition played when this page appears after another */
   transition?: PageTransition
+  /** v0.10 offline-merge: page-level HLC stamp (background/transition writes) */
+  _pm?: string
+  /** v0.10 offline-merge: elementId → HLC stamp of its deletion. Tombstones
+   * ride the saved document so deletes merge deterministically against
+   * concurrent edits (delete wins only while it is the newer write). */
+  tombstones?: Record<string, string>
 }
 
 /** user-placed ruler guide (position in page px; scoped to a page) */

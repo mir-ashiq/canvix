@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { Prisma } from '@/generated/prisma/client'
 import {
   MAX_EVENTS_PER_FLUSH,
   OP_KINDS,
@@ -68,8 +69,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ des
     }
 
     const seenEventIds = new Set<string>()
-    const accepted: string[] = []
     const rejected: string[] = []
+    const rows: Prisma.DesignEventCreateManyInput[] = []
 
     for (const env of events) {
       if (!env || typeof env !== 'object' || !env.op || typeof env.eventId !== 'string') {
@@ -106,27 +107,55 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ des
       // v0.10: embed the HLC stamp (client's if present, else the server's)
       payload._h = typeof env.hlc === 'string' && env.hlc.length <= 80 ? env.hlc : serverHlc()
 
-      await db.designEvent.create({
-        data: {
-          designId,
-          actorId: pid,
-          kind: op.kind,
-          payload: payload as object,
-        },
+      rows.push({
+        designId,
+        actorId: pid,
+        kind: op.kind,
+        payload: payload as Prisma.InputJsonValue,
+        eventId: env.eventId,
       })
-      accepted.push(env.eventId)
     }
 
-    // touch presence so an active editor stays "online" even between heartbeats
+    // v0.10.1: one round-trip for the whole batch (was N sequential creates —
+    // up to 20 pooler round-trips per flush) and IDEMPOTENT: (designId,
+    // eventId) is unique, so a retried flush (network drop, or the function
+    // killed at its duration limit mid-batch — exactly the 30 s-timeout
+    // incident) re-inserts nothing instead of duplicating ops. The v0.10
+    // client RETAINS failed batches, so this is what makes retries safe.
+    let accepted = 0
+    if (rows.length) {
+      const r = await db.designEvent.createMany({ data: rows, skipDuplicates: true })
+      accepted = r.count
+    }
+
+    // touch presence so an active editor stays "online" even between heartbeats.
+    // v0.10.1: bounded (3 s) — presence is best-effort and must never hold the
+    // flush hostage — and P2002-safe (a concurrent create raced us → the row
+    // exists by now → a plain update lands the touch anyway).
     const name = (body.name ?? '').replace(/[^\p{L}\p{N} ._-]/gu, '').slice(0, 40) || 'Guest'
     const color = HEX_COLOR.test(body.color ?? '') ? body.color! : '#7630D7'
-    await db.presence.upsert({
-      where: { designId_id: { designId, id: pid } },
-      create: { designId, id: pid, name, color },
-      update: { lastSeen: new Date(), name, color },
-    }).catch(() => { /* presence is best-effort */ })
+    await Promise.race([
+      db.presence
+        .upsert({
+          where: { designId_id: { designId, id: pid } },
+          create: { designId, id: pid, name, color },
+          update: { lastSeen: new Date(), name, color },
+        })
+        .catch(async (err) => {
+          if ((err as { code?: string }).code === 'P2002') {
+            await db.presence
+              .update({
+                where: { designId_id: { designId, id: pid } },
+                data: { lastSeen: new Date(), name, color },
+              })
+              .catch(() => { /* row vanished (GC) — next heartbeat recreates */ })
+          }
+          /* other errors: presence is best-effort */
+        }),
+      new Promise<void>((resolve) => setTimeout(resolve, 3_000)),
+    ])
 
-    return NextResponse.json({ ok: true, accepted: accepted.length, rejected })
+    return NextResponse.json({ ok: true, accepted, rejected })
   } catch (err) {
     console.error('[collab/events]', err)
     return NextResponse.json({ error: 'Could not persist collaboration events.' }, { status: 502 })

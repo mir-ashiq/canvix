@@ -39,6 +39,8 @@ export interface OpEnvelope {
 export interface DesignEventRow {
   seq: number
   id: string
+  /** v0.10.1: the emitting client's dedupe key (absent on legacy rows) */
+  eventId?: string
   designId: string
   actorId: string
   kind: string

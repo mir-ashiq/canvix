@@ -3,6 +3,46 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.10.1] — 2026-10-29
+
+Production hotfix: the presence P2002 storm + 30-second function hangs.
+Full analysis: `research/PRESENCE-P2002-POSTMORTEM.md`.
+
+### Fixed
+- **Presence P2002 on every heartbeat** — `Presence` had a primary key
+  on the participant id alone, but identity is per-browser and shared
+  across designs; a second open design collided with the first on every
+  heartbeat (~15 s) and cursor update. Migration `0004` makes the PK
+  `(designId, id)` — one browser can now be present in many designs —
+  and the heartbeat route falls back to a plain update on a
+  concurrent-create P2002 instead of 502ing.
+- **Functions running to exactly 30,000 ms** — the pg pool had no
+  acquisition timeout and no keepAlive, so one stale pooled connection
+  (pooler idle-drop without FIN) hung every request sharing the instance
+  until the platform killed it at `maxDuration`. The pool now fails fast
+  (`connectionTimeoutMillis 10 s`, `idleTimeoutMillis 30 s`, TCP
+  keepAlive); the SSE stream closes cleanly when a tick wedges >8 s and
+  self-recycles at 240 s (< the 300 s ceiling); a `retry: 1500` hint
+  makes the client's reconnect invisible.
+- **Duplicate events on retried flushes** (latent) — the v0.10 client
+  retains and retries failed batches; a flush killed mid-batch could
+  re-insert its persisted prefix. `DesignEvent.eventId` is now stored
+  with a unique `(designId, eventId)` index and flushes insert via one
+  idempotent `createMany({ skipDuplicates: true })` — retries are exact
+  no-ops, and a flush costs one pooler round-trip instead of up to
+  twenty.
+
+### Verification
+- Migration 0004 applied to production (composite PK + eventId dedupe
+  verified in `information_schema`); 267/267 tests; tsc + eslint clean.
+- Live probe extended to **18 checks** — all green against the real
+  database, including the incident regressions (one pid heartbeating
+  into two designs; a replayed batch inserting zero duplicates; each
+  op streaming exactly once). Zero `[collab/presence]` errors in the
+  server log afterwards.
+- Cloudflare 2.14 MB gz / Netlify 19.6 MB zip — unchanged, within all
+  free-tier limits.
+
 ## [0.10.0] — 2026-10-29
 
 The "no lost work, ever" release: offline and concurrent edits merge

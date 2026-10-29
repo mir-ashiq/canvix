@@ -5,6 +5,19 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // Vercel-friendly bounded stream duration
 
+// ── v0.10.1 lifecycle bounds (production incident 2026-10-29) ──
+// A tick could wedge forever on a stale pooled connection (pooler idle
+// drop with no FIN): the stream then hung silently until the platform
+// killed the function at its duration limit, and every request sharing
+// that instance's single connection queued behind it. Bounds now:
+//   - PUMP_TIMEOUT_MS: one tick wedging past this ends the invocation
+//     CLEANLY — the client reconnects within ~1.5 s and replays gap-free
+//   - MAX_STREAM_AGE_MS: self-recycle well under maxDuration so the
+//     platform never kills us mid-frame (fresh connection per cycle is
+//     also the cheapest pool hygiene there is)
+const PUMP_TIMEOUT_MS = 8_000
+const MAX_STREAM_AGE_MS = Number(process.env.CANVIX_STREAM_TTL_MS ?? 240_000)
+
 /**
  * GET /api/collab/[designId]/stream?since=<seq>&pid=<participantId>
  *
@@ -40,6 +53,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ desi
   const encoder = new TextEncoder()
   let closed = false
   let timer: ReturnType<typeof setTimeout> | null = null
+  let pumpTimeout: ReturnType<typeof setTimeout> | null = null
+  const born = Date.now()
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -68,6 +83,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ desi
         if (closed) return
         closed = true
         if (timer) clearTimeout(timer)
+        if (pumpTimeout) clearTimeout(pumpTimeout)
         try {
           controller.close()
         } catch {
@@ -117,6 +133,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ desi
               events: events.map((e) => ({
                 seq: Number(e.id),
                 id: e.id.toString(),
+                eventId: e.eventId ?? undefined, // v0.10.1: client dedupe key
                 designId: e.designId,
                 actorId: e.actorId,
                 kind: e.kind,
@@ -157,10 +174,37 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ desi
 
       // v0.9.2: adaptive self-scheduling pump — backs off to 3.2 s when the
       // design is quiet, returns to 800 ms the moment anything happens.
+      const PUMP_WEDGED = Symbol('pump-wedged')
       const scheduleNext = async () => {
         if (closed) return
-        const hadEvents = await pump()
-        delay = hadEvents ? 800 : Math.min(Math.round(delay * 1.5), 3200)
+        // v0.10.1: self-recycle under the maxDuration ceiling — the client
+        // reconnects (retry hint below) and replays gap-free via ?since
+        if (Date.now() - born > MAX_STREAM_AGE_MS) {
+          comment('recycle')
+          close()
+          return
+        }
+        const result = await Promise.race([
+          pump(),
+          new Promise<typeof PUMP_WEDGED>((resolve) => {
+            pumpTimeout = setTimeout(() => resolve(PUMP_WEDGED), PUMP_TIMEOUT_MS)
+          }),
+        ])
+        if (pumpTimeout) {
+          clearTimeout(pumpTimeout)
+          pumpTimeout = null
+        }
+        if (closed) return
+        if (result === PUMP_WEDGED) {
+          // v0.10.1: a tick wedged past PUMP_TIMEOUT_MS (stale pooled
+          // connection / pooler hiccup) — end this invocation cleanly
+          // instead of hanging to maxDuration; the client reconnects
+          // within ~1.5 s and replays gap-free
+          comment('db-timeout')
+          close()
+          return
+        }
+        delay = result ? 800 : Math.min(Math.round(delay * 1.5), 3200)
         if (closed) return
         timer = setTimeout(() => void scheduleNext(), delay)
       }
@@ -169,6 +213,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ desi
 
       // initial frame immediately (replay from `since`)
       comment(`open design=${designId} since=${since}`)
+      // v0.10.1: reconnect hint — after our clean close (recycle /
+      // db-timeout) the browser reconnects in 1.5 s instead of the ~3 s
+      // default, keeping the gap invisible to the user
+      try {
+        controller.enqueue(encoder.encode('retry: 1500\n\n'))
+      } catch {
+        /* client already gone */
+      }
       await scheduleNext()
     },
   })

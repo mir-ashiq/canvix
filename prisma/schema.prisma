@@ -124,21 +124,33 @@ model DesignEvent {
   actorId   String // participant id (client-generated)
   kind      String // op name — see research/COLLABORATION-ARCHITECTURE.md §3
   payload   Json
+  // v0.10.1: the client's dedupe key for this op. Unique per design so a
+  // retried flush (network drop / function timeout mid-batch) is a no-op
+  // instead of a duplicate — at-least-once delivery becomes exactly-once.
+  // Nullable: rows written before v0.10.1 have none (Postgres unique
+  // indexes ignore NULLs, so legacy rows never conflict).
+  eventId   String?
   createdAt DateTime @default(now())
 
+  @@unique([designId, eventId])
   @@index([designId, id(sort: Desc)])
 }
 
 // Live presence per participant per design (heartbeat-based).
+// v0.10.1: the primary key is (designId, id) — participant identity is
+// per-BROWSER (src/lib/collab/identity.ts) and one browser can edit two
+// designs at once (two tabs). The old single-column PK on id made presence
+// exclusive to one design: every heartbeat for a second design failed with
+// P2002 (production incident 2026-10-29).
 model Presence {
-  id        String   @id // = participant id
+  id        String // = participant id
   designId  String
   name      String
   color     String
   cursor    Json? // { page: number, x: number, y: number, selection?: string[] }
   lastSeen  DateTime @default(now()) @updatedAt
 
-  @@unique([designId, id])
+  @@id([designId, id])
   @@index([designId, lastSeen])
 }
 

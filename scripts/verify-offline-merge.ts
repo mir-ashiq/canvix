@@ -153,23 +153,53 @@ async function main() {
     }
 
     // 6. collab events — client hlc preserved, legacy gets a server stamp
-    const ev = await api('POST', `/api/collab/${designId}/events`, {
+    const batch = {
       pid: 'probe-pid',
       events: [
         { eventId: 'probe-ev-1', hlc: '00000012y0:00009:probe-b', op: { kind: 'elements:update', pageId, ids: ['E1'], patch: { text: 'via-sse' } } },
         { eventId: 'probe-ev-2', op: { kind: 'elements:update', pageId, ids: ['E2'], patch: { text: 'legacy-client' } } }, // NO hlc → server stamps
       ],
-    })
+    }
+    const ev = await api('POST', `/api/collab/${designId}/events`, batch)
     if (ev.status === 200 && ev.json?.accepted === 2) pass('events POST', '2 ops accepted')
     else fail('events POST', `status ${ev.status} body=${JSON.stringify(ev.json).slice(0, 120)}`)
 
-    // 7. SSE replay — both events stream back with `_h` in the payload
+    // 6b. v0.10.1 idempotent flush — the exact retry the client performs
+    // after a request dies mid-batch (30 s function kill): the SAME batch
+    // must re-insert nothing ((designId, eventId) unique)
+    const dup = await api('POST', `/api/collab/${designId}/events`, batch)
+    if (dup.status === 200 && dup.json?.accepted === 0) pass('idempotent flush', 'replayed batch inserted 0 duplicates')
+    else fail('idempotent flush', `status ${dup.status} accepted=${dup.json?.accepted}`)
+
+    // 6c. v0.10.1 cross-design presence — the exact P2002 repro: ONE
+    // browser identity heartbeating into TWO designs (the old PK on id
+    // alone made the second design's upsert fail every 15 s)
+    const second = await api('POST', '/api/designs', { name: 'offline-merge-probe-2', width: 800, height: 600 })
+    if (second.status === 201) {
+      const design2 = second.json.id
+      try {
+        const hb1 = await api('POST', `/api/collab/${designId}/presence`, { pid: 'probe-pid', name: 'Probe', color: '#7630D7', cursor: { page: 0, x: 10, y: 20 } })
+        const hb2 = await api('POST', `/api/collab/${design2}/presence`, { pid: 'probe-pid', name: 'Probe', color: '#7630D7', cursor: { page: 0, x: 30, y: 40 } })
+        const hb1b = await api('POST', `/api/collab/${designId}/presence`, { pid: 'probe-pid', name: 'Probe', color: '#7630D7' })
+        if (hb1.status === 200 && hb2.status === 200 && hb1b.status === 200)
+          pass('cross-design presence', 'same pid live in two designs, no P2002')
+        else
+          fail('cross-design presence', `heartbeat statuses ${hb1.status}/${hb2.status}/${hb1b.status}`)
+      } finally {
+        await api('DELETE', `/api/designs/${design2}?permanent=1`)
+      }
+    } else {
+      fail('cross-design presence', `second design create → ${second.status}`)
+    }
+
+    // 7. SSE replay — both events stream back with `_h` in the payload,
+    // EXACTLY ONCE each (duplicates would show the dedupe index failing)
     const ac = new AbortController()
     const sse = await fetch(`${BASE}/api/collab/${designId}/stream?since=0&pid=probe-pid`, {
       headers: cookies ? { cookie: cookies } : {},
       signal: ac.signal,
     })
-    const found = { client: false, server: false }
+    const found = { client: 0, server: 0, retryHint: false }
     if (sse.ok && sse.body) {
       const reader = sse.body.getReader()
       const dec = new TextDecoder()
@@ -182,16 +212,16 @@ async function main() {
         const lines = buf.split('\n')
         buf = lines.pop() ?? ''
         for (const line of lines) {
+          if (line.startsWith('retry:')) found.retryHint = true
           if (!line.startsWith('data:')) continue
           try {
             const frame = JSON.parse(line.slice(5).trim())
             for (const e of frame.events ?? []) {
-              // stream ids are DB row ids (client eventIds aren't persisted)
-              // → match ops by their patch payload
+              // stream ids are DB row ids — match ops by their patch payload
               const h = e.payload?._h
               const texts = JSON.stringify(e.payload?.patch ?? {})
-              if (texts.includes('via-sse') && h === '00000012y0:00009:probe-b') found.client = true
-              if (texts.includes('legacy-client') && typeof h === 'string' && h.endsWith(':srv')) found.server = true
+              if (texts.includes('via-sse') && h === '00000012y0:00009:probe-b') found.client++
+              if (texts.includes('legacy-client') && typeof h === 'string' && h.endsWith(':srv')) found.server++
             }
           } catch {
             /* keep-alive / partial */
@@ -200,10 +230,12 @@ async function main() {
       }
       ac.abort()
     }
-    if (found.client) pass('SSE client hlc', 'payload._h preserved verbatim')
-    else fail('SSE client hlc', 'probe-ev-1 not observed with its stamp')
-    if (found.server) pass('SSE server stamp', 'legacy op stamped …:srv:')
-    else fail('SSE server stamp', 'probe-ev-2 not observed with a server stamp')
+    if (found.client === 1) pass('SSE client hlc', 'payload._h preserved verbatim, exactly once')
+    else fail('SSE client hlc', `probe-ev-1 observed ${found.client}× (want exactly 1)`)
+    if (found.server === 1) pass('SSE server stamp', 'legacy op stamped …:srv, exactly once')
+    else fail('SSE server stamp', `probe-ev-2 observed ${found.server}× (want exactly 1)`)
+    if (found.retryHint) pass('SSE retry hint', 'reconnect hint present for clean recycles')
+    else fail('SSE retry hint', 'retry: field not observed')
   } finally {
     // 8. cleanup — permanent delete
     const del = await api('DELETE', `/api/designs/${designId}?permanent=1`)

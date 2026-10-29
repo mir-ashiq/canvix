@@ -42,11 +42,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ des
     }
 
     const { Prisma } = await import('@/generated/prisma/client')
-    await db.presence.upsert({
-      where: { designId_id: { designId, id: pid } },
-      create: { designId, id: pid, name, color, cursor: (cursor ?? undefined) as object },
-      update: { name, color, cursor: (cursor ?? Prisma.JsonNull) as object, lastSeen: new Date() },
-    })
+    // v0.10.1 (incident 2026-10-29): this upsert used to 502 with P2002
+    // every heartbeat when one browser had presence in a second design
+    // (participant identity is per-browser; the PK used to be id alone —
+    // fixed by migration 0004). Belt-and-braces: a concurrent create race
+    // can still P2002 on the composite key — fall back to a plain update
+    // so the heartbeat lands and the route never 502s on a benign race.
+    try {
+      await db.presence.upsert({
+        where: { designId_id: { designId, id: pid } },
+        create: { designId, id: pid, name, color, cursor: (cursor ?? undefined) as object },
+        update: { name, color, cursor: (cursor ?? Prisma.JsonNull) as object, lastSeen: new Date() },
+      })
+    } catch (err) {
+      if ((err as { code?: string }).code === 'P2002') {
+        await db.presence
+          .update({
+            where: { designId_id: { designId, id: pid } },
+            data: { name, color, cursor: (cursor ?? Prisma.JsonNull) as object, lastSeen: new Date() },
+          })
+          .catch(() => { /* row vanished (24 h GC) — next heartbeat recreates */ })
+      } else {
+        throw err // unexpected (pool timeout, DB down) — honest 502 below
+      }
+    }
 
     return NextResponse.json({ ok: true })
   } catch (err) {

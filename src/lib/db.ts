@@ -25,6 +25,20 @@ function createDb(): PrismaClient {
   const adapter = new PrismaPg({
     connectionString: driverConnectionString(process.env.DATABASE_URL),
     max: 1,
+    // ── v0.10.1 pool hardening (production incident 2026-10-29) ──
+    // Symptom: functions running to exactly their duration limit (30 s)
+    // with requests never resolving. Cause: one stale pooled connection
+    // (pooler idle-drop without a FIN) wedged the instance's single
+    // connection — waiters queued forever because the pool had NO
+    // acquisition timeout. Bounds now make every failure fast instead of
+    // hanging: a timed-out request 502s, the v0.10 client retains + retries
+    // it, and retries are idempotent (DesignEvent (designId, eventId)
+    // unique). keepAlive lets the OS detect dead peers instead of parking
+    // queries on them forever.
+    connectionTimeoutMillis: 10_000, // pool-wait cap → error, never hang
+    idleTimeoutMillis: 30_000, // drop idle conns before the pooler does it dirty
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
   })
   return new PrismaClient({
     adapter,

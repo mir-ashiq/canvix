@@ -69,6 +69,22 @@ export class CollabSession {
 
   // ── lifecycle ─────────────────────────────────────────────
 
+  // v0.11.1 fix: the browser's online/offline events are the only reliable
+  // signal for a hard network cut — a silent SSE socket (server drop, NAT
+  // timeout, emulated offline) never errors, so the status used to stay
+  // "live" while every flush failed and queued. Listen and reflect it:
+  // offline → honest 'offline' badge ("edits save locally"); online →
+  // reconnect immediately instead of waiting out the backoff.
+  private onOffline = () => this.setStatus('offline')
+  private onOnline = () => {
+    if (this.disposed) return
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+    this.connect()
+  }
+
   start() {
     if (this.disposed) return
     this.connect()
@@ -76,6 +92,10 @@ export class CollabSession {
     // v0.9.2: 15 s heartbeat — the server treats presence as live for 30 s,
     // so this still tolerates one lost beat before a collaborator fades out.
     this.heartbeatTimer = setInterval(() => void this.heartbeat(), 15_000)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('offline', this.onOffline)
+      window.addEventListener('online', this.onOnline)
+    }
     // v0.10: restore ops persisted while offline and flush them as soon as
     // we have a connection (they carry HLC stamps, so they merge safely no
     // matter what happened on the server meanwhile)
@@ -102,6 +122,10 @@ export class CollabSession {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
     if (this.persistTimer) clearTimeout(this.persistTimer)
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('offline', this.onOffline)
+      window.removeEventListener('online', this.onOnline)
+    }
     // v0.10: flush what we can one last time, then durably persist the rest
     void this.flush().finally(() => this.scheduleQueuePersist(0))
     this.es?.close()

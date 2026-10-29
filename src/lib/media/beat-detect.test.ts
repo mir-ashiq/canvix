@@ -95,8 +95,19 @@ describe('detectBpm', () => {
   })
 
   it('returns undefined for white noise (no periodicity)', () => {
+    // v0.11.1: deterministic noise (seeded PRNG). Math.random() made this
+    // test flaky — roughly one run in three drew a sample with enough
+    // spurious autocorrelation to clear the detector's periodicity gate.
+    let seed = 0x9e3779b9
+    const rand = () => {
+      seed |= 0
+      seed = (seed + 0x6d2b79f5) | 0
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
     const noise = new Float32Array(ANALYSIS_RATE * 8)
-    for (let i = 0; i < noise.length; i++) noise[i] = Math.random() * 2 - 1
+    for (let i = 0; i < noise.length; i++) noise[i] = rand() * 2 - 1
     expect(detectBpm(onsetOf(noise), ANALYSIS_RATE / Math.max(1, Math.round(ANALYSIS_RATE / 86)))).toBeUndefined()
   })
 })

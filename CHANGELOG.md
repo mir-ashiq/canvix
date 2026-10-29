@@ -3,6 +3,63 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.1] — 2026-10-30
+
+Production smoke-test release: the focused v0.11.0 verification
+(`research/V0110-SMOKE-TEST.md`) confirmed the v0.10.1 fixes hold — zero
+P2002s, zero 30-second hangs across the whole probe session — and found
+four real bugs in the browser-only paths that API probes and unit tests
+cannot reach. All four shipped in v0.11.0's headline features and none
+had ever worked end-to-end.
+
+### Fixed
+- **Preview never played audio/video (and could skip entry animations)** —
+  `PreviewStage` mounts its Konva stage only after the ResizeObserver
+  measures the container, but the playback effects bailed on the first
+  run (layer ref still null) and their deps never changed afterwards.
+  Whether media played was a commit-vs-observer race — manual testing
+  usually won it, headless browsers deterministically lose it. A
+  `stageReady` dep re-runs both effects when the stage actually mounts.
+- **Live video frames never swapped in** — the swap looked up
+  `findOne('#id')` as a Konva `Image`, but `VideoNode` renders a Group;
+  every video silently kept its poster. The swap now targets the Image
+  inside the group.
+- **Video froze at trimStart in a `canplay` seek-loop** — the handler
+  sought to `trimStart` on every `canplay` event; each completed seek
+  re-fired `canplay` (~130 `play()` calls/s, playback never advancing).
+  The trim seek now happens once, and looping videos wrap back to
+  `trimStart` instead of the source start.
+- **Video export could record digital silence** — two stacked races: the
+  recorder could start before `audioCtx.resume()` landed, and the export
+  render loop's tight MessageChannel yielding starves the audio element's
+  resource-selection task (the fetch never started; `readyState` stayed 0
+  and the pending `play()` aborted in cleanup). The export now bounded-
+  awaits both the context resume and `canplay` on every audio element
+  before recording begins; on timeout it still exports (silent, honestly)
+  rather than hanging.
+- **Collab status stayed "Live" through a hard network cut** — a
+  silently-dead SSE socket never fires `onerror`, so the editor claimed
+  Live while every flush failed and queued. The session now listens to
+  the browser's `online`/`offline` events: an honest "Offline — edits
+  save locally" badge appears immediately, and reconnect happens the
+  moment the network returns instead of waiting out the backoff.
+- **Flaky white-noise BPM unit test** — `Math.random()` input meant ~1 in
+  3 runs drew noise spurious enough to clear the detector's periodicity
+  gate; the test now uses a seeded PRNG (5/5 stable re-runs).
+
+### Verification
+- `scripts/smoke-v0110.ts` — focused API-level production smoke: auth,
+  ownership/read-only, the two-designs-one-browser P2002 scenario,
+  SSE drop/reconnect/gap-free replay, idempotent retried flushes, the
+  chunked media lifecycle, latency ceiling tracking, composite-PK DB
+  state. **46/46 green**; probe rows cleaned up afterwards.
+- `tests/e2e/v0110-smoke.spec.ts` — the browser-only surface: preview
+  plays uploaded audio AND video (playback observed, not assumed), video
+  export muxes a **non-silent** audio track (ffprobe + volumedetect), an
+  edit made offline syncs on reconnect and survives reload. 3/3 green,
+  stable across re-runs.
+- Offline-merge probe 18/18 · deploy-readiness ALL GREEN · 285 unit tests.
+
 ## [0.11.0] — 2026-10-29
 
 The "sound & motion" release: native audio/video elements, a chunked

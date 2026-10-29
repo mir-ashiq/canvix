@@ -432,7 +432,15 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
       const Ctx: typeof AudioContext =
         window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
       audioCtx = new Ctx()
-      void audioCtx.resume().catch(() => { /* suspended → silent track */ })
+      // v0.11.1 fix: resume() is async — a context that is still suspended
+      // when the recorder starts records DIGITAL SILENCE for the whole
+      // export (racy in headless browsers, possible on real ones after a
+      // background-tab suspension). Wait (bounded) for it to run before
+      // any audio flows; on timeout we still proceed honestly — the
+      // guards below keep the export correct, just silent.
+      await Promise.race([audioCtx.resume(), new Promise<void>((r) => setTimeout(r, 750))]).catch(() => {
+        /* suspended → silent track */
+      })
       audioDest = audioCtx.createMediaStreamDestination()
       for (const els of segmentAudio) {
         for (const a of els) audioCtx.createMediaElementSource(a).connect(audioDest)
@@ -442,6 +450,41 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
       audioDest = null
     }
   }
+  // v0.11.1 fix: WAIT for the audio to be buffered before recording starts.
+  // The render loop below yields via MessageChannel in a tight cycle, which
+  // starves the media element's resource-selection task — a not-yet-loaded
+  // element at recorder.start() never loads during the export (readyState
+  // stays 0, play() aborts in the finally) and the track records digital
+  // silence. Here the main thread is still idle: the fetch completes in
+  // milliseconds. Bounded at 1.5 s — a slow network still exports (silent,
+  // honestly) instead of hanging.
+  if (audioDest) {
+    const all = segmentAudio.flat()
+    await Promise.race([
+      Promise.all(
+        all.map(
+          (a) =>
+            new Promise<void>((resolve) => {
+              if (a.readyState >= 3) return resolve()
+              const done = () => {
+                a.removeEventListener('canplay', done)
+                a.removeEventListener('error', done)
+                resolve()
+              }
+              a.addEventListener('canplay', done)
+              a.addEventListener('error', done)
+              try {
+                a.load() // explicit resource selection — don't rely on the queued task
+              } catch {
+                resolve()
+              }
+            }),
+        ),
+      ),
+      new Promise<void>((resolve) => setTimeout(resolve, 1_500)),
+    ])
+  }
+
   const recordStream = audioDest ? new MediaStream([track, ...audioDest.stream.getAudioTracks()]) : stream
 
   const recorder = new MediaRecorder(recordStream, {

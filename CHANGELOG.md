@@ -3,6 +3,49 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.2] — 2026-10-30
+
+Two production bugs: an editor crash with an easy-to-miss root cause,
+and a Cloudflare git-deploy that could never have worked.
+
+### Fixed
+- **Editor's Projects panel crashed the whole editor ("This page couldn't
+  load")** — `/api/designs` has returned a keyset-paginated
+  `{ designs, nextCursor }` envelope since v0.9.2; the dashboard was
+  updated back then, but the editor's left-rail Projects panel still
+  assumed the pre-v0.9.2 bare array. The envelope object hit `.filter()`
+  on first render and took down the entire React tree the moment the
+  fetch resolved — every time, on every design list (opening a template
+  was just the way users got to the panel). The panel now parses the
+  envelope (first page, newest first — it's a quick switcher), and a
+  Playwright regression test locks the flow: open a design → Projects
+  panel → designs listed, zero page errors.
+- **Cloudflare Workers Builds deploys failed with "Could not find
+  compiled Open Next config"** — the git-connected pipeline runs
+  `npm run build` then `npx wrangler deploy`; wrangler detects the
+  OpenNext project and delegates to `opennextjs-cloudflare deploy`,
+  which requires the compiled `.open-next/` output. But `npm run build`
+  only ever produced the standalone Node output — and wrangler's OpenNext
+  delegation runs *before* it would execute any configured `build.command`,
+  so nothing in the pipeline ever built the worker. Fix: `npm run build`
+  is now `scripts/build.mjs`, which detects the Workers Builds environment
+  via its documented `WORKERS_CI=1` marker and runs
+  `opennextjs-cloudflare build` there (plain `next build` + standalone
+  copy steps everywhere else — Vercel, Netlify and self-hosted builds are
+  byte-identical to before). Second half of the fix:
+  `opennextjs-cloudflare build` builds the Next.js app by spawning the
+  project's own `npm run build` — with the new branch that would recurse
+  forever inside Workers CI, so `open-next.config.ts` now sets
+  `buildCommand: "next build"` to break the cycle. Verified locally:
+  `WORKERS_CI=1 npm run build` produces `.open-next/worker.js` (single
+  build pass), and `npx wrangler deploy` proceeds through the OpenNext
+  delegation to the auth check (Workers Builds injects the token in the
+  real pipeline).
+
+### Changed
+- README: the Cloudflare Workers section now documents git-connected
+  Workers Builds (keep the dashboard defaults — the build auto-detects).
+
 ## [0.11.1] — 2026-10-30
 
 Production smoke-test release: the focused v0.11.0 verification

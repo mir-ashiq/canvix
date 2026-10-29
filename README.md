@@ -478,6 +478,15 @@ npm run deploy                              # → https://canvix.<you>.workers.d
 # then open /api/health on the deployed URL — {"ok":true} = full stack green
 ```
 
+> **Git-connected builds (Workers Builds):** just connect the repo and keep
+> the defaults — build command `npm run build`, deploy command
+> `npx wrangler deploy`. Since v0.11.2 the build script detects the Workers
+> Builds environment (`WORKERS_CI=1`) and produces the OpenNext worker
+> output (`.open-next/`) that `wrangler deploy` needs; on every other
+> platform the same command builds the standard standalone output. Set
+> `DATABASE_URL` as a build/secret variable (the **transaction pooler**
+> URL) and deploys go green end-to-end.
+
 > **Local preview note:** `npm run preview` is great for UI and no-DB
 > routes, but some environments' local `wrangler dev` cannot open the
 > Postgres TLS upgrade (a workerd runtime quirk — details in

@@ -12,8 +12,9 @@
 // ─────────────────────────────────────────────────────────────
 
 import Konva from 'konva'
-import type { AnyElement, ImageElement, PageData } from '@/lib/types'
+import type { AnyElement, AudioElement, ImageElement, PageData, VideoElement } from '@/lib/types'
 import { animateElementAt, pageHoldDuration } from '@/lib/animations'
+import { beatEnvelopeAt, beatSourceOf } from '@/lib/media/beat-detect'
 
 export interface VideoExportOptions {
   designWidth: number
@@ -33,15 +34,20 @@ export interface VideoExportResult {
   frames: number
 }
 
-/** Detect the best supported output format (honest — no fake MP4). */
-export function detectVideoFormat(): { mimeType: string; extension: string; label: string } | null {
+/** Detect the best supported output format (honest — no fake MP4).
+ * v0.11: candidates that declare an audio codec can mux the page audio;
+ * the recorder only gets an audio track when the mime supports it. */
+export function detectVideoFormat(): { mimeType: string; extension: string; label: string; audio: boolean } | null {
   if (typeof MediaRecorder === 'undefined') return null
-  const candidates: { mimeType: string; extension: string; label: string }[] = [
-    { mimeType: 'video/mp4;codecs=avc1.42E01E', extension: 'mp4', label: 'MP4 (H.264)' },
-    { mimeType: 'video/mp4', extension: 'mp4', label: 'MP4' },
-    { mimeType: 'video/webm;codecs=vp9', extension: 'webm', label: 'WebM (VP9)' },
-    { mimeType: 'video/webm;codecs=vp8', extension: 'webm', label: 'WebM (VP8)' },
-    { mimeType: 'video/webm', extension: 'webm', label: 'WebM' },
+  const candidates: { mimeType: string; extension: string; label: string; audio: boolean }[] = [
+    { mimeType: 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', extension: 'mp4', label: 'MP4 (H.264 + AAC)', audio: true },
+    { mimeType: 'video/webm;codecs=vp9,opus', extension: 'webm', label: 'WebM (VP9 + Opus)', audio: true },
+    { mimeType: 'video/webm;codecs=vp8,opus', extension: 'webm', label: 'WebM (VP8 + Opus)', audio: true },
+    { mimeType: 'video/mp4;codecs=avc1.42E01E', extension: 'mp4', label: 'MP4 (H.264)', audio: false },
+    { mimeType: 'video/mp4', extension: 'mp4', label: 'MP4', audio: false },
+    { mimeType: 'video/webm;codecs=vp9', extension: 'webm', label: 'WebM (VP9)', audio: false },
+    { mimeType: 'video/webm;codecs=vp8', extension: 'webm', label: 'WebM (VP8)', audio: false },
+    { mimeType: 'video/webm', extension: 'webm', label: 'WebM', audio: false },
   ]
   for (const c of candidates) {
     try {
@@ -98,6 +104,7 @@ async function collectImages(pages: PageData[]): Promise<Map<string, HTMLImageEl
   const walk = (els: AnyElement[]) => {
     for (const el of els) {
       if (el.type === 'image') sources.push(el.src)
+      else if (el.type === 'video') sources.push(el.poster) // v0.11: poster dataURL
       else if (el.type === 'group') walk(el.children)
     }
   }
@@ -272,6 +279,71 @@ function buildKonvaNode(el: AnyElement, images: Map<string, HTMLImageElement>): 
       })
       return node
     }
+    case 'audio': {
+      // vector waveform card — geometry mirrors element-node.tsx AudioNode
+      const au = el as AudioElement
+      const group = new Konva.Group({ id: au.id, x: au.x, y: au.y })
+      group.add(
+        new Konva.Rect({
+          width: au.width,
+          height: au.height,
+          cornerRadius: 14,
+          fill: '#1B1D27',
+          stroke: 'rgba(255,255,255,0.13)',
+          strokeWidth: 1,
+        }),
+      )
+      group.add(new Konva.Path({ x: 18, y: au.height / 2 - 13, data: 'M13 0 L26 13 L13 26 Z', fill: '#02C0CC' }))
+      const peaks = au.peaks?.length ? au.peaks : null
+      const barCount = peaks ? Math.min(peaks.length, Math.max(24, Math.floor(au.width / 6))) : 32
+      const barW = 3
+      const gap = peaks ? Math.max(1.5, (au.width - 116 - barCount * barW) / Math.max(1, barCount - 1)) : 4
+      for (let i = 0; i < barCount; i++) {
+        const v = peaks ? peaks[Math.floor((i / barCount) * peaks.length)] ?? 0 : 0.35 + 0.3 * Math.abs(Math.sin(i * 1.7))
+        const h = Math.max(2, v * (au.height - 34))
+        group.add(
+          new Konva.Rect({
+            x: 116 + i * (barW + gap),
+            y: au.height / 2 - h / 2,
+            width: barW,
+            height: h,
+            cornerRadius: 1.5,
+            fill: '#7BE8E1',
+            opacity: 0.35 + 0.65 * v,
+          }),
+        )
+      }
+      group.add(
+        new Konva.Text({
+          x: 18,
+          y: au.height - 20,
+          text: au.name.slice(0, 42),
+          fontSize: 11,
+          fontFamily: 'Inter, system-ui, sans-serif',
+          fill: 'rgba(255,255,255,0.6)',
+          width: au.width - 36,
+        }),
+      )
+      return group
+    }
+    case 'video': {
+      const vd = el as VideoElement
+      const group = new Konva.Group({ id: vd.id, x: vd.x, y: vd.y })
+      group.add(new Konva.Rect({ width: vd.width, height: vd.height, cornerRadius: 12, fill: '#101218' }))
+      group.add(
+        new Konva.Image({
+          width: vd.width,
+          height: vd.height,
+          cornerRadius: 12,
+          image: images.get(vd.poster) ?? undefined,
+        }),
+      )
+      const play = new Konva.Group({ x: vd.width / 2 - 24, y: vd.height / 2 - 24, opacity: 0.92 })
+      play.add(new Konva.Ellipse({ radiusX: 24, radiusY: 24, fill: 'rgba(0,0,0,0.67)' }))
+      play.add(new Konva.Path({ x: 16, y: 14, data: 'M0 0 L16 10 L0 20 Z', fill: '#FFFFFF' }))
+      group.add(play)
+      return group
+    }
     case 'group': {
       const g = el
       const group = new Konva.Group({ id: g.id, x: g.x, y: g.y, rotation: g.rotation ?? 0 })
@@ -337,7 +409,42 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
   const stream = canvas.captureStream(0)
   const track = stream.getVideoTracks()[0] as MediaStreamTrack & { requestFrame?: () => void }
 
-  const recorder = new MediaRecorder(stream, {
+  // ── v0.11: page-audio muxing (best-effort) ──────────────────
+  // Each segment's autoplay audio elements play through a shared
+  // AudioContext MediaStreamDestination while their page is on the
+  // timeline; the wall-clock pacing of the frame loop keeps A/V aligned.
+  // Every step is individually guarded — a browser that refuses any of
+  // this (autoplay policy, codec) still produces a correct silent video.
+  const segmentAudio: HTMLAudioElement[][] = segments.map((s) =>
+    (s.page.elements as AnyElement[])
+      .filter((e): e is AudioElement => e.type === 'audio' && e.visible !== false && e.autoplay)
+      .map((el) => {
+        const a = new Audio(el.src)
+        a.volume = Math.min(1, Math.max(0, Number.isFinite(el.volume) ? el.volume : 0.8))
+        a.loop = el.loop
+        return a
+      }),
+  )
+  let audioCtx: AudioContext | null = null
+  let audioDest: MediaStreamAudioDestinationNode | null = null
+  if (format.audio && segmentAudio.some((els) => els.length)) {
+    try {
+      const Ctx: typeof AudioContext =
+        window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      audioCtx = new Ctx()
+      void audioCtx.resume().catch(() => { /* suspended → silent track */ })
+      audioDest = audioCtx.createMediaStreamDestination()
+      for (const els of segmentAudio) {
+        for (const a of els) audioCtx.createMediaElementSource(a).connect(audioDest)
+      }
+    } catch {
+      audioCtx = null
+      audioDest = null
+    }
+  }
+  const recordStream = audioDest ? new MediaStream([track, ...audioDest.stream.getAudioTracks()]) : stream
+
+  const recorder = new MediaRecorder(recordStream, {
     mimeType: format.mimeType,
     videoBitsPerSecond: Math.round(width * height * fps * 0.12),
   })
@@ -357,6 +464,8 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
 
   const nodesForPage = new Map<number, { node: Konva.Node; el: AnyElement }[]>()
   const stageForPage = new Map<number, Konva.Stage>()
+  // v0.11: Beat Sync sources per page (beats ride the audio element)
+  const beatsForPage = new Map<number, { beats: number[]; bpm: number } | null>()
 
   const buildPage = (index: number): { node: Konva.Node; el: AnyElement }[] => {
     let nodes = nodesForPage.get(index)
@@ -406,25 +515,31 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
     layer.batchDraw()
     nodesForPage.set(index, nodes)
     stageForPage.set(index, stage)
+    beatsForPage.set(index, beatSourceOf(page))
     return nodes
   }
 
-  /** apply animation state at page-local time t and draw */
+  /** apply animation + beat-pulse state at page-local time t and draw */
   const drawPage = (index: number, t: number): HTMLCanvasElement | null => {
     const nodes = buildPage(index)
+    const beatSrc = beatsForPage.get(index)
     for (const { node, el } of nodes) {
+      // v0.11: Beat Sync — pulses multiply whatever the entry animation
+      // (or rest state) produced, so beats compose with any animation
+      const beatScale =
+        beatSrc && (el.beatPulse ?? 0) > 0 ? 1 + (el.beatPulse ?? 0) * 0.12 * beatEnvelopeAt(beatSrc.beats, t) : 1
       const a = el.animation
       if (a && a.kind !== 'none') {
         const state = animateElementAt(el, t)
         node.opacity((el.opacity ?? 1) * state.opacity)
         if (state.reveal < 1) {
           const r = Math.max(0.001, state.reveal)
-          node.scale({ x: r, y: 1 })
+          node.scale({ x: r * beatScale, y: 1 })
           node.offsetY(el.height / 2)
           node.x(el.x + state.dx)
           node.y(el.y + state.dy + el.height / 2)
-        } else if (state.scaleX !== 1 || state.scaleY !== 1) {
-          node.scale({ x: state.scaleX, y: state.scaleY })
+        } else if (state.scaleX !== 1 || state.scaleY !== 1 || beatScale !== 1) {
+          node.scale({ x: state.scaleX * beatScale, y: state.scaleY * beatScale })
           node.offsetX(el.width / 2)
           node.offsetY(el.height / 2)
           node.x(el.x + state.dx + el.width / 2)
@@ -439,11 +554,19 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
         node.rotation((el.rotation ?? 0) + state.rotation)
       } else {
         node.opacity(el.opacity ?? 1)
-        node.scale({ x: 1, y: 1 })
-        node.offsetX(0)
-        node.offsetY(0)
-        node.x(el.x)
-        node.y(el.y)
+        if (beatScale !== 1) {
+          node.scale({ x: beatScale, y: beatScale })
+          node.offsetX(el.width / 2)
+          node.offsetY(el.height / 2)
+          node.x(el.x + el.width / 2)
+          node.y(el.y + el.height / 2)
+        } else {
+          node.scale({ x: 1, y: 1 })
+          node.offsetX(0)
+          node.offsetY(0)
+          node.x(el.x)
+          node.y(el.y)
+        }
         node.rotation(el.rotation ?? 0)
       }
     }
@@ -546,10 +669,37 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
     const startWall = performance.now()
     const deadline = startWall + total * 1000 + 15_000 // hard safety cap
     let frame = 0
+    let activeSeg = -1
+    /** segment index owning timeline time t (mirrors renderFrameAt) */
+    const segmentIndexAt = (t: number): number => {
+      for (let i = 0; i < segments.length; i++) {
+        const start = segStarts[i]
+        if (t >= start && t < start + segments[i].hold + segments[i].transition) return i
+      }
+      return segments.length - 1
+    }
 
     while (frame < totalFrames) {
       const t = frame / fps
       const targetWall = startWall + t * 1000
+
+      // v0.11: swap the playing page's audio as the timeline crosses a
+      // segment boundary (loops within the segment, like presentation)
+      const segIdx = segmentIndexAt(t)
+      if (segIdx !== activeSeg) {
+        if (activeSeg >= 0) {
+          for (const a of segmentAudio[activeSeg]) {
+            a.pause()
+            try {
+              a.currentTime = 0
+            } catch {
+              /* not seekable yet */
+            }
+          }
+        }
+        for (const a of segmentAudio[segIdx]) void a.play().catch(() => { /* stays silent */ })
+        activeSeg = segIdx
+      }
 
       // behind schedule? skip ahead to the frame the clock says we should render
       let now = performance.now()
@@ -586,6 +736,13 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
     for (const stage of stageForPage.values()) stage.destroy()
     host.remove()
     stream.getTracks().forEach((tr) => tr.stop())
+    for (const els of segmentAudio) {
+      for (const a of els) {
+        a.pause()
+        a.removeAttribute('src')
+      }
+    }
+    void audioCtx?.close().catch(() => {})
   }
 
   const blob = new Blob(chunks, { type: format.mimeType })

@@ -6,6 +6,7 @@ import { Ellipse, Group, Image as KonvaImage, Line, Path, Rect, Star, Text } fro
 import type { KonvaEventObject } from 'konva/lib/Node'
 import type {
   AnyElement,
+  AudioElement,
   EmbedElement,
   FrameElement,
   GroupElement,
@@ -16,6 +17,7 @@ import type {
   StrokeElement,
   TableElement,
   TextElement,
+  VideoElement,
 } from '@/lib/types'
 import { isLine, withAlpha, type GradientFill } from '@/lib/types'
 import { elementGradientProps } from '@/lib/editor-utils'
@@ -124,6 +126,131 @@ function ImageNode({ el, common }: { el: ImageElement; common: Record<string, un
       offsetY={el.flipV ? el.height : 0}
     />
   )
+}
+
+/** v0.11: audio — waveform player card. Pure vector: dark rounded card,
+ *  peak bars from the baked-in analysis (so every replica renders it
+ *  without the multi-MB file), a play glyph, the name, duration and a
+ *  Beat Sync chip when a grid was detected. Playback happens in
+ *  preview/present (see preview-stage.tsx), never in the editor canvas. */
+function AudioNode({ el, common }: { el: AudioElement; common: Record<string, unknown> }) {
+  const peaks = el.peaks && el.peaks.length ? el.peaks : null
+  const barCount = peaks ? Math.min(peaks.length, Math.max(24, Math.floor(el.width / 6))) : 48
+  const bars: number[] = []
+  if (peaks) {
+    for (let i = 0; i < barCount; i++) {
+      bars.push(peaks[Math.floor((i / barCount) * peaks.length)] ?? 0)
+    }
+  }
+  const barW = 3
+  const gap = peaks ? Math.max(1.5, (el.width - 116 - barCount * barW) / Math.max(1, barCount - 1)) : 4
+  const midY = el.height / 2
+
+  return (
+    <Group {...common} clip={undefined}>
+      <Rect width={el.width} height={el.height} cornerRadius={14} fill="#1B1D27" stroke="#FFFFFF22" strokeWidth={1} />
+      {/* play glyph */}
+      <Path
+        x={18}
+        y={midY - 13}
+        data="M13 0 L26 13 L13 26 Z"
+        fill="#02C0CC"
+      />
+      {/* waveform */}
+      {bars.length > 0 ? (
+        bars.map((v, i) => {
+          const h = Math.max(2, v * (el.height - 34))
+          return (
+            <Rect
+              key={i}
+              x={116 + i * (barW + gap)}
+              y={midY - h / 2}
+              width={barW}
+              height={h}
+              cornerRadius={1.5}
+              fill="#7BE8E1"
+              opacity={0.35 + 0.65 * v}
+            />
+          )
+        })
+      ) : (
+        <Text x={116} y={midY - 8} text="♪" fontSize={20} fill="#7BE8E1" />
+      )}
+      {/* label + duration */}
+      <Text
+        x={18}
+        y={el.height - 20}
+        text={el.name.slice(0, 42)}
+        fontSize={11}
+        fontFamily="Inter, system-ui, sans-serif"
+        fill="#FFFFFF99"
+        width={el.width - 36}
+        ellipsis
+      />
+      <Text
+        x={el.width - 62}
+        y={10}
+        text={formatDuration(el.duration)}
+        fontSize={11}
+        fontFamily="Inter, system-ui, sans-serif"
+        fill="#FFFFFF66"
+      />
+      {el.bpm ? (
+        <Group x={el.width - 62} y={el.height - 21}>
+          <Rect width={50} height={14} cornerRadius={7} fill="#02C0CC26" />
+          <Text x={4} y={2.5} text={`${Math.round(el.bpm)} BPM`} fontSize={9} fontFamily="Inter, system-ui, sans-serif" fill="#02C0CC" />
+        </Group>
+      ) : null}
+    </Group>
+  )
+}
+
+/** v0.11: video — poster frame + play affordance + duration chip. The
+ *  poster is a dataURL captured at upload, so it renders identically on
+ *  every replica and in exports. Frame playback runs in preview/present. */
+function VideoNode({ el, common }: { el: VideoElement; common: Record<string, unknown> }) {
+  const image = useLoadedImage(el.poster)
+  const isTrimmed = el.trimStart > 0.05 || el.trimEnd < el.duration - 0.05
+  return (
+    <Group {...common} clip={undefined}>
+      <Rect width={el.width} height={el.height} cornerRadius={12} fill="#101218" />
+      <KonvaImage
+        image={image ?? undefined}
+        x={0}
+        y={0}
+        width={el.width}
+        height={el.height}
+        cornerRadius={12}
+        crop={undefined}
+      />
+      {/* play affordance */}
+      <Group x={el.width / 2 - 24} y={el.height / 2 - 24} opacity={0.92}>
+        <Ellipse radiusX={24} radiusY={24} fill="#000000AA" />
+        <Path x={24 - 8} y={24 - 10} data="M0 0 L16 10 L0 20 Z" fill="#FFFFFF" />
+      </Group>
+      <Text
+        x={el.width - 62}
+        y={10}
+        text={formatDuration(el.duration)}
+        fontSize={11}
+        fontFamily="Inter, system-ui, sans-serif"
+        fill="#FFFFFFCC"
+      />
+      {isTrimmed && (
+        <Group x={12} y={10}>
+          <Rect width={44} height={14} cornerRadius={7} fill="#FFB84C26" />
+          <Text x={5} y={2.5} text="TRIM" fontSize={9} fontFamily="Inter, system-ui, sans-serif" fill="#FFB84C" />
+        </Group>
+      )}
+    </Group>
+  )
+}
+
+function formatDuration(sec: number): string {
+  if (!Number.isFinite(sec) || sec <= 0) return '0:00'
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  return `${m}:${String(s).padStart(2, '0')}`
 }
 
 function ElementNodeImpl({ element: el, interactive, hiding, hideCell, registerNode, onDragMoveNode, onDragEndNode, onDoubleClick, nested }: ElementNodeProps) {
@@ -476,6 +603,16 @@ function ElementNodeImpl({ element: el, interactive, hiding, hideCell, registerN
     case 'image': {
       const im = el as ImageElement
       return <ImageNode el={im} common={common} />
+    }
+
+    case 'audio': {
+      const au = el as AudioElement
+      return <AudioNode el={au} common={common} />
+    }
+
+    case 'video': {
+      const vd = el as VideoElement
+      return <VideoNode el={vd} common={common} />
     }
 
     case 'table': {

@@ -17,6 +17,8 @@ export type ElementType =
   | 'table'
   | 'frame'
   | 'embed'
+  | 'audio'
+  | 'video'
 
 export type TextAlign = 'left' | 'center' | 'right' | 'justify'
 
@@ -99,6 +101,10 @@ export interface BaseElement {
   name?: string
   /** v0.5: entry animation (undefined = none) */
   animation?: ElementAnimation
+  /** v0.11 Beat Sync: pulse strength on the page audio's beats
+   *  (0..1, undefined/0 = off). Applied in preview/present playback and
+   *  video export — see src/lib/media/beat-detect.ts. */
+  beatPulse?: number
   /** v0.10 offline-merge: hybrid-logical-clock stamp of the last write to
    * this element ("w:counter:actor"). Older documents lack it — treated as
    * epoch "0" so stamped writes deterministically win over legacy state.
@@ -263,6 +269,62 @@ export interface EmbedElement extends BaseElement {
   tint: string
 }
 
+// ── v0.11: audio/video elements + Beat Sync ──────────────────
+
+/** Hard caps keeping collab ops + saved documents small: the waveform and
+ *  beat grid are downsampled on upload (src/lib/media/beat-detect.ts) and
+ *  clipped here — a full-resolution analysis would blow MAX_EVENT_BYTES. */
+export const MAX_PEAKS = 200
+export const MAX_BEATS = 480
+
+/** Native audio element — renders as a waveform player card on the canvas
+ * (poster-free), and plays during presentation/preview + video export.
+ * `src` points at the media store (`/api/media/<id>`) or a CORS https URL.
+ * Beats/waveform are baked in at upload so every replica renders + syncs
+ * without re-decoding the (multi-MB) file. */
+export interface AudioElement extends BaseElement {
+  type: 'audio'
+  src: string
+  /** file label shown on the card */
+  name: string
+  /** seconds */
+  duration: number
+  /** 0..1 */
+  volume: number
+  loop: boolean
+  /** start playing when the page appears (presentation/export) */
+  autoplay: boolean
+  /** downsampled abs-peak envelope (0..1) for the waveform card */
+  peaks?: number[]
+  /** detected tempo — undefined when analysis found no stable beat */
+  bpm?: number
+  /** beat grid in seconds (aligned to the strongest onset) */
+  beats?: number[]
+}
+
+/** Native video element — the editor renders the poster frame (captured at
+ * upload, stored as a dataURL so it replicates through the document);
+ * playback runs in presentation/preview. Honest scope for v0.11: video
+ * exports render the poster + beat pulses; the video itself is not
+ * re-rendered into exports (documented in research/MEDIA-AND-BEAT-SYNC.md). */
+export interface VideoElement extends BaseElement {
+  type: 'video'
+  src: string
+  /** first-frame thumbnail (dataURL) — the canvas + export representation */
+  poster: string
+  /** seconds */
+  duration: number
+  /** 0..1 */
+  volume: number
+  muted: boolean
+  loop: boolean
+  /** start playing when the page appears (presentation) */
+  autoplay: boolean
+  /** playback window (seconds into the source) */
+  trimStart: number
+  trimEnd: number
+}
+
 /** Brand kit — persisted per browser (localStorage) */
 export interface BrandKit {
   colors: string[]
@@ -297,6 +359,8 @@ export type AnyElement =
   | TableElement
   | FrameElement
   | EmbedElement
+  | AudioElement
+  | VideoElement
 
 export type Background =
   | { type: 'solid'; color: string }
@@ -597,6 +661,55 @@ export function detectEmbedKind(url: string): EmbedKind {
     return 'link'
   } catch {
     return 'link'
+  }
+}
+
+/** v0.11: audio factory — media-store src + the analysis baked in at upload. */
+export function createAudioElement(
+  src: string,
+  name: string,
+  duration: number,
+  init: BaseInit & Partial<AudioElement> = {}
+): AudioElement {
+  return {
+    ...baseElement('audio', { width: 420, height: 96, ...init }),
+    type: 'audio',
+    src,
+    name,
+    duration,
+    volume: 0.8,
+    loop: false,
+    autoplay: false,
+    ...init,
+  }
+}
+
+/** v0.11: video factory — poster dataURL captured at upload. */
+export function createVideoElement(
+  src: string,
+  poster: string,
+  duration: number,
+  naturalWidth: number,
+  naturalHeight: number,
+  init: BaseInit & Partial<VideoElement> = {}
+): VideoElement {
+  const width = init.width ?? Math.min(560, naturalWidth || 560)
+  const height = init.height ?? (naturalHeight ? Math.round((width * naturalHeight) / (naturalWidth || 1)) : 315)
+  return {
+    ...baseElement('video', { width, height, ...init }),
+    type: 'video',
+    src,
+    poster,
+    duration,
+    volume: 0.8,
+    muted: false,
+    loop: false,
+    autoplay: false,
+    trimStart: 0,
+    trimEnd: duration,
+    ...init,
+    width,
+    height,
   }
 }
 

@@ -329,3 +329,57 @@ export function addImageAt(src: string, naturalWidth: number, naturalHeight: num
     })
   )
 }
+
+// ── v0.11: audio/video elements ──────────────────────────────
+
+/**
+ * Upload an audio file to the media store, analyze it (waveform peaks +
+ * BPM + beat grid — all baked into the element so every replica renders
+ * and beat-syncs without the multi-MB file), and add it to the canvas.
+ * onProgress reports upload chunks (0..1).
+ */
+export async function addAudioFromFile(
+  file: File,
+  onProgress?: (ratio: number) => void,
+): Promise<void> {
+  const { uploadMediaFile, mediaSrc } = await import('@/lib/media/media-client')
+  const { analyzeAudioFile } = await import('@/lib/media/decode')
+  const { createAudioElement } = await import('@/lib/types')
+  const [handle, analysis] = await Promise.all([uploadMediaFile(file, onProgress), analyzeAudioFile(file)])
+  const store = useEditorStore.getState()
+  const w = Math.min(520, Math.max(360, store.width * 0.55))
+  const pos = placement(w, 96, store.pages[store.currentPage].elements.length)
+  store.addElement(
+    createAudioElement(mediaSrc(handle.id), file.name.replace(/\.[^.]+$/, '').slice(0, 60), analysis.duration, {
+      ...pos,
+      width: Math.round(w),
+      height: 96,
+      peaks: analysis.peaks,
+      bpm: analysis.bpm,
+      beats: analysis.beats,
+    })
+  )
+}
+
+/** Upload a video file, capture its poster frame, and add it to the canvas. */
+export async function addVideoFromFile(
+  file: File,
+  onProgress?: (ratio: number) => void,
+): Promise<void> {
+  const { uploadMediaFile, mediaSrc } = await import('@/lib/media/media-client')
+  const { probeVideoFile } = await import('@/lib/media/decode')
+  const { createVideoElement } = await import('@/lib/types')
+  const [handle, probe] = await Promise.all([uploadMediaFile(file, onProgress), probeVideoFile(file)])
+  const store = useEditorStore.getState()
+  const maxW = store.width * 0.7
+  const w = Math.round(Math.min(maxW, Math.max(200, probe.naturalWidth || 480)))
+  const h = Math.round(probe.naturalWidth ? (w * probe.naturalHeight) / probe.naturalWidth : w * 0.5625)
+  const pos = placement(w, h, store.pages[store.currentPage].elements.length)
+  store.addElement(
+    createVideoElement(mediaSrc(handle.id), probe.poster, probe.duration, probe.naturalWidth, probe.naturalHeight, {
+      ...pos,
+      width: w,
+      height: h,
+    })
+  )
+}

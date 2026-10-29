@@ -9,11 +9,13 @@ import {
   AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd,
   FlipHorizontal, FlipVertical, Sun, Contrast, Palette, RotateCcw, Replace, Lock, LockOpen,
   Layers, SquareDashed, Crop, Spline, Table2, Rows3, Columns3, Trash, Upload, ExternalLink,
+  Music, Film, Play, Repeat, Volume2, VolumeX, SlidersHorizontal, Activity,
 } from 'lucide-react'
 import { useEditorStore, selectedElements, currentPageData } from '@/store/editor-store'
-import type { EmbedElement, FrameElement, ImageElement, LineElement, ShapeElement, StickerElement, TableElement, TextElement, AnyElement, FrameShape } from '@/lib/types'
+import type { AudioElement, EmbedElement, FrameElement, ImageElement, LineElement, ShapeElement, StickerElement, TableElement, TextElement, VideoElement, AnyElement, FrameShape } from '@/lib/types'
 import { FRAME_SHAPES, isGroup } from '@/lib/types'
 import { TEXT_EFFECTS } from '@/lib/types'
+import { beatSourceOf } from '@/lib/media/beat-detect'
 import { cn } from '@/lib/utils'
 import { FontDropdown } from './toolbar/FontDropdown'
 import { ColorMenu } from './toolbar/ColorMenu'
@@ -61,6 +63,10 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
   const table = first.type === 'table' ? (first as TableElement) : null
   const frame = first.type === 'frame' ? (first as FrameElement) : null
   const embed = first.type === 'embed' ? (first as EmbedElement) : null
+  const audio = first.type === 'audio' ? (first as AudioElement) : null
+  const video = first.type === 'video' ? (first as VideoElement) : null
+  // v0.11: the page's beat grid — powers the Beat Sync popover below
+  const beatSource = beatSourceOf(currentPageData(state))
 
   const canGroup = isMulti
   const canUngroup = sel.some((e) => isGroup(e))
@@ -382,8 +388,152 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           <Divider />
           <PositionPopover ids={ids} count={1} element={first} />
         </>
+      ) : audio ? (
+        <>
+          <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0 flex items-center gap-1.5">
+            <Music size={13} /> Audio
+          </span>
+          <MediaToolbar
+            ids={ids}
+            volume={audio.volume}
+            loop={audio.loop}
+            autoplay={audio.autoplay}
+            muted={false}
+            onMuted={undefined}
+            duration={audio.duration}
+            trim={undefined}
+          />
+          {audio.bpm ? (
+            <span className="text-[11px] font-semibold text-[#02C0CC] bg-[#02C0CC]/10 border border-[#02C0CC]/25 rounded-full px-2 py-0.5 shrink-0 tabular-nums" title="Detected tempo (Beat Sync grid)">
+              {Math.round(audio.bpm)} BPM
+            </span>
+          ) : null}
+          <Divider />
+          <PositionPopover ids={ids} count={1} element={first} />
+        </>
+      ) : video ? (
+        <>
+          <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0 flex items-center gap-1.5">
+            <Film size={13} /> Video
+          </span>
+          <MediaToolbar
+            ids={ids}
+            volume={video.volume}
+            loop={video.loop}
+            autoplay={video.autoplay}
+            muted={video.muted}
+            onMuted={(v) => update(ids, { muted: v })}
+            duration={video.duration}
+            trim={{ start: video.trimStart, end: video.trimEnd }}
+          />
+          <Divider />
+          <PositionPopover ids={ids} count={1} element={first} />
+        </>
       ) : null}
+
+      {/* ── v0.11: Beat Sync — available on any single-selected element ── */}
+      {!isMulti && beatSource && (
+        <>
+          <Divider />
+          <BeatSyncPopover el={first} ids={ids} bpm={beatSource.bpm} />
+        </>
+      )}
     </div>
+  )
+}
+
+// ── v0.11: media + beat sync toolbars ──────────────────────
+
+function MediaToolbar({
+  ids,
+  volume,
+  loop,
+  autoplay,
+  muted,
+  onMuted,
+  duration,
+  trim,
+}: {
+  ids: string[]
+  volume: number
+  loop: boolean
+  autoplay: boolean
+  muted: boolean
+  onMuted?: (v: boolean) => void
+  duration: number
+  trim?: { start: number; end: number }
+}) {
+  const update = useEditorStore((s) => s.updateElements)
+  const updateLive = useEditorStore((s) => s.updateElementsLive)
+  return (
+    <ToolbarPopover
+      width={264}
+      trigger={(open) => (
+        <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Media settings" title="Media settings">
+          <SlidersHorizontal size={14} /> <span className="text-[12px] hidden lg:inline">Media</span>
+        </button>
+      )}
+    >
+      <SliderRow label="Volume" value={Math.round(volume * 100)} min={0} max={100} step={1}
+        onChange={(v) => updateLive(ids, { volume: v / 100 })}
+        onCommit={() => update(ids, { volume })}
+        format={(v) => `${v}%`} />
+      <div className="flex gap-1.5 mt-1">
+        <TBtn onClick={() => update(ids, { loop: !loop })} dataActive={loop} title="Loop" ariaLabel="Loop">
+          <Repeat size={14} />
+        </TBtn>
+        <TBtn onClick={() => update(ids, { autoplay: !autoplay })} dataActive={autoplay} title="Play when the page appears (Preview / Present / video export)" ariaLabel="Play on page open">
+          <Play size={14} />
+        </TBtn>
+        {onMuted ? (
+          <TBtn onClick={() => onMuted(!muted)} dataActive={muted} title="Mute" ariaLabel="Mute">
+            {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+          </TBtn>
+        ) : null}
+      </div>
+      {trim && Number.isFinite(duration) && duration > 0.2 ? (
+        <div className="mt-2 border-t border-white/[0.08] pt-2">
+          <SliderRow label="Trim start" value={Number(trim.start.toFixed(1))} min={0} max={Math.max(0.1, duration - 0.1)} step={0.1}
+            onChange={(v) => updateLive(ids, { trimStart: Math.min(v, trim.end - 0.1) })}
+            onCommit={() => update(ids, { trimStart: trim.start })}
+            format={(v) => `${v.toFixed(1)}s`} />
+          <SliderRow label="Trim end" value={Number(trim.end.toFixed(1))} min={0.1} max={duration} step={0.1}
+            onChange={(v) => updateLive(ids, { trimEnd: Math.max(v, trim.start + 0.1) })}
+            onCommit={() => update(ids, { trimEnd: trim.end })}
+            format={(v) => `${v.toFixed(1)}s`} />
+        </div>
+      ) : null}
+      <p className="text-[10px] text-white/40 leading-relaxed mt-2">
+        Media plays in Preview / Present mode and in exported video (audio muxing is best-effort per browser).
+      </p>
+    </ToolbarPopover>
+  )
+}
+
+function BeatSyncPopover({ el, ids, bpm }: { el: AnyElement; ids: string[]; bpm: number }) {
+  const update = useEditorStore((s) => s.updateElements)
+  const updateLive = useEditorStore((s) => s.updateElementsLive)
+  const strength = Math.round((el.beatPulse ?? 0) * 100)
+  return (
+    <ToolbarPopover
+      width={252}
+      trigger={(open) => (
+        <button className="cv-tbtn gap-1 !px-2.5" data-active={open || strength > 0} aria-label="Beat Sync" title="Beat Sync — pulse this element on the music's beats">
+          <Activity size={14} /> <span className="text-[12px] hidden lg:inline">Beat{strength > 0 ? ` ${strength}%` : ''}</span>
+        </button>
+      )}
+    >
+      <div className="text-[10px] font-semibold text-white/45 uppercase tracking-wide mb-1.5">
+        Beat Sync · {Math.round(bpm)} BPM
+      </div>
+      <SliderRow label="Pulse" value={strength} min={0} max={100} step={1}
+        onChange={(v) => updateLive(ids, { beatPulse: v / 100 })}
+        onCommit={() => update(ids, { beatPulse: (el.beatPulse ?? 0) })}
+        format={(v) => (v === 0 ? 'off' : `+${(v * 0.12).toFixed(2)}× scale`)} />
+      <p className="text-[10px] text-white/40 leading-relaxed mt-2">
+        The element scales on every beat of the page's audio (Preview, Present and video export). Enable “Play on page open” on the audio element so the music runs with it.
+      </p>
+    </ToolbarPopover>
   )
 }
 

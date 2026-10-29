@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type Konva from 'konva'
 import { Layer, Rect, Stage } from 'react-konva'
-import type { PageData } from '@/lib/types'
+import type { AudioElement, PageData, VideoElement } from '@/lib/types'
 import { gradientProps } from '@/lib/editor-utils'
 import { animateElementAt, pageAnimationDuration } from '@/lib/animations'
+import { beatEnvelopeAt, beatSourceOf } from '@/lib/media/beat-detect'
 import { PreviewElements } from './element-node'
 
 interface PreviewStageProps {
@@ -129,6 +130,131 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
       resetNodes(layer, page, bases)
     }
   }, [page, hasAnimations, reduceMotion, playKey, designWidth, designHeight])
+
+  // ── v0.11: media playback — audio elements, video frames, Beat Sync ──
+  // Presentation/preview is where media plays (the editor canvas always
+  // shows the poster/waveform representation). Audio drives the beat clock:
+  // pulses run only while the beat-source audio is actually playing.
+  useEffect(() => {
+    const layer = layerRef.current
+    if (!layer || !animated) return
+
+    const cleanups: Array<() => void> = []
+    const clamp01 = (v: number) => Math.min(1, Math.max(0, Number.isFinite(v) ? v : 0))
+
+    // 1. audio: play every autoplay audio element; the first one with a
+    //    beat grid becomes the Beat Sync clock
+    let beatAudio: HTMLAudioElement | null = null
+    for (const el of page.elements as PageData['elements']) {
+      if (el.type !== 'audio' || el.visible === false || !el.autoplay) continue
+      const a = el as AudioElement
+      const audio = new Audio(a.src)
+      audio.volume = clamp01(a.volume)
+      audio.loop = a.loop
+      void audio.play().catch(() => { /* autoplay policy — stays silent */ })
+      cleanups.push(() => {
+        audio.pause()
+        audio.removeAttribute('src')
+      })
+      if (!beatAudio && a.beats?.length) beatAudio = audio
+    }
+
+    // 2. video: swap the poster Konva image for a live <video> + redraw
+    const videos: Array<{ v: HTMLVideoElement; node: Konva.Image; prev: CanvasImageSource | undefined; trimEnd: number; loop: boolean }> = []
+    if (!reduceMotion) {
+      for (const el of page.elements as PageData['elements']) {
+        if (el.type !== 'video' || el.visible === false || !el.autoplay) continue
+        const vd = el as VideoElement
+        const node = layer.findOne<Konva.Image>(`#${vd.id}`)
+        if (!node || typeof node.image !== 'function') continue
+        const v = document.createElement('video')
+        v.src = vd.src
+        v.loop = vd.loop
+        v.muted = vd.muted
+        v.volume = clamp01(vd.volume)
+        v.playsInline = true
+        const prev = node.image() as CanvasImageSource | undefined
+        const onCanPlay = () => {
+          try {
+            v.currentTime = vd.trimStart
+          } catch {
+            /* seek not ready */
+          }
+          void v.play().catch(() => { /* autoplay policy — poster stays */ })
+        }
+        v.addEventListener('canplay', onCanPlay)
+        node.image(v)
+        videos.push({ v, node, prev, trimEnd: vd.trimEnd, loop: vd.loop })
+        cleanups.push(() => {
+          v.removeEventListener('canplay', onCanPlay)
+          v.pause()
+          v.removeAttribute('src')
+          v.load()
+          node.image(prev ?? undefined)
+        })
+      }
+    }
+
+    // 3. beat pulses + continuous video redraw
+    const beatTargets = (page.elements as PageData['elements']).filter(
+      (e) => (e.beatPulse ?? 0) > 0 && e.visible !== false,
+    )
+    const beats = beatSourceOf(page)?.beats
+    const bases = new Map<string, { x: number; y: number; scaleX: number; scaleY: number; offsetX: number; offsetY: number }>()
+    for (const el of beatTargets) {
+      const node = layer.findOne(`#${el.id}`)
+      if (!node) continue
+      bases.set(el.id, { x: node.x(), y: node.y(), scaleX: node.scaleX(), scaleY: node.scaleY(), offsetX: node.offsetX(), offsetY: node.offsetY() })
+    }
+
+    const restoreBeatTargets = () => {
+      for (const el of beatTargets) {
+        const node = layer.findOne(`#${el.id}`)
+        const base = bases.get(el.id)
+        if (node && base) {
+          node.x(base.x)
+          node.y(base.y)
+          node.scaleX(base.scaleX)
+          node.scaleY(base.scaleY)
+          node.offsetX(base.offsetX)
+          node.offsetY(base.offsetY)
+        }
+      }
+      layer.batchDraw()
+    }
+
+    if (videos.length > 0 || (beatTargets.length > 0 && beatAudio && beats && !reduceMotion)) {
+      let raf = 0
+      const tick = () => {
+        for (const { v, node, trimEnd, loop } of videos) {
+          if (!loop && trimEnd < v.duration && v.currentTime >= trimEnd) v.pause()
+          node.getLayer()?.batchDraw()
+        }
+        if (beatAudio && beats) {
+          const t = beatAudio.currentTime
+          for (const el of beatTargets) {
+            const node = layer.findOne(`#${el.id}`)
+            const base = bases.get(el.id)
+            if (!node || !base) continue
+            const pulse = 1 + (el.beatPulse ?? 0) * 0.12 * beatEnvelopeAt(beats, t)
+            node.scaleX(base.scaleX * pulse)
+            node.scaleY(base.scaleY * pulse)
+            node.x(base.x)
+            node.y(base.y)
+          }
+          layer.batchDraw()
+        }
+        raf = requestAnimationFrame(tick)
+      }
+      raf = requestAnimationFrame(tick)
+      cleanups.push(() => cancelAnimationFrame(raf))
+    }
+
+    return () => {
+      for (const fn of cleanups) fn()
+      restoreBeatTargets()
+    }
+  }, [page, animated, reduceMotion, playKey])
 
   return (
     <div ref={containerRef} className="w-full h-full overflow-hidden" data-testid="preview-stage">

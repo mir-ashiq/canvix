@@ -34,6 +34,17 @@ async function postJson(url: string, body: unknown): Promise<{ ok: boolean; stat
   return { ok: res.ok, status: res.status, data }
 }
 
+/** Read /api/auth/me. `undefined` = transport failure (keep current state). */
+async function fetchMe(): Promise<AuthUser | null | undefined> {
+  try {
+    const res = await fetch('/api/auth/me', { cache: 'no-store' })
+    const data = (await res.json()) as { user: AuthUser | null }
+    return data?.user ?? null
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * The app's auth state. `refresh()` re-reads /api/auth/me (e.g. after
  * the login dialog succeeds somewhere else in the tree).
@@ -47,18 +58,23 @@ export function useAuth(): AuthState & {
   const [state, setState] = useState<AuthState>({ user: null, loading: true })
 
   const refresh = useCallback(async () => {
-    try {
-      const res = await fetch('/api/auth/me', { cache: 'no-store' })
-      const data = (await res.json()) as { user: AuthUser | null }
-      setState({ user: data?.user ?? null, loading: false })
-    } catch {
-      setState((s) => ({ ...s, loading: false }))
-    }
+    const user = await fetchMe()
+    setState((s) => ({ user: user === undefined ? s.user : user, loading: false }))
   }, [])
 
+  // Initial load: state is only ever set from the async continuation
+  // (never synchronously inside the effect body — the React Compiler
+  // lint enforces that), and a cancel flag discards late answers after
+  // unmount.
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    let cancelled = false
+    void fetchMe().then((user) => {
+      if (!cancelled) setState((s) => ({ user: user === undefined ? s.user : user, loading: false }))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   /** returns an error message, or null on success */
   const login = useCallback(async (username: string, password: string): Promise<string | null> => {

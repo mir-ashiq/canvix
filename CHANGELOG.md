@@ -3,6 +3,134 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.3] — 2026-10-29
+
+The "run it anywhere" release: Canvix now deploys to **Cloudflare
+Workers** (free tier) with the exact same codebase that runs on
+Vercel/self-hosted Node — one database, zero behavioural divergence.
+
+### Prisma without native binaries (the foundation)
+- Migrated to the **rust-free Prisma client** (dependency floor 6.11 →
+  6.16+; installed 6.19): no Rust query-engine binary, and it executes
+  on any JS runtime including workerd. The switch is
+  `generator client { provider = "prisma-client"; engineType = "client" }`
+  — `prisma-client-js` + the queryCompiler flag silently keeps the
+  library engine (found the hard way; documented in the patch script).
+- Postgres access now goes through **`@prisma/adapter-pg`** (the real
+  `pg` driver). On Cloudflare Workers pg auto-switches to
+  `pg-cloudflare`'s socket layer and rides workerd's `nodejs_compat`
+  straight into Supabase's transaction pooler — the same URL Vercel
+  uses.
+- **`scripts/patch-prisma-wasm.mjs`** (runs from postinstall, idempotent,
+  fails loudly on template drift) makes the generated client
+  runtime-portable: the sync `new WebAssembly.Module` becomes async
+  `WebAssembly.compile`; workerd gets an ESM-imported `.wasm` (wrangler
+  compiles it at deploy — runtime compilation is forbidden there); Node
+  reads the raw wasm from disk. The Node import of the 2.6 MB base64
+  module is gone entirely (bundler tracing is relentless — Turbopack
+  resolves even env-conditional specifiers), so the wasm ships exactly
+  once: **worker 2.13 MB gzipped vs the 3 MB free-plan cap** (3.11 MB
+  before the deduplication).
+- The client generates to `src/generated/prisma` (gitignored,
+  postinstall regenerates); imports are `@/generated/prisma/client` in
+  app code, relative paths in scripts.
+- `src/lib/db-url.ts` grows `driverConnectionString()` — the pg driver
+  gets TLS defaults translated to its semantics (`sslmode=require` →
+  `no-verify`: node-postgres currently treats `require` as `verify-full`,
+  which rejects hosted-pooler CA chains; user-pinned verify levels pass
+  through) but not Prisma-engine-only params (`pgbouncer`,
+  `connection_limit`); pool sizing is set in code (`max: 1` per
+  process/isolate). The env-var normalization for `prisma migrate` is
+  unchanged.
+- New script-side factory `src/lib/db-script.ts` (alias-free so plain
+  `tsx` runs it) used by seed, db-check, usage-forensics and the
+  auth-e2e probes — `datasources` overrides (unsupported by the
+  rust-free client) are gone everywhere.
+- Raw-query compatibility: the rust-free client refuses Postgres catalog
+  `name` columns — `/api/health` and the forensics script now cast to
+  `::text`.
+
+### Cloudflare Workers deployment
+- `@opennextjs/cloudflare` + `wrangler` wired in: `wrangler.jsonc`
+  (nodejs_compat + `global_fetch_strictly_public`, Workers assets,
+  self-reference service binding, observability) and a dependency-free
+  `open-next.config.ts` (no R2/KV/Images bindings needed — every Canvix
+  route is dynamic and no `next/image` is used).
+- `npm run preview` (local workerd), `npm run deploy`, `npm run upload`,
+  `npm run cf-typegen`; `.dev.vars.example` documents the secrets;
+  `.open-next`, `.dev.vars`, `src/generated/` are gitignored.
+- Database on Workers = the Supabase **transaction pooler** URL (6543) —
+  the direct endpoint is IPv6-only and workers cannot reach it.
+
+### Runtime-portable internals
+- **SSRF guard** (`src/lib/mcp/ssrf-guard.ts`): `node:net`'s `isIP` is
+  replaced by a strict local implementation (verified against
+  `node:net` as an oracle across a 60-case corpus, including v4-mapped
+  v6, NAT64, compressed/full forms and malformed literals) — and
+  `node:dns`/`node:http(s)`/`node:stream` are now lazily imported.
+  Node/Bun behaviour is byte-identical (lookup-pinned transport). On
+  workerd the guard resolves via **DNS-over-HTTPS** (Cloudflare's JSON
+  API) and validates every A/AAAA record before `fetch()` runs; the
+  wrangler `global_fetch_strictly_public` flag backstops it. The
+  theoretical DoH→fetch rebinding window (unpinnable on workerd) is
+  documented in the file header.
+- **sharp rasterizer** (`src/lib/mcp/tools.ts`): loaded through a
+  non-literal specifier guarded by a loader — Node keeps it (and
+  `outputFileTracingIncludes` pins it into the standalone trace for
+  self-hosters), workerd never tries to load it. MCP PNG export
+  degrades to a clear "use SVG" error; fetched images fall back to
+  default dimensions.
+- **AI provider**: the `.z-ai-config` file fallback is Node-only (on
+  workerd the unenv fs stub is swallowed by the existing try/catch —
+  env vars via wrangler secrets are the provider source there).
+- Auth needed no changes: workerd implements `node:crypto` scrypt,
+  `timingSafeEqual`, `createHash`; SSE collab is pure web streams.
+
+### Verification
+- New suite `src/lib/cross-runtime.test.ts`: isIP parity corpus,
+  driverConnectionString matrix, runtime detection.
+- Full vitest run, `tsc --noEmit`, eslint and the production Node build
+  stay green; the Node standalone server was live-verified against the
+  real Supabase (health, designs, templates, MCP guards). The worker
+  builds at 2.13 MB gzipped, boots in workerd and serves the app.
+- **Known limitation (documented):** local `wrangler dev` in some
+  environments (including the development sandbox this was built in)
+  cannot complete the Postgres TLS upgrade — workerd's `startTls()`
+  breaks after any stream-reader use (isolated with raw-socket tests
+  across wrangler 4.100/4.145/4.155; the same dance works from Node
+  against the same servers; `node:net`+`node:tls` upgrade is likewise
+  blocked by a permanently-pending internal read). Real deployments run
+  the documented pg/pg-cloudflare path — verify with
+  `npm run deploy` + `/api/health`; Hyperdrive is the documented
+  fallback. Full audit: research/CLOUDFLARE-WORKERS-PORTABILITY.md.
+- Bonus: two pre-existing `react-hooks/set-state-in-effect` lint errors
+  fixed (AuthDialog resets via Radix unmount; useAuth sets state from
+  async continuations only).
+
+## [0.9.2] — 2026-10-28
+
+The "stop the bleeding" release — evidence-based fixes for the Vercel
+usage spike (5h05m Fluid CPU / 29.08 GB Fast Origin Transfer over two
+days), each traced to a measurable driver before a line was changed:
+
+- `GET /api/designs` returned every ownerless row with base64 thumbnails
+  (~7 MB/response) → keyset-paginated (60/page + Load more), ownership
+  scoping AND-composed with the cursor (regression-tested).
+- `GET /api/templates` (~0.7 MB, public, uncached) → CDN cache headers
+  (`s-maxage=86400`, SWR 604800).
+- SSE collab stream fired 3 Postgres queries every 800 ms per client →
+  adaptive pump (presence every 2nd tick, MAX(id) every 5th, idle
+  backoff 800 ms → 3.2 s, instant snap-back on activity; ~10× cheaper
+  idle streams, unchanged editing latency).
+- Presence writes throttled (cursor 120 ms → 300 ms, heartbeat 5 s →
+  15 s; 48.5k slow upserts/day measured on the live DB).
+- AI routes: strict same-origin guard (Origin-less/foreign POSTs get
+  403 before any provider work) and tightened generation limits.
+- `robots.txt` disallows `/api/`; `/api/health` is no-store + noindex.
+- Infra: `scripts/usage-forensics.ts` + workflow — pg_stat_statements
+  and table stats on demand for the next spike.
+- 168/168 tests green (13 new regression tests).
+
 ## [0.9.1] — 2026-10-28
 
 The "never claim someone else's work" release: claim eligibility is now

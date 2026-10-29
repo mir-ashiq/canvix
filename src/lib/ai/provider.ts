@@ -40,6 +40,13 @@ export function resolveProviderConfig(): AIProviderConfig | null {
   if (envUrl && envKey) return { baseUrl: envUrl, apiKey: envKey }
   try {
     // the SDK resolves the config file itself at ZAI.create(); mirror its lookup here
+    //
+    // PORTABILITY (v0.9.3): on Cloudflare Workers there is no real fs —
+    // OpenNext's unenv layer stubs node:fs so these calls either return
+    // false or throw, and this try/catch swallows that, leaving env-var
+    // config (ZAI_BASE_URL / ZAI_API_KEY via wrangler secrets) as the
+    // only provider source on that runtime — which is the documented
+    // production setup everywhere anyway.
     const candidates = [
       `${process.cwd()}/.z-ai-config`,
       `${process.env.HOME ?? ''}/.z-ai-config`,

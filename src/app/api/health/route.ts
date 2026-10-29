@@ -61,8 +61,10 @@ export async function GET() {
   }
 
   // 3. migrated? (all tables present)
+  // (::text — the rust-free query compiler, unlike the classic engine,
+  //  refuses Postgres catalog `name` columns in raw results)
   const rows = await db.$queryRaw<{ table_name: string }[]>`
-    SELECT table_name FROM information_schema.tables
+    SELECT table_name::text AS table_name FROM information_schema.tables
     WHERE table_schema = 'public'
   `
   const present = new Set(rows.map((r) => r.table_name))

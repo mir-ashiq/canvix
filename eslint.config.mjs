@@ -44,7 +44,21 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-useless-escape": "off",
   },
 }, {
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills"]
+  ignores: [
+    "node_modules/**",
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+    "examples/**",
+    "skills",
+    // v0.9.3: prisma-generated client (regenerated on install; it carries
+    // its own eslint-disable header that flat-config ignores don't inherit)
+    "src/generated/**",
+    // v0.9.3: cloudflare adapter build output
+    ".open-next/**",
+    "cloudflare-env.d.ts",
+  ]
 }];
 
 export default eslintConfig;

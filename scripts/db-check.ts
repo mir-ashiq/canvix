@@ -1,7 +1,7 @@
 // scripts/db-check.ts — tiny Prisma-based SQL checker used by verify-db-setup.sh
 // Usage: npx tsx scripts/db-check.ts <DATABASE_URL> <json-spec>
 //   { "sql": "SELECT COUNT(*)::int AS c FROM \"Template\"", "expectField": "c", "expect": 110 }
-import { PrismaClient } from '@prisma/client'
+import { createScriptClient } from '../src/lib/db-script'
 
 async function main() {
   const url = process.argv[2]
@@ -11,7 +11,7 @@ async function main() {
     expect?: number | string
     label?: string
   }
-  const db = new PrismaClient({ datasources: { db: { url } } })
+  const db = createScriptClient(url)
   try {
     const rows = await db.$queryRawUnsafe(spec.sql) as Array<Record<string, unknown>>
     if (spec.expectField !== undefined) {

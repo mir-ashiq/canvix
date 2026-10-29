@@ -24,6 +24,32 @@ import {
 
 export const SERVER_VERSION = '0.6.1'
 
+// ── sharp loader (Node-only, v0.9.3) ──────────────────────
+// sharp is a native module: it runs on Node/Bun (Vercel, self-host)
+// but cannot load on workerd. The NON-LITERAL specifier +
+// turbopackIgnore keeps bundlers from tracing it into server
+// outputs that must stay portable (Cloudflare Workers); Node
+// deployments still resolve it from node_modules at runtime, and
+// next.config.ts pins it into the standalone trace for self-hosters.
+// Callers must all degrade gracefully when this returns null.
+
+type SharpModule = typeof import('sharp')
+let sharpCache: SharpModule | null | undefined
+
+export async function loadSharp(): Promise<SharpModule | null> {
+  if (sharpCache !== undefined) return sharpCache
+  const specifier = 'sharp'
+  try {
+    const mod = (await import(/* turbopackIgnore: true */ specifier)) as {
+      default?: SharpModule
+    }
+    sharpCache = mod.default ?? null
+  } catch {
+    sharpCache = null // workerd / stripped deployments — callers fall back
+  }
+  return sharpCache
+}
+
 // ── tool plumbing ────────────────────────────────────────────
 
 export interface McpContent {
@@ -211,7 +237,12 @@ async function fetchImageAsDataUrl(url: string): Promise<{ src: string; width: n
   const buf = Buffer.from(await res.arrayBuffer())
   if (buf.byteLength > 8 * 1024 * 1024) throw new Error('Image exceeds the 8 MB cap.')
   const src = `data:${type.replace('jpg', 'jpeg')};base64,${buf.toString('base64')}`
-  const { default: sharp } = await import('sharp')
+  const sharp = await loadSharp()
+  if (!sharp) {
+    // workerd: no native sharp — sensible defaults; the editor's own
+    // transform handles make the real dimensions once it loads.
+    return { src, width: 800, height: 600 }
+  }
   const meta = await sharp(buf).metadata()
   return { src, width: meta.width ?? 800, height: meta.height ?? 600 }
 }
@@ -899,9 +930,14 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
         return ok({ pages: indices.map((i, k) => ({ index: i, svg: svgs[k] })) })
       }
 
-      // png — rasterize the server-side SVG with sharp
+      // png — rasterize the server-side SVG with sharp (Node only)
       try {
-        const { default: sharp } = await import('sharp')
+        const sharp = await loadSharp()
+        if (!sharp) {
+          return fail(
+            'PNG export needs a Node server — the sharp rasterizer is unavailable on this runtime (e.g. Cloudflare Workers). Use format "svg" instead.',
+          )
+        }
         const pngs: { index: number; data: string }[] = []
         for (const i of indices.slice(0, 3)) {
           const svg = exportPageToSVG(pages[i], design.width, design.height)

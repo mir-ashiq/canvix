@@ -438,6 +438,57 @@ npm run build
 npm run start
 ```
 
+## ☁️ Deploy — Vercel, Cloudflare Workers, or your own box
+
+Canvix runs on **any Node host** and — since v0.9.3 — on **Cloudflare
+Workers** too. Same codebase, same database, zero config divergence.
+
+### Vercel (or any Node host)
+
+1. Import the repo, set `DATABASE_URL` (the **transaction pooler** URL —
+   `…pooler.supabase.com:6543` — Vercel functions have no IPv6 route).
+2. `npm run db:setup` once from anywhere with DB access (migrations +
+   templates), then deploy. `postinstall` regenerates the Prisma client
+   on every build.
+
+### Cloudflare Workers (free tier works)
+
+```bash
+npm install                     # adds @opennextjs/cloudflare + wrangler
+cp .dev.vars.example .dev.vars  # put your pooler DATABASE_URL in it
+npm run preview                 # builds & boots the real worker locally
+
+# ship it:
+npx wrangler secret put DATABASE_URL      # paste the pooler URL when asked
+npm run deploy                              # → https://canvix.<you>.workers.dev
+# then open /api/health on the deployed URL — {"ok":true} = full stack green
+```
+
+> **Local preview note:** `npm run preview` is great for UI and no-DB
+> routes, but some environments' local `wrangler dev` cannot open the
+> Postgres TLS upgrade (a workerd runtime quirk — details in
+> `research/CLOUDFLARE-WORKERS-PORTABILITY.md`). The real deployment is
+> the source of truth: deploy (free), hit `/api/health`.
+
+What makes it work (all already wired):
+
+| Concern | How |
+|---|---|
+| Next.js on Workers | [`@opennextjs/cloudflare`](https://opennext.js.org/cloudflare) adapter (`open-next.config.ts`, `wrangler.jsonc`) |
+| Prisma without native binaries | rust-free client (WASM query compiler) — the wasm is ESM-imported on Workers (compiled at deploy) and read from disk on Node; ships once, keeping the worker at **2.1 MB gzipped** |
+| Postgres sockets | `pg` over `pg-cloudflare`'s socket layer (`nodejs_compat`) straight into the Supabase transaction pooler |
+| Auth (scrypt) | workerd implements `node:crypto` scrypt — same hashes on every runtime |
+| SSE collaboration | pure web streams + timers — no Node APIs |
+| MCP fetch tool | SSRF guard switches to DNS-over-HTTPS validation + public-only `fetch()` (`global_fetch_strictly_public` flag) |
+| PNG export | needs `sharp` (native) — on Workers it degrades gracefully: the tool answers "use SVG instead" |
+
+Honest free-tier notes: Workers free allows 100k requests/day, ~10 ms CPU
+per request and a 3 MB (gzipped) worker bundle — fine for trying Canvix
+and light self-hosting; heavier editing sessions (scrypt logins, big SSE
+pumps) fit the $5 paid plan better. Prisma's rust-free client keeps the
+bundle ~85 % smaller than the classic engine, which is what makes it fit
+at all. Full details: `research/CLOUDFLARE-WORKERS-PORTABILITY.md`.
+
 ## 🛠 Tech stack
 
 | Layer | Choice |

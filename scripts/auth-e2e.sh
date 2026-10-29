@@ -173,11 +173,11 @@ TSX="./node_modules/.bin/tsx"
 LEGACY_ID=""
 for attempt in 1 2 3; do
   if OUT=$(DATABASE_URL="$DATABASE_URL" "$TSX" -e "
-// use the app's own URL normalization (pgbouncer/sslmode) — a raw
-// client against the transaction pooler breaks on prepared statements
-require('./src/lib/db-url').applyDatabaseUrlDefaults()
-const { PrismaClient } = require('@prisma/client')
-const db = new PrismaClient()
+// use the app's own script-side client factory (URL normalization +
+// pg driver adapter — a raw client against the transaction pooler
+// breaks on prepared statements)
+const { createScriptClient } = require('./src/lib/db-script')
+const db = createScriptClient()
 ;(async () => {
   const d = await db.design.create({ data: { name: 'E2E legacy (pre-accounts) design', width: 100, height: 100 } })
   console.log(d.id)
@@ -256,11 +256,11 @@ pass "B opens C's design in view-only mode (readOnly:true)"
 CLEANUP_OK=0
 for attempt in 1 2 3; do
   if DATABASE_URL="$DATABASE_URL" "$TSX" -e "
-// use the app's own URL normalization (pgbouncer/sslmode) — a raw
-// client against the transaction pooler breaks on prepared statements
-require('./src/lib/db-url').applyDatabaseUrlDefaults()
-const { PrismaClient } = require('@prisma/client')
-const db = new PrismaClient()
+// use the app's own script-side client factory (URL normalization +
+// pg driver adapter — a raw client against the transaction pooler
+// breaks on prepared statements)
+const { createScriptClient } = require('./src/lib/db-script')
+const db = createScriptClient()
 ;(async () => {
   const ids = process.argv.slice(1, 6).filter(Boolean)   // 5 design ids (this run)
   const names = process.argv.slice(6).filter(Boolean)    // 3 usernames (this run)

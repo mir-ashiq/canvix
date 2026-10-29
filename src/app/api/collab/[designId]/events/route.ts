@@ -7,6 +7,7 @@ import {
   type CollabOp,
   type OpEnvelope,
 } from '@/lib/collab/protocol'
+import { formatHlc } from '@/lib/collab/hlc'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -19,6 +20,26 @@ interface EventsBody {
 }
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+
+// ── v0.10 offline merge: server-side HLC stamping ─────────────
+// Envelopes from v0.10 clients carry an `hlc`; legacy clients don't. Every
+// persisted event gets a stamp so downstream last-write-wins gates are
+// total-ordered. The server clock is walltime-based with an in-memory tick;
+// per-serverless-instance state is fine — stamps only need to be newer than
+// the *client* epochs they arbitrate, and walltime guarantees that for
+// honestly-clocked clients (a skewed client clock is absorbed by its own
+// HLC on the next observe).
+const serverClock = { w: 0, c: 0 }
+function serverHlc(): string {
+  const wall = Date.now()
+  if (wall > serverClock.w) {
+    serverClock.w = wall
+    serverClock.c = 0
+  } else {
+    serverClock.c += 1
+  }
+  return formatHlc(serverClock.w, serverClock.c, 'srv')
+}
 
 /**
  * POST /api/collab/[designId]/events — upstream op flush (batched).
@@ -78,10 +99,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ des
       }
 
       // design:rename — clamp the name
-      const payload =
+      const payload: Record<string, unknown> =
         op.kind === 'design:rename'
           ? { name: String((op as { name?: unknown }).name ?? '').slice(0, 80) }
-          : (op as unknown)
+          : { ...(op as unknown as Record<string, unknown>) }
+      // v0.10: embed the HLC stamp (client's if present, else the server's)
+      payload._h = typeof env.hlc === 'string' && env.hlc.length <= 80 ? env.hlc : serverHlc()
 
       await db.designEvent.create({
         data: {

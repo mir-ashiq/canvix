@@ -126,13 +126,13 @@ export function PhotosPanel() {
       searchPlaceholder="Search photos (e.g. mountain, coffee, beach)"
       onSearch={setQuery}
       belowSearch={
-        <div className="flex gap-1.5 flex-wrap mt-2.5">
+        <div className="cv-tabscroll -mx-4 mt-2.5 flex gap-1.5 overflow-x-auto px-4">
           {CATEGORIES.map((c) => (
             <button
               key={c.id}
               onClick={() => setCat(c.id)}
               className={cn(
-                'h-7 px-3 rounded-full text-[11.5px] font-semibold transition-colors border',
+                'h-7 shrink-0 whitespace-nowrap rounded-full px-3 text-[11.5px] font-semibold transition-colors border',
                 cat === c.id
                   ? 'bg-white/[0.16] text-white border-white/25'
                   : 'bg-transparent text-white/65 border-white/10 hover:bg-white/[0.07] hover:text-white'

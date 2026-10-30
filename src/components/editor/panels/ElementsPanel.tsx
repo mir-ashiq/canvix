@@ -45,6 +45,22 @@ const TABLE_STYLES: { id: TableStyle; label: string; swatch: React.CSSProperties
   { id: 'soft', label: 'Soft', swatch: { background: '#F2FBFC', border: '1px solid #02C0CC' } },
 ]
 
+/** v0.11.3: category strip config — one source of truth so every tab shares metrics. */
+const CATEGORY_TABS = [
+  { value: 'shapes', label: 'Shapes' },
+  { value: 'lines', label: 'Lines' },
+  { value: 'graphics', label: 'Graphics' },
+  { value: 'stickers', label: 'Stickers' },
+  { value: 'tables', label: 'Tables' },
+  { value: 'frames', label: 'Frames' },
+  { value: 'embeds', label: 'Embeds' },
+] as const
+
+/** One shared class ⇒ identical height, padding, type size and states on every tab.
+ *  text-white/65 on the white@5% bar = 7.38:1 (WCAG AA, was ~1.3:1 via text-foreground). */
+const CATEGORY_TAB_CLS =
+  'h-7 flex-none whitespace-nowrap rounded-md px-3 text-xs text-white/65 hover:text-white/90 transition-colors data-[state=active]:bg-[#7630D7] data-[state=active]:text-white'
+
 export function ElementsPanel() {
   const [tab, setTab] = useState('shapes')
   const [query, setQuery] = useState('')
@@ -74,14 +90,18 @@ export function ElementsPanel() {
             aria-label={searchPlaceholder}
           />
         </div>
-        <TabsList className="mt-3 w-full grid grid-cols-4 h-8 bg-white/[0.05]">
-          <TabsTrigger value="shapes" className="text-xs data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Shapes</TabsTrigger>
-          <TabsTrigger value="lines" className="text-xs data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Lines</TabsTrigger>
-          <TabsTrigger value="graphics" className="text-xs data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Graphics</TabsTrigger>
-          <TabsTrigger value="stickers" className="text-xs data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Stickers</TabsTrigger>
-          <TabsTrigger value="tables" className="text-[11px] data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Tables</TabsTrigger>
-          <TabsTrigger value="frames" className="text-[11px] data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Frames</TabsTrigger>
-          <TabsTrigger value="embeds" className="text-[11px] data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Embeds</TabsTrigger>
+        {/* v0.11.3: single-row swipeable strip. The old grid-cols-4 wrapped 7 tabs
+            into a second row that painted outside the fixed h-8 bar, over the
+            panel divider and content ("Tables" floating mid-panel on mobile). */}
+        <TabsList
+          aria-label="Element categories"
+          className="cv-tabscroll mt-3 flex h-9 w-full items-center justify-start gap-1 overflow-x-auto rounded-lg bg-white/[0.05] p-1"
+        >
+          {CATEGORY_TABS.map((t) => (
+            <TabsTrigger key={t.value} value={t.value} className={CATEGORY_TAB_CLS}>
+              {t.label}
+            </TabsTrigger>
+          ))}
         </TabsList>
       </div>
 

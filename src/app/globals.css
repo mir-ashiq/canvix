@@ -457,6 +457,17 @@
   border-radius: 999px;
 }
 
+/* v0.11.3: single-row swipeable strips (Elements category tabs, Photos/Templates
+   filter chips) — scroll instead of wrap. No visible scrollbar (a cut-off label
+   is the affordance), and no horizontal scroll chaining to the page. */
+.cv-tabscroll {
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.cv-tabscroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* landing animations */
 @keyframes cv-fade-up {
   from {

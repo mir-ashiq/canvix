@@ -3,6 +3,49 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.3] — 2026-10-30
+
+One mobile UI bug with two loud symptoms and a quiet third one hiding in
+plain sight on desktop.
+
+### Fixed
+- **Elements panel category tabs broke out of their bar on narrow
+  screens** — the strip was `grid grid-cols-4` with a fixed `h-8`, but
+  there are 7 categories: Shapes/Lines/Graphics/Stickers filled row one
+  and Tables/Frames/Embeds wrapped into a second row that painted
+  outside the 32px-tall bar. On a phone the Tables tab floated detached
+  over the panel divider and content (the reported screenshot); the same
+  overflow existed on desktop — the side panel is 320px there too — it
+  was just less obvious against the content. The strip is now a
+  single-row, horizontally scrollable bar (`overflow-x-auto`, hidden
+  scrollbar, no horizontal scroll chaining). Every category stays
+  reachable by swipe/scroll and keyboard (Radix roving focus scrolls
+  the trigger into view) — nothing is hidden or dropped.
+- **Inactive tab labels were nearly invisible in dark panels (≈1.3:1)** —
+  the app never applies Tailwind's `.dark` class (the editor's dark
+  chrome is hand-painted), so the shadcn Tabs default `text-foreground`
+  resolved to the light-theme near-black `oklch(0.145 0 0)` ≈ `#0a0a0a`
+  on the dark bar. Tabs now set an explicit `text-white/65` — 7.4:1 on
+  the white@5% bar (WCAG AA; the active white-on-purple pill is 6.6:1).
+- **Inconsistent tab metrics** — the last three tabs shipped at
+  `text-[11px]` beside `text-xs` siblings (and measured 25px vs 26px
+  tall). All seven tabs now render from one shared class: identical
+  height, padding, font size, radius, hover and active states.
+- **Photos & Templates filter chips wrapped unpredictably at narrow
+  widths** — same treatment: single-row swipeable chip strips that
+  scroll full-bleed under the panel padding; chips no longer wrap or
+  shrink. Their label colors already passed AA (7.0:1 / 8.0:1) and are
+  unchanged.
+
+### Added
+- `.cv-tabscroll` utility (globals.css) for the single-row scroll
+  strips: `scrollbar-width: none` + `overscroll-behavior-x: contain`.
+- Playwright regression suite `panels-responsive.spec.ts` (7 tests):
+  at 320 / 360 / 390 / 430px and desktop — one row, shared metrics,
+  strip scrollable, no overlap with the divider/description/content,
+  the last tab reachable and functional, and a computed-style WCAG
+  contrast lock (≥ 4.5:1) on the inactive label.
+
 ## [0.11.2] — 2026-10-30
 
 Two production bugs: an editor crash with an easy-to-miss root cause,

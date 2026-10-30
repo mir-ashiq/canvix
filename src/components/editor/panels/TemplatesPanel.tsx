@@ -69,13 +69,14 @@ export function TemplatesPanel() {
             </button>
           )}
         </div>
-        <div className="mt-3 flex gap-1.5 flex-wrap">
+        {/* v0.11.3: single-row swipeable chips — full-bleed scroll under the panel padding */}
+        <div className="cv-tabscroll -mx-4 mt-3 flex gap-1.5 overflow-x-auto px-4">
           {[{ id: 'all', label: 'All' }, ...TEMPLATE_CATEGORIES.map((c) => ({ id: c.id, label: c.label }))].map((c) => (
             <button
               key={c.id}
               onClick={() => setCategory(c.id)}
               className={cn(
-                'rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                'shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium border transition-colors',
                 category === c.id ? 'bg-[#7630D7] text-white border-transparent' : 'border-white/12 text-white/60 hover:border-white/30 hover:text-white'
               )}
             >

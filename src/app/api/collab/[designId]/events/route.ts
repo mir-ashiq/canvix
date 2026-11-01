@@ -9,6 +9,9 @@ import {
   type OpEnvelope,
 } from '@/lib/collab/protocol'
 import { formatHlc } from '@/lib/collab/hlc'
+import { canEditDesign, NOT_YOUR_DESIGN } from '@/lib/auth/design-guard'
+import { getSessionUser } from '@/lib/auth/session'
+import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -52,6 +55,11 @@ function serverHlc(): string {
 export async function POST(req: NextRequest, { params }: { params: Promise<{ designId: string }> }) {
   const { designId } = await params
   try {
+    // v0.11.8: same-origin enforcement — every other mutating route already
+    // checks this; without it a cross-site page could drive an authenticated
+    // owner's session cookie at this endpoint.
+    if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
+
     const body = (await req.json().catch(() => ({}))) as EventsBody
     const pid = (body.pid ?? '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40)
     if (!pid) return NextResponse.json({ error: 'A participant id is required.' }, { status: 400 })
@@ -59,13 +67,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ des
     const events = Array.isArray(body.events) ? body.events.slice(0, MAX_EVENTS_PER_FLUSH) : []
     if (!events.length) return NextResponse.json({ ok: true, accepted: 0 })
 
-    // verify design exists & is not trashed
-    const design = await db.design.findUnique({
-      where: { id: designId },
-      select: { id: true, deletedAt: true },
-    })
+    // v0.11.8: verify the design exists & is not trashed, and resolve the
+    // caller's edit rights. This route used to check existence only — the
+    // ownership rule the document rail (PUT /api/designs/[id]) enforces was
+    // missing here, so anyone holding an owned design's link could append
+    // ops (up to and including pages:replace) that reached the owner's live
+    // session and rode the owner's next autosave. Same three cases as
+    // design-guard now, resolved with a lean column set — this route is hot
+    // (a flush every 400 ms per client), so the full design row is
+    // deliberately not fetched.
+    const [design, user] = await Promise.all([
+      db.design.findUnique({
+        where: { id: designId },
+        select: { id: true, deletedAt: true, ownerId: true },
+      }),
+      getSessionUser(req),
+    ])
     if (!design || design.deletedAt) {
       return NextResponse.json({ error: 'Design not found.' }, { status: 404 })
+    }
+    if (!canEditDesign(design, user)) {
+      return NextResponse.json(NOT_YOUR_DESIGN, { status: 403 })
     }
 
     const seenEventIds = new Set<string>()

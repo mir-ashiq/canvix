@@ -25,6 +25,20 @@ export interface DesignAccess {
 }
 
 /**
+ * The three-case rule, pure — extracted (v0.11.8) so the document rail
+ * (PUT /api/designs/[id]) and the collab rail (POST /api/collab/[id]/events)
+ * can never drift:
+ *   ownerless design → anyone with the link can edit (pre-accounts
+ *   behaviour, deliberate); owned design → the owner only.
+ */
+export function canEditDesign(
+  design: { ownerId: string | null },
+  user: { id: string } | null
+): boolean {
+  return design.ownerId === null || design.ownerId === user?.id
+}
+
+/**
  * Load a design + resolve the caller's access. Returns null when the
  * design does not exist. Never throws (DB errors bubble as usual so
  * dbErrorResponse can classify them).
@@ -38,8 +52,7 @@ export async function resolveDesignAccess(
     getSessionUser(req),
   ])
   if (!design) return null
-  const canEdit = design.ownerId === null || design.ownerId === user?.id
-  return { design: design as DesignAccess['design'], user, canEdit }
+  return { design: design as DesignAccess['design'], user, canEdit: canEditDesign(design, user) }
 }
 
 /** Standard 403 body for mutating routes. */

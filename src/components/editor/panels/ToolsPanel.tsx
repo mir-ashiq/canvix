@@ -55,6 +55,7 @@ export function ToolsPanel() {
 function DrawTab() {
   const tool = useEditorStore((s) => s.tool)
   const setTool = useEditorStore((s) => s.setTool)
+  const editingMode = useEditorStore((s) => s.editingMode)
   const drawColor = useEditorStore((s) => s.drawColor)
   const setDrawColor = useEditorStore((s) => s.setDrawColor)
   const drawSize = useEditorStore((s) => s.drawSize)
@@ -64,6 +65,14 @@ function DrawTab() {
 
   return (
     <div className="p-4 space-y-4">
+      {/* v0.11.6 (F3): setTool now leaves read-only viewing too, so the
+          toggle always works — say so instead of showing Draw "pressed"
+          over a read-only canvas with no explanation */}
+      {editingMode === 'viewing' && (
+        <p className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[11.5px] leading-relaxed text-white/60">
+          Viewing mode is read-only — picking a tool resumes editing.
+        </p>
+      )}
       <div className="flex gap-2">
         <button
           onClick={() => setTool('draw')}

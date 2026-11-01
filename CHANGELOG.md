@@ -3,6 +3,42 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.12.4] — 2026-11-02
+
+### Added
+
+- **Docs & ops runbook (H6).** Self-hosters get the two guides the
+  roadmap research called the missing floor of the operations story:
+  - **`docs/BACKUP-AND-RESTORE.md`** — one-command `pg_dump` backup
+    (custom format) with the notes that actually matter in practice:
+    the **bytea media travels inside the dump** (size implications,
+    32 MB/file cap), the Supabase session-vs-transaction-pooler
+    pitfall for pg_dump, and cross-owner restore flags. The core is a
+    **restore drill executed and verified end-to-end**, documented
+    step-by-step with its real output: dump (753 KB, 167 designs,
+    110 templates, 30 media) → scratch database → `pg_restore
+    --no-owner --no-privileges` → count-and-byte verification
+    (identical, including `SUM(size)` on media) → **booting the app
+    against the restored database** (`/api/health` green, designs
+    served) → teardown. Plus real-recovery steps and a scheduled-
+    backup cron example.
+  - **`docs/UPGRADING.md`** — the routine upgrade path (snapshot →
+    pull → `npm ci` → `db:migrate:deploy` → rebuild → health check),
+    jumping minors (cumulative migrations, one command, what to read
+    in the CHANGELOG), and rollback guidance with the honest caveat:
+    Prisma migrations are forward-only, so the safe path is
+    restore-forward from the pre-upgrade snapshot — and the note that
+    0.9–0.12 migrations are additive, so code-only rollbacks can
+    leave the schema migrated.
+  - **`scripts/media-gc.ts`** — media orphan GC: reports (default) or
+    prunes (`--prune`, `GRACE_DAYS`) never-finalized uploads older
+    than 24 h and finalized uploads no live design references anymore
+    (elements reference media as `/api/media/<id>`; deleting a design
+    intentionally keeps its media for version snapshots). Verified by
+    a drill (`scripts/media-gc-drill.ts`) that plants one orphan and
+    one referenced row and asserts exactly the orphan is pruned.
+- **README pointers** to both guides from the Deploy section.
+
 ## [0.12.3] — 2026-11-02
 
 ### Added

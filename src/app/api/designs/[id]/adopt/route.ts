@@ -4,6 +4,7 @@ import { getSessionUser } from '@/lib/auth/session'
 import { anonHashFrom } from '@/lib/auth/anon'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { NOT_YOUR_DESIGN } from '@/lib/auth/design-guard'
+import { withLogging } from '@/lib/observability'
 
 // POST /api/designs/[id]/adopt — deliberately claim ONE ownerless
 // design into the signed-in account.
@@ -17,7 +18,7 @@ import { NOT_YOUR_DESIGN } from '@/lib/auth/design-guard'
 //
 // The claim itself is a single conditional updateMany (WHERE ownerId IS
 // NULL), so two racing accounts can never both win.
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function __canvix_post(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   const user = await getSessionUser(req)
   if (!user) {
@@ -61,3 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Failed to adopt design.' }, { status: 500 })
   }
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const POST = withLogging('POST /api/designs/[id]/adopt', __canvix_post)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
+import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const maxDuration = 20
@@ -19,7 +20,7 @@ const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
  * POST /api/collab/[designId]/presence — heartbeat + cursor broadcast.
  * Called every ~5 s (heartbeat) and throttled on cursor moves.
  */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ designId: string }> }) {
+async function __canvix_post(req: NextRequest, { params }: { params: Promise<{ designId: string }> }) {
   const { designId } = await params
   try {
     // v0.11.8: same-origin enforcement, matching every other mutating route.
@@ -96,3 +97,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ des
     return NextResponse.json({ error: 'Could not update presence.' }, { status: 502 })
   }
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const POST = withLogging('POST /api/collab/[designId]/presence', __canvix_post)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withProvider, VISION_MODEL } from '@/lib/ai/provider'
 import { validateAnalysis } from '@/lib/magic-layers/validate'
+import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -17,7 +18,7 @@ interface MagicLayersBody {
  * elements. The model never dictates element creation directly; its JSON is
  * schema-validated and clamped before it leaves this route.
  */
-export async function POST(req: NextRequest) {
+async function __canvix_post(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as MagicLayersBody
   const image = (body.image ?? '').trim()
 
@@ -81,3 +82,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(analysis)
   })
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const POST = withLogging('POST /api/ai/magic-layers', __canvix_post)

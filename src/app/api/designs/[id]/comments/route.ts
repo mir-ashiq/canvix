@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
+import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -11,7 +12,7 @@ const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
  * GET /api/designs/[id]/comments — all comment threads for a design.
  * POST — add a comment (top-level pin or reply via parentId).
  */
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function __canvix_get(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   try {
     const comments = await db.comment.findMany({
@@ -55,7 +56,7 @@ interface CommentBody {
   parentId?: string
 }
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function __canvix_post(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: designId } = await params
   // v0.12.3 (H5): comment spam brake — humans don't post 60/min.
   const limit = checkRateLimit(req, 'comments:create')
@@ -144,3 +145,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Could not create the comment.' }, { status: 502 })
   }
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const GET = withLogging('GET /api/designs/[id]/comments', __canvix_get)
+export const POST = withLogging('POST /api/designs/[id]/comments', __canvix_post)

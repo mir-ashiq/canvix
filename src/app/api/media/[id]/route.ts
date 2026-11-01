@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
+import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -13,7 +14,7 @@ export const maxDuration = 30
 const MAX_CHUNK = 3 * 1024 * 1024 + 64 * 1024 // transport headroom over the client chunk size
 
 /** PATCH /api/media/[id]?offset=<n> — append one chunk (raw body). */
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function __canvix_patch(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   const { id } = await params
   try {
@@ -48,7 +49,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 /** PUT /api/media/[id] — finalize: verify length, mark complete. */
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function __canvix_put(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   const { id } = await params
   try {
@@ -78,7 +79,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 /** GET /api/media/[id] — stream the bytes (Range-aware for <audio>/<video>
  * seeking). Finalized media only; immutable content-addressed by id. */
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function __canvix_get(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   try {
     const rows = await db.$queryRawUnsafe<{ bytes: Buffer; mime: string }[]>(
@@ -131,3 +132,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return new Response('Media unavailable', { status: 500 })
   }
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const PATCH = withLogging('PATCH /api/media/[id]', __canvix_patch)
+export const PUT = withLogging('PUT /api/media/[id]', __canvix_put)
+export const GET = withLogging('GET /api/media/[id]', __canvix_get)

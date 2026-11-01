@@ -5,12 +5,13 @@ import { canonicalUsername, checkUsername, checkPassword } from '@/lib/auth/vali
 import { createSession } from '@/lib/auth/session'
 import { rateLimit } from '@/lib/ai/provider'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
+import { withLogging } from '@/lib/observability'
 
 // POST /api/auth/register — create an account (username + password).
 // Free forever: no email, no verification, no external provider — a
 // self-hosted account system with zero moving parts beyond the DB.
 // v0.9.1: same-origin enforced (blocks cross-site forced sign-ups).
-export async function POST(req: NextRequest) {
+async function __canvix_post(req: NextRequest) {
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   const rl = rateLimit('auth:register', req, 5, 3600)
   if (!rl.ok) {
@@ -41,3 +42,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Could not create the account. Please try again.' }, { status: 500 })
   }
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const POST = withLogging('POST /api/auth/register', __canvix_post)

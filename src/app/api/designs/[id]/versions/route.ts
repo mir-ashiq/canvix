@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@/generated/prisma/client'
 import { db } from '@/lib/db'
 import { resolveDesignAccess, NOT_YOUR_DESIGN } from '@/lib/auth/design-guard'
+import { withLogging } from '@/lib/observability'
 
 // GET /api/designs/[id]/versions — list server-side version snapshots (newest first)
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function __canvix_get(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const versions = await db.designVersion.findMany({
@@ -32,7 +33,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 // POST /api/designs/[id]/versions — save a new version snapshot
 // v0.9: owner-only for owned designs (403 otherwise); ownerless unchanged.
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function __canvix_post(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const access = await resolveDesignAccess(req, id)
@@ -83,3 +84,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Failed to save version' }, { status: 500 })
   }
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const GET = withLogging('GET /api/designs/[id]/versions', __canvix_get)
+export const POST = withLogging('POST /api/designs/[id]/versions', __canvix_post)

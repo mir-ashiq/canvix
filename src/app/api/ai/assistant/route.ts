@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withProvider } from '@/lib/ai/provider'
+import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -223,7 +224,7 @@ function sanitizeActions(input: unknown): DesignAction[] {
 }
 
 /** POST /api/ai/assistant — Canva AI 2.0-style design-aware assistant. */
-export async function POST(req: NextRequest) {
+async function __canvix_post(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as AssistantBody
   const message = (body.message ?? '').trim().slice(0, 1500)
   if (!message) return NextResponse.json({ error: 'A message is required.' }, { status: 400 })
@@ -312,3 +313,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(parsed)
   })
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const POST = withLogging('POST /api/ai/assistant', __canvix_post)

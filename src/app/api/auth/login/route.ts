@@ -5,12 +5,13 @@ import { canonicalUsername, checkUsername } from '@/lib/auth/validate'
 import { createSession } from '@/lib/auth/session'
 import { rateLimit } from '@/lib/ai/provider'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
+import { withLogging } from '@/lib/observability'
 
 // POST /api/auth/login — exchange username + password for a session cookie.
 // One deliberately generic error message: never reveal whether the
 // username exists (account enumeration).
 // v0.9.1: same-origin enforced (blocks login CSRF / session fixation).
-export async function POST(req: NextRequest) {
+async function __canvix_post(req: NextRequest) {
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   const rl = rateLimit('auth:login', req, 10, 600)
   if (!rl.ok) {
@@ -42,3 +43,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Sign-in failed. Please try again.' }, { status: 500 })
   }
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const POST = withLogging('POST /api/auth/login', __canvix_post)

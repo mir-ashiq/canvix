@@ -13,6 +13,7 @@ import { canEditDesign, NOT_YOUR_DESIGN } from '@/lib/auth/design-guard'
 import { getSessionUser } from '@/lib/auth/session'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
+import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -53,7 +54,7 @@ function serverHlc(): string {
  * bounded payload size, bounded counts. Malformed events are dropped and
  * reported — never crash, never 500 on bad input.
  */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ designId: string }> }) {
+async function __canvix_post(req: NextRequest, { params }: { params: Promise<{ designId: string }> }) {
   const { designId } = await params
   try {
     // v0.11.8: same-origin enforcement — every other mutating route already
@@ -188,3 +189,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ des
     return NextResponse.json({ error: 'Could not persist collaboration events.' }, { status: 502 })
   }
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const POST = withLogging('POST /api/collab/[designId]/events', __canvix_post)

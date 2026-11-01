@@ -51,7 +51,12 @@ export function useCollab(): void {
     }
     session.onPresence = (collaborators) => useEditorStore.getState().setCollaborators(collaborators)
 
-    setOpEmitter((op) => session.emit(op, `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`))
+    setOpEmitter((op) => {
+      // v0.11.8: read-only designs never queue ops (the server would 403
+      // the flush) — presence/cursors still flow; only mutations stop.
+      if (useEditorStore.getState().readOnly) return
+      session.emit(op, `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`)
+    })
     session.start()
 
     return () => {

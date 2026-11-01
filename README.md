@@ -759,6 +759,10 @@ tool descriptions so agents pick the right format.
       “Cannot update a component while rendering” warning, root-caused to
       stroke/marquee/guide commits — not Magic Layers), and the Share
       dialog documents the real access model for self-hosters *(v0.11.7)*
+- [x] Collab-rail ownership enforcement — the events/presence routes now
+      apply the same design-guard rule as the document rail (owned designs
+      403 non-owners; ownerless designs stay link-editable), plus
+      same-origin enforcement and design-gated presence writes *(v0.11.8)*
 - [ ] Plugin system (external, installable apps) — sandboxed-iframe MVP
       per `research/PLUGIN-SYSTEM.md`: manifest + permission model, iframe
       sandbox with postMessage bridge, an “Apps” panel store, and 2–3

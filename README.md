@@ -795,6 +795,12 @@ tool descriptions so agents pick the right format.
       + blob workers, and the strict per-manifest CSP the v0.13 plugin
       serve route will use, drafted and unit-tested in
       `src/lib/security/plugin-csp.ts` *(v0.12.1)*
+- [x] Error boundaries — a top-level boundary around the app shell plus
+      per-surface boundaries around the editor and dashboard: a render-time
+      crash now shows a recovery UI (reload editor / back to dashboard /
+      copy diagnostics with design id + last saved seq) instead of a white
+      screen; `reactStrictMode` re-enabled after a full-suite re-evaluation
+      *(v0.12.2)*
 - [ ] Plugin system (external, installable apps) — sandboxed-iframe MVP
       per `research/PLUGIN-SYSTEM.md`: manifest + permission model, iframe
       sandbox with postMessage bridge, an “Apps” panel store, and 2–3

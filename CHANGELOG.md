@@ -3,6 +3,49 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.12.2] — 2026-11-02
+
+### Added
+
+- **Error boundaries — a crash is never a white screen anymore (H4).**
+  The v1.0 roadmap research flagged this as tech-debt #4: any
+  render-time throw in the editor tree unmounted React root-down —
+  a blank page, no recovery, no diagnostics. Now three boundaries
+  guard the app: a top-level one around `AppShell` on both routes
+  (`/` and `/design/<id>`), plus per-surface ones around the editor
+  and the dashboard. The recovery UI offers the three escapes that
+  actually help — **Reload editor** (fresh mount, URL and design id
+  preserved), **Back to dashboard** (switches the app-store view and
+  remounts the crashed surface from scratch, no reload needed) and
+  **Copy diagnostics** — and the diagnostics carry exactly what a
+  bug report needs: the design id, the last saved collab seq
+  (from the replay cursor), save state (savedAt/saving/dirty), page
+  and element counts, the error and its stack head, URL, timestamp
+  and user agent. Honest scope note: boundaries catch render/lifecycle
+  errors; event-handler and async errors were already contained by the
+  validated-collab and db-error paths.
+- **Dev-only crash probe** (`DevCrashProbe` in
+  `src/components/ErrorBoundary.tsx`) — throws during render when
+  `window.__canvixRequestDevCrash()` is called, which is the only
+  class of error a boundary can catch. `NODE_ENV`-gated, so the
+  throw branch is dead code that production builds drop entirely.
+- **Playwright spec** `tests/e2e/error-boundary.spec.ts` — forces a
+  crash in a child of the editor boundary, asserts the recovery UI
+  renders (never a white screen), that the clipboard diagnostics
+  parse as JSON with the design id + last-saved-seq fields, that
+  “Back to dashboard” recovers without a reload, and that the
+  editor still opens afterwards with no collateral page errors.
+
+### Changed
+
+- **`reactStrictMode` re-enabled** (was `false` since the
+  pre-accounts era). The H4 epic called for a re-evaluation, and the
+  current codebase tolerates double-invoked effects: the full
+  Playwright suite passes unchanged under strict mode (dev server,
+  which is where the double-invocation happens). This surfaces
+  effect-cleanup bugs at development time instead of in production
+  remounts.
+
 ## [0.12.1] — 2026-11-02
 
 ### Added

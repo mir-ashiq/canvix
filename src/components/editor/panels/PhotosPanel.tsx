@@ -23,6 +23,10 @@ interface WebPhoto {
   height: number
 }
 
+/** v0.11.6 (F2): why a web search came back empty — surfaced in the panel
+ *  so an unconfigured server says so instead of looking "broken" */
+type WebError = { kind: 'no-provider' } | { kind: 'service'; message: string }
+
 const CATEGORIES = [
   { id: 'all', label: 'All photos' },
   { id: 'nature', label: 'Nature' },
@@ -60,24 +64,46 @@ export function PhotosPanel() {
   // v0.4: live web search (debounced)
   const [webResults, setWebResults] = useState<WebPhoto[] | null>(null)
   const [webBusy, setWebBusy] = useState(false)
+  // v0.11.6 (F2): last search's failure mode, if any — 'no-provider' gets
+  // a configuration hint, anything else keeps the plain empty message
+  const [webError, setWebError] = useState<WebError | null>(null)
   const lastQuery = useRef('')
 
   useEffect(() => {
     const q = query.trim()
     const run = async () => {
       if (q.length < 2) {
+        // v0.11.6 (F2): leaving results mode must clear BOTH the results and
+        // any error — a stale hint next to the full library is exactly the
+        // sticky-state bug the QA pass reported
         setWebResults(null)
+        setWebError(null)
         return
       }
       setWebBusy(true)
+      setWebError(null)
       try {
         const res = await fetch('/api/photos/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: q, count: 24 }),
         })
-        const data = (await res.json()) as { results?: WebPhoto[] }
-        setWebResults(res.ok && Array.isArray(data.results) ? data.results : [])
+        const data = (await res.json().catch(() => ({}))) as {
+          results?: WebPhoto[]
+          error?: string
+          code?: string
+        }
+        // v0.11.6 (F2): 503 NO_PROVIDER means the server has no AI provider
+        // configured — say that, not "no photos matched"
+        if (res.status === 503 && data.code === 'NO_PROVIDER') {
+          setWebError({ kind: 'no-provider' })
+          setWebResults([])
+        } else if (!res.ok) {
+          setWebError(data.error ? { kind: 'service', message: data.error } : null)
+          setWebResults([])
+        } else {
+          setWebResults(Array.isArray(data.results) ? data.results : [])
+        }
       } catch {
         setWebResults([])
       } finally {
@@ -119,18 +145,32 @@ export function PhotosPanel() {
 
   const showWeb = query.trim().length >= 2 && (webResults !== null || webBusy)
 
+  // v0.11.6 (F2): clicking a category tab EXITS results mode — clears the
+  // query (and with it the visible search box, now controlled), the web
+  // results and any error. Before, the query kept filtering the bundled
+  // grid, so "All photos" showed the stale 6-photo result set instead of
+  // the 42-photo library until the panel was closed and reopened.
+  const pickCategory = (id: string) => {
+    setCat(id)
+    setQuery('')
+    setWebResults(null)
+    setWebError(null)
+  }
+
   return (
     <PanelShell
       title="Photos"
       subtitle="Search millions of photos or browse the free library"
       searchPlaceholder="Search photos (e.g. mountain, coffee, beach)"
+      searchValue={query}
+      onSearchValueChange={setQuery}
       onSearch={setQuery}
       belowSearch={
         <div className="cv-tabscroll -mx-4 mt-2.5 flex gap-1.5 overflow-x-auto px-4">
           {CATEGORIES.map((c) => (
             <button
               key={c.id}
-              onClick={() => setCat(c.id)}
+              onClick={() => pickCategory(c.id)}
               className={cn(
                 'h-7 shrink-0 whitespace-nowrap rounded-full px-3 text-[11.5px] font-semibold transition-colors border',
                 cat === c.id
@@ -155,7 +195,16 @@ export function PhotosPanel() {
             </span>
             {webBusy && <Loader2 size={11} className="animate-spin text-white/40 ml-1" />}
           </div>
-          {webResults && webResults.length === 0 && !webBusy ? (
+          {webError?.kind === 'no-provider' ? (
+            <p className="text-[11.5px] text-white/40 py-2 leading-relaxed">
+              Web search needs an AI provider configured on the server — set
+              the <code className="text-white/55">ZAI_BASE_URL</code> and{' '}
+              <code className="text-white/55">ZAI_API_KEY</code> environment
+              variables. The free library below still works.
+            </p>
+          ) : webError?.kind === 'service' ? (
+            <p className="text-[11.5px] text-white/40 py-2">{webError.message}</p>
+          ) : webResults && webResults.length === 0 && !webBusy ? (
             <p className="text-[11.5px] text-white/40 py-2">No web photos matched — try other keywords.</p>
           ) : (
             <div className="grid grid-cols-2 gap-2.5">

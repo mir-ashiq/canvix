@@ -10,6 +10,11 @@ interface PanelShellProps {
   /** canva-style AI prompt + Generate/Search row */
   searchPlaceholder?: string
   onSearch?: (q: string) => void
+  /** v0.11.6 (F2): optional controlled search text — lets a panel reset the
+   *  visible input (e.g. Photos clears the box when a category tab exits
+   *  results mode). Unset → the input keeps its own local state. */
+  searchValue?: string
+  onSearchValueChange?: (q: string) => void
   children: ReactNode
   /** extra row under the search bar (e.g. filter chips) */
   belowSearch?: ReactNode
@@ -17,8 +22,12 @@ interface PanelShellProps {
 }
 
 /** Dark side-panel shell matching canva.com 2026: header, AI prompt row, purple Search button. */
-export function PanelShell({ title, subtitle, searchPlaceholder, onSearch, children, belowSearch, onClose }: PanelShellProps) {
-  const [q, setQ] = useState('')
+export function PanelShell({ title, subtitle, searchPlaceholder, onSearch, searchValue, onSearchValueChange, children, belowSearch, onClose }: PanelShellProps) {
+  const [localQ, setLocalQ] = useState('')
+  // controlled when the panel passes a value+change pair; local otherwise
+  const isControlled = searchValue !== undefined && onSearchValueChange !== undefined
+  const q = isControlled ? searchValue : localQ
+  const setQ = isControlled ? onSearchValueChange : setLocalQ
   const submit = () => onSearch?.(q.trim())
 
   return (

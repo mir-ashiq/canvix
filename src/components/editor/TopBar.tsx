@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Home, MessageCircle, Play, Share2, ChevronDown, Undo2, Redo2, Download, Github, Cloud, Check, Loader2, Ruler, History, Languages, Wand2, Zap } from 'lucide-react'
+import { Home, MessageCircle, Play, Share2, ChevronDown, Undo2, Redo2, Download, Github, Cloud, Check, Loader2, Ruler, History, Languages, Wand2, Zap, MousePointer2, Brush, Eye } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
+import { interactionMode } from '@/lib/editor-utils'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
@@ -32,6 +33,11 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
   const savedAt = useEditorStore((s) => s.savedAt)
   const editingMode = useEditorStore((s) => s.editingMode)
   const setEditingMode = useEditorStore((s) => s.setEditingMode)
+  // v0.11.6 (F3): the mode control also needs the active tool — both derive
+  // from the same store via interactionMode(), so the top bar can never
+  // read "Editing" while the canvas is in Draw mode again
+  const tool = useEditorStore((s) => s.tool)
+  const setTool = useEditorStore((s) => s.setTool)
   const setPreviewOpen = useEditorStore((s) => s.setPreviewOpen)
   const setPanel = useEditorStore((s) => s.setPanel)
   const selectedIds = useEditorStore((s) => s.selectedIds)
@@ -52,6 +58,10 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
   const [magicLayersOpen, setMagicLayersOpen] = useState(false)
 
   const item = 'h-10 px-3 rounded-xl text-white/95 hover:bg-white/15 transition-colors text-sm font-semibold flex items-center gap-1.5 select-none'
+
+  // v0.11.6 (F3): one derivation drives the label — the top bar and the
+  // Tools panel can no longer disagree about the canvas mode
+  const mode = interactionMode(editingMode, tool)
 
   // canva behaviour: an element selection replaces the topbar middle section with the context toolbar
   const hasSelection = selectedIds.length > 0
@@ -125,16 +135,26 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
         Magic Resize
       </button>
 
-      {/* Editing / Viewing mode */}
+      {/* Editing / Draw / Viewing mode — v0.11.6 (F3): ONE derivation
+          (interactionMode) drives this label, and the menu can activate
+          drawing directly, where previously only the Tools panel could */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button className={item} aria-label="Editing mode">
-            {editingMode === 'editing' ? 'Editing' : 'Viewing'} <ChevronDown size={12} className="opacity-70" />
+            {mode === 'viewing' ? <Eye size={13} className="text-white/80" /> : mode === 'draw' ? <Brush size={13} className="text-white/80" /> : <MousePointer2 size={13} className="text-white/80" />}
+            {mode === 'viewing' ? 'Viewing' : mode === 'draw' ? 'Draw' : 'Editing'} <ChevronDown size={12} className="opacity-70" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-44 bg-[#16181D] border-white/10 text-white">
-          <DropdownMenuItem onClick={() => setEditingMode('editing')}>✏️ Editing — make changes</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setEditingMode('viewing')}>👁 Viewing — read only</DropdownMenuItem>
+          <DropdownMenuItem className="gap-2" onClick={() => { setEditingMode('editing'); setTool('select') }}>
+            <MousePointer2 size={15} /> Editing — select & edit
+          </DropdownMenuItem>
+          <DropdownMenuItem className="gap-2" onClick={() => { setEditingMode('editing'); setTool('draw') }}>
+            <Brush size={15} /> Draw — freehand brush
+          </DropdownMenuItem>
+          <DropdownMenuItem className="gap-2" onClick={() => setEditingMode('viewing')}>
+            <Eye size={15} /> Viewing — read only
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 

@@ -745,6 +745,10 @@ tool descriptions so agents pick the right format.
 - [x] Presence join latency fix — per-tick presence diff + announce-on-join:
       a new collaborator shows up for idle clients in ≤ 3.2 s (was 60–90 s),
       remote cursors included *(v0.11.5)*
+- [x] Panel state hygiene — Photos category tabs exit search mode (no more
+      stale 6-of-42 grid), web search without an AI provider says so, and
+      the top-bar mode control + Tools-panel Draw toggle always agree
+      *(v0.11.6)*
 - [ ] Plugin system (external, installable apps) — sandboxed-iframe MVP
       per `research/PLUGIN-SYSTEM.md`: manifest + permission model, iframe
       sandbox with postMessage bridge, an “Apps” panel store, and 2–3

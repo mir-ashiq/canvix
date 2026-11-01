@@ -736,7 +736,20 @@ tool descriptions so agents pick the right format.
 - [x] Audio/video elements & Beat Sync — chunked media store (bytea +
       Range streaming), in-browser tempo/beat analysis, per-element beat
       pulses in preview/present/export *(v0.11.0)*
-- [ ] Plugin system (external, installable apps)
+- [x] Production hardening sweep — presence P2002 storm + 30s function
+      hangs, v0.11.0 smoke (preview playback, export audio, offline
+      detection), editor Projects panel crash, Elements panel tab strip
+      *(v0.11.1–v0.11.3)*
+- [x] Canonical design URLs — `/design/<id>` share links, address-bar
+      sync, legacy `/?design=` links self-heal to the canonical path *(v0.11.4)*
+- [ ] Plugin system (external, installable apps) — sandboxed-iframe MVP
+      per `research/PLUGIN-SYSTEM.md`: manifest + permission model, iframe
+      sandbox with postMessage bridge, an “Apps” panel store, and 2–3
+      reference plugins (stock icons, charts, QR codes) to prove the
+      surface — then a community plugin registry
+- [ ] Mobile editor polish — touch-first selection handles, gesture
+      zoom/pan without modifier keys, bottom-sheet property panels
+      (the responsive groundwork from v0.11.3 makes this tractable)
 
 ## 🤝 Contributing
 

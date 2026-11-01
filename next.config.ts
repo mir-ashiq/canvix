@@ -68,7 +68,14 @@ const nextConfig: NextConfig = {
     // v0.6.1: strict again — the codebase typechecks clean; keep it that way.
     ignoreBuildErrors: false,
   },
-  reactStrictMode: false,
+  // v0.12.2 (H4): strict mode re-enabled. It was disabled in the
+  // pre-accounts era (double-invoked effects broke the first collab
+  // prototype); the v0.12 codebase now tolerates it — the full
+  // Playwright suite passes unchanged under double-invoked effects
+  // on the dev server (one ERR_CONNECTION_REFUSED infra flake,
+  // green on re-run). This surfaces effect-cleanup bugs early
+  // instead of in production remounts.
+  reactStrictMode: true,
   // v0.9.3: two trace pins for cross-runtime packages that Next's module
   // graph cannot see on its own:
   //   - sharp: loaded via a non-literal specifier in the MCP tools (that

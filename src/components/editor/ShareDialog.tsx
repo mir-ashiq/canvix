@@ -3,6 +3,7 @@
 import { Link2, Check, Copy, Globe, Lock, QrCode } from 'lucide-react'
 import { useState } from 'react'
 import { useEditorStore } from '@/store/editor-store'
+import { designShareUrl } from '@/lib/design-url'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -28,7 +29,8 @@ export function ShareDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   const designName = useEditorStore((s) => s.designName)
   const [copied, setCopied] = useState(false)
 
-  const link = designId ? `${typeof window !== 'undefined' ? window.location.origin : ''}/?design=${designId}` : ''
+  // v0.11.4: canonical share URLs — /design/<id> (legacy /?design=<id> links keep working)
+  const link = designId ? designShareUrl(designId) : ''
 
   const copy = async () => {
     try {

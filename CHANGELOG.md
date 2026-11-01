@@ -23,6 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Runtime targets: PR gate < 10 min, e2e job verified at ~4 min locally.
   The whole command sequence was verified end-to-end before this
   release: 316/316 unit, 28/28 Playwright against a fresh database.
+  The e2e job also installs ffmpeg on the runner — the video-export
+  test shells out to `ffprobe`/`volumedetect` (and the preview test
+  encodes a WebM fixture), and GitHub's runner images ship without
+  ffmpeg, which the pipeline's first `main` run caught (26 passed /
+  1 skipped / 1 ENOENT → whole suite once installed).
 - **README CI badge** — live build status for `main` next to the license
   badge.
 - **CONTRIBUTING: "CI & required checks"** — documents what each check

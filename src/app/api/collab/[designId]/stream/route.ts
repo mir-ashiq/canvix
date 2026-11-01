@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
+import { presenceKey } from '@/lib/collab/presence-diff'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -35,6 +36,20 @@ const MAX_STREAM_AGE_MS = Number(process.env.CANVIX_STREAM_TTL_MS ?? 240_000)
  *   - the MAX(id) aggregate only every 5th tick (gap detection)
  * Idle collaboration sessions now cost ~10× less; active editing latency
  * is unchanged (first event after activity still arrives in ≤ 800 ms).
+ *
+ * v0.11.5 (F4, research/V0114-QA-PASS.md): frames used to go out only when
+ * design events existed or every 20th tick — so an IDLE client learned that
+ * someone JOINED only via that keepalive: 20 ticks at the 3.2 s idle cadence
+ * ≈ 64–90 s of invisible collaborator. Presence is now queried every tick
+ * and diffed against the last snapshot actually SENT (presenceKey: id /
+ * name / color / cursor — never lastSeen, never row order); any visible
+ * change pushes a frame within one tick (≤ 3.2 s idle, ≤ 800 ms active) and
+ * counts as activity for the backoff. Cost: the presence findMany doubles
+ * (every 2nd → every tick: 0.31 q/s idle, 1.25 q/s active per client — a
+ * tiny indexed take-30 query, still ~3× below the pre-v0.9.2 constant
+ * 3.75 q/s), while idle FRAME traffic is unchanged: the diff only fires on
+ * real changes, and heartbeats (15 s) reorder rows and bump lastSeen
+ * without touching the key.
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ designId: string }> }) {
   const { designId } = await params
@@ -61,6 +76,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ desi
       let lastSeq = since
       let tick = 0
       let delay = 800
+      // v0.11.5: last presence key actually sent to THIS client (null =
+      // nothing sent yet — the first tick always counts as a change, which
+      // also preserves the historical send-a-frame-immediately-on-connect)
+      let lastPresenceKey: string | null = null
 
       const send = (frame: unknown) => {
         if (closed) return
@@ -100,15 +119,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ desi
               orderBy: { id: 'asc' },
               take: 200,
             }),
-            // v0.9.2: presence every 2nd tick — clients heartbeat every 15 s,
-            // so a 1.6 s refresh window (when active) is still real-time.
-            tick % 2 === 0
-              ? db.presence.findMany({
-                  where: { designId, lastSeen: { gt: new Date(Date.now() - 30_000) } },
-                  orderBy: { lastSeen: 'desc' },
-                  take: 30,
-                })
-              : Promise.resolve([]),
+            // v0.11.5: presence EVERY tick — the diff gate needs a fresh
+            // snapshot to detect a join within one tick (was every 2nd under
+            // the old send-only-every-20th-tick regime; see header note)
+            db.presence.findMany({
+              where: { designId, lastSeen: { gt: new Date(Date.now() - 30_000) } },
+              orderBy: { lastSeen: 'desc' },
+              take: 30,
+            }),
             // v0.9.2: the MAX(id) aggregate only matters for gap detection
             // after pruning — every 5th tick is plenty.
             tick % 5 === 0
@@ -128,7 +146,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ desi
 
           // only send a frame when something actually changed (plus periodic keepalive)
           const filteredPresence = presence.filter((p) => p.id !== pid)
-          if (events.length || tick % 20 === 0) {
+          // v0.11.5 (F4): diff the VISIBLE presence against what this client
+          // was last told — a join/leave/cursor/name/color change pushes a
+          // frame within one tick instead of waiting for the 20-tick
+          // keepalive (~64 s at the idle cadence). Keyed without lastSeen
+          // and row order (see presence-diff.ts) so heartbeats stay silent.
+          const presenceSnapshot = filteredPresence.map((p) => ({
+            id: p.id,
+            name: p.name,
+            color: p.color,
+            cursor: p.cursor,
+          }))
+          const currentKey = presenceKey(presenceSnapshot)
+          const presenceChanged = currentKey !== lastPresenceKey
+          if (events.length || presenceChanged || tick % 20 === 0) {
             const frame = {
               events: events.map((e) => ({
                 seq: Number(e.id),
@@ -150,6 +181,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ desi
               seq: serverSeq,
             }
             send(frame)
+            lastPresenceKey = currentKey
           } else {
             comment('keepalive')
           }
@@ -162,7 +194,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ desi
               /* pruning is best-effort */
             }
           }
-          return events.length > 0
+          // presence changes are activity too: a collaborator joining or
+          // moving a cursor keeps this pump hot (800 ms) exactly like edits
+          // do — idle backoff resumes the moment the room goes quiet
+          return events.length > 0 || presenceChanged
         } catch (err) {
           console.error('[collab/stream] tick failed', err)
           comment('retry')

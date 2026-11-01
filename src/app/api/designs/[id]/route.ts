@@ -6,6 +6,7 @@ import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 import { mergePages } from '@/lib/collab/merge'
 import type { PageData } from '@/lib/types'
+import { withLogging } from '@/lib/observability'
 
 // Normalise incoming pages payload (accepts object or legacy JSON string)
 // into a value suitable for the Postgres jsonb column.
@@ -27,7 +28,7 @@ function asPages(value: unknown): PageData[] {
 // v0.10: also returns `seq` (the design's current event-log cursor) so a
 // freshly loaded editor does not replay pre-load events over a document
 // that already contains them.
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function __canvix_get(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const access = await resolveDesignAccess(req, id)
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // tab was offline while others saved), the server MERGES element-wise by
 // HLC stamps (`_m`) + tombstones instead of clobbering — the same pure
 // rule every client applies, so all replicas converge.
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function __canvix_put(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   // v0.12.3 (H5): generous cap — autosave fires ≤ ~37/min after its
   // 1.6 s debounce; 300/min leaves multi-tab headroom, stops runaway loops
@@ -119,7 +120,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 // ?permanent=1 → delete permanently (also removes version snapshots).
 // v0.9: ownerless designs stay link-editable; owned designs only delete
 // for their owner (403 otherwise). v0.9.1: same-origin enforced (CSRF).
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function __canvix_delete(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   const limit = checkRateLimit(req, 'designs:delete')
   if (!limit.ok) return rateLimitResponse(limit)
@@ -140,3 +141,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return NextResponse.json({ error: 'Failed to delete design' }, { status: 500 })
   }
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const GET = withLogging('GET /api/designs/[id]', __canvix_get)
+export const PUT = withLogging('PUT /api/designs/[id]', __canvix_put)
+export const DELETE = withLogging('DELETE /api/designs/[id]', __canvix_delete)

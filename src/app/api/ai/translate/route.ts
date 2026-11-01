@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withProvider } from '@/lib/ai/provider'
+import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -32,7 +33,7 @@ function parseTranslations(raw: string, expected: number): string[] | null {
 }
 
 /** POST /api/ai/translate — Canva "Translate": translate an array of design texts. */
-export async function POST(req: NextRequest) {
+async function __canvix_post(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as TranslateBody
   const language = (body.language ?? '').trim()
   const texts = Array.isArray(body.texts) ? body.texts.filter((t) => typeof t === 'string') : []
@@ -71,3 +72,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ language, translations })
   })
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const POST = withLogging('POST /api/ai/translate', __canvix_post)

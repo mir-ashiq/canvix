@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { hasProvider } from '@/lib/ai/provider'
+import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic'
  * show "requires server AI provider" states before the user tries a feature.
  * Only ever exposes which capabilities exist — never config, never keys.
  */
-export async function GET() {
+async function __canvix_get() {
   const configured = hasProvider()
   return NextResponse.json({
     configured,
@@ -28,3 +29,7 @@ export async function GET() {
     },
   })
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const GET = withLogging('GET /api/ai/capabilities', __canvix_get)

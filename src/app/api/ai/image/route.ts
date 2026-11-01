@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withProvider } from '@/lib/ai/provider'
+import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -13,7 +14,7 @@ interface ImageBody {
 }
 
 /** POST /api/ai/image — AI image generation for the canvas. Returns a PNG dataURL. */
-export async function POST(req: NextRequest) {
+async function __canvix_post(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as ImageBody
   const prompt = (body.prompt ?? '').trim().slice(0, 600)
   const size = (SUPPORTED_SIZES as readonly string[]).includes(body.size ?? '')
@@ -39,3 +40,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ dataUrl: `data:image/png;base64,${base64}`, width: w, height: h })
   })
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const POST = withLogging('POST /api/ai/image', __canvix_post)

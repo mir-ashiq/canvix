@@ -1,12 +1,19 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { describeDatabaseUrl } from '@/lib/db-url'
+import { APP_VERSION } from '@/lib/observability'
+import { withLogging } from '@/lib/observability'
 
 // GET /api/health — one-shot setup diagnostics.
 // Tells you whether the database is reachable, migrated and seeded,
 // and prints the exact fix when it is not. Point a browser here first
 // whenever designs/templates fail to open after a host switch
 // (e.g. Neon → Supabase).
+//
+// v0.12.5 (H7): ?v=2 adds the observability payload — aggregate
+// counts (never ids), a DB latency probe and the app version —
+// behind an explicit opt-in so plain liveness probes stay as cheap
+// as they were. v1's shape is otherwise unchanged (additive `v`).
 
 const REQUIRED_TABLES = [
   'Design',
@@ -21,9 +28,10 @@ const REQUIRED_TABLES = [
   'Session',
 ] as const
 
-export async function GET() {
+async function __canvix_get(req: NextRequest) {
   const url = process.env.DATABASE_URL
   const info = describeDatabaseUrl(url)
+  const wantsV2 = req.nextUrl.searchParams.get('v') === '2'
 
   // 1. no DATABASE_URL at all
   if (!url) {
@@ -38,7 +46,8 @@ export async function GET() {
     )
   }
 
-  // 2. reachable at all?
+  // 2. reachable at all? (also the v2 latency probe)
+  const probeStart = Date.now()
   try {
     await db.$queryRaw`SELECT 1`
   } catch (error) {
@@ -59,6 +68,7 @@ export async function GET() {
       { status: 503 }
     )
   }
+  const dbLatencyMs = Date.now() - probeStart
 
   // 3. migrated? (all tables present)
   // (::text — the rust-free query compiler, unlike the classic engine,
@@ -100,20 +110,62 @@ export async function GET() {
     )
   }
 
-  // 5. all green
+  // 5. all green (v1: unchanged shape + explicit version tag)
+  if (!wantsV2) {
+    return NextResponse.json(
+      {
+        v: 1,
+        ok: true,
+        database: { kind: info.kind, host: info.host, database: info.database },
+        templates,
+      },
+      {
+        headers: {
+          // v0.9.2: diagnostics must never be cached (stale health is worse
+          // than none) and should not be indexed.
+          'Cache-Control': 'no-store',
+          'X-Robots-Tag': 'noindex',
+        },
+      }
+    )
+  }
+
+  // 5b. v2: the observability payload — counts only, never ids
+  // (H7 acceptance: “returns counts without leaking ids”)
+  const [designs, users, media, versions, comments] = await Promise.all([
+    db.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*)::bigint AS count FROM "Design" WHERE "deletedAt" IS NULL`,
+    db.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*)::bigint AS count FROM "User"`,
+    db.$queryRaw<{ count: bigint; bytes: bigint | null }[]>`SELECT COUNT(*)::bigint AS count, COALESCE(SUM("size"), 0)::bigint AS bytes FROM "Media" WHERE "finalizedAt" IS NOT NULL`,
+    db.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*)::bigint AS count FROM "DesignVersion"`,
+    db.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*)::bigint AS count FROM "Comment"`,
+  ])
+  const n = (r: { count: bigint }[] | undefined) => Number(r?.[0]?.count ?? 0)
   return NextResponse.json(
     {
+      v: 2,
       ok: true,
       database: { kind: info.kind, host: info.host, database: info.database },
       templates,
+      counts: {
+        designs: n(designs),
+        users: n(users),
+        media: n(media),
+        mediaBytes: Number(media?.[0]?.bytes ?? 0),
+        versions: n(versions),
+        comments: n(comments),
+      },
+      db: { latencyMs: dbLatencyMs },
+      app: { version: APP_VERSION, uptimeSec: Math.round(process.uptime()) },
     },
     {
       headers: {
-        // v0.9.2: diagnostics must never be cached (stale health is worse
-        // than none) and should not be indexed.
         'Cache-Control': 'no-store',
         'X-Robots-Tag': 'noindex',
       },
     }
   )
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const GET = withLogging('GET /api/health', __canvix_get)

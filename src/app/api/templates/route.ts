@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { dbErrorResponse } from '@/lib/db-errors'
+import { withLogging } from '@/lib/observability'
 
 // GET /api/templates — built-in template library (from DB, falls back empty)
 //
@@ -10,7 +11,9 @@ import { dbErrorResponse } from '@/lib/db-errors'
 // carries explicit CDN cache headers: first hit per region serves from
 // the function, everything after that is an edge HIT for 24 h (and a
 // stale-while-revalidate revalidation window of 7 d).
-export async function GET() {
+// (_req: Next always passes the request; the handler just ignores it —
+// the logging wrapper wants it)
+async function __canvix_get(_req: NextRequest) {
   try {
     const templates = await db.template.findMany({
       orderBy: { createdAt: 'asc' },
@@ -38,3 +41,7 @@ export async function GET() {
     return dbErrorResponse(error, 'GET /api/templates')
   }
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const GET = withLogging('GET /api/templates', __canvix_get)

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -8,7 +9,7 @@ export const maxDuration = 30
  * PATCH /api/comments/[id] — resolve / reopen / edit own comment.
  * DELETE /api/comments/[id] — delete own comment (or thread with replies).
  */
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function __canvix_patch(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   try {
     const body = (await req.json().catch(() => ({}))) as {
@@ -51,7 +52,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function __canvix_delete(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   try {
     const actorId = req.nextUrl.searchParams.get('actorId')?.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) ?? ''
@@ -80,3 +81,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return NextResponse.json({ error: 'Could not delete the comment.' }, { status: 502 })
   }
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const PATCH = withLogging('PATCH /api/comments/[id]', __canvix_patch)
+export const DELETE = withLogging('DELETE /api/comments/[id]', __canvix_delete)

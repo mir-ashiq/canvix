@@ -3,6 +3,39 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.12.3] — 2026-11-02
+
+### Added
+
+- **Rate limits & connection caps (H5).** The roadmap research
+  noted every mutating surface except `/api/mcp` accepted unlimited
+  traffic. Now a single limiter module (`src/lib/rate-limit.ts`)
+  guards the epic's list with per-IP fixed-window budgets — designs
+  create/update/delete (30/300/60 per min), collab events (600/min;
+  active clients flush 150/min each), presence heartbeats (120/min),
+  comment creation (60/min) and media upload init (30/min) — each
+  budget ≥ 4× the heaviest legitimate client, so a working editor
+  never notices. Rejected requests get `429` + `Retry-After` + a
+  `RATE_LIMITED` body and never touch the database. The SSE stream
+  route caps **concurrent connections per IP** (default 6, the
+  per-domain browser limit), releasing slots on every exit path —
+  abort, recycle, db-timeout and consumer cancel all funnel through
+  one `close()`. 12 unit tests cover the window math (injected
+  clock), bucket/IP isolation, the off switch and the slot
+  lifecycle; a mocked-route test proves POST /api/designs actually
+  429s and stops short of the DB.
+- **Load probe** `scripts/rate-limit-probe.sh` — proves both caps
+  against a live instance: hammers design creation until the 429
+  (asserting `Retry-After`), opens the stream cap + 1 and asserts
+  the refusal, then verifies a fresh stream connects once slots are
+  released (no leak). Documented for scratch instances.
+- **README “Rate limiting” section** — the caps table, the knobs
+  (`CANVIX_RATE_LIMITS=off`, `CANVIX_SSE_MAX_PER_IP`), and the
+  honest multi-instance limitation the epic demanded: counters are
+  in-memory per instance, so an N-instance fleet enforces each cap
+  per instance, not per deployment; the shared-store upgrade is
+  deliberately deferred past 1.0 with the reasoning written down.
+
 ## [0.12.2] — 2026-11-02
 
 ### Added

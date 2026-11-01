@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -56,6 +57,9 @@ interface CommentBody {
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: designId } = await params
+  // v0.12.3 (H5): comment spam brake — humans don't post 60/min.
+  const limit = checkRateLimit(req, 'comments:create')
+  if (!limit.ok) return rateLimitResponse(limit)
   try {
     const body = (await req.json().catch(() => ({}))) as CommentBody
 

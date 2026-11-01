@@ -541,6 +541,45 @@ pumps) fit the $5 paid plan better. Prisma's rust-free client keeps the
 bundle ~85 % smaller than the classic engine, which is what makes it fit
 at all. Full details: `research/CLOUDFLARE-WORKERS-PORTABILITY.md`.
 
+### 🚦 Rate limiting (v0.12.3)
+
+Every mutating surface carries a per-IP request limit, and the
+collaboration stream carries a per-IP concurrent-connection cap:
+
+| Surface | Cap (per IP) |
+|---|---|
+| `POST /api/designs` (create) | 30 / min |
+| `PUT /api/designs/<id>` (autosave) | 300 / min — autosave itself fires ≤ ~37/min |
+| `DELETE /api/designs/<id>` | 60 / min |
+| `POST …/collab/<id>/events` | 600 / min — active clients flush 150/min each |
+| `POST …/collab/<id>/presence` | 120 / min — heartbeats are 4/min per client |
+| `POST …/comments` | 60 / min |
+| `POST /api/media` (upload init) | 30 / min |
+| `GET …/collab/<id>/stream` (SSE) | 6 concurrent connections |
+
+Rejected requests get `429` with a `Retry-After` header and a
+`RATE_LIMITED` JSON body. The limits exist to stop abuse and runaway
+loops, never to throttle a working editor — every cap has at least 4×
+headroom over the heaviest legitimate client.
+
+**Multi-instance fleets — the honest limitation.** Counters live in
+memory, per server instance (the `/api/mcp` limiter always worked this
+way). A fleet of N instances behind one load balancer enforces each cap
+per instance, not per deployment: an abuser rotating across instances
+gets roughly N× the budget. The shared-store upgrade (Postgres or Redis
+counters) is deliberately deferred past 1.0 — it costs a round-trip on
+every mutation and matters only once you outgrow a single instance.
+Also: the client IP comes from `x-forwarded-for` / `x-real-ip` — the
+headers every reverse proxy and hosting platform sets. A bare
+`next start` with no proxy in front exposes no client address, so such
+deployments fall back to one shared bucket (localhost is trusted
+anyway; the caps still stop runaway loops).
+
+Knobs (in `.env`): `CANVIX_RATE_LIMITS=off` disables every cap (self-
+hosters behind their own throttle, load tests); `CANVIX_SSE_MAX_PER_IP`
+tunes the stream cap (default 6). Prove the caps on a scratch instance:
+`BASE_URL=http://localhost:3000 bash scripts/rate-limit-probe.sh`.
+
 ## 🛠 Tech stack
 
 | Layer | Choice |
@@ -801,6 +840,12 @@ tool descriptions so agents pick the right format.
       copy diagnostics with design id + last saved seq) instead of a white
       screen; `reactStrictMode` re-enabled after a full-suite re-evaluation
       *(v0.12.2)*
+- [x] Rate limits & connection caps — per-IP limits on designs CRUD,
+      collab events/presence, comments and media init (429 + `Retry-After`,
+      every cap ≥ 4× the heaviest legitimate client), SSE streams capped
+      at 6 concurrent connections per IP, a load-probe script that proves
+      both caps on a live instance, and an honest “multi-instance fleets”
+      section in the README *(v0.12.3)*
 - [ ] Plugin system (external, installable apps) — sandboxed-iframe MVP
       per `research/PLUGIN-SYSTEM.md`: manifest + permission model, iframe
       sandbox with postMessage bridge, an “Apps” panel store, and 2–3

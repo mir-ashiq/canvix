@@ -1,29 +1,26 @@
 'use client'
 
-import { Link2, Check, Copy, Globe, Lock, QrCode } from 'lucide-react'
+import { Link2, Check, Copy, Eye, Info, QrCode } from 'lucide-react'
 import { useState } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import { designShareUrl } from '@/lib/design-url'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
 
-type Access = 'private' | 'link' | 'public'
+/**
+ * v0.11.7 (F6): the Share dialog documents the REAL access model instead of
+ * offering a decorative Only-me/Public selector that nothing enforced.
+ * The rules (src/lib/auth/design-guard.ts):
+ *   • ownerless design (created signed-out) → anyone with the link can edit
+ *   • design owned by an account            → the owner edits; everyone else
+ *                                             opens it read-only (honest
+ *                                             view-only banner, 403 on saves)
+ * Canvix has no cloud access control — who can reach the link at all is
+ * decided by the deployment (LAN, VPN, reverse-proxy auth).
+ */
 
-const ACCESS_OPTS: { id: Access; label: string; desc: string; icon: typeof Lock }[] = [
-  { id: 'private', label: 'Only me', desc: 'Private to you', icon: Lock },
-  { id: 'link', label: 'Anyone with the link', desc: 'Can view or edit', icon: Link2 },
-  { id: 'public', label: 'Public', desc: 'Listed in the community gallery', icon: Globe },
-]
-
-function readSavedAccess(designId: string | null): Access {
-  if (typeof window === 'undefined' || !designId) return 'link'
-  const saved = localStorage.getItem(`canvix:share:${designId}`)
-  return saved === 'private' || saved === 'public' ? saved : 'link'
-}
-
-/** Canva-style Share dialog — copy link + access levels (local-first). */
+/** Canva-style Share dialog — copy link + the honest access model. */
 export function ShareDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const designId = useEditorStore((s) => s.designId)
   const designName = useEditorStore((s) => s.designName)
@@ -46,25 +43,21 @@ export function ShareDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="rounded-[28px] bg-[#16181D] border-white/10 text-white sm:max-w-md">
-        {open && <ShareBody designId={designId} designName={designName} link={link} copied={copied} onCopy={() => void copy()} />}
+        <ShareBody designName={designName} link={link} copied={copied} onCopy={() => void copy()} />
       </DialogContent>
     </Dialog>
   )
 }
 
-function ShareBody({ designId, designName, link, copied, onCopy }: {
-  designId: string | null
+function ShareBody({ designName, link, copied, onCopy }: {
   designName: string
   link: string
   copied: boolean
   onCopy: () => void
 }) {
-  const [access, setAccess] = useState<Access>(() => readSavedAccess(designId))
-
-  const setAccessAndPersist = (a: Access) => {
-    setAccess(a)
-    if (designId) localStorage.setItem(`canvix:share:${designId}`, a)
-  }
+  // v0.9: the editor already knows when the open design belongs to another
+  // account — surface it here so the access card describes THIS design
+  const readOnly = useEditorStore((s) => s.readOnly)
 
   return (
     <>
@@ -93,25 +86,44 @@ function ShareBody({ designId, designName, link, copied, onCopy }: {
           </Button>
         </div>
 
-        <div className="rounded-xl border border-white/10 overflow-hidden divide-y divide-white/10">
-          {ACCESS_OPTS.map((o) => (
-            <button
-              key={o.id}
-              onClick={() => setAccessAndPersist(o.id)}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-3 text-left transition-colors',
-                access === o.id ? 'bg-[#7630D7]/25' : 'hover:bg-white/5'
-              )}
-              aria-pressed={access === o.id}
-            >
-              <o.icon size={17} className={access === o.id ? 'text-[#a78bfa]' : 'text-white/60'} />
-              <span className="flex-1 min-w-0">
-                <span className="block text-[13px] font-semibold">{o.label}</span>
-                <span className="block text-[11px] text-white/50">{o.desc}</span>
+        {/* F6 (v0.11.7): the honest access model, documented where the link
+            is handed out — this is the contract the server actually enforces */}
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 space-y-2">
+          <div className="text-xs font-semibold text-white/75 flex items-center gap-1.5">
+            <Info size={13} className="text-[#02C0CC] shrink-0" /> Who can open this link
+          </div>
+          <ul className="text-[11px] leading-relaxed text-white/55 space-y-1.5 list-none">
+            <li className="flex gap-2">
+              <span aria-hidden className="text-white/35">•</span>
+              <span>
+                Anyone who can reach this Canvix instance. There is no cloud gatekeeping — reachability is decided by
+                your deployment (LAN, VPN or reverse-proxy auth).
               </span>
-              {access === o.id && <Check size={15} className="text-[#a78bfa] shrink-0" />}
-            </button>
-          ))}
+            </li>
+            <li className="flex gap-2">
+              <span aria-hidden className="text-white/35">•</span>
+              <span>
+                <strong className="text-white/75">Ownerless designs</strong> (created while signed out) stay editable by
+                everyone with the link — the pre-accounts behaviour, kept on purpose so existing shares never break.
+              </span>
+            </li>
+            <li className="flex gap-2">
+              <span aria-hidden className="text-white/35">•</span>
+              <span>
+                <strong className="text-white/75">Owned designs</strong> open read-only for everyone except the owner:
+                an honest view-only banner in the editor, and every save answers 403.
+              </span>
+            </li>
+          </ul>
+          {readOnly && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 p-2.5 text-[11px] text-amber-200/90">
+              <Eye size={13} className="shrink-0 mt-0.5" />
+              <span>
+                You are viewing this design read-only — it belongs to another account. The link still opens it for
+                anyone who has it.
+              </span>
+            </div>
+          )}
         </div>
 
         <p className="text-[11px] text-white/40 flex items-center gap-1.5">

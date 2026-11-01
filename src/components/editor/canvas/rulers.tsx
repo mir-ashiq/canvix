@@ -188,10 +188,15 @@ export function Rulers({ width, height, zoom, pan, containerW, containerH, onGui
   const beginGuide = (axis: 'x' | 'y', e: React.MouseEvent<HTMLCanvasElement>) => {
     const container = (e.currentTarget.parentElement as HTMLElement)?.getBoundingClientRect()
     if (!container) return
+    // v0.11.7: position must match the guide's axis — mouse Y for a horizontal
+    // guide from the TOP ruler, mouse X for a vertical guide from the LEFT
+    // ruler. (These were swapped: harmless mid-drag — the first mousemove
+    // overwrote the value — but a bare ruler click committed a guide at a
+    // nonsense position, and the dashed draft flashed in the wrong place.)
     const pagePos =
       axis === 'y'
-        ? (e.clientX - container.left - pan.x) / zoom // horizontal guide from the TOP ruler
-        : (e.clientY - container.top - pan.y) / zoom // vertical guide from the LEFT ruler
+        ? (e.clientY - container.top - pan.y) / zoom // horizontal guide from the TOP ruler
+        : (e.clientX - container.left - pan.x) / zoom // vertical guide from the LEFT ruler
     onGuideStart(axis, pagePos)
   }
 

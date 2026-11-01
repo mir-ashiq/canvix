@@ -44,6 +44,9 @@ share → auth → collaboration → comments → versions → mobile.
   the current selection; only Escape deselects. Canva deselects on empty
   click. One-line fix in `CanvasStage.handleStageMouseDown` (stage-level
   click that hits no element → clear `selectedIds`).
+  **→ FIXED in v0.11.7** (a bare click is a zero-size marquee, and
+  `selectInMarquee` now clears the selection for it;
+  `research/V0117-QA-FOLLOWUPS.md`).
 - **F2 — Photos panel search state sticks.** After a web search returns
   “Web results (0)”, the “All photos” tab shows only the last category’s
   photos (6 of 42) instead of the full grid; the panel must be closed and
@@ -77,10 +80,19 @@ share → auth → collaboration → comments → versions → mobile.
   component (`MagicLayersDialog`) while rendering a different component
   (`CanvasStage`)”. A setState-during-render in the MagicLayers flow —
   harmless today but a future-interaction landmine.
+  **→ FIXED in v0.11.7** (never a MagicLayers bug: three gesture commits —
+  stroke, marquee, ruler-guide — wrote the store inside `setState`
+  updaters, which run mid-render; all three now commit at event time.
+  The named component varies by subscriber order;
+  `research/V0117-QA-FOLLOWUPS.md`).
 - **F6 — share of signed-out ownerless designs.** The share URL works
   for anyone (by design, v0.5 note in README §collab). The editor shows
   an honest view-only banner for other accounts’ designs — correct; just
   worth documenting on the Share dialog for self-hosters.
+  **→ FIXED in v0.11.7** (the Share dialog now documents the enforced
+  model — link-editable ownerless designs, read-only owned designs, no
+  cloud gatekeeping — replacing a decorative access selector that
+  nothing enforced; `research/V0117-QA-FOLLOWUPS.md`).
 
 ## Enhancement candidates (beyond fixes)
 

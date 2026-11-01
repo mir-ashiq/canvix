@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 
 export const runtime = 'nodejs'
 export const maxDuration = 20
@@ -20,9 +21,26 @@ const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
 export async function POST(req: NextRequest, { params }: { params: Promise<{ designId: string }> }) {
   const { designId } = await params
   try {
+    // v0.11.8: same-origin enforcement, matching every other mutating route.
+    if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
+
     const body = (await req.json().catch(() => ({}))) as PresenceBody
     const pid = (body.pid ?? '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40)
     if (!pid) return NextResponse.json({ error: 'A participant id is required.' }, { status: 400 })
+
+    // v0.11.8: verify the design exists (and is not trashed) before
+    // writing presence — this used to upsert blindly, leaving junk rows
+    // for arbitrary design ids. Presence stays open to signed-out visitors
+    // and read-only viewers ON PURPOSE: they are legitimate room members,
+    // and a presence row carries no document authority (element ops go
+    // through /events, which enforces ownership since v0.11.8).
+    const design = await db.design.findUnique({
+      where: { id: designId },
+      select: { id: true, deletedAt: true },
+    })
+    if (!design || design.deletedAt) {
+      return NextResponse.json({ error: 'Design not found.' }, { status: 404 })
+    }
 
     const name = (body.name ?? '').replace(/[^\p{L}\p{N} ._-]/gu, '').slice(0, 40) || 'Guest'
     const color = HEX_COLOR.test(body.color ?? '') ? body.color! : '#7630D7'

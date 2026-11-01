@@ -282,8 +282,11 @@ export class CollabSession {
       if (res.ok) {
         this.onQueueDepth?.(this.queue.length)
         this.scheduleQueuePersist(100)
-      } else if (res.status === 404 || res.status === 503) {
-        // design gone / db down — drop the queue (local editor still works)
+      } else if (res.status === 403 || res.status === 404 || res.status === 503) {
+        // v0.11.8: 403 = this tab has no write authority on this design
+        // (owned by another account) — drop the queue like 404/503 instead
+        // of retrying forever; the local editor keeps working. Design gone
+        // (404) / db down (503) — same treatment.
         this.queue = []
         this.onQueueDepth?.(0)
         this.scheduleQueuePersist(0)

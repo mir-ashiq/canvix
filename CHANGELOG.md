@@ -3,6 +3,50 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.8] — 2026-11-01
+
+### Security
+
+- **Collab rail now enforces design ownership (P0).**
+  `POST /api/collab/[designId]/events` verified the design existed but
+  never consulted the access rule the document rail
+  (`PUT /api/designs/[id]`) enforces — so anyone holding an *owned*
+  design's link could append collab ops (up to and including
+  `pages:replace`), mutating the owner's live session and riding the
+  owner's next autosave. The route now resolves the same three-case
+  rule (`canEditDesign`, extracted from `design-guard.ts` so the two
+  rails can never drift) with a lean column set — ownerless designs
+  stay link-editable for everyone, owned designs accept ops from their
+  owner only, everyone else gets 403 `READ_ONLY_DESIGN`. Found during
+  the v1.0 roadmap research (`research/V0118-ROADMAP-RESEARCH.md` §3.7).
+- **Same-origin (CSRF) enforcement on the collab routes** — `events`
+  and `presence` were the only mutating routes without it; a cross-site
+  page could previously drive an authenticated owner's session cookie
+  at the events endpoint.
+- **Presence writes are design-gated** — the presence route now 404s
+  for missing/trashed designs instead of upserting junk rows for
+  arbitrary ids. Heartbeats stay open to signed-out visitors and
+  read-only viewers on purpose (they are legitimate room members, and a
+  presence row carries no document authority — element ops go through
+  `/events`, which enforces ownership).
+
+### Fixed
+
+- **Read-only sessions no longer queue collab ops.** The op emitter
+  skips when the store is read-only, and `CollabSession` treats a 403
+  flush like 404/503 (drop the queue) instead of retrying every 400 ms —
+  a misbehaving read-only tab can no longer spin against the 403.
+
+### Added
+
+- `scripts/collab-guard-probe.sh` — live API probe, 8 assertions:
+  the anonymous/second-account/owner/cross-site flush matrix, the
+  ownerless flow, viewer presence, and the junk-row 404.
+- Unit coverage for both collab routes: `events.test.ts` (9 tests) +
+  `presence.test.ts` (5) — **316 unit** total; Playwright **28/28**
+  green (incl. the offline-sync and presence-latency specs, proving the
+  anonymous ownerless path is byte-for-byte unchanged).
+
 ## [0.11.7] — 2026-11-01
 
 The three findings that stayed open after the v0.11.4–v0.11.6 QA sweep

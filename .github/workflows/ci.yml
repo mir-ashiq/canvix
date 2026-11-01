@@ -1,0 +1,121 @@
+name: CI
+
+# H2 (roadmap: research/V0118-ROADMAP-RESEARCH.md §4.2) — the test gate
+# the deploy pipelines never had. Three deploy targets publish `main`
+# directly, and until now every test in this repo ran only on a
+# contributor's laptop.
+#
+#   pull_request    → fast feedback, no DB required:
+#                     npm ci → tsc --noEmit → eslint → vitest run
+#   push to main    → the same gate + the full Playwright browser suite
+#                     against a real Postgres service container, so
+#                     nothing lands on `main` untested by e2e either.
+#   workflow_dispatch → run the whole pipeline (incl. e2e) on demand,
+#                     e.g. before cutting a release or on a risky PR.
+#
+# Binding the gate: CONTRIBUTING.md → "CI & required checks" documents
+# the one-time branch-protection setup (require the `lint-unit` check).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Fast gate: every pull request ─────────────────────────────────
+  lint-unit:
+    name: lint-unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # postinstall runs `prisma generate` + the wasm portability patch,
+      # so tsc has the generated client types it type-checks against.
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # 316 unit tests — pure functions + mocked-route tests, no DB.
+      - name: Unit tests
+        run: npm test
+
+  # ── Browser suite: merges to main + manual dispatch ───────────────
+  e2e:
+    name: e2e
+    needs: lint-unit
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: canvix
+          POSTGRES_PASSWORD: canvix
+          POSTGRES_DB: canvix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U canvix"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      # Plain local URL — db-url.ts leaves localhost alone (no SSL).
+      # db:setup applies migrations + seeds the 110-template library;
+      # playwright.config.ts boots `npm run dev` itself.
+      DATABASE_URL: postgresql://canvix:canvix@localhost:5432/canvix
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Playwright browser (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Set up database (migrations + template seed)
+        run: npm run db:setup
+
+      - name: Run Playwright e2e suite
+        run: npx playwright test
+
+      - name: Upload Playwright traces (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failures
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7

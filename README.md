@@ -9,6 +9,7 @@
 Free & open-source graphic design tool — a community-built [Canva](https://canva.com) alternative.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-00C4CC.svg)](LICENSE)
+[![CI](https://github.com/mir-ashiq/canvix/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mir-ashiq/canvix/actions/workflows/ci.yml)
 [![Next.js](https://img.shields.io/badge/Next.js%2016-black?logo=next.js)](https://nextjs.org)
 [![React 19](https://img.shields.io/badge/React%2019-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://typescriptlang.org)
@@ -766,6 +767,10 @@ tool descriptions so agents pick the right format.
       apply the same design-guard rule as the document rail (owned designs
       403 non-owners; ownerless designs stay link-editable), plus
       same-origin enforcement and design-gated presence writes *(v0.11.8)*
+- [x] CI gate — every pull request now runs `tsc --noEmit` + eslint + the
+      full vitest suite on GitHub Actions, and merges to `main` also run the
+      Playwright browser suite against a real Postgres service container —
+      the deploy pipelines finally get tested code *(v0.12)*
 - [ ] Plugin system (external, installable apps) — sandboxed-iframe MVP
       per `research/PLUGIN-SYSTEM.md`: manifest + permission model, iframe
       sandbox with postMessage bridge, an “Apps” panel store, and 2–3
@@ -790,7 +795,7 @@ and verified.
 
 Contributions are very welcome! Areas that especially need help:
 
-- New templates (add them in `src/lib/templates.ts`)
+- New templates (add them in `src/lib/templates/collection-v08-*.ts`)
 - New fonts, sticker packs, shape graphics
 - Mobile UX polish
 - Tests

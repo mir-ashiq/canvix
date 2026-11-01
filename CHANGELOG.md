@@ -3,6 +3,55 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.12.0] — 2026-11-02
+
+### Added
+
+- **CI gate — tests finally gate what ships (H2).** A new **CI** workflow
+  (`.github/workflows/ci.yml`) closes the gap the v1.0 roadmap research
+  flagged as the highest-leverage fix: the repo had 316 unit tests and 28
+  browser tests, but both GitHub workflows were manual-only and all three
+  deploy pipelines (Vercel, Cloudflare Workers Builds, Netlify) publish
+  `main` directly — so every test ran only on a contributor's laptop.
+  Now: every **pull request** runs `npm ci` (with the npm cache) →
+  `tsc --noEmit` → `eslint .` → `vitest run` — no database required, the
+  check lands in minutes; every **merge to `main`** additionally runs the
+  full Playwright browser suite against a real Postgres 17 service
+  container (migrations + the 110-template seed + `next dev`, all inside
+  the job), with traces uploaded on failure. The pipeline is also
+  manually dispatchable on any branch for pre-merge e2e on risky PRs.
+  Runtime targets: PR gate < 10 min, e2e job verified at ~4 min locally.
+  The whole command sequence was verified end-to-end before this
+  release: 316/316 unit, 28/28 Playwright against a fresh database.
+- **README CI badge** — live build status for `main` next to the license
+  badge.
+- **CONTRIBUTING: "CI & required checks"** — documents what each check
+  runs and the one-time branch-protection setup that makes `lint-unit`
+  a required status check on `main` (branch protection cannot be enabled
+  from a PR, so the exact click-path is written down), plus the
+  contributor-facing local equivalents (`npm run lint`, `npm run
+  typecheck`, `npm run db:setup && npx playwright test`).
+
+### Fixed
+
+- **`image-guard` happy-path test is now hermetic** — the first catch of
+  the new CI gate. The test mocked the AI SDK but not the provider-config
+  resolution (`ZAI_BASE_URL`/`ZAI_API_KEY` env → `.z-ai-config` file chain
+  cwd → ~ → /etc), so the "same-origin POSTs pass the guard" assertion
+  only held on machines that carry a real provider config (dev sandbox:
+  200) while clean CI runners answered 503. The test now stubs the env
+  pair in `beforeEach` (restored after each test), so every machine
+  exercises the same code path.
+
+### Changed
+
+- **CONTRIBUTING setup flow modernized** — the quick-start now matches
+  what CI itself runs (`npm install` → `npm run db:setup`, the one
+  command that applies migrations and seeds the template library)
+  instead of the pre-v0.8 `db:push` + `db:seed` two-step, and the
+  stale `src/lib/templates.ts` pointer now names the real
+  `src/lib/templates/collection-v08-*.ts` files.
+
 ## [0.11.8] — 2026-11-01
 
 ### Security

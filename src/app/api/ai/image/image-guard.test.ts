@@ -5,9 +5,18 @@
 //   1. POSTs without Origin/Referer (direct API bots) → 403, zero provider work
 //   2. POSTs with a foreign Origin → 403
 //   3. Same-origin POSTs (browser fetch from the app) → pass the guard
-//      (then reach the provider path; unconfigured providers answer 503)
+//      and complete the (mocked) provider path → 200
+//
+// Hermeticity: the SDK is mocked below, but withProvider() checks
+// resolveProviderConfig() BEFORE touching the SDK — env vars
+// (ZAI_BASE_URL/ZAI_API_KEY) → .z-ai-config file chain (cwd → ~ → /etc).
+// Machines that carry a real config (e.g. a dev sandbox with
+// /etc/.z-ai-config) used to answer 200 while clean CI runners
+// answered 503 — caught by the first run of the v0.12 CI gate. The
+// env pair is stubbed in beforeEach so every machine takes the same
+// path; the mocked SDK supplies the response.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // This sandbox (and dev machines) can carry a real /etc/.z-ai-config, which
 // would make getZAI() hit the live gateway from unit tests. Mock the SDK
@@ -48,9 +57,17 @@ function post(opts: { origin?: string; referer?: string } = {}) {
 }
 
 beforeEach(() => {
+  // configured-server simulation — short-circuits the config-file chain
+  // deterministically (see the hermeticity note above)
+  vi.stubEnv('ZAI_BASE_URL', 'http://provider.test')
+  vi.stubEnv('ZAI_API_KEY', 'test-key')
   vi.clearAllMocks()
   dbMock.aIUsage.create.mockResolvedValue({})
   generationsCreate.mockResolvedValue({ data: [{ base64: 'aGVsbG8=' }] })
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
 })
 
 describe('POST /api/ai/image — v0.9.2 abuse guard', () => {

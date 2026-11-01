@@ -3,6 +3,39 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.4] — 2026-11-01
+
+Share links looked like query strings. Every design URL a user ever
+copied — `/?design=cmvxd70oo…` — carried the app's SPA implementation
+detail in the one place users actually look at it. Deep links worked,
+but they didn't look like they would.
+
+### Added
+- **Canonical design URLs — `/design/<id>`** (new `src/app/design/[id]`
+  route rendering the same app shell). The address bar now follows the
+  app: opening a design (from the dashboard, the Projects panel, or a
+  link) lands on `/design/<id>`; going home resets to `/`. Refresh on a
+  design URL reopens the design. An unknown id falls back to the landing
+  page with the URL reset — a dead path renders the app, not a blank page.
+- `src/lib/design-url.ts` — one home for URL concerns: `designPath`,
+  `designShareUrl`, `readDesignIdFromLocation` (path → `?design=` → `?d=`,
+  in that order) and a `replaceUrl` helper. `AppShell` is the extracted
+  single-page shell shared by `/` and `/design/[id]`.
+- Playwright suite `design-urls.spec.ts` (5 tests): address-bar sync on
+  create/back, cold-open of a canonical link, legacy query link
+  resolution into the canonical path, Share-dialog link format, and the
+  unknown-id fallback.
+
+### Changed
+- **Share dialog now generates `/design/<id>` links.** `/?design=<id>`
+  and `/?d=<id>` remain first-class — old links, QR codes and printed
+  URLs keep resolving (the legacy query resolves into the canonical
+  path once the editor opens, so the address bar self-heals).
+- The app store (`openEditor` / `goLanding` / `goDashboard`) keeps the
+  URL in sync via `history.replaceState` — deliberately not `pushState`:
+  popstate is not routed in this shell, and replace keeps the history
+  stack honest while giving refresh/share the URL they need.
+
 ## [0.11.3] — 2026-10-30
 
 One mobile UI bug with two loud symptoms and a quiet third one hiding in

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
+import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 import { getSessionUser } from '@/lib/auth/session'
 import { anonKeyHash, newAnonToken, readAnonToken, setAnonCookie } from '@/lib/auth/anon'
 
@@ -21,6 +22,10 @@ const ALLOWED_PREFIXES = ['audio/', 'video/']
 
 export async function POST(req: NextRequest) {
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
+  // v0.12.3 (H5): uploads are chunked but initiation is cheap — cap
+  // the init calls, not the chunk traffic (chunks carry real bytes).
+  const limit = checkRateLimit(req, 'media:init')
+  if (!limit.ok) return rateLimitResponse(limit)
   try {
     const body = (await req.json().catch(() => ({}))) as { mime?: unknown; size?: unknown }
     const mime = typeof body.mime === 'string' ? body.mime.slice(0, 100) : ''

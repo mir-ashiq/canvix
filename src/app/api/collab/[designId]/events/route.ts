@@ -12,6 +12,7 @@ import { formatHlc } from '@/lib/collab/hlc'
 import { canEditDesign, NOT_YOUR_DESIGN } from '@/lib/auth/design-guard'
 import { getSessionUser } from '@/lib/auth/session'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
+import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -59,6 +60,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ des
     // checks this; without it a cross-site page could drive an authenticated
     // owner's session cookie at this endpoint.
     if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
+    // v0.12.3 (H5): active clients flush every 400 ms (150/min each) —
+    // 600/min/IP covers a few tabs in one room, stops event floods.
+    const limit = checkRateLimit(req, 'collab:events')
+    if (!limit.ok) return rateLimitResponse(limit)
 
     const body = (await req.json().catch(() => ({}))) as EventsBody
     const pid = (body.pid ?? '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40)

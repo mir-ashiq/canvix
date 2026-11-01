@@ -3,6 +3,7 @@ import { Prisma } from '@/generated/prisma/client'
 import { db } from '@/lib/db'
 import { resolveDesignAccess, NOT_YOUR_DESIGN } from '@/lib/auth/design-guard'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
+import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 import { mergePages } from '@/lib/collab/merge'
 import type { PageData } from '@/lib/types'
 
@@ -58,6 +59,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // rule every client applies, so all replicas converge.
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
+  // v0.12.3 (H5): generous cap — autosave fires ≤ ~37/min after its
+  // 1.6 s debounce; 300/min leaves multi-tab headroom, stops runaway loops
+  const limit = checkRateLimit(req, 'designs:update')
+  if (!limit.ok) return rateLimitResponse(limit)
   try {
     const { id } = await params
     const access = await resolveDesignAccess(req, id)
@@ -116,6 +121,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 // for their owner (403 otherwise). v0.9.1: same-origin enforced (CSRF).
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
+  const limit = checkRateLimit(req, 'designs:delete')
+  if (!limit.ok) return rateLimitResponse(limit)
   try {
     const { id } = await params
     const access = await resolveDesignAccess(req, id)

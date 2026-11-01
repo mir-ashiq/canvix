@@ -429,3 +429,27 @@ export const PRESET_SIZES = [
   { name: 'Facebook cover', width: 1640, height: 856, hint: '1640 × 856 px' },
   { name: 'Business card', width: 1050, height: 600, hint: '1.75 × 1 in' },
 ] as const
+
+// ── Interaction mode (v0.11.6 — QA finding F3) ──────────────
+
+/**
+ * The single derived interaction mode shown by BOTH the top-bar control and
+ * the Tools panel. The two controls used to display separate store fields
+ * (`editingMode` vs `tool`), so the UI could show "Draw" pressed while the
+ * canvas behaved as read-only Select — the QA pass called it "editing-mode
+ * toggles can disagree". One derivation can't disagree with itself:
+ *
+ *   viewing  — read-only, always wins over the active tool
+ *   draw     — editing + the freehand brush tool
+ *   editing  — editing + the select tool (move / resize / marquee)
+ */
+export type InteractionMode = 'editing' | 'draw' | 'viewing'
+
+/** Combine the read-only toggle with the active tool into one visible mode. */
+export function interactionMode(
+  editingMode: 'editing' | 'viewing',
+  tool: 'select' | 'draw',
+): InteractionMode {
+  if (editingMode === 'viewing') return 'viewing'
+  return tool === 'draw' ? 'draw' : 'editing'
+}

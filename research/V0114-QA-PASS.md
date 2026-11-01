@@ -19,7 +19,7 @@ share → auth → collaboration → comments → versions → mobile.
 | Editor · shapes | add circle/square, drag, resize 320→506px, rotate to 81°, z-order (To front) | ✅ |
 | Editor · colour | Fill menu: brand palette, gradients picker opens, fill applied (#7630D7) | ✅ |
 | Photos | 42 bundled photos render, add to canvas (756×432) | ✅ |
-| Photos | web search without an AI provider key | ⚠️ see F2 |
+| Photos | web search without an AI provider key | ⚠️ see F2 (→ fixed v0.11.6) |
 | Uploads | file input → data-URL image lands on canvas | ✅ |
 | Draw | brush colour + stroke created (12-pt line) | ✅ |
 | Export | PNG 2160×2160 RGBA, SVG true vector (clipPaths), PDF 1 page 1440×1440pt | ✅ |
@@ -31,7 +31,7 @@ share → auth → collaboration → comments → versions → mobile.
 | Share | dialog generates canonical `/design/<id>` link | ✅ |
 | Deep links | `/?design=`, `/?d=`, `/design/<id>` all open the editor | ✅ |
 | Collab · stream | SSE replay from `?since=0` (21 events, HLC-stamped), keepalives, presence snapshot | ✅ |
-| Collab · presence | second session joins, both eventually see 2 | ⚠️ see F4 |
+| Collab · presence | second session joins, both eventually see 2 | ⚠️ see F4 (→ fixed v0.11.5) |
 | Comments | canvas pin drop, post with author identity, DB row, cross-session sync | ✅ |
 | MCP | disabled without `CANVIX_MCP_TOKEN` — clear JSON-RPC error, no auth bypass | ✅ |
 | Health | `/api/health` → ok, db kind/host, template count | ✅ |
@@ -51,11 +51,17 @@ share → auth → collaboration → comments → versions → mobile.
   the results-mode flag. Also: no hint that web results need an AI
   provider key — a one-line “configure an AI provider to search the web”
   note would prevent the “search is broken” impression.
+  **→ FIXED in v0.11.6** (category clicks exit results mode — query, box
+  text, web results and errors clear together; 503 NO_PROVIDER renders a
+  configuration hint; `research/V0116-PANEL-STATE-HYGIENE.md`).
 - **F3 — editing-mode toggles can disagree.** The top-bar “Editing mode”
   control and the Tools-panel Select/Draw toggle are separate states:
   the top bar can read “Draw” while the canvas behaves as Select. Only
   the Tools-panel toggle reliably activates drawing. Either drive both
   from one store field or make the top-bar control the single source.
+  **→ FIXED in v0.11.6** (one `interactionMode()` derivation labels both
+  controls, the top-bar menu offers Draw, and `setTool` leaves viewing —
+  `research/V0116-PANEL-STATE-HYGIENE.md`).
 - **F4 — presence latency for idle clients (most impactful).** The
   stream pump sends a frame only when events exist or every 20th tick;
   with the quiet-mode backoff (800ms → 3.2s) a newly joined participant

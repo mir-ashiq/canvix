@@ -101,9 +101,13 @@ interface EditorState {
   version: number
 
   // canva-2026 chrome
+  /** read-only toggle (top bar) — viewing wins over any tool. v0.11.6:
+   *  the top bar now labels the COMBINED mode (see interactionMode() in
+   *  lib/editor-utils) so this field and `tool` can no longer be read as
+   *  disagreeing controls (QA finding F3). */
   editingMode: 'editing' | 'viewing'
   previewOpen: boolean
-  /** freehand draw tool */
+  /** freehand draw tool — activating one also leaves viewing mode (F3) */
   tool: 'select' | 'draw'
   drawColor: string
   drawSize: number
@@ -760,7 +764,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setEditingMode: (m) => set({ editingMode: m }),
   setPreviewOpen: (open) => set({ previewOpen: open }),
-  setTool: (t) => set({ tool: t, selectedIds: [] }),
+  // v0.11.6 (F3): activating a tool also leaves read-only viewing — the
+  // Tools-panel toggle used to show "Draw" pressed while the canvas stayed
+  // read-only, because editingMode and tool were set from separate controls
+  // that never reconciled. One store write now covers both.
+  setTool: (t) => set({ tool: t, selectedIds: [], editingMode: 'editing' }),
   setDrawColor: (c) => set({ drawColor: c }),
   setDrawSize: (n) => set({ drawSize: Math.min(64, Math.max(1, n)) }),
   setBrand: (b) => set({ brand: b }),

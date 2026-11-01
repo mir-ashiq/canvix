@@ -3,6 +3,45 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.6] — 2026-11-01
+
+Two QA-pass findings in panel state hygiene (§5.2 of
+`research/V0114-QA-PASS.md`): the Photos panel kept a stale search
+filtering its grid after a category switch, and the top-bar mode control
+could disagree with the Tools-panel Draw toggle.
+
+### Fixed
+- **F2 — Photos panel search state sticks.** After a web search, clicking
+  a category tab left the query filtering the bundled library, so "All
+  photos" showed the stale 6-of-42 result set until the panel was closed
+  and reopened. A category click now exits results mode: the query, the
+  visible search box (the `PanelShell` search input is optionally
+  controlled now), the web results and any error all clear together.
+- **F2b — web search on a provider-less server reads as broken.** With no
+  AI provider configured, `/api/photos/search` answers 503
+  `NO_PROVIDER`; the panel used to render that as "No web photos
+  matched". It now says web search needs an AI provider configured on
+  the server (pointing at `ZAI_BASE_URL` / `ZAI_API_KEY`) and that the
+  free library below still works. Other API errors surface their message.
+- **F3 — editing-mode toggles can disagree.** The top-bar "Editing mode"
+  control (`editingMode`) and the Tools-panel Select/Draw toggle (`tool`)
+  were separate states: the panel could show "Draw" pressed over a
+  read-only canvas, and only the panel toggle reliably started drawing.
+  Both controls now label the same derivation
+  (`interactionMode()` in `lib/editor-utils`: viewing / draw / editing —
+  viewing wins, then the active tool), the top-bar menu offers Draw
+  directly, and `setTool` leaves read-only viewing so either control
+  activates drawing from any state. The Tools panel explains itself in
+  viewing mode ("picking a tool resumes editing").
+
+### Added
+- `src/lib/editor-utils.ts` → `interactionMode()` + 4 unit tests pinning
+  the truth table (`src/lib/editor-utils.test.ts`).
+- Playwright `panel-state.spec.ts` (3 tests): category-tab exit of search
+  mode, the NO_PROVIDER configuration hint (503 mocked via `page.route`
+  so it is deterministic on any machine), and the F3 top-bar ↔ Tools
+  panel agreement across all four toggle paths.
+
 ## [0.11.5] — 2026-11-01
 
 A newly joined collaborator took **60–90 s to appear** for clients that

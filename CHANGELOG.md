@@ -32,6 +32,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   contributor-facing local equivalents (`npm run lint`, `npm run
   typecheck`, `npm run db:setup && npx playwright test`).
 
+### Fixed
+
+- **`image-guard` happy-path test is now hermetic** — the first catch of
+  the new CI gate. The test mocked the AI SDK but not the provider-config
+  resolution (`ZAI_BASE_URL`/`ZAI_API_KEY` env → `.z-ai-config` file chain
+  cwd → ~ → /etc), so the "same-origin POSTs pass the guard" assertion
+  only held on machines that carry a real provider config (dev sandbox:
+  200) while clean CI runners answered 503. The test now stubs the env
+  pair in `beforeEach` (restored after each test), so every machine
+  exercises the same code path.
+
 ### Changed
 
 - **CONTRIBUTING setup flow modernized** — the quick-start now matches

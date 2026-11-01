@@ -5,6 +5,7 @@ import { useEffect } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Landing } from '@/components/landing/Landing'
 import { Dashboard } from '@/components/dashboard/Dashboard'
+import { ErrorBoundary, DevCrashHook, DevCrashProbe } from '@/components/ErrorBoundary'
 import { readDesignIdFromLocation, isDesignPath, replaceUrl } from '@/lib/design-url'
 
 const Editor = dynamic(() => import('@/components/editor/Editor'), {
@@ -59,15 +60,30 @@ function DeepLinkHandler() {
 export function AppShell() {
   const view = useAppStore((s) => s.view)
 
+  // v0.12.2 (H4): per-surface error boundaries — a render-time crash
+  // in the editor (or dashboard) shows the recovery UI instead of a
+  // white screen; “Back to dashboard” remounts the crashed surface.
+  // The dev-only crash probe lives inside the editor boundary (the
+  // e2e target); production builds compile it out entirely.
   if (view === 'editor') {
-    return <Editor />
+    return (
+      <ErrorBoundary label="editor">
+        <Editor />
+        <DevCrashProbe />
+      </ErrorBoundary>
+    )
   }
   if (view === 'dashboard') {
-    return <Dashboard />
+    return (
+      <ErrorBoundary label="dashboard">
+        <Dashboard />
+      </ErrorBoundary>
+    )
   }
   return (
     <>
       <DeepLinkHandler />
+      <DevCrashHook />
       <Landing />
     </>
   )

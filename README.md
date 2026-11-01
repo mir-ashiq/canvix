@@ -742,6 +742,9 @@ tool descriptions so agents pick the right format.
       *(v0.11.1–v0.11.3)*
 - [x] Canonical design URLs — `/design/<id>` share links, address-bar
       sync, legacy `/?design=` links self-heal to the canonical path *(v0.11.4)*
+- [x] Presence join latency fix — per-tick presence diff + announce-on-join:
+      a new collaborator shows up for idle clients in ≤ 3.2 s (was 60–90 s),
+      remote cursors included *(v0.11.5)*
 - [ ] Plugin system (external, installable apps) — sandboxed-iframe MVP
       per `research/PLUGIN-SYSTEM.md`: manifest + permission model, iframe
       sandbox with postMessage bridge, an “Apps” panel store, and 2–3

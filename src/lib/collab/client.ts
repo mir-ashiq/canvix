@@ -15,7 +15,11 @@ import {
  * - local ops queue and flush every 400 ms (≤ 20 per flush)
  * - cursor updates throttled (~300 ms), presence heartbeat every 15 s
  *   (v0.9.2: was 120 ms / 5 s — each write is a remote-DB upsert, and
- *   the old rates let a single moving mouse generate ~8 writes/s)
+ *   the old rates let a single moving mouse generate ~8 writes/s);
+ *   v0.11.5: one announce fires immediately on join too — a fresh
+ *   collaborator's presence row used to appear only at the first 15 s
+ *   heartbeat, stacking an invisible-participant delay on top of the
+ *   stream's old every-20th-tick frame cadence (QA finding F4)
  * - reconnect with exponential backoff (0.5 s → 8 s), gap-free replay via ?since
  * - v0.10 offline merge: the op queue and the replay cursor persist
  *   (IndexedDB / localStorage) — edits made offline survive reloads and
@@ -88,6 +92,10 @@ export class CollabSession {
   start() {
     if (this.disposed) return
     this.connect()
+    // v0.11.5 (F4): announce on join, not at the first 15 s heartbeat —
+    // the server's per-tick presence diff can only show what exists in
+    // Postgres, and other clients' frames were waiting on this row
+    void this.heartbeat()
     this.flushTimer = setInterval(() => void this.flush(), 400)
     // v0.9.2: 15 s heartbeat — the server treats presence as live for 30 s,
     // so this still tolerates one lost beat before a collaborator fades out.

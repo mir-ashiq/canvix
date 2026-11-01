@@ -3,6 +3,43 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.5] — 2026-11-01
+
+A newly joined collaborator took **60–90 s to appear** for clients that
+were just *looking* at a design (QA finding F4, the one flagged most
+impactful in `research/V0114-QA-PASS.md`). Two delays stacked: the joining
+client announced nothing until its first 15 s heartbeat, and the stream
+pump only pushed a frame on design events or every 20th tick — ~64 s
+apart on a quiet design at the 3.2 s idle tick cadence.
+
+### Fixed
+- **Presence join latency — per-tick diff + announce-on-join.** The pump
+  now queries presence every tick and compares a stable key of the
+  *visible* snapshot (`id`/`name`/`color`/`cursor` — never `lastSeen`,
+  never row order, see `src/lib/collab/presence-diff.ts`) against the
+  last key it actually sent; any change pushes a frame within one tick
+  (≤ 3.2 s idle, ≤ 800 ms active) and counts as activity for the
+  adaptive backoff. `CollabSession.start()` fires one presence POST
+  immediately, so a fresh participant exists in Postgres from the first
+  moment instead of at `start() + 15 s`. Remote cursors on an idle client
+  drop from ~64 s to ≤ 3.2 s too.
+- Cost: the presence `findMany` doubles (every 2nd → every tick; 0.31 q/s
+  idle / 1.25 q/s active per client — still ~3× below the pre-v0.9.2
+  constant) while idle frame traffic is unchanged: heartbeats and row
+  reorderings don't touch the key, so the diff stays silent when nothing
+  visible changed. The every-20th-tick frame remains as a keepalive.
+
+### Added
+- `src/lib/collab/presence-diff.ts` + 13 unit tests pinning the diff-key
+  contract (changes on join/leave/name/color/cursor; silent on lastSeen,
+  reorder, cursor key order, null-vs-undefined cursor).
+- Playwright `presence-latency.spec.ts`: two contexts, client A held idle
+  past the full tick backoff, client B joins cold — A must see B within
+  15 s and B must see A immediately. Negative-tested: fails on the
+  v0.11.4 code, passes with the fix.
+- `research/V0115-PRESENCE-JOIN-LATENCY.md` — full analysis, cost math
+  and resulting latency table.
+
 ## [0.11.4] — 2026-11-01
 
 Share links looked like query strings. Every design URL a user ever

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { presenceKey } from '@/lib/collab/presence-diff'
+import { acquireStreamSlot, clientIp, releaseStreamSlot } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -65,6 +66,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ desi
     return new Response('Database unavailable', { status: 503 })
   }
 
+  // v0.12.3 (H5): per-IP concurrent SSE cap (default 6 — a browser's
+  // per-domain HTTP/1.1 limit; CANVIX_SSE_MAX_PER_IP to tune). Every
+  // exit path funnels through close(), which releases the slot.
+  const ip = clientIp(req)
+  if (!acquireStreamSlot(ip)) {
+    return new Response('Too many live collaboration streams from this address.', {
+      status: 429,
+      headers: { 'Retry-After': '10', 'Content-Type': 'text/plain; charset=utf-8' },
+    })
+  }
+
   const encoder = new TextEncoder()
   let closed = false
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -101,6 +113,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ desi
       const close = () => {
         if (closed) return
         closed = true
+        releaseStreamSlot(ip)
         if (timer) clearTimeout(timer)
         if (pumpTimeout) clearTimeout(pumpTimeout)
         try {
@@ -257,6 +270,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ desi
         /* client already gone */
       }
       await scheduleNext()
+    },
+    cancel() {
+      // consumer went away without an abort signal (platform teardown)
+      close()
     },
   })
 

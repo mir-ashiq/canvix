@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
+import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 export const maxDuration = 20
@@ -23,6 +24,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ des
   try {
     // v0.11.8: same-origin enforcement, matching every other mutating route.
     if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
+    // v0.12.3 (H5): heartbeats are 15 s/client — 120/min/IP is a floor
+    // so high it never bites a real room, and a ceiling for floods.
+    const limit = checkRateLimit(req, 'collab:presence')
+    if (!limit.ok) return rateLimitResponse(limit)
 
     const body = (await req.json().catch(() => ({}))) as PresenceBody
     const pid = (body.pid ?? '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40)

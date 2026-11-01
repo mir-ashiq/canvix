@@ -5,6 +5,7 @@ import { dbErrorResponse } from '@/lib/db-errors'
 import { getSessionUser } from '@/lib/auth/session'
 import { readAnonToken, newAnonToken, anonKeyHash, setAnonCookie, anonHashFrom } from '@/lib/auth/anon'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
+import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 
 // Normalise incoming pages payload (accepts object or legacy JSON string)
 // into a value suitable for the Postgres jsonb column.
@@ -111,6 +112,10 @@ export async function GET(req: NextRequest) {
 // adopt-all can never claim someone else's work.
 export async function POST(req: NextRequest) {
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
+  // v0.12.3 (H5): design creation is unauthenticated (anonymous
+  // ownerless mode) — a per-IP cap is the only brake on flooding.
+  const limit = checkRateLimit(req, 'designs:create')
+  if (!limit.ok) return rateLimitResponse(limit)
   try {
     const user = await getSessionUser(req)
     const body = await req.json()

@@ -10,13 +10,7 @@ The three findings that stayed open after the v0.11.4–v0.11.6 QA sweep
 anti-pattern, one documentation debt.
 
 ### Fixed
-+- **Ruler→guide initial position used the wrong coordinate** (found while
-+  verifying the guide fix): `rulers.tsx beginGuide()` computed the seed
-+  position from the swapped axis — mouse X for a horizontal guide, mouse
-+  Y for a vertical one. Mid-drag the first mousemove masked it, but a
-+  bare ruler click committed a guide at a nonsense position and the
-+  dashed draft flashed one frame in the wrong place.
- - **F1 — no deselect on empty-canvas click.** Clicking empty canvas kept
+- **F1 — no deselect on empty-canvas click.** Clicking empty canvas kept
    the current selection; only Escape (and touch) deselected. A bare click
    is a zero-size marquee, and `selectInMarquee` now clears the selection
    for it — Canva parity (`research/V0117-QA-FOLLOWUPS.md`).
@@ -44,6 +38,12 @@ anti-pattern, one documentation debt.
   read-only for everyone else (view-only banner, 403 on saves); there is
   no cloud gatekeeping — reachability is decided by the deployment. When
   you are viewing someone else's design, the dialog says so.
+- **Ruler→guide initial position used the wrong coordinate** (found while
+  verifying the guide fix): `rulers.tsx beginGuide()` computed the seed
+  position from the swapped axis — mouse X for a horizontal guide, mouse
+  Y for a vertical one. Mid-drag the first mousemove masked it, but a
+  bare ruler click committed a guide at a nonsense position and the
+  dashed draft flashed one frame in the wrong place.
 
 ### Changed
 - `ShareDialog` no longer reads/writes the `canvix:share:<id>`

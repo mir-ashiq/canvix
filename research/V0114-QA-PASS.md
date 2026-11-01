@@ -64,6 +64,9 @@ share → auth → collaboration → comments → versions → mobile.
   list per tick and send a presence-only frame when it changes (or cap
   the presence cadence at ~5s). Cursor moves already ride heartbeats —
   it’s joins/leaves that stall.
+  **→ FIXED in v0.11.5** (per-tick presence diff + announce-on-join;
+  `research/V0115-PRESENCE-JOIN-LATENCY.md` — the same scenario now
+  measures **1.9 s**).
 - **F5 — React anti-pattern warning.** Console: “Cannot update a
   component (`MagicLayersDialog`) while rendering a different component
   (`CanvasStage`)”. A setState-during-render in the MagicLayers flow —

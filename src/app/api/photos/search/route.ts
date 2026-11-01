@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withProvider } from '@/lib/ai/provider'
+import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -10,7 +11,7 @@ interface SearchBody {
 }
 
 /** POST /api/photos/search — runtime stock-photo search (Canva-like photo search). */
-export async function POST(req: NextRequest) {
+async function __canvix_post(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as SearchBody
   const query = (body.query ?? '').trim().slice(0, 120)
   if (!query) return NextResponse.json({ error: 'A query is required.' }, { status: 400 })
@@ -30,3 +31,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ query, count: results.length, results })
   })
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const POST = withLogging('POST /api/photos/search', __canvix_post)

@@ -2,6 +2,7 @@
 // public payload must be edge-cacheable so it stops counting against
 // Fluid CPU + Fast Origin Transfer on every request.
 
+import { NextRequest } from 'next/server'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const dbMock = vi.hoisted(() => ({
@@ -30,7 +31,7 @@ beforeEach(() => {
 
 describe('GET /api/templates (v0.9.2 CDN caching)', () => {
   it('serves the full template list with edge-cache headers', async () => {
-    const res = await GET()
+    const res = await GET(new NextRequest('http://canvix.test/api/templates'))
     expect(res.status).toBe(200)
     const cc = res.headers.get('cache-control') ?? ''
     expect(cc).toContain('public')
@@ -43,7 +44,7 @@ describe('GET /api/templates (v0.9.2 CDN caching)', () => {
 
   it('still surfaces classified DB errors (never a bare 500)', async () => {
     dbMock.template.findMany.mockRejectedValue(new Error('connect ECONNREFUSED'))
-    const res = await GET()
+    const res = await GET(new NextRequest('http://canvix.test/api/templates'))
     expect(res.status).toBeGreaterThanOrEqual(500)
     const body = await res.json()
     expect(typeof body.error).toBe('string')

@@ -4,6 +4,7 @@ import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 import { getSessionUser } from '@/lib/auth/session'
 import { anonKeyHash, newAnonToken, readAnonToken, setAnonCookie } from '@/lib/auth/anon'
+import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -20,7 +21,7 @@ const MAX_MEDIA_MB = Math.max(1, Number(process.env.CANVIX_MAX_MEDIA_MB ?? 32))
 
 const ALLOWED_PREFIXES = ['audio/', 'video/']
 
-export async function POST(req: NextRequest) {
+async function __canvix_post(req: NextRequest) {
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   // v0.12.3 (H5): uploads are chunked but initiation is cheap — cap
   // the init calls, not the chunk traffic (chunks carry real bytes).
@@ -71,3 +72,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Could not start the upload.' }, { status: 500 })
   }
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const POST = withLogging('POST /api/media', __canvix_post)

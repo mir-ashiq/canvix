@@ -589,6 +589,30 @@ hosters behind their own throttle, load tests); `CANVIX_SSE_MAX_PER_IP`
 tunes the stream cap (default 6). Prove the caps on a scratch instance:
 `BASE_URL=http://localhost:3000 bash scripts/rate-limit-probe.sh`.
 
+### 📡 Observability (v0.12.5)
+
+Three primitives, **all off by default** — a design tool's server logs
+are the self-hoster's to read:
+
+- **Structured request logging** — set `CANVIX_LOG=requests` and every
+  API request emits one JSON line on stdout: method, path, status,
+  duration (`{"ts":…,"level":"info","event":"http_request","method":"PUT",
+"path":"/api/designs/abc","status":200,"duration_ms":18.4}`). Query
+  strings are never logged (they carry design ids and cursors); IPs
+  aren't either. Grep-able, JSON-parseable, zero dependencies.
+- **`/api/health?v=2`** — the observability payload: aggregate counts
+  (live designs, users, finalized media count **and bytes**, version
+  snapshots, comments), a DB latency probe, and the app version +
+  uptime. Counts only, never ids — safe to point monitoring at. Plain
+  `/api/health` keeps its v1 shape (plus an explicit `v: 1`) for
+  liveness probes that should stay cheap.
+- **Error webhook** — set `CANVIX_ERROR_WEBHOOK_URL` and every
+  *unhandled* request error (any route, page or server action — via
+  Next's `onRequestError` hook in `src/instrumentation.ts`) POSTs a
+  JSON report: message, path, method, route type, app version,
+  timestamp. 5-second timeout, fire-and-forget — a broken webhook
+  never takes the error path down with it.
+
 ## 🛠 Tech stack
 
 | Layer | Choice |
@@ -861,6 +885,13 @@ tool descriptions so agents pick the right format.
       scheduled-backup cron) and `docs/UPGRADING.md` (routine upgrades,
       jumping minors, rollback with the forward-only-migrations caveat),
       plus a media orphan GC script with its own verified drill *(v0.12.4)*
+- [x] Observability floor — opt-in structured request logging
+      (`CANVIX_LOG=requests`, one JSON line per API request, no query
+      strings, no IPs), `/api/health?v=2` with aggregate counts + DB
+      latency probe (never ids), and an optional error webhook
+      (`CANVIX_ERROR_WEBHOOK_URL`, POSTed from Next's `onRequestError`
+      hook for every unhandled error) — all off by default for
+      self-hoster privacy *(v0.12.5)*
 - [ ] Plugin system (external, installable apps) — sandboxed-iframe MVP
       per `research/PLUGIN-SYSTEM.md`: manifest + permission model, iframe
       sandbox with postMessage bridge, an “Apps” panel store, and 2–3

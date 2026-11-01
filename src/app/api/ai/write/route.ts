@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withProvider } from '@/lib/ai/provider'
+import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -20,7 +21,7 @@ const KIND_HINTS: Record<string, string> = {
 const TONES = ['bold', 'playful', 'elegant', 'minimal', 'corporate', 'warm'] as const
 
 /** POST /api/ai/write — Magic Write: generate on-brand copy variants for designs. */
-export async function POST(req: NextRequest) {
+async function __canvix_post(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as WriteBody
   const prompt = (body.prompt ?? '').trim().slice(0, 500)
   const kind = body.kind && KIND_HINTS[body.kind] ? body.kind : 'tagline'
@@ -60,3 +61,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ options })
   })
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const POST = withLogging('POST /api/ai/write', __canvix_post)

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { presenceKey } from '@/lib/collab/presence-diff'
 import { acquireStreamSlot, clientIp, releaseStreamSlot } from '@/lib/rate-limit'
+import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -52,7 +53,7 @@ const MAX_STREAM_AGE_MS = Number(process.env.CANVIX_STREAM_TTL_MS ?? 240_000)
  * real changes, and heartbeats (15 s) reorder rows and bump lastSeen
  * without touching the key.
  */
-export async function GET(req: NextRequest, { params }: { params: Promise<{ designId: string }> }) {
+async function __canvix_get(req: NextRequest, { params }: { params: Promise<{ designId: string }> }) {
   const { designId } = await params
   const pid = req.nextUrl.searchParams.get('pid')?.slice(0, 40) ?? ''
   let since = Number(req.nextUrl.searchParams.get('since'))
@@ -286,3 +287,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ desi
     },
   })
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const GET = withLogging('GET /api/collab/[designId]/stream', __canvix_get)

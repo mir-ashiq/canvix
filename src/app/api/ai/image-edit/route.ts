@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withProvider } from '@/lib/ai/provider'
+import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -46,7 +47,7 @@ const MODE_PROMPTS: Record<string, string> = {
 }
 
 /** POST /api/ai/image-edit — Canva-style AI image tools (BG remover, Magic eraser, enhance). */
-export async function POST(req: NextRequest) {
+async function __canvix_post(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as EditBody
   const image = (body.image ?? '').trim()
   if (!image || !/^(data:image\/|https?:\/\/)/.test(image)) {
@@ -89,3 +90,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ dataUrl: `data:image/png;base64,${base64}`, width: outW, height: outH })
   })
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const POST = withLogging('POST /api/ai/image-edit', __canvix_post)

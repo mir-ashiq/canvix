@@ -3,6 +3,45 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.12.5] — 2026-11-02
+
+### Added
+
+- **Observability floor (H7) — all opt-in, off by default.** The
+  last v0.12 epic gives self-hosters the three primitives the
+  roadmap research named, with privacy as the design constraint:
+  - **Structured request logging** (`CANVIX_LOG=requests`): every
+    API request emits one JSON line on stdout — method, path,
+    status, duration (`event: http_request`). Query strings are
+    deliberately never logged (they carry design ids and cursor
+    data) and neither are IPs. Implemented as a `withLogging()`
+    wrapper applied to **every API route handler** (29 files, ~60
+    handlers — designs, collab, media, auth, comments, versions,
+    templates, health, MCP, photos and all eight AI routes); with
+    the env unset it is a zero-behavior-change passthrough, and
+    the SSE stream's response passes through untouched.
+  - **`/api/health?v=2`** — the observability payload: aggregate
+    counts (live designs, users, finalized media count **and
+    bytes**, version snapshots, comments), a DB latency probe
+    (measured on the existing `SELECT 1`), and app version +
+    uptime. Counts only, **never ids** — asserted by an e2e test
+    that scans the payload for cuid/uuid shapes. Plain
+    `/api/health` keeps its v1 shape (plus an explicit `v: 1`) so
+    liveness probes stay as cheap as before.
+  - **Optional error webhook** (`CANVIX_ERROR_WEBHOOK_URL`):
+    every *unhandled* request error — any route, page or server
+    action — POSTs a JSON report (message, stack head, path,
+    method, route type, app version, timestamp) via Next's
+    `onRequestError` hook in the new `src/instrumentation.ts`.
+    One file instruments the whole app; 5-second timeout,
+    fire-and-forget, and a failing webhook logs locally instead
+    of taking the error path down.
+- **8 unit tests** (`src/lib/observability.test.ts`): the opt-in
+  gate, passthrough-vs-logging behavior, JSON line shape, query-
+  string redaction, error-path 500 logging + rethrow, params
+  passthrough, and the webhook payload contract (bounded,
+  id-free). Plus a Playwright spec for health v1/v2.
+
 ## [0.12.4] — 2026-11-02
 
 ### Added

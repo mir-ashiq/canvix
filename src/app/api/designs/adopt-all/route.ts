@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth/session'
 import { anonHashFrom } from '@/lib/auth/anon'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
+import { withLogging } from '@/lib/observability'
 
 // POST /api/designs/adopt-all — one-click migration into an account.
 //
@@ -16,7 +17,7 @@ import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 // attributed to OTHER browsers remain untouchable.
 //
 // Idempotent; already-owned designs are excluded by the query itself.
-export async function POST(req: NextRequest) {
+async function __canvix_post(req: NextRequest) {
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   const user = await getSessionUser(req)
   if (!user) {
@@ -54,3 +55,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to adopt designs.' }, { status: 500 })
   }
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const POST = withLogging('POST /api/designs/adopt-all', __canvix_post)

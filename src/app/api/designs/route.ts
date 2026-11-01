@@ -6,6 +6,7 @@ import { getSessionUser } from '@/lib/auth/session'
 import { readAnonToken, newAnonToken, anonKeyHash, setAnonCookie, anonHashFrom } from '@/lib/auth/anon'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
+import { withLogging } from '@/lib/observability'
 
 // Normalise incoming pages payload (accepts object or legacy JSON string)
 // into a value suitable for the Postgres jsonb column.
@@ -38,7 +39,7 @@ function toPages(value: unknown): Prisma.InputJsonValue {
 // the client there is more. Worst case per page is now ~0.5 MB.
 const DESIGNS_PAGE_SIZE = 60
 
-export async function GET(req: NextRequest) {
+async function __canvix_get(req: NextRequest) {
   try {
     const trash = req.nextUrl.searchParams.get('trash') === '1'
     const cursor = req.nextUrl.searchParams.get('cursor')
@@ -110,7 +111,7 @@ export async function GET(req: NextRequest) {
 // v0.9.1: anonymous creations are attributed to the creating browser
 // (anonKey = sha256 of the canvix_anon cookie, minted on first use) so
 // adopt-all can never claim someone else's work.
-export async function POST(req: NextRequest) {
+async function __canvix_post(req: NextRequest) {
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   // v0.12.3 (H5): design creation is unauthenticated (anonymous
   // ownerless mode) — a per-IP cap is the only brake on flooding.
@@ -157,3 +158,8 @@ export async function POST(req: NextRequest) {
     return dbErrorResponse(error, 'POST /api/designs')
   }
 }
+
+// v0.12.5 (H7): opt-in request logging wrapper — passthrough
+// unless CANVIX_LOG=requests (see src/lib/observability.ts)
+export const GET = withLogging('GET /api/designs', __canvix_get)
+export const POST = withLogging('POST /api/designs', __canvix_post)

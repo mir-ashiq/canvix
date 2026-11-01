@@ -221,6 +221,11 @@ is right here.
   gap-free catch-up after disconnects. Architecture: an append-only event log in
   Postgres + server-sent events downstream + batched op POSTs upstream — works on
   Vercel serverless and self-hosted Node alike, no WebSocket server required.
+  **Link access (documented in the Share dialog since v0.11.7):** anyone who
+  can reach your instance can open a share link; ownerless designs (created
+  while signed out) are editable by everyone with the link, while designs
+  owned by an account open read-only for everyone else — there is no cloud
+  gatekeeping, reachability is decided by your deployment.
   Optimistic local edits always keep the canvas butter-smooth. Since **v0.10**
   collaboration is also **offline-safe**: edits made while disconnected (or
   after a crash/reload) queue in IndexedDB and merge deterministically on
@@ -749,6 +754,11 @@ tool descriptions so agents pick the right format.
       stale 6-of-42 grid), web search without an AI provider says so, and
       the top-bar mode control + Tools-panel Draw toggle always agree
       *(v0.11.6)*
+- [x] QA sweep close-out — empty-canvas click deselects (Canva parity),
+      zero render-phase store writes in canvas gestures (the
+      “Cannot update a component while rendering” warning, root-caused to
+      stroke/marquee/guide commits — not Magic Layers), and the Share
+      dialog documents the real access model for self-hosters *(v0.11.7)*
 - [ ] Plugin system (external, installable apps) — sandboxed-iframe MVP
       per `research/PLUGIN-SYSTEM.md`: manifest + permission model, iframe
       sandbox with postMessage bridge, an “Apps” panel store, and 2–3

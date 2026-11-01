@@ -77,6 +77,11 @@ export default function CanvasStage() {
   const [draftGuide, setDraftGuide] = useState<{ axis: 'x' | 'y'; position: number } | null>(null)
   const drawingRef = useRef(false)
   const marqueeRef = useRef(false)
+  /** v0.11.7 (F5): latest marquee rect for the window-level gesture
+   * listeners — lets mouseup select OUTSIDE any setState updater.
+   * (Store writes inside updaters run during render and trigger React's
+   * "Cannot update a component while rendering a different component".) */
+  const marqueeShapeRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const spaceRef = useRef(false)
 
   const interactive = editingMode === 'editing' && tool === 'select' && !commentsOpen
@@ -370,7 +375,12 @@ export default function CanvasStage() {
   const selectInMarquee = (a: { x0: number; y0: number; x1: number; y1: number }) => {
     const x = Math.min(a.x0, a.x1), y = Math.min(a.y0, a.y1)
     const w = Math.abs(a.x1 - a.x0), h = Math.abs(a.y1 - a.y0)
-    if (w < 4 && h < 4) return
+    if (w < 4 && h < 4) {
+      // v0.11.7 (F1): a bare click on empty canvas deselects — Canva parity.
+      // (Touches already did this in handleStageTouchStart; Escape always could.)
+      clearSelection()
+      return
+    }
     const hits = page.elements
       .filter((e) => e.visible && !e.locked)
       .filter((e) => e.x < x + w && e.x + e.width > x && e.y < y + h && e.y + e.height > y)
@@ -383,19 +393,21 @@ export default function CanvasStage() {
   const guideDragging = draftGuide !== null
   useEffect(() => {
     if (!guideDragging) return
+    // v0.11.7 (F5): the guide's axis is fixed for the whole drag; the
+    // position is tracked locally so mouseup can commit the guide at EVENT
+    // time — outside any setState updater (updaters run during render).
+    const axis = draftGuide?.axis ?? 'x'
+    let position = draftGuide?.position ?? 0
     const onMove = (e: MouseEvent) => {
       const pt = pagePoint(e.clientX, e.clientY)
       if (!pt) return
-      setDraftGuide((d) => (d ? { ...d, position: d.axis === 'x' ? pt.x : pt.y } : d))
+      position = axis === 'x' ? pt.x : pt.y
+      setDraftGuide((d) => (d ? { ...d, position } : d))
     }
     const onUp = () => {
-      setDraftGuide((d) => {
-        if (d) {
-          const limit = d.axis === 'x' ? width : height
-          if (d.position > -30 && d.position < limit + 30) addManualGuide(d.axis, d.position)
-        }
-        return null
-      })
+      setDraftGuide(null)
+      const limit = axis === 'x' ? width : height
+      if (position > -30 && position < limit + 30) addManualGuide(axis, position)
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setDraftGuide(null)
@@ -476,7 +488,9 @@ export default function CanvasStage() {
       const pt = pagePoint(e.evt.clientX, e.evt.clientY)
       if (!pt) return
       marqueeRef.current = true
-      setMarquee({ x0: pt.x, y0: pt.y, x1: pt.x, y1: pt.y })
+      const m = { x0: pt.x, y0: pt.y, x1: pt.x, y1: pt.y }
+      marqueeShapeRef.current = m
+      setMarquee(m)
     }
   }
 
@@ -507,7 +521,14 @@ export default function CanvasStage() {
     const onMove = (e: MouseEvent) => {
       if (marqueeRef.current) {
         const pt = pagePoint(e.clientX, e.clientY)
-        if (pt) setMarquee((m) => (m ? { ...m, x1: pt.x, y1: pt.y } : m))
+        if (pt) {
+          const prev = marqueeShapeRef.current
+          if (prev) {
+            const next = { ...prev, x1: pt.x, y1: pt.y }
+            marqueeShapeRef.current = next
+            setMarquee(next)
+          }
+        }
         return
       }
       movePan(e.clientX, e.clientY)
@@ -515,10 +536,13 @@ export default function CanvasStage() {
     const onUp = () => {
       if (marqueeRef.current) {
         marqueeRef.current = false
-        setMarquee((m) => {
-          if (m) selectInMarquee(m)
-          return null
-        })
+        // v0.11.7 (F5): select at event time, NOT inside the setMarquee
+        // updater — updaters run during render, and the store write would
+        // re-render other components mid-render (the F5 warning)
+        const m = marqueeShapeRef.current
+        marqueeShapeRef.current = null
+        setMarquee(null)
+        if (m) selectInMarquee(m)
         return
       }
       endPan()
@@ -608,6 +632,11 @@ export default function CanvasStage() {
   // ── freehand drawing (window-level so strokes continue off-element) ────
   useEffect(() => {
     if (!drawingRef.current && draft === null) return
+    // v0.11.7 (F5): local mirror of the stroke-so-far — mouseup commits the
+    // element from it at event time, OUTSIDE the setDraft updater (updaters
+    // run during render; the store write re-rendered other components
+    // mid-render → "Cannot update a component while rendering …").
+    let points = draft
     const onMove = (e: MouseEvent) => {
       if (!drawingRef.current) return
       const stage = stageRef.current
@@ -615,28 +644,28 @@ export default function CanvasStage() {
       if (!stage || !container) return
       const px = (e.clientX - container.left - pan.x) / zoom
       const py = (e.clientY - container.top - pan.y) / zoom
-      setDraft((d) => (d ? [...d, px, py] : [px, py, px, py]))
+      points = points ? [...points, px, py] : [px, py, px, py]
+      setDraft(points)
     }
     const commit = () => {
       if (!drawingRef.current) return
       drawingRef.current = false
-      setDraft((d) => {
-        if (d && d.length >= 6) {
-          const minX = Math.min(...d.filter((_, i) => i % 2 === 0))
-          const minY = Math.min(...d.filter((_, i) => i % 2 === 1))
-          const rel = d.map((v, i) => (i % 2 === 0 ? v - minX : v - minY))
-          useEditorStore.getState().addElement(
-            createStrokeElement({
-              x: Math.round(minX),
-              y: Math.round(minY),
-              points: rel.map((v) => Math.round(v)),
-              stroke: drawColor,
-              strokeWidth: drawSize,
-            })
-          )
-        }
-        return null
-      })
+      const d = points
+      setDraft(null)
+      if (d && d.length >= 6) {
+        const minX = Math.min(...d.filter((_, i) => i % 2 === 0))
+        const minY = Math.min(...d.filter((_, i) => i % 2 === 1))
+        const rel = d.map((v, i) => (i % 2 === 0 ? v - minX : v - minY))
+        useEditorStore.getState().addElement(
+          createStrokeElement({
+            x: Math.round(minX),
+            y: Math.round(minY),
+            points: rel.map((v) => Math.round(v)),
+            stroke: drawColor,
+            strokeWidth: drawSize,
+          })
+        )
+      }
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', commit)

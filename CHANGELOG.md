@@ -3,6 +3,58 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.7] — 2026-11-01
+
+The three findings that stayed open after the v0.11.4–v0.11.6 QA sweep
+(§5.2 of `research/V0114-QA-PASS.md`): one interaction gap, one React
+anti-pattern, one documentation debt.
+
+### Fixed
++- **Ruler→guide initial position used the wrong coordinate** (found while
++  verifying the guide fix): `rulers.tsx beginGuide()` computed the seed
++  position from the swapped axis — mouse X for a horizontal guide, mouse
++  Y for a vertical one. Mid-drag the first mousemove masked it, but a
++  bare ruler click committed a guide at a nonsense position and the
++  dashed draft flashed one frame in the wrong place.
+ - **F1 — no deselect on empty-canvas click.** Clicking empty canvas kept
+   the current selection; only Escape (and touch) deselected. A bare click
+   is a zero-size marquee, and `selectInMarquee` now clears the selection
+   for it — Canva parity (`research/V0117-QA-FOLLOWUPS.md`).
+- **F5 — React render-phase update warning.** Console:
+  "Cannot update a component (`MagicLayersDialog`/`TopBar`) while
+  rendering a different component (`CanvasStage`)". Three store writes
+  lived inside `setState` updaters — the draw-stroke commit
+  (`addElement` inside `setDraft`), the marquee select
+  (`setSelection`/`clearSelection` inside `setMarquee`) and the ruler
+  guide drop (`addManualGuide` inside `setDraftGuide`). Updaters run
+  during render, so each write synchronously re-rendered other
+  components mid-render (which component the warning names depends on
+  subscriber order — hence the misleading "MagicLayers" attribution).
+  All three now commit at event time, outside any updater, with local
+  mirrors (`marqueeShapeRef`, the stroke `points`, the guide `position`)
+  keeping the gesture data exact. Amusingly, F1 had been masking the
+  marquee variant: a bare click early-returned before any store write.
+- **F6 — Share dialog documented the wrong access model.** The dialog
+  offered a decorative Only me / Anyone with the link / Public selector
+  that nothing enforced ("Public — listed in the community gallery"
+  described a gallery that does not exist). It now documents the rules
+  the server actually enforces (`src/lib/auth/design-guard.ts`):
+  anyone who can reach the instance can open the link; ownerless
+  designs (created signed-out) stay link-editable; owned designs open
+  read-only for everyone else (view-only banner, 403 on saves); there is
+  no cloud gatekeeping — reachability is decided by the deployment. When
+  you are viewing someone else's design, the dialog says so.
+
+### Changed
+- `ShareDialog` no longer reads/writes the `canvix:share:<id>`
+  localStorage preference (the old decorative selector's storage).
+
+### Added
+- Playwright `qa-followups.spec.ts` (5 tests): the F1 deselect click
+  (plus re-select of the element), the marquee re-select and
+  empty-marquee clear, stroke draw and ruler-guide drop with zero
+  render-phase warnings, and the F6 access-model documentation.
+
 ## [0.11.6] — 2026-11-01
 
 Two QA-pass findings in panel state hygiene (§5.2 of

@@ -551,7 +551,7 @@ at all. Full details: `research/CLOUDFLARE-WORKERS-PORTABILITY.md`.
 | Database | Prisma ORM + PostgreSQL (jsonb) |
 | Realtime | Postgres event log + SSE (no WebSocket server needed) |
 | AI | server-side provider layer (z-ai-web-dev-sdk, vision-capable) |
-| Fonts | 15 hand-picked Google Fonts |
+| Fonts | 63 hand-picked Google Font families |
 | Tests | Vitest (unit) + Playwright (browser) + `scripts/mcp-e2e.sh` (38 live MCP assertions) |
 
 ## 🧪 Testing
@@ -716,8 +716,11 @@ tool descriptions so agents pick the right format.
   guard per the MCP spec); 120 req/min/IP; SSRF-guarded image fetches (private
   hosts denied, 8 MB/10 s caps); tool arguments whitelisted & clamped per element
   type; agent writes ride the same validated event log as human edits
-- Known limitation: designs are link-accessible (no per-user ownership yet) —
-  the v0.5 identity layer is the migration path; see the security audit
+- Designs without an owner are link-editable by anyone who can reach
+  the instance (deliberate — the Share dialog documents this); owned
+  designs are read-only for everyone else, enforced on both the document
+  rail and (since v0.11.8) the collaboration events rail; see the
+  security audit and `research/V0118-ROADMAP-RESEARCH.md` §3.7
 
 ## 🧭 Roadmap
 
@@ -771,6 +774,17 @@ tool descriptions so agents pick the right format.
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)
+
+**Path to v1.0** — the full phased plan (current-state analysis, 2026
+landscape research, prioritized epics with effort estimates, risk
+register) lives in `research/V0118-ROADMAP-RESEARCH.md`. The arc:
+**v0.12** trust & rails (CI gate, security headers, rate limits, ops
+runbook) → **v0.13** plugin system MVP → **v0.14** daily-driver editor
+depth (persistent uploads, clipboard, folders, filters, charts) →
+**v0.15** rich content & export (rich text, WebCodecs video, vector
+PDF) → **v0.16** mobile & collaboration scale (touch-first editing,
+LISTEN/NOTIFY fan-out) → **v1.0** = every promise on this page shipped
+and verified.
 
 ## 🤝 Contributing
 

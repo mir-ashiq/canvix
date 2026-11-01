@@ -105,6 +105,15 @@ jobs:
       - name: Install Playwright browser (chromium)
         run: npx playwright install --with-deps chromium
 
+      # The video-export e2e shells out to ffprobe + volumedetect to prove
+      # the exported file really carries a non-silent audio track, and the
+      # preview test encodes a VP8/Vorbis WebM fixture — GitHub's
+      # ubuntu-latest images ship without ffmpeg (first main run: 26
+      # passed / 1 skipped / 1 ENOENT). Ubuntu's ffmpeg package provides
+      # all of it, so the suite runs whole instead of half-skipping.
+      - name: Install ffmpeg (video-export e2e dependencies)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
       - name: Set up database (migrations + template seed)
         run: npm run db:setup
 

@@ -1,7 +1,69 @@
 import type { NextConfig } from "next";
 
+// ─────────────────────────────────────────────────────────────────
+// Security headers + CSP baseline (v0.12.1, roadmap H3 — see
+// research/V0118-ROADMAP-RESEARCH.md §5.1). One static source of
+// truth in next.config: every deploy target (Vercel, Cloudflare
+// Workers via OpenNext, Netlify, Node standalone) serves these on
+// every route — pages and API handlers alike.
+//
+// CSP ships as Report-Only on purpose: it documents the policy the
+// app needs today (Google Fonts, data:/blob: images, blob: workers)
+// without risking a regression on a renderer we have not audited.
+// Review the browser-console violation reports for ~a week, then
+// flip to enforcement (README → “Security notes” has the path).
+// The plugin serve route (v0.13, P1) will NOT use this baseline —
+// it gets the strict per-manifest CSP drafted in
+// src/lib/security/plugin-csp.ts.
+// ─────────────────────────────────────────────────────────────────
+const CSP_REPORT_ONLY = [
+  "default-src 'self'",
+  // dev needs eval for HMR; wasm+blob workers are the background
+  // remover; inline is Next's hydration scripts (nonce-based CSP is
+  // the enforcement-time upgrade, tracked with P1)
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: blob: https://fonts.gstatic.com",
+  // stock-photo providers may return remote URLs; data: covers AI
+  // thumbnails, blob: covers canvas exports
+  "img-src 'self' data: blob: https:",
+  "media-src 'self' data: blob:",
+  "connect-src 'self' blob: data:",
+  "worker-src 'self' blob:",
+  // embed cards (YouTube, Maps, …) frame out over TLS; enforcement
+  // will tighten this to the embed allowlist
+  "frame-src https:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join("; ");
+
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  // Browsers ignore HSTS over plain HTTP, so self-hosters behind
+  // http:// are unaffected by definition — the header only starts
+  // counting once the host is served over TLS (reverse proxy,
+  // platform, or tunnel).
+  { key: "Strict-Transport-Security", value: "max-age=15552000; includeSubDomains" },
+  // Canvix uses none of these; explicitly off.
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), interest-cohort=()" },
+  { key: "Content-Security-Policy-Report-Only", value: CSP_REPORT_ONLY },
+];
+
 const nextConfig: NextConfig = {
   output: "standalone",
+  async headers() {
+    return [
+      {
+        // every route class — landing/editor pages, API routes, SSE
+        source: "/:path*",
+        headers: securityHeaders,
+      },
+    ];
+  },
   typescript: {
     // v0.6.1: strict again — the codebase typechecks clean; keep it that way.
     ignoreBuildErrors: false,

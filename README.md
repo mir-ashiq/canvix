@@ -703,6 +703,23 @@ tool descriptions so agents pick the right format.
 
 ## 🔐 Security notes
 
+- **Security headers + CSP baseline (v0.12.1)** — every response from every
+  route class (pages, APIs, SSE, static assets) now carries
+  `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`,
+  `X-Frame-Options: SAMEORIGIN` (+ `frame-ancestors 'self'`),
+  `Strict-Transport-Security` (180 days) and a `Permissions-Policy` that
+  turns off camera/mic/geo. The CSP ships as **Report-Only** so nothing
+  breaks while violations are reviewed: it allowlists Google Fonts,
+  `data:`/`blob:` images, blob workers for the background remover and
+  TLS-only frames for embed cards. After a review week, flip the
+  `Content-Security-Policy-Report-Only` header in `next.config.ts` to
+  `Content-Security-Policy` (and tighten `frame-src` to the embed
+  allowlist). HSTS note for self-hosters: browsers only honour it over
+  TLS, so an `http://` deployment is unaffected by definition — the
+  header starts counting the moment you put the instance behind HTTPS.
+  A Playwright spec (`tests/e2e/security-headers.spec.ts`) asserts the
+  whole baseline on every route class in CI
 - **Secrets never reach the browser** — provider credentials are resolved
   server-side only; the public capabilities endpoint exposes booleans only
 - **Validated collaboration ops** — every realtime event is type-checked,
@@ -771,6 +788,13 @@ tool descriptions so agents pick the right format.
       full vitest suite on GitHub Actions, and merges to `main` also run the
       Playwright browser suite against a real Postgres service container —
       the deploy pipelines finally get tested code *(v0.12)*
+- [x] Security headers + CSP baseline — `nosniff`, `Referrer-Policy`,
+      `X-Frame-Options`/`frame-ancestors`, HSTS and `Permissions-Policy`
+      on every route class from one source of truth in `next.config.ts`,
+      a report-only CSP allowlisting Google Fonts + `data:`/`blob:` images
+      + blob workers, and the strict per-manifest CSP the v0.13 plugin
+      serve route will use, drafted and unit-tested in
+      `src/lib/security/plugin-csp.ts` *(v0.12.1)*
 - [ ] Plugin system (external, installable apps) — sandboxed-iframe MVP
       per `research/PLUGIN-SYSTEM.md`: manifest + permission model, iframe
       sandbox with postMessage bridge, an “Apps” panel store, and 2–3

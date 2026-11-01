@@ -3,6 +3,44 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.12.1] — 2026-11-02
+
+### Added
+
+- **Security headers + CSP baseline (H3).** Every response from every
+  route class — landing/editor pages, read APIs, the health probe,
+  even 404s and static assets — now carries the hardening baseline
+  the roadmap research flagged as missing: `X-Content-Type-Options:
+  nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
+  `X-Frame-Options: SAMEORIGIN` (with a matching `frame-ancestors
+  'self'` in the CSP), `Strict-Transport-Security` (180 days —
+  documented that browsers ignore HSTS over plain HTTP, so
+  `http://` self-hosters are unaffected by definition) and a
+  `Permissions-Policy` turning off camera/mic/geo. The CSP itself
+  ships as **Report-Only**: the policy the app needs today is
+  written down directive by directive (Google Fonts css + files,
+  `data:`/`blob:` images, blob workers for the background remover,
+  TLS-only `frame-src` for embed cards, `object-src 'none'`,
+  `base-uri`/`form-action 'self'`) and nothing breaks while the
+  violation reports are reviewed — the enforcement flip is a
+  one-line change in `next.config.ts`, documented in the README.
+  The single source of truth is `next.config.ts → headers()`, so
+  Vercel, Cloudflare Workers (OpenNext), Netlify and Node
+  standalone all serve byte-identical values.
+- **Drafted the strict per-manifest CSP for the v0.13 plugin serve
+  route** (`src/lib/security/plugin-csp.ts`): `default-src 'none'`,
+  `script-src 'self'` (no inline scripts — the packaging rule),
+  `connect-src` collapsing to `'none'` unless the user consented to
+  specific https origins, canonicalised and deduplicated, with
+  loopback http allowed for development builds only. Unit tests pin
+  the header byte-for-byte so the consent screen, the serve route
+  and the P4 security suite all agree on what “strict” means.
+- **Playwright spec `tests/e2e/security-headers.spec.ts`** — asserts
+  the whole baseline on one representative URL per route class in
+  CI (landing, design deep-link, templates/designs APIs, health,
+  static asset), plus the CSP allowlist contents and the fact that
+  no enforcing CSP header exists yet.
+
 ## [0.12.0] — 2026-11-02
 
 ### Added

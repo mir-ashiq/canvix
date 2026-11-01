@@ -463,6 +463,15 @@ Canvix runs on **any Node host** and — since v0.9.3 — on **Cloudflare
 Workers** too, and — since v0.9.4 — on **Netlify**. Same codebase, same
 database, zero config divergence.
 
+**Running it long-term?** Two operations guides shipped with v0.12.4:
+[`docs/BACKUP-AND-RESTORE.md`](docs/BACKUP-AND-RESTORE.md) — the
+one-command `pg_dump` backup, a restore drill executed and verified
+step-by-step (counts + bytea sizes + booting the app against the
+restored database), scheduled-backup cron, and the media orphan GC —
+and [`docs/UPGRADING.md`](docs/UPGRADING.md) — the routine upgrade
+path, jumping minors, and rollback guidance including the honest
+forward-only-migrations caveat.
+
 ### Vercel (or any Node host)
 
 1. Import the repo, set `DATABASE_URL` (the **transaction pooler** URL —
@@ -846,6 +855,12 @@ tool descriptions so agents pick the right format.
       at 6 concurrent connections per IP, a load-probe script that proves
       both caps on a live instance, and an honest “multi-instance fleets”
       section in the README *(v0.12.3)*
+- [x] Docs & ops runbook — `docs/BACKUP-AND-RESTORE.md` (pg_dump backup
+      with the bytea note, a restore drill executed + verified end-to-end:
+      counts, media bytes, booting the app on the restored database,
+      scheduled-backup cron) and `docs/UPGRADING.md` (routine upgrades,
+      jumping minors, rollback with the forward-only-migrations caveat),
+      plus a media orphan GC script with its own verified drill *(v0.12.4)*
 - [ ] Plugin system (external, installable apps) — sandboxed-iframe MVP
       per `research/PLUGIN-SYSTEM.md`: manifest + permission model, iframe
       sandbox with postMessage bridge, an “Apps” panel store, and 2–3

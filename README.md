@@ -896,7 +896,16 @@ tool descriptions so agents pick the right format.
       per `research/PLUGIN-SYSTEM.md`: manifest + permission model, iframe
       sandbox with postMessage bridge, an “Apps” panel store, and 2–3
       reference plugins (stock icons, charts, QR codes) to prove the
-      surface — then a community plugin registry
+      surface — then a community plugin registry.
+      In progress: the **security-boundary core** (P1) landed in
+      `src/lib/plugins/` — manifest validator (id/api/engines/entry/
+      permissions/element-schema rules), versioned postMessage RPC
+      envelope with typed error codes, the default-deny permission
+      catalog for the consent screen and broker, plugin data caps at
+      collab parity, and the accept-or-reject renderer-SVG sanitizer —
+      all pinned by a protocol-level security regression suite
+      (20 hostile manifests, 16 hostile SVGs, RPC replay/spoof corpus)
+      *(v0.13.0)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)

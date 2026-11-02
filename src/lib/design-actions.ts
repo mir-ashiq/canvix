@@ -90,6 +90,28 @@ export async function applyDesignAction(action: DesignAction): Promise<string> {
       return 'Text added — fully editable'
     }
 
+    // v0.13 (P3): plugin panels may add images — the §4.3 whitelist
+    // ("dataURL ≤ 4 MB or /api/media id"). Same clamps the AI image
+    // path applies; nothing about the plugin is trusted raw.
+    case 'addImage': {
+      const src = String(action.src ?? '')
+      const isMediaRef = /^\/api\/media\/[A-Za-z0-9_-]{1,64}$/.test(src)
+      const isDataUrl = /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(src)
+      if (!isMediaRef && !isDataUrl) return 'src must be a /api/media id or a png/jpeg/gif/webp data URL'
+      if (isDataUrl && src.length > 4 * 1024 * 1024) return 'Image is larger than 4 MB'
+      const naturalWidth = Math.min(8000, Math.max(16, Number(action.naturalWidth) || 800))
+      const naturalHeight = Math.min(8000, Math.max(16, Number(action.naturalHeight) || 600))
+      const scale = Math.min(1, (width * 0.7) / naturalWidth)
+      const el = createImageElement(src, naturalWidth, naturalHeight, {
+        width: Math.max(8, Math.round(naturalWidth * scale)),
+        height: Math.max(8, Math.round(naturalHeight * scale)),
+        x: Math.round(width * 0.15),
+        y: Math.round(height * 0.15),
+      })
+      useEditorStore.getState().addElement(el)
+      return 'Image added'
+    }
+
     case 'updateElements': {
       const ids = resolveIds(action.ids)
       if (!ids.length) return 'No matching elements'
@@ -370,6 +392,7 @@ function balanceLayout(): string {
 export function describeAction(action: DesignAction): string {
   switch (action.type) {
     case 'addText': return `Add text: “${String(action.text ?? '').slice(0, 40)}${String(action.text ?? '').length > 40 ? '…' : ''}”`
+    case 'addImage': return `Add image (${String(action.src ?? '').startsWith('data:') ? 'embedded' : 'media library'})`
     case 'updateElements': return `Update ${action.ids?.length ?? 0} element${(action.ids?.length ?? 0) === 1 ? '' : 's'}`
     case 'deleteElements': return `Delete ${action.ids?.length ?? 0} element${(action.ids?.length ?? 0) === 1 ? '' : 's'}`
     case 'moveElements': return action.to ? `Move to ${action.to}` : 'Move elements'

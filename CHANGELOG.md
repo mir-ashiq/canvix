@@ -3,6 +3,63 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.2] — 2026-11-02
+
+### Added
+
+- **Plugin system, part 3 of 5 — the panel runtime (P3).**
+  The host half of research §4.3/§4.8: an installed row can now
+  become running code — inside the boundary P1/P2 pinned. 57 new
+  unit tests, zero new npm dependencies.
+  - **RPC broker** (`src/lib/plugins/broker.ts`): one instance per
+    mounted iframe, and the ONLY path between plugin and host.
+    Origin discipline by window identity (`ev.source === the frame
+    we mounted` — an opaque-origin iframe cannot be named, so the
+    object IS the origin check), one-time handshake token echoed
+    on the first call (rides the iframe URL fragment, never the
+    wire), 200 calls/min sliding-window budget (`E_THROTTLE`),
+    default-deny dispatch against the install's consented
+    permissions, typed `BrokerError`s that stay wire-legal, and
+    `E_INTERNAL` + server-side-only logging for host failures.
+    Full method surface: `info`/`ping` (no permission),
+    `design.getSnapshot` (lossy read-only projection, RPC-capped),
+    `subscribe('selection'|'document')` with ack-bounded pushes,
+    `actions.apply` (the §4.3 whitelist — AI actions excluded,
+    `addPluginElement` reserved for P4), `storage.*`, `ui.notify`
+    (sanitized, 200-char cap), `ui.closePanel`. Read-only designs
+    suspend `design:write` at the broker (E_PERMISSION).
+  - **Design snapshot projection** (`src/lib/plugins/snapshot.ts`):
+    what `design.getSnapshot` returns — geometry + small own data
+    + background, groups projected recursively; heavy fields
+    (image dataURLs) omitted-and-listed, internal bookkeeping
+    (`_m` HLC stamps, `magicLayer`, `shadow`) never crossing the
+    boundary.
+  - **Namespaced plugin storage** (`src/lib/plugins/plugin-storage.ts`):
+    `canvix:plugin:<pluginId>:*`, 256 KB per plugin, 64 KB per
+    value, structured-clone-checked — the prefix is the isolation
+    (one plugin can never see another's keys or the host's).
+  - **Panel iframe host** (`PluginRuntime.tsx`):
+    `<iframe sandbox="allow-scripts">` — nothing else in the
+    attribute — loading the DB-served entry panel with the
+    handshake token in the fragment; mounts the broker, wires
+    store subscriptions to `pushEvent`, and unmount = deactivate
+    (broker disposed, listeners removed, zero residue).
+  - **"Installed" section in Apps** (`InstalledApps.tsx`, lazy
+    dynamic import — flag-off instances never download a byte):
+    install by manifest URL, **consent modal listing every
+    requested permission verbatim** (grant keeps it / remove
+    deletes the row), per-plugin enable/disable, uninstall that
+    never touches the design. Silent degradation: flag off (503),
+    signed out (401) or offline → the section never renders.
+  - **`addImage` design action** (`design-actions.ts`): the §4.3
+    whitelist's image entry — `/api/media` id or dataURL ≤ 4 MB
+    (png/jpeg/gif/webp), natural-size clamped, same clamps the AI
+    path applies.
+  - **E2E regression spec** (`tests/e2e/plugins-panel.spec.ts`):
+    with the flag off the built-in app grid is untouched, no
+    plugin UI leaks, and `/api/plugins` answers 503
+    `PLUGINS_DISABLED`.
+
 ## [0.13.0] — 2026-11-02
 
 ### Added

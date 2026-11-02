@@ -1,11 +1,17 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import { ArrowRight } from 'lucide-react'
 import { PanelShell } from './panel-shell'
 import { CANVIX_APPS, type CanvixApp } from '../apps/registry'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+
+// v0.13 (P3): the "Installed" section — installed plugin panels.
+// Lazy + client-only: instances with CANVIX_PLUGINS off never
+// download a byte of the plugin runtime (research §4.10).
+const InstalledApps = dynamic(() => import('../apps/InstalledApps').then((m) => m.InstalledApps), { ssr: false })
 
 /** Canva Apps panel — a registry-driven app ecosystem. Open an app to get its
  *  full panel UI; new apps are added by registering in apps/registry.tsx. */
@@ -17,25 +23,28 @@ export function AppsPanel() {
       {open ? (
         <open.content onClose={() => setOpen(null)} />
       ) : (
-        <div className="grid grid-cols-2 gap-2.5">
-          {CANVIX_APPS.map((app) => (
-            <AppCard key={app.id} app={app} onOpen={() => setOpen(app)} />
-          ))}
-          <div className="col-span-2 mt-1 rounded-xl border border-dashed border-white/12 p-3 text-center">
-            <p className="text-[11px] text-white/40 leading-relaxed">
-              Canvix apps are open —{' '}
-              <a
-                href="https://github.com/mir-ashiq/canvix"
-                target="_blank"
-                rel="noreferrer"
-                className="text-[#02C0CC] hover:underline"
-              >
-                build your own
-              </a>{' '}
-              by registering a component in <code className="text-white/60">apps/registry.tsx</code>.
-            </p>
+        <>
+          <div className="grid grid-cols-2 gap-2.5">
+            {CANVIX_APPS.map((app) => (
+              <AppCard key={app.id} app={app} onOpen={() => setOpen(app)} />
+            ))}
+            <div className="col-span-2 mt-1 rounded-xl border border-dashed border-white/12 p-3 text-center">
+              <p className="text-[11px] text-white/40 leading-relaxed">
+                Canvix apps are open —{' '}
+                <a
+                  href="https://github.com/mir-ashiq/canvix"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[#02C0CC] hover:underline"
+                >
+                  build your own
+                </a>{' '}
+                by registering a component in <code className="text-white/60">apps/registry.tsx</code>.
+              </p>
+            </div>
           </div>
-        </div>
+          <InstalledApps />
+        </>
       )}
     </PanelShell>
   )

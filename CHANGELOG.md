@@ -67,6 +67,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     with spec-correct prerelease ordering — no `semver` dependency,
     per the zero-dependency rule.
 
+## [0.13.1] — 2026-11-02
+
+### Added
+
+- **Plugin system, part 2 of 5 — the install rail (P2).**
+  The store half of research §4.2: submit → fetch → validate →
+  consent → store. Everything ships behind `CANVIX_PLUGINS`
+  (default **off** — the same opt-in pattern as the MCP token;
+  with the flag off every plugin route answers 503
+  `PLUGINS_DISABLED` and behavior is byte-identical to v0.12.5):
+  - **`POST /api/plugins`** — install from a manifest URL. The
+    server fetches the manifest + every declared file through
+    the existing `safeFetch` SSRF guard (DNS pinning, private-
+    range denial, per-hop redirect revalidation), enforcing the
+    §4.7 caps: 2 MB total bundle, ≤ 50 files, 10 s per file.
+    Each file is sha256-pinned; `.html` files re-pass the P1
+    packaging check at install; the whole snapshot lands in one
+    transaction (a reinstall atomically replaces the previous
+    row — no version mixing, no orphan assets). CSRF + per-IP
+    rate limit (`plugins:install`, 10/min) + session required.
+  - **`GET /api/plugins`** — the user's installs as a consent
+    payload: name/version/author, the file list with integrity
+    hashes, and **every permission in plain language** — the
+    exact lines the consent screen will show. Never bytes.
+  - **`PATCH/DELETE /api/plugins/<installId>`** — the per-plugin
+    enable/disable kill switch and uninstall. Uninstall deletes
+    the row + assets (FK cascade) and **never touches elements**:
+    plugin elements are plain jsonb data and degrade to
+    placeholders, not data loss.
+  - **`GET /api/plugins/<installId>/serve/<path>`** — the asset
+    route: DB-served, extension-allowlisted mime types, sha256
+    ETag with 304 revalidation, `nosniff`, and the **per-manifest
+    CSP** from the v0.12.1 pre-staged `plugin-csp.ts` — consented
+    `network:` origins become `connect-src`, zero grants collapse
+    to `'none'`. Documented auth decision: the route is not
+    session-gated (sandboxed iframes cannot carry SameSite=Lax
+    cookies); the boundary is unguessable cuids +
+    `frame-ancestors 'self'` + per-IP rate limiting + the flag,
+    and design data never flows through it.
+  - **Migration 0006** — `PluginInstall` + `PluginAsset`
+    (additive only; rollback = flag off, no data removed).
+  - Manifest validator extended with the **`files` list** (the
+    install fetch list): safe paths only, entry panel must be
+    declared, ≤ 50 files, deduped.
+  - New rate-limit buckets `plugins:install` (10/min) and
+    `plugins:serve` (600/min); `.env.example` documents
+    `CANVIX_PLUGINS`.
+
 ## [0.12.5] — 2026-11-02
 
 ### Added

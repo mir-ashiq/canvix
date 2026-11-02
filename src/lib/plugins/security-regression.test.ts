@@ -33,6 +33,7 @@ function manifest(overrides: Record<string, unknown>): Record<string, unknown> {
     version: '1.0.0',
     engines: { canvix: '>=0.13.0 <0.14.0' },
     entry: { panel: 'panel.html' },
+    files: ['panel.html'],
     permissions: [],
     ...overrides,
   }

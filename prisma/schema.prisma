@@ -208,3 +208,37 @@ model AIUsage {
 
   @@index([createdAt])
 }
+
+// ── v0.13: plugin system (research/PLUGIN-SYSTEM.md §4.2) ────
+// A plugin install is a per-user snapshot of a third-party plugin's
+// files, pinned at install time (sha256 per file). After install the
+// instance is fully offline — the runtime never fetches anything.
+// Updates are explicit reinstalls; `enabled` is the user's kill switch
+// and CANVIX_PLUGINS=0 the instance-wide one. Elements created by a
+// plugin survive uninstall (they are plain elements in design jsonb).
+model PluginInstall {
+  id        String        @id @default(cuid())
+  userId    String
+  pluginId  String
+  version   String
+  manifest  Json
+  enabled   Boolean       @default(true)
+  assets    PluginAsset[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([userId, pluginId])
+  @@index([userId])
+}
+
+model PluginAsset {
+  id        String         @id @default(cuid())
+  installId String
+  install   PluginInstall  @relation(fields: [installId], references: [id], onDelete: Cascade)
+  path      String
+  mime      String
+  bytes     Bytes
+  sha256    String
+
+  @@unique([installId, path])
+}

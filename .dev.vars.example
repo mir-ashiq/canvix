@@ -13,3 +13,6 @@ DATABASE_URL=postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].poole
 # ── AI provider (optional — all local features work without it) ──
 # ZAI_BASE_URL=
 # ZAI_API_KEY=
+
+# Plugins (v0.13) — sandboxed third-party apps; default off
+# CANVIX_PLUGINS=1

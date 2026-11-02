@@ -16,6 +16,7 @@ const WORDCLOUD = {
   author: { name: 'Canvix team' },
   engines: { canvix: '>=0.13.0 <0.14.0' },
   entry: { panel: 'panel.html' },
+  files: ['panel.html', 'app.js'],
   permissions: ['design:read', 'design:write', 'element:plugin', 'storage'],
   elements: [
     {
@@ -44,6 +45,7 @@ interface ManifestFixture {
   engines: { canvix: string }
   entry: { panel?: string }
   permissions: string[]
+  files?: string[]
   elements?: Array<{
     kind: string
     label: string
@@ -175,7 +177,7 @@ describe('validateManifest — structural rules', () => {
     }
   })
 
-  it('entry paths must be relative and safe', () => {
+  it('entry paths must be relative and safe (files list follows the entry)', () => {
     for (const bad of ['/abs.html', '../escape.html', 'a/../b.html', 'a\\\\b.html', 'no-ext', 'x.ht', 'a//b.html', 'https://evil/x.html']) {
       const m = base()
       m.entry = { panel: bad }
@@ -184,6 +186,7 @@ describe('validateManifest — structural rules', () => {
     for (const good of ['panel.html', 'ui/panel.html', 'a/b/c/d/panel.html']) {
       const m = base()
       m.entry = { panel: good }
+      m.files = [good, 'app.js']
       expect(validateManifest(m, HOST).ok, `entry "${good}"`).toBe(true)
     }
   })

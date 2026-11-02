@@ -29,6 +29,8 @@ export const MAX_MANIFEST_BYTES = 64 * 1024
 export const MAX_ELEMENTS = 20
 /** Max property fields per element schema. */
 export const MAX_FIELDS = 24
+/** Max files in a plugin bundle (§4.2). */
+export const MAX_BUNDLE_FILES = 50
 
 const API_RE = /^\d+(\.\d+)?$/
 const ID_RE = /^[a-z0-9][a-z0-9-]{1,62}(\.[a-z0-9-]+){0,3}$/
@@ -36,6 +38,9 @@ const KIND_RE = /^[a-z][a-z0-9-]{0,30}$/
 const FIELD_KEY_RE = /^[a-z][a-zA-Z0-9]{0,30}$/
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
 const ENTRY_PATH_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,118}\.html$/
+
+/** Asset extensions a plugin bundle may ship (§4.2: no zip format — plain files). */
+const ASSET_EXT_RE = /\.(html|js|mjs|css|png|jpe?g|gif|svg|json|txt|woff2|map|ico)$/i
 
 export type PluginFieldType = 'text' | 'number' | 'color' | 'select' | 'range'
 
@@ -67,6 +72,8 @@ export interface PluginManifest {
   engines: { canvix: string }
   entry: { panel?: string }
   permissions: string[]
+  /** every file the bundle ships — the install route fetches exactly these */
+  files: string[]
   elements: PluginElementSpec[]
 }
 
@@ -98,6 +105,22 @@ export function isSafeEntryPath(p: unknown): p is string {
   const segs = p.split('/')
   if (segs.length > 8 || segs.some((s) => !s)) return false
   return true
+}
+
+/** Same safety rules for ANY declared bundle asset (any allowlisted extension). */
+export function isSafeAssetPath(p: unknown): p is string {
+  return (
+    typeof p === 'string' &&
+    ASSET_EXT_RE.test(p) &&
+    !p.includes('..') &&
+    !p.includes('\\') &&
+    !p.startsWith('/') &&
+    /^[A-Za-z0-9][A-Za-z0-9._/-]{0,118}$/.test(p) &&
+    (() => {
+      const segs = p.split('/')
+      return segs.length <= 8 && segs.every((s) => s.length > 0)
+    })()
+  )
 }
 
 /** Validate one field spec; return its error or null. */
@@ -272,6 +295,32 @@ export function validateManifest(raw: unknown, opts: ValidateManifestOptions): M
     errors.push('a plugin must declare entry.panel and/or elements — otherwise it does nothing')
   }
 
+  // ── files (the install fetch list, §4.2) ──
+  const files: string[] = []
+  if (raw.files === undefined) {
+    if (isPlainObject(entry) && entry.panel !== undefined) {
+      errors.push('files must list every file the plugin ships (including "' + String(entry.panel) + '")')
+    }
+  } else if (!Array.isArray(raw.files) || raw.files.length === 0) {
+    errors.push('files must be a non-empty array when present')
+  } else if (raw.files.length > MAX_BUNDLE_FILES) {
+    errors.push(`at most ${MAX_BUNDLE_FILES} files per plugin`)
+  } else {
+    const seen = new Set<string>()
+    for (const f of raw.files) {
+      if (!isSafeAssetPath(f)) {
+        errors.push(`files: "${String(f)}" is not a safe relative path with an allowed extension`)
+        continue
+      }
+      if (seen.has(f)) errors.push(`files: duplicate "${f}"`)
+      seen.add(f)
+      files.push(f)
+    }
+    if (isPlainObject(entry) && typeof entry.panel === 'string' && !seen.has(entry.panel)) {
+      errors.push(`files must include the entry panel "${entry.panel}"`)
+    }
+  }
+
   // ── permissions ──
   const perms = normalizePermissions(raw.permissions)
   if (!perms.ok) {
@@ -365,6 +414,7 @@ export function validateManifest(raw: unknown, opts: ValidateManifestOptions): M
         : {}
       : {},
     permissions: perms.ok ? perms.permissions : [],
+    files,
     elements,
   }
   return {

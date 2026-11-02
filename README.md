@@ -905,7 +905,11 @@ tool descriptions so agents pick the right format.
       collab parity, and the accept-or-reject renderer-SVG sanitizer —
       all pinned by a protocol-level security regression suite
       (20 hostile manifests, 16 hostile SVGs, RPC replay/spoof corpus)
-      *(v0.13.0)*
+      *(v0.13.0)*; the **install rail** (P2) followed — `CANVIX_PLUGINS`
+      (default off) gates `/api/plugins` install/list/uninstall +
+      a DB-served asset route with the per-manifest CSP,
+      sha256-pinned bundles fetched through the SSRF guard
+      *(v0.13.1)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)

@@ -38,6 +38,8 @@ export type RateLimitBucket =
   | 'collab:presence'
   | 'comments:create'
   | 'media:init'
+  | 'plugins:install'
+  | 'plugins:serve'
 
 export interface RateLimitConfig {
   /** window length in milliseconds */
@@ -59,6 +61,12 @@ export const RATE_LIMITS: Record<RateLimitBucket, RateLimitConfig> = {
   'collab:presence': { windowMs: 60_000, max: 120 },
   'comments:create': { windowMs: 60_000, max: 60 },
   'media:init': { windowMs: 60_000, max: 30 },
+  // installs are rare and heavy (server-side fetch fan-out) — a
+  // generous ceiling that still blocks scripted bulk installs
+  'plugins:install': { windowMs: 60_000, max: 10 },
+  // one panel mount loads ~5–10 assets; 600/min covers a session
+  // of panel open/close without inviting scrape-the-DB abuse
+  'plugins:serve': { windowMs: 60_000, max: 600 },
 }
 
 export function rateLimitsDisabled(): boolean {

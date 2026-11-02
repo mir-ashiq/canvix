@@ -3,6 +3,70 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.0] — 2026-11-02
+
+### Added
+
+- **Plugin system, part 1 of 5 — the security-boundary core (P1).**
+  First milestone of the v0.13 plugin MVP, ordered exactly as the
+  research doc prescribes: boundary first, runtime second, DX last.
+  Pure library code — no routes, no UI, no DB, **zero new npm
+  dependencies** — that every later milestone composes:
+  - **Manifest validator** (`src/lib/plugins/manifest.ts`):
+    enforces every §4.1 rule with plain-language errors collected
+    in one pass — `canvixPluginApi` major/minor gates (mismatch
+    blocks install, never a silent no-op), the id grammar with
+    `com.canvix.*` reserved for first-party, semver `engines.canvix`
+    checked against the running app, safe relative `.html` entry
+    paths (no traversal, no schemes), element-kind/field-schema
+    grammar with `initialData` coherence, and an install-time HTML
+    packaging check (no inline `<script>`, no `javascript:` URIs,
+    no `on*=` handlers — so the serve route's strict CSP stays
+    defensible). Reserved key names (`__proto__`, `constructor`,
+    `prototype`) are rejected outright.
+  - **Versioned RPC envelope** (`src/lib/plugins/rpc.ts`): the
+    one bidirectional postMessage wire format (`v`/`id`/`dir`/
+    `method`/`params` ↔ `ok`/`result`|`error`) with typed error
+    codes (`E_VERSION`, `E_MALFORMED`, `E_PAYLOAD`, `E_PERMISSION`,
+    `E_METHOD`, `E_THROTTLE`, `E_NOT_FOUND`, `E_TIMEOUT`,
+    `E_INTERNAL`), strict id/method/handshake charsets, and
+    256 KB payload caps — unknown methods are `E_METHOD`, not
+    `E_PERMISSION`, so misconfiguration is diagnosable.
+  - **Permission model** (`src/lib/plugins/permissions.ts`):
+    the manifest-declared → consent-granted → broker-enforced
+    catalog (`design:read`, `design:write`, `element:plugin`,
+    `storage`, `ui:notify`, repeatable `network:<origin>`), each
+    with the verbatim plain-language line the consent screen will
+    show, plus the §4.3 method→permission table that makes the
+    broker default-deny by construction.
+  - **Plugin data caps** (`src/lib/plugins/data-caps.ts`): one
+    clone-safety checker (JSON-typed values only, depth ≤ 12,
+    arrays ≤ 500, strings ≤ 100 k, ≤ 60 keys, no prototype-
+    pollution key names) at numerical parity with the collab op
+    validator, so plugin data rides autosave/collab/jsonb
+    unchanged.
+  - **Renderer SVG sanitizer**
+    (`src/lib/plugins/sanitize-svg.ts`): accept-or-reject — never
+    rewrite — validation of plugin renderer output before it is
+    rasterized on canvas or embedded in exports: 2 MB / 20 k
+    element / depth-64 caps, an SVG tag allowlist (no `script`,
+    `foreignObject`, `animate`/`set`, `iframe`…), no event
+    handlers or `javascript:` URIs, `data:`-only hrefs, `url()`
+    and `@import` policing in `<style>` and `style=` CSS, and
+    XXE/DOCTYPE/CDATA rejections. Hardened against comment-split
+    payloads and quadratic-backtracking inputs.
+  - **Security regression suite**
+    (`src/lib/plugins/security-regression.test.ts`): the protocol-
+    level seed of the §6 corpus — 20 hostile manifests, 16 hostile
+    SVG documents, RPC replay/spoof/smuggle attempts, and four
+    cross-module attack chains (default-deny, permission→CSP
+    flow, data→export flow, entry-HTML smuggling). Runs on every
+    PR via the existing `lint-unit` gate.
+  - Semver engine matching is a hand-rolled comparator/x-range/
+    hyphen/OR/caret/tilde range matcher (`semver.ts`, ~200 lines)
+    with spec-correct prerelease ordering — no `semver` dependency,
+    per the zero-dependency rule.
+
 ## [0.12.5] — 2026-11-02
 
 ### Added

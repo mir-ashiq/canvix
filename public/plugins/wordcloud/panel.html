@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Word Cloud — panel</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 12px;
+    color: #E7E8EE;
+    background: #0F0F13;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 100vh;
+  }
+  h1 { font-size: 13px; margin: 0; font-weight: 700; }
+  h1 small { font-weight: 400; color: #878E9C; font-size: 10px; }
+  .row { display: flex; align-items: center; gap: 6px; }
+  .grow { flex: 1; min-width: 0; }
+  label.field { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+  label.field > span { font-size: 10px; color: #878E9C; }
+  textarea, input[type="text"], select {
+    width: 100%;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    color: #E7E8EE;
+    padding: 6px 8px;
+    font: inherit;
+    outline: none;
+  }
+  textarea { resize: vertical; min-height: 88px; line-height: 1.45; }
+  textarea:focus, input:focus, select:focus { border-color: #7630D7; }
+  input[type="range"] { width: 100%; accent-color: #7630D7; }
+  button {
+    font: inherit;
+    font-weight: 600;
+    border: 0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    color: #fff;
+    background: #7630D7;
+  }
+  button:hover { background: #8B5CF6; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.ghost { background: rgba(255,255,255,0.07); color: #C9CDD6; font-weight: 500; }
+  button.ghost:hover { background: rgba(255,255,255,0.12); }
+  .preview {
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    background: #fff;
+    overflow: hidden;
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .preview svg { display: block; max-width: 100%; height: auto; }
+  .hint { font-size: 10px; color: #878E9C; line-height: 1.5; margin: 0; }
+  .status { font-size: 11px; min-height: 16px; color: #878E9C; }
+  .status.ok { color: #34D399; }
+  .status.err { color: #F87171; }
+  .badge { font-size: 9px; color: #02C0CC; background: rgba(2,192,204,0.1); border-radius: 5px; padding: 2px 6px; }
+</style>
+</head>
+<body>
+  <h1>Word Cloud <small>· com.canvix.wordcloud</small> <span class="badge" id="wc-api">connecting…</span></h1>
+
+  <label class="field">
+    <span>Text — paste anything, or pull it from this page</span>
+    <textarea id="wc-text" placeholder="Paste or type the text for your cloud…" spellcheck="false"></textarea>
+  </label>
+  <div class="row">
+    <button class="ghost grow" id="wc-use-page" type="button">Use this page&rsquo;s text</button>
+    <button class="ghost" id="wc-reroll" type="button" title="New random seed">Reroll</button>
+  </div>
+
+  <div class="row">
+    <label class="field">
+      <span>Palette</span>
+      <select id="wc-palette">
+        <option value="canvix">Canvix</option>
+        <option value="sunset">Sunset</option>
+        <option value="ocean">Ocean</option>
+        <option value="mono">Mono</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Shape</span>
+      <select id="wc-mask">
+        <option value="rect">Rectangle</option>
+        <option value="circle">Circle</option>
+      </select>
+    </label>
+  </div>
+
+  <label class="field">
+    <span>Density — <b id="wc-density-val">0.70</b></span>
+    <input type="range" id="wc-density" min="0.1" max="1" step="0.05" value="0.7">
+  </label>
+
+  <label class="field">
+    <span>Stop words (comma separated — remembered)</span>
+    <input type="text" id="wc-stops" placeholder="e.g. lorem, ipsum">
+  </label>
+
+  <div class="preview" id="wc-preview" aria-label="Word cloud preview"></div>
+  <p class="hint" id="wc-count">No words yet.</p>
+
+  <button id="wc-add" type="button" disabled>Add to canvas</button>
+  <button id="wc-update" type="button" disabled hidden>Update selected cloud</button>
+  <div class="status" id="wc-status" role="status"></div>
+
+  <p class="hint">Deterministic: the same text, seed and options always render the same cloud. No network — everything happens in this sandbox.</p>
+
+<script src="wordcloud.js"></script>
+<script src="panel.js"></script>
+</body>
+</html>

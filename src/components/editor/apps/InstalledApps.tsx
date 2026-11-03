@@ -17,9 +17,10 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Puzzle, ShieldCheck, Trash2, Power, Loader2, X, ExternalLink } from 'lucide-react'
+import { Puzzle, ShieldCheck, Trash2, Power, Loader2, X, ExternalLink, Plus } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+import { BUNDLED_PLUGINS, bundledManifestUrl } from '@/lib/plugins/firstparty'
 import type { PluginInstallView } from './PluginRuntime'
 
 const PluginRuntime = dynamic(() => import('./PluginRuntime').then((m) => m.PluginRuntime), {
@@ -40,8 +41,17 @@ interface InstallSummaryRow {
   version: string
   enabled: boolean
   entry: { panel?: string }
+  /** P5: element kinds + schema — flows into the panel's broker
+   *  record so its addPluginElement calls pass the declared-kind check */
+  elements?: { kind: string; label: string; schema?: unknown[] }[]
   permissions: { permission: string; description: string }[]
   createdAt: string
+}
+
+/** Tell the rest of the editor (the service layer) that the install
+ *  list changed mid-session — P5. */
+function broadcastPluginsChanged() {
+  window.dispatchEvent(new CustomEvent('canvix:plugins-changed'))
 }
 
 export function InstalledApps() {
@@ -80,15 +90,15 @@ export function InstalledApps() {
     }
   }, [])
 
-  const install = useCallback(async () => {
-    const manifestUrl = url.trim()
-    if (!manifestUrl) return
+  const install = useCallback(async (manifestUrl: string) => {
+    const target = manifestUrl.trim()
+    if (!target) return
     setInstalling(true)
     try {
       const res = await fetch('/api/plugins', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manifestUrl }),
+        body: JSON.stringify({ manifestUrl: target }),
       })
       const data = (await res.json().catch(() => ({}))) as { install?: InstallSummaryRow; error?: string }
       if (!res.ok || !data.install) {
@@ -98,12 +108,13 @@ export function InstalledApps() {
       setConsent(data.install) // consent screen — permissions verbatim
       setUrl('')
       await load()
+      broadcastPluginsChanged()
     } catch {
       toast({ title: 'Could not install this plugin', description: 'Network error — try again.' })
     } finally {
       setInstalling(false)
     }
-  }, [url, load])
+  }, [load])
 
   const setEnabled = useCallback(async (row: InstallSummaryRow, enabled: boolean) => {
     setInstalls((prev) => (prev ? prev.map((r) => (r.id === row.id ? { ...r, enabled } : r)) : prev))
@@ -115,6 +126,7 @@ export function InstalledApps() {
       })
       if (!res.ok) throw new Error(String(res.status))
       toast({ title: enabled ? `${row.name} enabled` : `${row.name} disabled`, description: enabled ? undefined : 'Its elements stay on the canvas as placeholders.' })
+      broadcastPluginsChanged()
     } catch {
       toast({ title: 'Could not update the plugin' })
       await load()
@@ -128,6 +140,7 @@ export function InstalledApps() {
       const res = await fetch(`/api/plugins/${encodeURIComponent(row.id)}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(String(res.status))
       toast({ title: `${row.name} removed`, description: 'Your design and its elements are untouched.' })
+      broadcastPluginsChanged()
     } catch {
       toast({ title: 'Could not remove the plugin' })
       await load()
@@ -147,9 +160,15 @@ export function InstalledApps() {
       author: open.author,
       grantedPermissions: open.permissions.map((p) => p.permission),
       entryPanel: open.entry.panel,
+      elements: open.elements ?? [],
     }
     return <PluginRuntime install={view} onClose={() => setOpenId(null)} />
   }
+
+  // bundled plugins this instance ships but the user has not installed
+  const bundledAvailable = BUNDLED_PLUGINS.filter(
+    (b) => !installs.some((r) => r.pluginId === b.pluginId),
+  )
 
   return (
     <section className="mt-4" aria-label="Installed plugin apps">
@@ -164,14 +183,14 @@ export function InstalledApps() {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') void install()
+            if (e.key === 'Enter') void install(url)
           }}
           placeholder="https://example.com/plugin/manifest.json"
           aria-label="Plugin manifest URL"
           className="flex-1 min-w-0 h-8 rounded-lg bg-white/[0.05] border border-white/10 px-2.5 text-[11px] text-white placeholder:text-white/25 focus:outline-none focus:border-[#7630D7]"
         />
         <button
-          onClick={() => void install()}
+          onClick={() => void install(url)}
           disabled={installing || !url.trim()}
           className="h-8 px-3 rounded-lg bg-[#7630D7] hover:bg-[#8B5CF6] disabled:opacity-40 text-white text-[11px] font-semibold flex items-center gap-1 shrink-0 transition-colors"
         >
@@ -179,6 +198,29 @@ export function InstalledApps() {
           Install
         </button>
       </div>
+
+      {bundledAvailable.length > 0 && (
+        <div className="mb-2.5 space-y-1.5" aria-label="Bundled plugin apps">
+          {bundledAvailable.map((b) => (
+            <button
+              key={b.slug}
+              onClick={() => void install(bundledManifestUrl(b.slug))}
+              disabled={installing}
+              className="w-full text-left rounded-xl border border-[#7630D7]/30 bg-[#7630D7]/[0.08] hover:bg-[#7630D7]/[0.16] disabled:opacity-40 p-2.5 transition-colors group"
+              aria-label={`Install ${b.name} (bundled)`}
+            >
+              <div className="flex items-center gap-1.5">
+                <Plus size={11} className="text-[#02C0CC] shrink-0" />
+                <span className="text-[12px] font-semibold text-white group-hover:text-[#02C0CC] transition-colors">
+                  {b.name}
+                </span>
+                <span className="text-[9px] font-mono text-white/30 shrink-0">bundled</span>
+              </div>
+              <div className="text-[10px] text-white/40 leading-relaxed">{b.description}</div>
+            </button>
+          ))}
+        </div>
+      )}
 
       {installs.length === 0 ? (
         <p className="text-[11px] text-white/35 leading-relaxed rounded-xl border border-dashed border-white/10 p-3">

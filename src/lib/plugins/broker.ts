@@ -123,6 +123,11 @@ export interface BrokerOptions {
   hostVersion: string
   /** 'panel' now; 'service' arrives with P4 renderers */
   context?: 'panel' | 'service'
+  /** P5: called when a service broker registers a renderer kind —
+   *  the render cache uses it to re-attempt renders that degraded
+   *  to "not responding" while this iframe was still booting (dev
+   *  cold-compiles of the serve route can outrun the 12 s grace) */
+  onKindsChanged?: () => void
   /** injectable clock for tests */
   now?: () => number
 }
@@ -147,6 +152,7 @@ export class PluginBroker {
   private readonly storage: PluginStorage
   private readonly hostVersion: string
   private readonly context: 'panel' | 'service'
+  private readonly onKindsChanged?: () => void
   private readonly now: () => number
 
   private iframeWindow: PostableWindow | null = null
@@ -167,6 +173,7 @@ export class PluginBroker {
     this.storage = opts.storage
     this.hostVersion = opts.hostVersion
     this.context = opts.context ?? 'panel'
+    this.onKindsChanged = opts.onKindsChanged
     this.now = opts.now ?? (() => Date.now())
   }
 
@@ -403,6 +410,15 @@ export class PluginBroker {
             throw new BrokerError('E_PAYLOAD', `at most ${MAX_REGISTERED_KINDS} kinds may be registered`)
           }
           this.registeredKinds.add(kind)
+          // P5: the landscape changed — renders that degraded to
+          // "not responding" while this frame booted get re-attempted
+          if (this.onKindsChanged) {
+            try {
+              this.onKindsChanged()
+            } catch {
+              // a listener bug must never break registration
+            }
+          }
         }
         return { registered: Array.from(this.registeredKinds) }
       }

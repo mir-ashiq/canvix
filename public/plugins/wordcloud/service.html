@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Word Cloud — renderer service</title>
+</head>
+<body>
+<!--
+  The hidden service frame the host mounts for every design that
+  contains Word Cloud elements. It registers the 'cloud' renderer
+  and answers host→plugin elements.render calls. No UI, no styles —
+  just the contract.
+-->
+<script src="wordcloud.js"></script>
+<script src="service.js"></script>
+</body>
+</html>

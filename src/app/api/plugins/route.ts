@@ -7,8 +7,9 @@ import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 import { withLogging, APP_VERSION } from '@/lib/observability'
 import { PLUGINS_DISABLED, pluginsEnabled } from '@/lib/plugins/flag'
-import { collectBundle } from '@/lib/plugins/install'
+import { collectBundle, type CollectOptions } from '@/lib/plugins/install'
 import { describePermission, parsePermission } from '@/lib/plugins/permissions'
+import { bundledSyntheticUrl, isBundledManifestUrl } from '@/lib/plugins/firstparty'
 
 // ─────────────────────────────────────────────────────────────
 // /api/plugins — list + install (research §4.2).
@@ -65,6 +66,11 @@ function installSummary(row: {
   })
   return {
     id: row.id,
+    // P5: the service layer keys its iframes on installId — the
+    // projection used to expose only `id`, so every service frame
+    // pointed at /api/plugins/undefined/serve/... and 404'd. Both
+    // names now carry the same value (panels read `id`).
+    installId: row.id,
     pluginId: row.pluginId,
     name: m.name ?? row.pluginId,
     description: m.description ?? null,
@@ -126,9 +132,38 @@ async function __canvix_post(req: NextRequest) {
     }
 
     const hostVersion = APP_VERSION.includes('.') ? APP_VERSION : '0.13.0'
-    const collected = await collectBundle(manifestUrl, {
-      hostAppVersion: hostVersion,
-    })
+
+    // P5: first-party bundled plugins install through the same rail,
+    // from the strict relative form /plugins/<slug>/manifest.json.
+    // A relative URL is same-origin by construction, and the files are
+    // read from this instance's own public/ directory — no network
+    // hop at all, so the SSRF guard's (correct) loopback denial never
+    // applies, and ONLY this branch may carry a com.canvix.* id.
+    const opts: CollectOptions = { hostAppVersion: hostVersion }
+    let fetchUrl = manifestUrl
+    if (isBundledManifestUrl(manifestUrl)) {
+      const slug = manifestUrl.split('/')[2]
+      opts.allowFirstParty = true
+      try {
+        // lazy import: runtimes without a filesystem (Cloudflare
+        // Workers) keep every other plugin route working — a bundled
+        // install there fails with this honest error instead
+        const { createBundledFetcher } = await import('@/lib/plugins/firstparty-fetch')
+        opts.fetcher = createBundledFetcher()
+        fetchUrl = bundledSyntheticUrl(slug)
+      } catch {
+        return NextResponse.json(
+          {
+            error:
+              'This Canvix runtime has no filesystem access, so bundled plugins cannot be installed from disk. Serve the plugin from any static host and install it by absolute URL instead.',
+            code: 'E_BUNDLED_UNAVAILABLE',
+          },
+          { status: 422 },
+        )
+      }
+    }
+
+    const collected = await collectBundle(fetchUrl, opts)
     if (!collected.ok) {
       const status =
         collected.error.code === 'E_MANIFEST' || collected.error.code === 'E_URL' ? 422 : 502

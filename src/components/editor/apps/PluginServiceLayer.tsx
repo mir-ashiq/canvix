@@ -58,9 +58,22 @@ export function PluginServiceLayer() {
   const pages = useEditorStore((s) => s.pages)
   const [installs, setInstalls] = useState<PluginInstallInfo[] | null>(null)
   const [off, setOff] = useState(false)
+  const [reloadEpoch, setReloadEpoch] = useState(0)
 
-  // fetch the install list once per editor mount; 503 (flag off) and
-  // 401 (signed out) both mean "no plugin system" — state 'off'
+  // P5: InstalledApps broadcasts this after install/uninstall/enable/
+  // disable — without it, a plugin installed mid-session never got a
+  // service frame until the next editor remount (the list used to be
+  // fetched exactly once), so freshly-generated elements sat as
+  // "not responding" placeholders.
+  useEffect(() => {
+    const onPluginsChanged = () => setReloadEpoch((n) => n + 1)
+    window.addEventListener('canvix:plugins-changed', onPluginsChanged)
+    return () => window.removeEventListener('canvix:plugins-changed', onPluginsChanged)
+  }, [])
+
+  // fetch the install list on mount and after every install-list
+  // change; 503 (flag off) and 401 (signed out) both mean "no plugin
+  // system" — state 'off'
   useEffect(() => {
     let cancelled = false
     void fetch('/api/plugins', { cache: 'no-store' })
@@ -89,7 +102,7 @@ export function PluginServiceLayer() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reloadEpoch])
 
   // push install state into the renderer cache (placeholder reasons)
   useEffect(() => {

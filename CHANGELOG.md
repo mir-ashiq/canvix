@@ -3,6 +3,94 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.4] — 2026-11-03
+
+### Added
+
+- **Plugin system, part 5 of 5 — the first-party validation plugin
+  (P5): `com.canvix.wordcloud`.** The plugin whose end-to-end use *is*
+  the v0.13 MVP acceptance test (research §5): install → consent →
+  generate → render → export → restyle → disable → uninstall, all on
+  the public API, zero per-plugin host code. **This closes the v0.13
+  plugin-system MVP.**
+  - **The bundle** (`public/plugins/wordcloud/`): manifest v1.1 with
+    one `cloud` element kind (seed/density/mask/palette schema for the
+    host-rendered properties card), panel + service entries, and
+    exactly four permissions — `design:read`, `design:write`,
+    `element:plugin`, `storage`. **No network**, proving the
+    default-deny path. `wordcloud.js` is one shared zero-dependency
+    UMD script for both frames: the plugin half of the v1 RPC envelope
+    (handshake echo, call/result correlation, host→plugin call
+    answering) plus a mulberry32-seeded spiral layout whose SVG passes
+    the P1 sanitizer by construction (asserted in the unit suite on
+    hostile inputs). Widths are estimated from character classes, so
+    output is machine-independent and determinism — the render-cache
+    contract — holds exactly. The panel pulls page text via
+    `design.getSnapshot`, previews with the same code the service
+    renders with, remembers settings via namespaced storage, and
+    generates through `addPluginElement` / `updatePluginElementData`.
+  - **First-party distribution** (`firstparty.ts` +
+    `firstparty-fetch.ts`): bundled plugins ship in
+    `public/plugins/<slug>/` and install through the SAME rail
+    (validate → sha256-pin → consent → per-user rows) from the strict
+    relative form `/plugins/<slug>/manifest.json`. The server reads
+    the files from disk behind a synthetic origin — no network hop,
+    so the SSRF guard's correct loopback denial never applies, and
+    `allowFirstParty` is true on that branch ONLY: `com.canvix.*`
+    remains reserved to what the instance itself serves. The Apps
+    grid gains a one-click "+ Word Cloud (bundled)" chip. On
+    runtimes without a filesystem (Cloudflare Workers) a bundled
+    install answers an honest error; every other plugin route is
+    unaffected (lazy import).
+  - **The acceptance e2e** (`tests/e2e-plugins/wordcloud.spec.ts`,
+    5 specs, run flag-on via the new `playwright.plugins.config.ts`,
+    port 3100): UI install with all four consent lines asserted
+    verbatim; mid-session install → panel handshake → page-text
+    collection → generate → the service frame's render observed →
+    element persisted (API truth); exported SVG embeds the real
+    cloud; restyle through the host schema card; disable → the
+    export degrades to the honest placeholder; signed-out viewer
+    inert; uninstall leaves design data byte-identical. CI's e2e job
+    runs the flag-on suite after the default one.
+  - **Plugin author docs** (`docs/PLUGINS.md`, ~350 lines): the trust
+    model, a hello-world quickstart, the manifest spec, the
+    permissions table with consent lines, the full RPC reference
+    (both directions, error codes, caps), the element/renderer
+    contract, packaging rules, hosting guide (incl. the bundled-plugin
+    path for forks), the Word Cloud walkthrough, and the FAQ
+    ("no marketplace, ever").
+
+### Fixed
+
+- **Four integration gaps the validation plugin exposed** — all
+  shipped silently in P3/P4 because every earlier e2e ran flag-off,
+  so no service frame or panel-driven element had ever really
+  mounted:
+  1. `manifest.ts` spoke a stale plugin API version — its private
+     `PLUGIN_API_MINOR = 0` copy was never bumped with the P4
+     renderer minor, so the install rail rejected every real
+     `"canvixPluginApi": "1.1"` manifest. The constants now alias
+     the RPC envelope's single source of truth.
+  2. Service frames pointed at `/api/plugins/undefined/serve/…` —
+     the install route's projection names the key `id`, the service
+     layer read `installId`; every service iframe 404'd and every
+     plugin element rendered as a "not responding" placeholder. The
+     projection now carries both names.
+  3. Panels could not generate elements — the panel host dropped the
+     broker's `caller` identity (`addPluginElement` always refused)
+     and its record carried no `elementKinds` (the declared kind was
+     refused too). Both now ride the panel record, mirroring the
+     service frame.
+  4. Mid-session installs never mounted a service frame — the
+     service layer fetched the install list once on editor mount.
+     InstalledApps now dispatches `canvix:plugins-changed` after
+     install/uninstall/enable/disable and the layer re-fetches.
+
+### Changed
+
+- Version 0.13.4; README plugin-system roadmap item updated with the
+  P5 paragraph; zero new npm dependencies.
+
 ## [0.13.3] — 2026-11-03
 
 ### Added

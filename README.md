@@ -909,7 +909,14 @@ tool descriptions so agents pick the right format.
       (default off) gates `/api/plugins` install/list/uninstall +
       a DB-served asset route with the per-manifest CSP,
       sha256-pinned bundles fetched through the SSRF guard
-      *(v0.13.1)*
+      *(v0.13.1)*; the **panel runtime** (P3) turned installs into
+      running code — the RPC broker (origin discipline by window
+      identity, one-time handshake token, 200 calls/min, default-deny
+      dispatch), a lossy read-only design-snapshot projection,
+      namespaced 256 KB plugin storage, the
+      `<iframe sandbox="allow-scripts">` panel host, and the Apps
+      grid's "Installed" section with a consent modal that lists
+      every requested permission verbatim *(v0.13.2)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)

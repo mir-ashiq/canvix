@@ -41,6 +41,10 @@ export interface PluginInstallView {
   grantedPermissions: string[]
   /** manifest entry.panel — relative path inside the bundle */
   entryPanel?: string
+  /** P5: element kinds the manifest declares — the panel record must
+   *  carry them or the broker refuses its own addPluginElement
+   *  calls ("this app does not declare an element kind …") */
+  elements?: { kind: string }[]
 }
 
 /** Cryptographically random handshake token (URL-fragment safe). */
@@ -77,6 +81,10 @@ export function PluginRuntime({ install, onClose }: { install: PluginInstallView
       pluginId: install.pluginId,
       version: install.version,
       permissions: install.grantedPermissions,
+      // P5: panels may own element kinds too (the Word Cloud panel
+      // generates 'cloud' elements) — without this the broker's
+      // declared-kind check on addPluginElement always failed
+      elementKinds: (install.elements ?? []).map((e) => e.kind),
     }
     const broker = new PluginBroker({
       install: record,
@@ -85,7 +93,12 @@ export function PluginRuntime({ install, onClose }: { install: PluginInstallView
           const s = useEditorStore.getState()
           return { pages: s.pages, currentPage: s.currentPage, readOnly: s.readOnly }
         },
-        applyAction: (action) => applyDesignAction({ ...action, type: String(action.type) }),
+        // P5: forward the broker's caller identity — the two plugin
+        // element actions are scoped to the CALLING install, and the
+        // broker derives that identity from the install row. Dropping
+        // it here made every panel-driven addPluginElement refuse.
+        applyAction: (action, caller) =>
+          applyDesignAction({ ...action, type: String(action.type) }, caller),
         notify: (text) => toast({ title: install.name, description: text }),
         closePanel: () => onClose(),
         logError: (scope, error) => console.error(`[plugin:${install.pluginId}] ${scope}`, error),

@@ -892,12 +892,12 @@ tool descriptions so agents pick the right format.
       (`CANVIX_ERROR_WEBHOOK_URL`, POSTed from Next's `onRequestError`
       hook for every unhandled error) — all off by default for
       self-hoster privacy *(v0.12.5)*
-- [ ] Plugin system (external, installable apps) — sandboxed-iframe MVP
+- [x] Plugin system (external, installable apps) — sandboxed-iframe MVP
       per `research/PLUGIN-SYSTEM.md`: manifest + permission model, iframe
-      sandbox with postMessage bridge, an “Apps” panel store, and 2–3
-      reference plugins (stock icons, charts, QR codes) to prove the
-      surface — then a community plugin registry.
-      In progress: the **security-boundary core** (P1) landed in
+      sandbox with postMessage bridge, an “Apps” panel store, and a
+      reference plugin to prove the surface. **No community registry —
+      by design** (see `docs/PLUGINS.md`'s FAQ).
+      Shipped across five slices: the **security-boundary core** (P1) landed in
       `src/lib/plugins/` — manifest validator (id/api/engines/entry/
       permissions/element-schema rules), versioned postMessage RPC
       envelope with typed error codes, the default-deny permission
@@ -930,7 +930,17 @@ tool descriptions so agents pick the right format.
       `addPluginElement`/`updatePluginElementData` actions whose
       caller identity comes from the install row — verified
       end-to-end that uninstall/crash/flag-off never loses document
-      data *(v0.13.3)*
+      data *(v0.13.3)*; and the **reference plugin** (P5) closed the
+      MVP — `com.canvix.wordcloud`, bundled in
+      `public/plugins/wordcloud/` and installable one-click from the
+      Apps grid: a seeded, fully deterministic word-cloud generator
+      (panel + service renderer, zero network permissions) whose
+      install → consent → generate → render → export → restyle →
+      disable → uninstall journey is the acceptance e2e
+      (`tests/e2e-plugins/`, flag-on). Author docs live in
+      [`docs/PLUGINS.md`](docs/PLUGINS.md) — quickstart, manifest
+      spec, RPC reference, renderer contract, hosting guide
+      *(v0.13.4)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)

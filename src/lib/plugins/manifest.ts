@@ -17,11 +17,17 @@
 
 import { checkCloneSafe } from './data-caps'
 import { normalizePermissions } from './permissions'
+import { RPC_API_MAJOR, RPC_API_MINOR } from './rpc'
 import { isValidRange, matchesRange, parseSemver } from './semver'
 
-/** Plugin API version THIS host build speaks (envelope major + additive minor). */
-export const PLUGIN_API_MAJOR = 1
-export const PLUGIN_API_MINOR = 0
+/** Plugin API version THIS host build speaks (envelope major + additive
+ *  minor). Aliased from the RPC envelope's single source of truth —
+ *  P5: the constants had drifted (manifest said 1.0 while the broker
+ *  already spoke 1.1), so every real `"canvixPluginApi": "1.1"`
+ *  manifest was rejected by the install rail even though the host
+ *  supported everything it asked for. */
+export const PLUGIN_API_MAJOR = RPC_API_MAJOR
+export const PLUGIN_API_MINOR = RPC_API_MINOR
 
 /** Hard size cap for the manifest JSON itself. */
 export const MAX_MANIFEST_BYTES = 64 * 1024

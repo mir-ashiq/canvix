@@ -120,6 +120,13 @@ jobs:
       - name: Run Playwright e2e suite
         run: npx playwright test
 
+      # v0.13.4 (P5): the plugin-system acceptance suite — same dev
+      # server, CANVIX_PLUGINS=1, port 3100, tests/e2e-plugins only.
+      # The default suite above keeps the flag OFF (its specs assert
+      # 503s and hidden UI); this one proves the flag-on world.
+      - name: Run Playwright plugins suite (CANVIX_PLUGINS=1)
+        run: npx playwright test -c playwright.plugins.config.ts
+
       - name: Upload Playwright traces (on failure)
         if: failure()
         uses: actions/upload-artifact@v4

@@ -150,6 +150,40 @@ function page_sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+/** P5 robustness: confirm a disable by its OBSERVED effects — the
+ * install list reports enabled:false and the plugin's service frame
+ * has unmounted (its title is the one that says "renderer") — instead
+ * of a fixed sleep. On slow machines a dev-mode cold compile of the
+ * PATCH route can outrun any fixed wait (observed 8.4 s on a loaded
+ * self-host box; the UI flips optimistically long before the server
+ * does), and this is exactly the precondition the export depends on:
+ * transport deregistered → settled renders dropped → placeholder. */
+async function waitForPluginDisabled(page: Page, timeoutMs = 30_000): Promise<void> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const observed = await page.evaluate(async () => {
+      let apiDisabled = false
+      try {
+        const r = await fetch('/api/plugins', { cache: 'no-store' })
+        if (r.ok) {
+          const d = (await r.json()) as { installs?: { pluginId: string; enabled: boolean }[] }
+          const row = (d.installs ?? []).find((i) => i.pluginId === 'com.canvix.wordcloud')
+          apiDisabled = !!row && row.enabled === false
+        }
+      } catch {
+        apiDisabled = false
+      }
+      const serviceFrameGone = !Array.from(document.querySelectorAll('iframe')).some(
+        (f) => f.title.includes('renderer'),
+      )
+      return apiDisabled && serviceFrameGone
+    })
+    if (observed) return
+    await page_sleep(250)
+  }
+  throw new Error(`Word Cloud not disabled (api + service frame) within ${timeoutMs}ms`)
+}
+
 async function exportSvg(page: Page): Promise<string> {
   await page.getByRole('button', { name: 'Download', exact: true }).click()
   await page.getByRole('button', { name: /^SVG\b/ }).click()
@@ -314,7 +348,7 @@ test.describe('Word Cloud bundled plugin — the MVP acceptance (flag ON)', () =
     // disable the plugin → the export must degrade to the placeholder
     await page.getByRole('button', { name: 'Apps', exact: true }).click()
     await page.getByRole('button', { name: 'Disable Word Cloud' }).click()
-    await page.waitForTimeout(1500)
+    await waitForPluginDisabled(page)
 
     const svg = await exportSvg(page)
     expect(svg).toContain('WC restyle cloud') // the honest card names the element

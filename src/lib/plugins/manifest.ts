@@ -70,7 +70,7 @@ export interface PluginManifest {
   version: string
   author?: { name: string; url?: string }
   engines: { canvix: string }
-  entry: { panel?: string }
+  entry: { panel?: string; service?: string }
   permissions: string[]
   /** every file the bundle ships — the install route fetches exactly these */
   files: string[]
@@ -289,10 +289,24 @@ export function validateManifest(raw: unknown, opts: ValidateManifestOptions): M
   const hasElements = Array.isArray(elementsRaw) && elementsRaw.length > 0
   if (!isPlainObject(entry)) {
     errors.push('entry must be an object, e.g. { "panel": "panel.html" }')
-  } else if (entry.panel !== undefined && !isSafeEntryPath(entry.panel)) {
-    errors.push('entry.panel must be a relative .html path inside the plugin (no "..", no absolute paths)')
-  } else if (entry.panel === undefined && !hasElements) {
-    errors.push('a plugin must declare entry.panel and/or elements — otherwise it does nothing')
+  } else {
+    if (entry.panel !== undefined && !isSafeEntryPath(entry.panel)) {
+      errors.push('entry.panel must be a relative .html path inside the plugin (no "..", no absolute paths)')
+    }
+    // v1.1 (P4): the service entry — the hidden iframe that hosts
+    // element renderers. Same path rules as the panel.
+    if (entry.service !== undefined && !isSafeEntryPath(entry.service)) {
+      errors.push('entry.service must be a relative .html path inside the plugin (no "..", no absolute paths)')
+    }
+    if (entry.panel === undefined && !hasElements) {
+      errors.push('a plugin must declare entry.panel and/or elements — otherwise it does nothing (a service entry alone renders nothing)')
+    }
+    // elements on the canvas need a renderer host: declaring
+    // elements[] without entry.service can only ever produce
+    // placeholders, so it fails at install (honest, not silent)
+    if (hasElements && entry.service === undefined) {
+      errors.push('a plugin with elements must declare entry.service — the hidden iframe that hosts its renderers')
+    }
   }
 
   // ── files (the install fetch list, §4.2) ──
@@ -318,6 +332,9 @@ export function validateManifest(raw: unknown, opts: ValidateManifestOptions): M
     }
     if (isPlainObject(entry) && typeof entry.panel === 'string' && !seen.has(entry.panel)) {
       errors.push(`files must include the entry panel "${entry.panel}"`)
+    }
+    if (isPlainObject(entry) && typeof entry.service === 'string' && !seen.has(entry.service)) {
+      errors.push(`files must include the service entry "${entry.service}"`)
     }
   }
 
@@ -409,9 +426,10 @@ export function validateManifest(raw: unknown, opts: ValidateManifestOptions): M
       : {}),
     engines: { canvix: (engines as { canvix: string }).canvix },
     entry: isPlainObject(entry)
-      ? entry.panel !== undefined
-        ? { panel: entry.panel as string }
-        : {}
+      ? {
+          ...(entry.panel !== undefined ? { panel: entry.panel as string } : {}),
+          ...(entry.service !== undefined ? { service: entry.service as string } : {}),
+        }
       : {},
     permissions: perms.ok ? perms.permissions : [],
     files,

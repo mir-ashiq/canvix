@@ -8,12 +8,31 @@
 
 import {
   createImageElement,
+  createPluginElement,
   createTextElement,
   type AnyElement,
   type Background,
+  type PluginElement,
   type TextElement,
 } from '@/lib/types'
+import { checkCloneSafe } from '@/lib/plugins/data-caps'
 import { useEditorStore } from '@/store/editor-store'
+
+/** Who is calling applyDesignAction. Present ONLY when a plugin's
+ *  broker drives an action — the plugin identity is stamped from the
+ *  install row (never from the wire payload), so one plugin can
+ *  never forge elements in another plugin's namespace. */
+export interface ActionCaller {
+  pluginId: string
+  pluginVersion: string
+  /** kinds the install's manifest declared (elements[].kind) */
+  elementKinds: readonly string[]
+}
+
+/** Byte cap for one plugin element's data — matches the plugin
+ *  storage value cap so a single element can never out-grow the
+ *  RPC/autosave budgets that carry it (§4.7). */
+const PLUGIN_ELEMENT_DATA_MAX_BYTES = 64 * 1024
 
 export interface DesignAction {
   type: string
@@ -65,8 +84,9 @@ function resolveIds(ids: string[] | undefined): string[] {
   return (ids ?? []).filter((id) => typeof id === 'string' && valid.has(id))
 }
 
-/** Execute one action. Returns a human-readable result message. */
-export async function applyDesignAction(action: DesignAction): Promise<string> {
+/** Execute one action. Returns a human-readable result message.
+ *  `caller` is set when a plugin broker drives the action. */
+export async function applyDesignAction(action: DesignAction, caller?: ActionCaller): Promise<string> {
   const store = useEditorStore.getState()
   const { width, height } = store
 
@@ -110,6 +130,58 @@ export async function applyDesignAction(action: DesignAction): Promise<string> {
       })
       useEditorStore.getState().addElement(el)
       return 'Image added'
+    }
+
+    // v0.13 (P4): plugin-owned canvas elements (§4.3 whitelist).
+    // Everything plugin-supplied is re-validated here — the caller
+    // identity comes from the install row, the kind from the manifest,
+    // the data from the collab caps. The element then rides the normal
+    // addElement path: undoable, HLC-stamped, collab-broadcast.
+    case 'addPluginElement': {
+      if (!caller) return 'Plugin elements can only be added by installed apps'
+      const kind = String(action.kind ?? '')
+      if (!caller.elementKinds.includes(kind)) {
+        return `This app does not declare an element kind "${kind.slice(0, 40)}"`
+      }
+      const data = (action.data ?? {}) as Record<string, unknown>
+      const dataErr = checkCloneSafe(data, { maxBytes: PLUGIN_ELEMENT_DATA_MAX_BYTES })
+      if (dataErr) return `Element data ${dataErr.replace(/^value /, '')}`
+      const width = Math.min(8000, Math.max(16, Math.round(Number(action.width) || 480)))
+      const height = Math.min(8000, Math.max(16, Math.round(Number(action.height) || 320)))
+      const el = createPluginElement(caller.pluginId, kind, caller.pluginVersion, data, {
+        width,
+        height,
+        x: Number.isFinite(Number(action.x)) ? Math.round(Number(action.x)) : Math.round(width * 0.1),
+        y: Number.isFinite(Number(action.y)) ? Math.round(Number(action.y)) : Math.round(height * 0.1),
+        ...(typeof action.name === 'string' && action.name.trim() ? { name: action.name.slice(0, 60) } : {}),
+      })
+      useEditorStore.getState().addElement(el)
+      return 'Element added'
+    }
+
+    // v0.13 (P4): restyle in place — only elements OWNED by the calling
+    // plugin, only a data patch. The broker refuses foreign pluginIds
+    // before this runs; this is the second, structural check.
+    case 'updatePluginElementData': {
+      if (!caller) return 'Plugin elements can only be edited by installed apps'
+      const ids = resolveIds(action.ids)
+      if (!ids.length) return 'No matching elements'
+      const patch = (action.patch ?? {}) as Record<string, unknown>
+      const patchErr = checkCloneSafe(patch, { maxBytes: PLUGIN_ELEMENT_DATA_MAX_BYTES })
+      if (patchErr) return `Element data ${patchErr.replace(/^value /, '')}`
+      const page = currentPageElements()
+      const mine: PluginElement[] = []
+      for (const el of flatElements(page)) {
+        if (ids.includes(el.id) && el.type === 'plugin' && el.pluginId === caller.pluginId) mine.push(el)
+      }
+      if (!mine.length) return 'No elements from this app match'
+      for (const el of mine) {
+        const merged = { ...el.data, ...patch }
+        const mergedErr = checkCloneSafe(merged, { maxBytes: PLUGIN_ELEMENT_DATA_MAX_BYTES })
+        if (mergedErr) return `Merged element data ${mergedErr.replace(/^value /, '')}`
+        useEditorStore.getState().updateElements([el.id], { data: merged } as Partial<PluginElement>)
+      }
+      return `Updated ${mine.length} element${mine.length > 1 ? 's' : ''}`
     }
 
     case 'updateElements': {
@@ -393,6 +465,8 @@ export function describeAction(action: DesignAction): string {
   switch (action.type) {
     case 'addText': return `Add text: “${String(action.text ?? '').slice(0, 40)}${String(action.text ?? '').length > 40 ? '…' : ''}”`
     case 'addImage': return `Add image (${String(action.src ?? '').startsWith('data:') ? 'embedded' : 'media library'})`
+    case 'addPluginElement': return `Add ${String(action.kind ?? 'plugin')} element`
+    case 'updatePluginElementData': return `Update ${action.ids?.length ?? 0} plugin element${(action.ids?.length ?? 0) === 1 ? '' : 's'}`
     case 'updateElements': return `Update ${action.ids?.length ?? 0} element${(action.ids?.length ?? 0) === 1 ? '' : 's'}`
     case 'deleteElements': return `Delete ${action.ids?.length ?? 0} element${(action.ids?.length ?? 0) === 1 ? '' : 's'}`
     case 'moveElements': return action.to ? `Move to ${action.to}` : 'Move elements'

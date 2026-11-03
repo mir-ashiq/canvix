@@ -23,11 +23,22 @@ import { checkCloneSafe } from './data-caps'
 
 /** Protocol major of THIS host build. */
 export const RPC_API_MAJOR = 1
-/** Additive minor — grows when new methods/fields are added. */
-export const RPC_API_MINOR = 0
+/** Additive minor — grows when new methods/fields are added.
+ *  v1.1 (P4): the renderer contract is live — host→plugin
+ *  `elements.render` calls with results up to
+ *  MAX_RENDER_RESULT_BYTES, and `elements.registerRenderer`
+ *  accepts service-iframe callers. */
+export const RPC_API_MINOR = 1
 
 /** Byte cap per message — the collab op cap (§4.7). */
 export const MAX_RPC_BYTES = 256 * 1024
+
+/** Renderer results may be full SVG documents — the §4.5 output cap
+ *  (MAX_PLUGIN_SVG_BYTES) plus envelope overhead. This is the ONE
+ *  sanctioned exception to MAX_RPC_BYTES: it applies only to the
+ *  result of a host→plugin `elements.render` call, and the plugin's
+ *  svg still has to pass the sanitizer before the host uses it. */
+export const MAX_RENDER_RESULT_BYTES = 2 * 1024 * 1024 + 64 * 1024
 
 export type RpcErrorCode =
   | 'E_VERSION' // protocol major mismatch
@@ -154,8 +165,19 @@ export function parseRpcCall(
   }
 }
 
-/** Parse a RESULT envelope (either direction). */
-export function parseRpcResult(data: unknown): ParseOk<RpcResult> | ParseErr {
+/** Parse a RESULT envelope (either direction).
+ *  `maxResultBytes` widens the byte AND per-string caps for the
+ *  renderer-contract result (§4.5) — default stays the standard RPC
+ *  cap. A render result is legitimately ONE big string (the svg). */
+export function parseRpcResult(
+  data: unknown,
+  opts: { maxResultBytes?: number } = {},
+): ParseOk<RpcResult> | ParseErr {
+  const maxBytes = opts.maxResultBytes ?? MAX_RPC_BYTES
+  const caps =
+    maxBytes > MAX_RPC_BYTES
+      ? { maxBytes, maxString: maxBytes }
+      : { maxBytes }
   const common = checkCommon(data)
   if (!('v' in common)) return common
   const raw = data as Record<string, unknown>
@@ -164,7 +186,7 @@ export function parseRpcResult(data: unknown): ParseOk<RpcResult> | ParseErr {
   }
   if (raw.ok === true) {
     if (raw.result !== undefined) {
-      const err = checkCloneSafe(raw.result, { maxBytes: MAX_RPC_BYTES })
+      const err = checkCloneSafe(raw.result, caps)
       if (err) return { ok: false, code: 'E_PAYLOAD', message: err }
     }
     return { ok: true, value: { v: RPC_API_MAJOR, id: common.id, dir: 'result', ok: true, result: raw.result } }

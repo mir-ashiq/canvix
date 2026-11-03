@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import {
   Bold, Italic, Underline, Strikethrough, CaseUpper, AlignLeft, AlignCenter, AlignRight,
   AlignJustify, Minus, Plus, LetterText, Percent, Sparkles, Move, CopyPlus, Trash2,
@@ -9,14 +9,16 @@ import {
   AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd,
   FlipHorizontal, FlipVertical, Sun, Contrast, Palette, RotateCcw, Replace, Lock, LockOpen,
   Layers, SquareDashed, Crop, Spline, Table2, Rows3, Columns3, Trash, Upload, ExternalLink,
-  Music, Film, Play, Repeat, Volume2, VolumeX, SlidersHorizontal, Activity,
+  Music, Film, Play, Repeat, Volume2, VolumeX, SlidersHorizontal, Activity, Puzzle, LayoutGrid,
 } from 'lucide-react'
 import { useEditorStore, selectedElements, currentPageData } from '@/store/editor-store'
-import type { AudioElement, EmbedElement, FrameElement, ImageElement, LineElement, ShapeElement, StickerElement, TableElement, TextElement, VideoElement, AnyElement, FrameShape } from '@/lib/types'
+import type { AudioElement, EmbedElement, FrameElement, ImageElement, LineElement, PluginElement, ShapeElement, StickerElement, TableElement, TextElement, VideoElement, AnyElement, FrameShape } from '@/lib/types'
 import { FRAME_SHAPES, isGroup } from '@/lib/types'
 import { TEXT_EFFECTS } from '@/lib/types'
 import { beatSourceOf } from '@/lib/media/beat-detect'
 import { cn } from '@/lib/utils'
+import { getPluginSystemState, subscribePluginSystem } from '@/lib/plugins/renderer-cache'
+import { applyDesignAction } from '@/lib/design-actions'
 import { FontDropdown } from './toolbar/FontDropdown'
 import { ColorMenu } from './toolbar/ColorMenu'
 import { ToolbarPopover, SliderRow, IconTile } from './toolbar/popover-kit'
@@ -63,6 +65,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
   const table = first.type === 'table' ? (first as TableElement) : null
   const frame = first.type === 'frame' ? (first as FrameElement) : null
   const embed = first.type === 'embed' ? (first as EmbedElement) : null
+  const plugin = first.type === 'plugin' ? (first as PluginElement) : null
   const audio = first.type === 'audio' ? (first as AudioElement) : null
   const video = first.type === 'video' ? (first as VideoElement) : null
   // v0.11: the page's beat grid — powers the Beat Sync popover below
@@ -385,6 +388,15 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
               onCommit={() => update(ids, { opacity: embed.opacity })}
               format={(v) => `${100 - v}% transparent`} />
           </ToolbarPopover>
+          <Divider />
+          <PositionPopover ids={ids} count={1} element={first} />
+        </>
+      ) : plugin ? (
+        <>
+          <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0 flex items-center gap-1.5">
+            <Puzzle size={13} /> {plugin.name?.trim() || plugin.kind}
+          </span>
+          <PluginToolbar plugin={plugin} ids={ids} />
           <Divider />
           <PositionPopover ids={ids} count={1} element={first} />
         </>
@@ -846,3 +858,95 @@ function TBtn({ children, onClick, title, ariaLabel, disabled, danger, className
 }
 
 const Divider = () => <span className="w-px h-5 bg-white/15 mx-1 shrink-0" />
+
+// ── v0.13 (P4): plugin element properties slot ───────────────
+
+/** One schema-driven field row (host-rendered — no plugin code runs
+ *  in the toolbar; research §4.4 "UI — properties slot"). */
+function PluginToolbar({ plugin, ids }: { plugin: PluginElement; ids: string[] }) {
+  const setPanel = useEditorStore((s) => s.setPanel)
+  const system = useSyncExternalStore(subscribePluginSystem, getPluginSystemState, getPluginSystemState)
+
+  const install = system.installs.get(plugin.pluginId)
+  const spec = install?.elements.find((e) => e.kind === plugin.kind)
+  const patchData = async (patch: Record<string, unknown>) => {
+    if (!install) return
+    // host-side editing acts with the install's identity (the host is
+    // trusted; the caller scoping exists so PLUGINS cannot forge each
+    // other's elements — the user owns the design)
+    await applyDesignAction(
+      { type: 'updatePluginElementData', ids, patch },
+      { pluginId: install.pluginId, pluginVersion: install.version, elementKinds: install.elements.map((e) => e.kind) },
+    )
+  }
+
+  return (
+    <>
+      {spec ? (
+        spec.schema.slice(0, 5).map((raw) => {
+          const f = raw as { key: string; type: string; label: string; min?: number; max?: number; step?: number; maxLength?: number; options?: { value: string; label: string }[] }
+          const value = plugin.data[f.key]
+          const inputCls = 'h-7 rounded-lg bg-white/[0.07] border border-white/10 px-1.5 text-[11px] text-white outline-none focus:border-[#7630D7] [color-scheme:dark]'
+          return (
+            <label key={f.key} className="flex items-center gap-1.5 shrink-0" title={f.label}>
+              <span className="text-[10px] text-white/45">{f.label}</span>
+              {f.type === 'text' && (
+                <input
+                  defaultValue={typeof value === 'string' ? value : ''}
+                  maxLength={f.maxLength ?? 200}
+                  onBlur={(e) => { const v = e.target.value; if (v !== (plugin.data[f.key] ?? '')) void patchData({ [f.key]: v }) }}
+                  className={cn(inputCls, 'w-28')}
+                  aria-label={f.label}
+                />
+              )}
+              {(f.type === 'number' || f.type === 'range') && (
+                <input
+                  type="number"
+                  defaultValue={Number(value ?? f.min ?? 0)}
+                  min={f.min}
+                  max={f.max}
+                  step={f.step ?? 1}
+                  onBlur={(e) => {
+                    const n = Number(e.target.value)
+                    const clamped = Math.min(f.max ?? Infinity, Math.max(f.min ?? -Infinity, Number.isFinite(n) ? n : (f.min ?? 0)))
+                    if (clamped !== Number(plugin.data[f.key] ?? NaN)) void patchData({ [f.key]: clamped })
+                  }}
+                  className={cn(inputCls, 'w-16 text-center')}
+                  aria-label={f.label}
+                />
+              )}
+              {f.type === 'color' && (
+                <input
+                  type="color"
+                  defaultValue={typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#7630D7'}
+                  onBlur={(e) => { const v = e.target.value; if (v !== plugin.data[f.key]) void patchData({ [f.key]: v }) }}
+                  className="h-7 w-8 rounded-lg border border-white/10 bg-transparent cursor-pointer"
+                  aria-label={f.label}
+                />
+              )}
+              {f.type === 'select' && (
+                <select
+                  defaultValue={typeof value === 'string' ? value : (f.options?.[0]?.value ?? '')}
+                  onChange={(e) => { const v = e.target.value; if (v !== plugin.data[f.key]) void patchData({ [f.key]: v }) }}
+                  className={cn(inputCls, 'w-24')}
+                  aria-label={f.label}
+                >
+                  {(f.options ?? []).map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              )}
+            </label>
+          )
+        })
+      ) : (
+        <span className="text-[11px] text-white/40 shrink-0" title="Install the app to edit this element's settings">
+          {install ? `"${plugin.kind}" settings` : 'App not installed — settings unavailable'}
+        </span>
+      )}
+      <TBtn onClick={() => setPanel('apps')} title="Open in app (Apps panel)" ariaLabel="Open in app">
+        <LayoutGrid size={14} />
+      </TBtn>
+    </>
+  )
+}

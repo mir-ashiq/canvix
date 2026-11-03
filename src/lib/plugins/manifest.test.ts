@@ -15,8 +15,8 @@ const WORDCLOUD = {
   version: '1.0.0',
   author: { name: 'Canvix team' },
   engines: { canvix: '>=0.13.0 <0.14.0' },
-  entry: { panel: 'panel.html' },
-  files: ['panel.html', 'app.js'],
+  entry: { panel: 'panel.html', service: 'service.html' },
+  files: ['panel.html', 'service.html', 'app.js'],
   permissions: ['design:read', 'design:write', 'element:plugin', 'storage'],
   elements: [
     {
@@ -43,7 +43,7 @@ interface ManifestFixture {
   version?: string
   author?: { name: string }
   engines: { canvix: string }
-  entry: { panel?: string }
+  entry: { panel?: string; service?: string }
   permissions: string[]
   files?: string[]
   elements?: Array<{
@@ -180,15 +180,35 @@ describe('validateManifest — structural rules', () => {
   it('entry paths must be relative and safe (files list follows the entry)', () => {
     for (const bad of ['/abs.html', '../escape.html', 'a/../b.html', 'a\\\\b.html', 'no-ext', 'x.ht', 'a//b.html', 'https://evil/x.html']) {
       const m = base()
-      m.entry = { panel: bad }
+      m.entry = { service: 'service.html', panel: bad }
       expect(validateManifest(m, HOST).ok, `entry "${bad}"`).toBe(false)
     }
     for (const good of ['panel.html', 'ui/panel.html', 'a/b/c/d/panel.html']) {
       const m = base()
-      m.entry = { panel: good }
-      m.files = [good, 'app.js']
+      m.entry = { service: 'service.html', panel: good }
+      m.files = ['service.html', good, 'app.js']
       expect(validateManifest(m, HOST).ok, `entry "${good}"`).toBe(true)
     }
+  })
+
+  it('entry.service follows the same path rules as the panel', () => {
+    for (const bad of ['/svc.html', '../svc.html', 'svc.js', 'a//b.html']) {
+      const m = base()
+      m.entry.service = bad
+      expect(validateManifest(m, HOST).ok, `service "${bad}"`).toBe(false)
+    }
+    const m = base()
+    m.entry.service = 'render/service.html'
+    m.files = ['panel.html', 'render/service.html', 'app.js']
+    expect(validateManifest(m, HOST).ok).toBe(true)
+  })
+
+  it('elements without a service entry can only ever placeholder → rejected at install', () => {
+    const m = base()
+    delete m.entry.service
+    const r = validateManifest(m, HOST)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.errors.join('\n')).toMatch(/entry.service/)
   })
 
   it('a plugin with neither entry.panel nor elements does nothing → rejected', () => {

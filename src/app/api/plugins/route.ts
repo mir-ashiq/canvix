@@ -54,7 +54,8 @@ function installSummary(row: {
     description?: string
     author?: { name?: string }
     permissions?: string[]
-    entry?: { panel?: string }
+    entry?: { panel?: string; service?: string }
+    elements?: { kind: string; label: string; schema?: unknown[] }[]
   }
   const permissions = (m.permissions ?? []).map((p) => {
     const parsed = parsePermission(p)
@@ -71,6 +72,14 @@ function installSummary(row: {
     version: row.version,
     enabled: row.enabled,
     entry: m.entry ?? {},
+    // P4: element kinds + schema — powers the service layer (which
+    // plugins need iframes) and the properties slot (host-rendered
+    // inputs). initialData never crosses — the plugin supplies it.
+    elements: (m.elements ?? []).map((e) => ({
+      kind: e.kind,
+      label: e.label,
+      schema: Array.isArray(e.schema) ? e.schema : [],
+    })),
     permissions,
     createdAt: row.createdAt,
   }

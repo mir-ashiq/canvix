@@ -36,6 +36,12 @@ import type { ImageElement, PageData } from '@/lib/types'
 
 const CanvasStage = dynamic(() => import('./canvas/CanvasStage'), { ssr: false })
 
+// v0.13 (P4): hidden plugin service iframes — mounted only when the
+// open design actually contains plugin elements and the install
+// list says the plugin is enabled. Flag-off instances fetch once,
+// get 503, and never download the frame chunk at all.
+const PluginServiceLayer = dynamic(() => import('./apps/PluginServiceLayer').then((m) => m.PluginServiceLayer), { ssr: false })
+
 const PANEL_TITLES: Record<Exclude<PanelId, null>, string> = {
   templates: 'Templates',
   elements: 'Elements',
@@ -469,6 +475,8 @@ export default function Editor() {
           <CanvasStage />
           <PageBar />
           <ZoomControls />
+          {/* plugin renderers for elements on the canvas (hidden iframes) */}
+          <PluginServiceLayer />
         </main>
 
         {/* v0.5: Animate panel — canva-style right side panel */}

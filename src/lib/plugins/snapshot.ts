@@ -15,6 +15,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { AnyElement, PageData } from '@/lib/types'
+import { checkCloneSafe } from './data-caps'
 
 /** Strings longer than this are dropped (image dataURLs etc.). */
 export const SNAPSHOT_FIELD_CHAR_CAP = 1024
@@ -91,6 +92,17 @@ function projectElement(el: AnyElement): PluginElementView {
       if (Array.isArray(value)) {
         view.children = value.map((c) => projectElement(c as AnyElement))
       }
+      continue
+    }
+    // plugin elements: `data` is the owning plugin's own output —
+    // it wrote those bytes through the capped addPluginElement /
+    // updatePluginElementData actions, so it gets them back whole
+    // (arrays and nesting included). A foreign plugin reading the
+    // snapshot sees the same copy — capped, read-only, its own to
+    // interpret or ignore.
+    if (el.type === 'plugin' && key === 'data') {
+      if (checkCloneSafe(value) === null) view.data = value
+      else omitted.push('data')
       continue
     }
     if (HEAVY_FIELDS.has(key)) {

@@ -3,6 +3,87 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.3] — 2026-11-03
+
+### Added
+
+- **Plugin system, part 4 of 5 — plugin elements & the renderer
+  contract (P4).** The research §4.5 milestone: an installed plugin
+  can now put its OWN element types on the canvas, draw them from
+  inside its sandbox, and have them ride every pipeline a native
+  element rides — save, versions, collab, offline merge, SVG/PNG/
+  JPG/PDF/video export — with zero per-plugin host code. 56 new
+  unit tests + a durability e2e; zero new npm dependencies.
+  - **The `plugin` element** (`src/lib/types.ts`): ONE new union
+    member — `type: 'plugin'` with `pluginId`, `kind`,
+    `pluginVersion` and a capped `data` record. All per-plugin
+    variety lives in `data`; the structural move that dodges the
+    "three independent switches" problem (§4.4). Factory +
+    `addPluginElement` / `updatePluginElementData` design actions:
+    caller identity is stamped from the INSTALL row (a plugin can
+    never forge another plugin's namespace or edit its elements),
+    kinds checked against the manifest, data against the collab
+    caps (64 KB/element). Undoable, HLC-stamped, collab-broadcast —
+    ordinary elements, only their pixels are delegated.
+  - **Renderer contract** (`broker.ts` + `renderer-cache.ts`):
+    service iframes answer host→plugin `elements.render` calls
+    (`{ kind, data, width, height, mode }`, 10 s deadline →
+    E_TIMEOUT → placeholder). Output is `{ svg }` (≤ 2 MB, through
+    the P1 accept-or-reject sanitizer — the one place untrusted
+    SVG enters the host) or `{ raster }` (base64 png/jpeg/gif/webp
+    data URL). `elements.registerRenderer` is service-context only
+    and manifest-scoped. Render results ride a widened result
+    envelope (2 MB + slack); every other result keeps the 256 KB
+    RPC cap (enforced after correlation).
+  - **The render cache** (`renderer-cache.ts`): module-level store
+    keyed by `(pluginId, elementId, hash(data), size, mode)` —
+    restyles and resizes re-render, everything else is a hit;
+    in-flight dedupe; LRU 120; transport unmount drops settled
+    renders. Failure philosophy (§4.5/§4.9): error/timeout/missing
+    plugin → a neutral placeholder card, never a thrown exception,
+    never a blocked editor.
+  - **Service iframe host** (`PluginServiceLayer` +
+    `PluginServiceFrame`): one hidden
+    `<iframe sandbox="allow-scripts">` per installed plugin with
+    elements in the open design, loading the manifest's
+    `entry.service` through the DB-served CSP-pinned route; the
+    frame's broker registers with the cache as the plugin's render
+    transport. Frames derive purely from present elements (a
+    plugin with no elements mounts no iframe); flag off / signed
+    out / offline → zero iframes and placeholders.
+  - **Canvas + exports**: `PluginNode` (element-node) draws the
+    sanitized data URL as a Konva Image or the placeholder card
+    with the honest §4.9 reason (checking / disabled on this
+    instance / install hint / disabled app / not responding).
+    svg-export embeds sanitized svg as a nested `<svg>` pinned to
+    the element box (raster output embeds as `<image>`); video
+    export awaits renders into its image map; PNG/JPG/PDF ride the
+    live stage. The ExportDialog primes renders before SVG export.
+    Missing renderers still export a visible placeholder card —
+    the element is never silently dropped from a file.
+  - **Properties slot** (`PropertiesBar`): selecting a plugin
+    element shows a host-rendered schema card (text/number/color/
+    select inputs from the manifest `schema` — no plugin code in
+    the toolbar) + an "Open in app" button; edits go through the
+    same scoped `updatePluginElementData` action.
+  - **Snapshot projection**: `design.getSnapshot` returns plugin
+    elements with their `data` verbatim (arrays and nesting
+    included — it is the plugin's own capped output) so panels can
+    restyle their elements; `_m`/bookkeeping still never crosses.
+  - **Manifest v1.1** (`canvixPluginApi` minor bump): optional
+    `entry.service` (same path rules as the panel, must be in
+    `files`); declaring `elements[]` without `entry.service` is
+    rejected at install — elements that could only ever render
+    placeholders fail honestly, upfront.
+  - **Durability, verified end-to-end** (`plugin-elements.spec.ts`):
+    a design containing plugin elements from a plugin that is not
+    available opens without a crash on a flag-off instance, stays
+    editable, and round-trips load → placeholder → edit → autosave
+    with the element byte-identical at the API layer. Unit suite
+    pins the same for offline merge (LWW by id, type-agnostic) and
+    `validateOpPayload`. Uninstall/disable/flag-off never touch
+    document data — the §4.9 promise, now executable.
+
 ## [0.13.2] — 2026-11-02
 
 ### Added

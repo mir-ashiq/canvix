@@ -18,6 +18,8 @@ test.describe('Apps panel with plugin runtime mounted (flag off)', () => {
     page.on('pageerror', (err) => errors.push(String(err)))
 
     await page.goto('/')
+    // Next.js dev tools indicator overlays the first rail button in dev mode
+    await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' })
     await page.getByRole('button', { name: /start designing/i }).first().click()
     await expect(page.getByLabel('Create a design')).toBeVisible()
 

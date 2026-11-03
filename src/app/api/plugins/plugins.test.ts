@@ -224,6 +224,65 @@ describe('POST /api/plugins — install', () => {
       where: { install: { userId: USER.id, pluginId: 'net.example.wordcloud' } },
     })
   })
+
+  // ── P5: first-party bundled installs ─────────────────────────
+
+  it('the projection carries installId === id (the service layer keys on it)', async () => {
+    dbMock.pluginInstall.findMany.mockResolvedValue([
+      {
+        id: 'install-9',
+        pluginId: 'com.canvix.wordcloud',
+        version: '1.0.0',
+        enabled: true,
+        createdAt: new Date(),
+        manifest: GOOD_BUNDLE.manifest,
+      },
+    ])
+    const res = await listInstalls(req('http://canvix.test/api/plugins'))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.installs[0].installId).toBe('install-9')
+    expect(body.installs[0].id).toBe('install-9')
+  })
+
+  it('a bundled relative URL installs with allowFirstParty + the synthetic origin', async () => {
+    const calls: unknown[][] = []
+    collectBundleMock.mockImplementation(async (...args: unknown[]) => {
+      calls.push(args)
+      return { ok: true, bundle: GOOD_BUNDLE }
+    })
+    const res = await installPlugin(
+      req('http://canvix.test/api/plugins', {
+        method: 'POST',
+        body: '{"manifestUrl":"/plugins/wordcloud/manifest.json"}',
+      }),
+    )
+    expect(res.status).toBe(201)
+    expect(calls.length).toBe(1)
+    const [url, opts] = calls[0] as [string, { allowFirstParty?: boolean }]
+    expect(url).toBe('http://canvix.bundled.internal/plugins/wordcloud/manifest.json')
+    expect(opts.allowFirstParty).toBe(true)
+  })
+
+  it('an ordinary absolute URL NEVER gets the first-party grant', async () => {
+    const calls: unknown[][] = []
+    collectBundleMock.mockImplementation(async (...args: unknown[]) => {
+      calls.push(args)
+      return { ok: true, bundle: GOOD_BUNDLE }
+    })
+    const res = await installPlugin(
+      req('http://canvix.test/api/plugins', {
+        method: 'POST',
+        // same-origin-looking but absolute, and not a bundled slug:
+        // must go through safeFetch with allowFirstParty unset
+        body: '{"manifestUrl":"http://canvix.test/plugins/someone-else/manifest.json"}',
+      }),
+    )
+    expect(res.status).toBe(201)
+    const [url, opts] = calls[0] as [string, { allowFirstParty?: boolean }]
+    expect(url).toBe('http://canvix.test/plugins/someone-else/manifest.json')
+    expect(opts.allowFirstParty).toBeUndefined()
+  })
 })
 
 describe('GET /api/plugins/[id]/serve/[...path]', () => {

@@ -134,6 +134,23 @@ export function setRenderTransport(pluginId: string, transport: RenderTransport 
   for (const cb of systemListeners) cb()
 }
 
+/**
+ * P5: a service broker just registered a renderer kind. Renders that
+ * degraded to "not responding" while its iframe was still booting (a
+ * dev-mode cold compile of the serve route can outrun the 12 s boot
+ * grace) get one more attempt — their settled ERROR cells are dropped
+ * and the broker-epoch bump re-kicks every canvas node watching this
+ * plugin. OK renders are never re-requested (deterministic contract).
+ */
+export function notifyRendererKindsChanged(pluginId: string): void {
+  brokerEpoch += 1
+  for (const [key, cell] of renderCache) {
+    if (!key.startsWith(pluginId + '|')) continue
+    if (cell.settled && cell.entry.status === 'error') renderCache.delete(key)
+  }
+  for (const cb of systemListeners) cb()
+}
+
 /** Placeholder reason for an element whose plugin cannot render it
  *  right now (§4.9 matrix). null = render normally. */
 export function placeholderReason(el: PluginElement): { reason: 'loading' | 'off' | 'missing' | 'disabled'; label: string } | { reason: 'render'; label: null } | null {

@@ -19,7 +19,11 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { PluginBroker, type BrokerInstall } from '@/lib/plugins/broker'
 import { PluginStorage } from '@/lib/plugins/plugin-storage'
-import { setRenderTransport, type PluginInstallInfo } from '@/lib/plugins/renderer-cache'
+import {
+  notifyRendererKindsChanged,
+  setRenderTransport,
+  type PluginInstallInfo,
+} from '@/lib/plugins/renderer-cache'
 import { applyDesignAction } from '@/lib/design-actions'
 import { useEditorStore } from '@/store/editor-store'
 import { toast } from '@/hooks/use-toast'
@@ -84,6 +88,10 @@ export function PluginServiceFrame({ install }: ServiceFrameProps) {
       storage: new PluginStorage(install.pluginId),
       hostVersion,
       context: 'service',
+      // P5: the moment this frame's renderer registers, renders that
+      // degraded while it was booting get re-attempted (dev cold
+      // compiles of the serve route can outrun the 12 s boot grace)
+      onKindsChanged: () => notifyRendererKindsChanged(install.pluginId),
     })
     const onMessage = (ev: MessageEvent) => broker.handleMessage(ev)
     broker.attach(frame, handshake, onMessage)

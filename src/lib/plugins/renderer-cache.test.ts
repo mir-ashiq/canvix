@@ -8,6 +8,7 @@ import {
   requestRender,
   setPluginSystemState,
   setRenderTransport,
+  notifyRendererKindsChanged,
   getRenderEntry,
   type PluginInstallInfo,
   type RenderTransport,
@@ -286,5 +287,59 @@ describe('install state store', () => {
     expect(getPluginSystemState().installs.size).toBe(2)
     setPluginSystemState('ready', [])
     expect(getPluginSystemState().installs.size).toBe(0)
+  })
+})
+
+describe('P5 — registration recovers renders that outran the boot grace', () => {
+  it('a settled "not responding" error is re-attempted when kinds register late', async () => {
+    setPluginSystemState('ready', [install()])
+    // the frame is mounted but NOT ready yet (booting — dev cold compile)
+    const booting = fakeTransport({ isHandshaked: false, kinds: new Set() })
+    setRenderTransport('com.example.test', booting)
+
+    const key = renderKey(el(), 'canvas')
+    requestRender(el(), 'canvas')
+    // boot grace expires before the handshake — honest degradation…
+    await vi.advanceTimersByTimeAsync(13_000)
+    expect(getRenderEntry(key)).toMatchObject({ status: 'error' })
+
+    // …and the moment the broker registers its kind, the settled error
+    // is dropped and a re-request goes through the now-ready transport
+    const ready = fakeTransport()
+    setRenderTransport('com.example.test', ready)
+    notifyRendererKindsChanged('com.example.test')
+    expect(getRenderEntry(key)).toBeUndefined() // stale error dropped
+
+    requestRender(el(), 'canvas')
+    const entry = await awaitRender(el(), 'canvas')
+    expect(entry.status).toBe('ok')
+    expect(ready.callPlugin).toHaveBeenCalled()
+  })
+
+  it('OK renders are never dropped by a kinds change (determinism)', async () => {
+    setPluginSystemState('ready', [install()])
+    const t = fakeTransport()
+    setRenderTransport('com.example.test', t)
+    const key = renderKey(el(), 'canvas')
+    requestRender(el(), 'canvas')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(getRenderEntry(key)).toMatchObject({ status: 'ok' })
+
+    notifyRendererKindsChanged('com.example.test')
+    expect(getRenderEntry(key)).toMatchObject({ status: 'ok' }) // untouched
+  })
+
+  it('a kinds change never drops ANOTHER plugin\u2019s cells', async () => {
+    setPluginSystemState('ready', [install()])
+    setRenderTransport('com.example.test', fakeTransport())
+    const key = renderKey(el(), 'canvas')
+    requestRender(el(), 'canvas')
+    await vi.advanceTimersByTimeAsync(13_000)
+    // com.example.test rendered fine; simulate a late registration by a
+    // DIFFERENT plugin — our cell must survive untouched
+    const key2 = renderKey(el({ pluginId: 'net.other.plugin', id: 'el_other' }), 'canvas')
+    void key2
+    notifyRendererKindsChanged('net.other.plugin')
+    expect(getRenderEntry(key)).toMatchObject({ status: 'ok' })
   })
 })

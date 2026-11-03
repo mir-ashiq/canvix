@@ -1,0 +1,43 @@
+{
+  "canvixPluginApi": "1.1",
+  "id": "com.canvix.wordcloud",
+  "name": "Word Cloud",
+  "description": "Turn any text into a seeded word-cloud graphic. Deterministic, offline, zero network.",
+  "version": "1.0.0",
+  "author": { "name": "Canvix team", "url": "https://github.com/mir-ashiq/canvix" },
+  "engines": { "canvix": ">=0.13.4 <0.14.0" },
+  "entry": { "panel": "panel.html", "service": "service.html" },
+  "permissions": ["design:read", "design:write", "element:plugin", "storage"],
+  "files": ["manifest.json", "panel.html", "panel.js", "service.html", "service.js", "wordcloud.js"],
+  "elements": [
+    {
+      "kind": "cloud",
+      "label": "Word cloud",
+      "initialData": { "words": [], "seed": 42, "density": 0.7, "mask": "rect", "palette": "canvix" },
+      "schema": [
+        { "key": "seed", "type": "number", "label": "Seed", "min": 1, "max": 9999 },
+        { "key": "density", "type": "range", "label": "Density", "min": 0.1, "max": 1, "step": 0.05 },
+        {
+          "key": "mask",
+          "type": "select",
+          "label": "Shape",
+          "options": [
+            { "value": "rect", "label": "Rectangle" },
+            { "value": "circle", "label": "Circle" }
+          ]
+        },
+        {
+          "key": "palette",
+          "type": "select",
+          "label": "Palette",
+          "options": [
+            { "value": "canvix", "label": "Canvix" },
+            { "value": "sunset", "label": "Sunset" },
+            { "value": "ocean", "label": "Ocean" },
+            { "value": "mono", "label": "Mono" }
+          ]
+        }
+      ]
+    }
+  ]
+}

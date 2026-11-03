@@ -31,6 +31,7 @@ import { PluginStorage } from './plugin-storage'
 import { pluginSnapshot, type PluginDesignSnapshot } from './snapshot'
 import { methodAllowed, requiredPermission } from './permissions'
 import {
+  MAX_RENDER_RESULT_BYTES,
   MAX_RPC_BYTES,
   RPC_API_MAJOR,
   RPC_API_MINOR,
@@ -43,7 +44,10 @@ import {
   type RpcErrorCode,
 } from './rpc'
 
-/** The validated action set a PANEL may drive (§4.3). */
+/** The validated action set a plugin may drive (§4.3) — panel and
+ *  service iframes alike. The two plugin-element actions are scoped
+ *  to the CALLING plugin inside design-actions.ts (caller identity
+ *  comes from the install row, never the wire). */
 export const PANEL_ACTION_TYPES: ReadonlySet<string> = new Set([
   'addText',
   'addImage',
@@ -54,6 +58,8 @@ export const PANEL_ACTION_TYPES: ReadonlySet<string> = new Set([
   'duplicatePage',
   'alignElements',
   'distributeElements',
+  'addPluginElement',
+  'updatePluginElementData',
 ])
 
 /** push-event topics a plugin may subscribe to (§4.3). */
@@ -69,6 +75,15 @@ export const EVENT_ACK_TIMEOUT_MS = 5_000
 /** ui.notify text cap. */
 export const NOTIFY_TEXT_MAX = 200
 
+/** Renderer contract deadline (§4.5): a render that has not answered
+ *  in 10 s fails to a placeholder — the plugin keeps running, the
+ *  editor never blocks on it. */
+export const RENDER_DEADLINE_MS = 10_000
+
+/** Cap on distinct kinds one plugin may register (manifest already
+ *  bounds this; the broker re-asserts it — never trust the wire). */
+export const MAX_REGISTERED_KINDS = 8
+
 /** What the broker needs to know about an install. */
 export interface BrokerInstall {
   installId: string
@@ -76,14 +91,17 @@ export interface BrokerInstall {
   version: string
   /** granted (normalized) permission strings — the consent record */
   permissions: string[]
+  /** element kinds the manifest declared (elements[].kind) — P4 */
+  elementKinds?: readonly string[]
 }
 
 /** Host capabilities the broker calls into (all injected, all mockable). */
 export interface BrokerHost {
   /** current editor state for snapshots + read-only checks */
   getDesignState(): { pages: Parameters<typeof pluginSnapshot>[0]['pages']; currentPage: number; readOnly: boolean }
-  /** execute a whitelisted design action (design-actions.ts) */
-  applyAction(action: Record<string, unknown>): Promise<string>
+  /** execute a whitelisted design action (design-actions.ts);
+   *  `caller` is the plugin identity for the plugin-element actions */
+  applyAction(action: Record<string, unknown>, caller?: { pluginId: string; pluginVersion: string; elementKinds: readonly string[] }): Promise<string>
   /** toast */
   notify(text: string): void
   /** close the plugin's panel */
@@ -114,6 +132,15 @@ interface PendingAck {
   settled: boolean
 }
 
+/** A host→plugin call awaiting its result (renderer contract §4.5). */
+interface PendingCall {
+  method: string
+  resolve: (result: unknown) => void
+  reject: (error: BrokerError) => void
+  timer: ReturnType<typeof setTimeout>
+  settled: boolean
+}
+
 export class PluginBroker {
   private readonly install: BrokerInstall
   private readonly host: BrokerHost
@@ -130,6 +157,9 @@ export class PluginBroker {
   private readonly callTimestamps: number[] = []
   private readonly subscriptions = new Set<'selection' | 'document'>()
   private readonly pendingAcks = new Map<string, PendingAck>()
+  private readonly pendingCalls = new Map<string, PendingCall>()
+  /** element kinds this plugin registered renderers for (service ctx) */
+  private readonly registeredKinds = new Set<string>()
 
   constructor(opts: BrokerOptions) {
     this.install = opts.install
@@ -156,13 +186,32 @@ export class PluginBroker {
     return this.subscriptions
   }
 
+  /** Kinds with a registered renderer (service context). */
+  get kinds(): ReadonlySet<string> {
+    return this.registeredKinds
+  }
+
+  /** True when the plugin answered its first handshake echo. */
+  get isHandshaked(): boolean {
+    return this.verified
+  }
+
   /** Tear down: no listener leaks, no dangling ack timers. */
   dispose(onMessage?: (ev: MessageEvent) => void): void {
     this.disposed = true
     if (onMessage && typeof window !== 'undefined') window.removeEventListener('message', onMessage)
     for (const pending of this.pendingAcks.values()) clearTimeout(pending.timer)
     this.pendingAcks.clear()
+    for (const call of this.pendingCalls.values()) {
+      if (!call.settled) {
+        call.settled = true
+        clearTimeout(call.timer)
+        call.reject(new BrokerError('E_INTERNAL', 'broker disposed before the plugin answered'))
+      }
+    }
+    this.pendingCalls.clear()
     this.subscriptions.clear()
+    this.registeredKinds.clear()
     this.iframeWindow = null
   }
 
@@ -235,14 +284,40 @@ export class PluginBroker {
   }
 
   private handleResult(data: unknown): void {
-    if (!this.verified) return // acks only count post-handshake
-    const parsed = parseRpcResult(data)
-    if (!parsed.ok) return // malformed acks are dropped, not fatal
-    const pending = this.pendingAcks.get(parsed.value.id)
+    if (!this.verified) return // results only count post-handshake
+    // parse permissively (renderer results may be 2 MB, §4.5); the
+    // per-call cap is re-asserted after correlation below
+    const parsed = parseRpcResult(data, { maxResultBytes: MAX_RENDER_RESULT_BYTES })
+    if (!parsed.ok) return // malformed results are dropped, not fatal
+    const id = parsed.value.id
+
+    const call = this.pendingCalls.get(id)
+    if (call && !call.settled) {
+      call.settled = true
+      clearTimeout(call.timer)
+      this.pendingCalls.delete(id)
+      if (parsed.value.ok) {
+        // non-render results keep the standard RPC cap — only the
+        // §4.5 renderer output is allowed the wide envelope
+        if (call.method !== 'elements.render' && parsed.value.result !== undefined) {
+          const err = checkCloneSafe(parsed.value.result, { maxBytes: MAX_RPC_BYTES })
+          if (err) {
+            call.reject(new BrokerError('E_PAYLOAD', err))
+            return
+          }
+        }
+        call.resolve(parsed.value.result)
+      } else {
+        call.reject(new BrokerError(parsed.value.error.code, parsed.value.error.message))
+      }
+      return
+    }
+
+    const pending = this.pendingAcks.get(id)
     if (pending && !pending.settled) {
       pending.settled = true
       clearTimeout(pending.timer)
-      this.pendingAcks.delete(parsed.value.id)
+      this.pendingAcks.delete(id)
     }
   }
 
@@ -290,19 +365,47 @@ export class PluginBroker {
         if (typeof type !== 'string' || !PANEL_ACTION_TYPES.has(type)) {
           throw new BrokerError(
             'E_PAYLOAD',
-            `unknown action type — allowed: ${Array.from(PANEL_ACTION_TYPES).join(', ')} (addPluginElement arrives with element support)`,
+            `unknown action type — allowed: ${Array.from(PANEL_ACTION_TYPES).join(', ')}`,
           )
         }
-        const message = await this.host.applyAction(action as Record<string, unknown>)
+        // plugin-element actions run with the CALLER's identity — the
+        // install row, never a wire-supplied pluginId (§4.3)
+        const caller =
+          type === 'addPluginElement' || type === 'updatePluginElementData'
+            ? {
+                pluginId: this.install.pluginId,
+                pluginVersion: this.install.version,
+                elementKinds: this.install.elementKinds ?? [],
+              }
+            : undefined
+        const message = await (caller
+          ? this.host.applyAction(action as Record<string, unknown>, caller)
+          : this.host.applyAction(action as Record<string, unknown>))
         return { message }
       }
 
-      case 'elements.registerRenderer':
-        // P4 wires this for service iframes; a panel cannot render.
+      case 'elements.registerRenderer': {
+        // Only a service iframe may register renderers — a panel
+        // cannot draw (its iframe dies with the panel).
         if (this.context !== 'service') {
-          throw new BrokerError('E_METHOD', 'renderer registration is only available to element service iframes (P4)')
+          throw new BrokerError('E_METHOD', 'renderer registration is only available to element service iframes')
         }
-        throw new BrokerError('E_METHOD', 'service renderer wiring is not enabled in this build')
+        const kind = (call.params as { kind?: unknown } | undefined)?.kind
+        if (typeof kind !== 'string' || !/^[a-z][a-z0-9-]{0,30}$/.test(kind)) {
+          throw new BrokerError('E_PAYLOAD', 'params.kind must be a lowercase slug like "cloud"')
+        }
+        const declared = this.install.elementKinds ?? []
+        if (!declared.includes(kind)) {
+          throw new BrokerError('E_PAYLOAD', `kind "${kind}" is not declared in this plugin's manifest (elements[])`)
+        }
+        if (!this.registeredKinds.has(kind)) {
+          if (this.registeredKinds.size >= MAX_REGISTERED_KINDS) {
+            throw new BrokerError('E_PAYLOAD', `at most ${MAX_REGISTERED_KINDS} kinds may be registered`)
+          }
+          this.registeredKinds.add(kind)
+        }
+        return { registered: Array.from(this.registeredKinds) }
+      }
 
       case 'storage.get': {
         const key = (call.params as { key?: unknown } | undefined)?.key
@@ -341,6 +444,41 @@ export class PluginBroker {
         // unreachable: parseRpcCall already filtered the catalog
         throw new BrokerError('E_METHOD', `unknown method "${call.method}"`)
     }
+  }
+
+  // ── outbound (host → plugin calls) ────────────────────────
+
+  /**
+   * Invoke a method INSIDE the plugin and await its result — the
+   * renderer contract's transport (§4.5: `elements.render` with
+   * `{ data, width, height, mode }`). Rejects with a BrokerError on
+   * deadline (E_TIMEOUT), disposal (E_INTERNAL) or the plugin's own
+   * error code. The result is NOT sanitized here — the consumer
+   * (renderer cache) runs sanitizePluginSvg before any use.
+   */
+  callPlugin(method: 'elements.render', params: unknown, opts: { timeoutMs?: number } = {}): Promise<unknown> {
+    if (this.disposed || !this.iframeWindow) {
+      return Promise.reject(new BrokerError('E_INTERNAL', 'the plugin frame is not mounted'))
+    }
+    if (!this.verified) {
+      return Promise.reject(new BrokerError('E_PERMISSION', 'the plugin has not completed its handshake'))
+    }
+    const err = checkCloneSafe(params, { maxBytes: MAX_RPC_BYTES })
+    if (err) return Promise.reject(new BrokerError('E_PAYLOAD', err))
+    const timeoutMs = opts.timeoutMs ?? RENDER_DEADLINE_MS
+    return new Promise((resolve, reject) => {
+      const id = newRpcId()
+      const timer = setTimeout(() => {
+        const call = this.pendingCalls.get(id)
+        if (call && !call.settled) {
+          call.settled = true
+          this.pendingCalls.delete(id)
+          reject(new BrokerError('E_TIMEOUT', `the plugin did not answer ${method} within ${Math.round(timeoutMs / 1000)} s`))
+        }
+      }, timeoutMs)
+      this.pendingCalls.set(id, { method, resolve, reject, timer, settled: false })
+      this.send({ v: RPC_API_MAJOR, id, dir: 'call', method, params })
+    })
   }
 
   // ── outbound (host → plugin pushes) ─────────────────────────

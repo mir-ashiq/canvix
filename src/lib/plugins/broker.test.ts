@@ -66,6 +66,8 @@ const PAGES: PageData[] = [
 interface TestOpts {
   permissions?: string[]
   readOnly?: boolean
+  context?: 'panel' | 'service'
+  elementKinds?: string[]
 }
 
 function makeBroker(opts: TestOpts = {}) {
@@ -74,6 +76,7 @@ function makeBroker(opts: TestOpts = {}) {
     pluginId: 'com.example.test',
     version: '1.0.0',
     permissions: opts.permissions ?? ['design:read', 'design:write', 'storage', 'ui:notify'],
+    elementKinds: opts.elementKinds ?? ['cloud'],
   }
   const applyAction = vi.fn(async () => 'applied')
   const notify = vi.fn()
@@ -92,6 +95,7 @@ function makeBroker(opts: TestOpts = {}) {
     host,
     storage: new PluginStorage(install.pluginId, memoryStorage()),
     hostVersion: '0.13.2',
+    context: opts.context ?? 'panel',
     now: () => clock.t,
   })
   const frame = new FakeWindow()
@@ -336,13 +340,16 @@ describe('actions.apply', () => {
     expect((last().result as { message: string }).message).toBe('applied')
   })
 
-  it('rejects action types outside the panel whitelist with E_PAYLOAD', async () => {
+  it('rejects action types outside the plugin whitelist with E_PAYLOAD', async () => {
     const { callOk, last } = makeBroker()
-    for (const type of ['generateImage', 'translate', 'addPluginElement', 'updatePluginElementData', '__proto__', '']) {
+    for (const type of ['generateImage', 'translate', 'addPluginElemenX', 'constructor', '']) {
       await callOk('actions.apply', { action: { type } })
       expect(last().error?.code).toBe('E_PAYLOAD')
     }
+    // the P4 element actions are now first-class whitelist members
     expect(PANEL_ACTION_TYPES.has('addText')).toBe(true)
+    expect(PANEL_ACTION_TYPES.has('addPluginElement')).toBe(true)
+    expect(PANEL_ACTION_TYPES.has('updatePluginElementData')).toBe(true)
   })
 
   it('suspends writes on read-only designs with E_PERMISSION', async () => {
@@ -429,6 +436,139 @@ describe('elements.registerRenderer (P4 preview semantics)', () => {
     const { callOk, last } = makeBroker({ permissions: ['element:plugin'] })
     await callOk('elements.registerRenderer', { kind: 'cloud', fn: 1 })
     expect(last().error?.code).toBe('E_METHOD')
+  })
+})
+
+describe('elements.registerRenderer — the service contract (P4)', () => {
+  it('registers a manifest-declared kind in service context', async () => {
+    const { broker, callOk, last } = makeBroker({ context: 'service', permissions: ['element:plugin'] })
+    await callOk('elements.registerRenderer', { kind: 'cloud' })
+    expect(last().ok).toBe(true)
+    expect((last().result as { registered: string[] }).registered).toEqual(['cloud'])
+    expect(broker.kinds.has('cloud')).toBe(true)
+  })
+
+  it('requires the element:plugin permission (default-deny)', async () => {
+    const { callOk, last } = makeBroker({ context: 'service' })
+    await callOk('elements.registerRenderer', { kind: 'cloud' })
+    expect(last().error?.code).toBe('E_PERMISSION')
+  })
+
+  it('refuses kinds the manifest never declared', async () => {
+    const { callOk, last } = makeBroker({ context: 'service', permissions: ['element:plugin'] })
+    await callOk('elements.registerRenderer', { kind: 'intruder' })
+    expect(last().error?.code).toBe('E_PAYLOAD')
+    expect(last().error?.message).toContain('manifest')
+  })
+
+  it('refuses malformed kind slugs', async () => {
+    const { callOk, last } = makeBroker({ context: 'service', permissions: ['element:plugin'] })
+    await callOk('elements.registerRenderer', { kind: 'Not A Slug' })
+    expect(last().error?.code).toBe('E_PAYLOAD')
+  })
+
+  it('caps registered kinds at MAX_REGISTERED_KINDS', async () => {
+    const { callOk, last } = makeBroker({
+      context: 'service',
+      permissions: ['element:plugin'],
+      elementKinds: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'],
+    })
+    for (const k of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) await callOk('elements.registerRenderer', { kind: k })
+    await callOk('elements.registerRenderer', { kind: 'i' })
+    expect(last().error?.code).toBe('E_PAYLOAD')
+  })
+})
+
+describe('callPlugin — host→plugin elements.render (P4)', () => {
+  it('refuses before the handshake completed', async () => {
+    const { broker } = makeBroker({ context: 'service', permissions: ['element:plugin'] })
+    await expect(broker.callPlugin('elements.render', {})).rejects.toMatchObject({ code: 'E_PERMISSION' })
+  })
+
+  it('round-trips a render call and its result envelope', async () => {
+    const { broker, frame, ev, callOk } = makeBroker({ context: 'service', permissions: ['element:plugin'] })
+    await callOk('ping') // completes the handshake
+
+    const promise = broker.callPlugin('elements.render', { kind: 'cloud', data: {}, width: 10, height: 10, mode: 'canvas' })
+    // the frame received a host→plugin call envelope
+    const outbound = frame.sent.find((m) => (m as { method?: string }).method === 'elements.render') as { id: string; dir: string }
+    expect(outbound.dir).toBe('call')
+    broker.handleMessage(ev({ v: 1, id: outbound.id, dir: 'result', ok: true, result: { svg: '<svg xmlns="http://www.w3.org/2000/svg"/>' } }))
+    await expect(promise).resolves.toEqual({ svg: '<svg xmlns="http://www.w3.org/2000/svg"/>' })
+  })
+
+  it('times out with E_TIMEOUT when the plugin never answers', async () => {
+    vi.useFakeTimers()
+    try {
+      const { broker, callOk } = makeBroker({ context: 'service', permissions: ['element:plugin'] })
+      await callOk('ping')
+      const promise = broker.callPlugin('elements.render', {}, { timeoutMs: 50 })
+      const assertion = expect(promise).rejects.toMatchObject({ code: 'E_TIMEOUT' })
+      // the deadline timer only fires when time advances
+      await vi.advanceTimersByTimeAsync(60)
+      await assertion
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('carries the plugin error code when the renderer fails', async () => {
+    const { broker, frame, ev, callOk } = makeBroker({ context: 'service', permissions: ['element:plugin'] })
+    await callOk('ping')
+    const promise = broker.callPlugin('elements.render', {})
+    const outbound = frame.sent.find((m) => (m as { method?: string }).method === 'elements.render') as { id: string }
+    broker.handleMessage(ev({ v: 1, id: outbound.id, dir: 'result', ok: false, error: { code: 'E_PAYLOAD', message: 'bad data' } }))
+    await expect(promise).rejects.toMatchObject({ code: 'E_PAYLOAD', message: 'bad data' })
+  })
+
+  it('accepts a 2 MB-class render result (the §4.5 output cap rides the wide envelope)', async () => {
+    const { broker, frame, ev, callOk } = makeBroker({ context: 'service', permissions: ['element:plugin'] })
+    await callOk('ping')
+    const big = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">${'<rect width="1" height="1"/>'.repeat(20000)}</svg>`
+    expect(big.length).toBeGreaterThan(300 * 1024) // far past MAX_RPC_BYTES
+    const promise = broker.callPlugin('elements.render', {})
+    const outbound = frame.sent.find((m) => (m as { method?: string }).method === 'elements.render') as { id: string }
+    broker.handleMessage(ev({ v: 1, id: outbound.id, dir: 'result', ok: true, result: { svg: big } }))
+    await expect(promise).resolves.toMatchObject({ svg: big })
+  })
+
+  it('a disposed broker rejects pending render calls', async () => {
+    const { broker, callOk } = makeBroker({ context: 'service', permissions: ['element:plugin'] })
+    await callOk('ping')
+    const promise = broker.callPlugin('elements.render', {})
+    broker.dispose()
+    await expect(promise).rejects.toMatchObject({ code: 'E_INTERNAL' })
+  })
+})
+
+describe('plugin-element actions carry the install identity (P4)', () => {
+  it('addPluginElement reaches design-actions with the CALLER stamped from the install row', async () => {
+    const { callOk, host, last } = makeBroker({ permissions: ['design:write'] })
+    await callOk('actions.apply', {
+      action: { type: 'addPluginElement', kind: 'cloud', data: { seed: 1 }, pluginId: 'com.OTHER.plugin' },
+    })
+    expect(last().ok).toBe(true)
+    expect(host.applyAction).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'addPluginElement', kind: 'cloud' }),
+      { pluginId: 'com.example.test', pluginVersion: '1.0.0', elementKinds: ['cloud'] },
+    )
+  })
+
+  it('updatePluginElementData is whitelisted and caller-stamped too', async () => {
+    const { callOk, host, last } = makeBroker({ permissions: ['design:write'] })
+    await callOk('actions.apply', { action: { type: 'updatePluginElementData', ids: ['el_1'], patch: { seed: 2 } } })
+    expect(last().ok).toBe(true)
+    expect(host.applyAction).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'updatePluginElementData' }),
+      expect.objectContaining({ pluginId: 'com.example.test' }),
+    )
+  })
+
+  it('read-only designs still suspend plugin-element writes', async () => {
+    const { callOk, last } = makeBroker({ permissions: ['design:write'], readOnly: true })
+    await callOk('actions.apply', { action: { type: 'addPluginElement', kind: 'cloud', data: {} } })
+    expect(last().error?.code).toBe('E_PERMISSION')
+    expect(last().error?.message).toContain('read-only')
   })
 })
 

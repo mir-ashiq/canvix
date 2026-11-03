@@ -916,7 +916,21 @@ tool descriptions so agents pick the right format.
       namespaced 256 KB plugin storage, the
       `<iframe sandbox="allow-scripts">` panel host, and the Apps
       grid's "Installed" section with a consent modal that lists
-      every requested permission verbatim *(v0.13.2)*
+      every requested permission verbatim *(v0.13.2)*; the **element
+      & renderer contract** (P4) let plugins put their OWN element
+      types on the canvas — one new `plugin` union member whose
+      per-plugin variety lives in capped `data`, a service iframe
+      per plugin-with-elements answering host→plugin
+      `elements.render` calls (10 s deadline, sanitized ≤ 2 MB SVG
+      or raster output, cached by element+data+size), placeholder
+      cards for every §4.9 state (flag off / not installed /
+      disabled / not responding), export coverage (SVG embeds the
+      sanitized vector; PNG/JPG/PDF/video rasterize it), a
+      host-rendered schema properties card, and install-scoped
+      `addPluginElement`/`updatePluginElementData` actions whose
+      caller identity comes from the install row — verified
+      end-to-end that uninstall/crash/flag-off never loses document
+      data *(v0.13.3)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)

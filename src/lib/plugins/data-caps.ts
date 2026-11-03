@@ -41,10 +41,11 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
  */
 export function checkCloneSafe(
   value: unknown,
-  opts: { maxBytes?: number; depth?: number } = {},
+  opts: { maxBytes?: number; depth?: number; maxString?: number } = {},
 ): string | null {
   const maxBytes = opts.maxBytes ?? PLUGIN_DATA_MAX_BYTES
   const maxDepth = opts.depth ?? PLUGIN_DATA_MAX_DEPTH
+  const maxString = opts.maxString ?? PLUGIN_DATA_MAX_STRING
 
   let serialized: string
   try {
@@ -67,9 +68,9 @@ export function checkCloneSafe(
       return Number.isFinite(v) ? null : `${path}: non-finite number`
     }
     if (typeof v === 'string') {
-      return v.length <= PLUGIN_DATA_MAX_STRING
+      return v.length <= maxString
         ? null
-        : `${path}: string longer than ${PLUGIN_DATA_MAX_STRING} characters`
+        : `${path}: string longer than ${maxString} characters`
     }
     if (Array.isArray(v)) {
       if (v.length > PLUGIN_DATA_MAX_ARRAY) {

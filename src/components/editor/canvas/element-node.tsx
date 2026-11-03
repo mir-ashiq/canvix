@@ -12,6 +12,7 @@ import type {
   GroupElement,
   ImageElement,
   LineElement,
+  PluginElement,
   ShapeElement,
   StickerElement,
   StrokeElement,
@@ -24,6 +25,7 @@ import { elementGradientProps } from '@/lib/editor-utils'
 import { useEditorStore } from '@/store/editor-store'
 import { useLoadedImage } from './use-loaded-image'
 import { CurvedTextNode, EmbedNode, FrameNode, TableNode, type TableCellRef } from './v06-nodes'
+import { PluginNode } from './PluginNode'
 
 export interface ElementNodeProps {
   element: AnyElement
@@ -636,6 +638,14 @@ function ElementNodeImpl({ element: el, interactive, hiding, hideCell, registerN
     case 'embed': {
       const em = el as EmbedElement
       return <EmbedNode el={em} common={common} />
+    }
+
+    // v0.13 (P4): plugin-owned elements — pixels delegated to the
+    // plugin's registered renderer via the cache; every failure
+    // state degrades to a placeholder card, never data loss
+    case 'plugin': {
+      const pl = el as PluginElement
+      return <PluginNode el={pl} common={common} />
     }
 
     case 'sticker': {

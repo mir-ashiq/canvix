@@ -19,6 +19,7 @@ export type ElementType =
   | 'embed'
   | 'audio'
   | 'video'
+  | 'plugin'
 
 export type TextAlign = 'left' | 'center' | 'right' | 'justify'
 
@@ -325,6 +326,31 @@ export interface VideoElement extends BaseElement {
   trimEnd: number
 }
 
+// ── v0.13 (P4): the plugin element — research/PLUGIN-SYSTEM.md §4.5 ──
+
+/** The ONE native element type plugins add (§4.4): a single union
+ *  member whose per-plugin variety lives entirely in `data` + a
+ *  renderer registered at runtime by the owning plugin. Structural
+ *  move that dodges the "three independent switches" problem — every
+ *  renderer adds ONE `case 'plugin'` that delegates to the contract.
+ *
+ *  Durability rules (§4.9): the element is plain document data — it
+ *  rides autosave, versions, collab replication and offline merge
+ *  (LWW by id, type-agnostic) like any other element. Uninstalling
+ *  or disabling the plugin NEVER touches it; the canvas degrades to
+ *  a placeholder card and the data stays intact for reinstall. */
+export interface PluginElement extends BaseElement {
+  type: 'plugin'
+  /** owning plugin id, e.g. 'com.canvix.wordcloud' — namespaced by the manifest */
+  pluginId: string
+  /** element kind declared in the manifest's elements[] — namespaced by pluginId */
+  kind: string
+  /** plugin semver at creation time, so a later version can migrate its own data */
+  pluginVersion: string
+  /** JSON data — must pass the collab/validateOpPayload caps (≤ 500-array, ≤ 100 k strings, depth ≤ 12) */
+  data: Record<string, unknown>
+}
+
 /** Brand kit — persisted per browser (localStorage) */
 export interface BrandKit {
   colors: string[]
@@ -361,6 +387,7 @@ export type AnyElement =
   | EmbedElement
   | AudioElement
   | VideoElement
+  | PluginElement
 
 export type Background =
   | { type: 'solid'; color: string }
@@ -737,6 +764,29 @@ export function createStrokeElement(init: BaseInit & Partial<StrokeElement>): St
     points: [],
     stroke: '#FFFFFF',
     strokeWidth: 6,
+    ...init,
+  }
+}
+
+/** v0.13 (P4): factory for plugin elements. The caller (the
+ *  addPluginElement design action) has ALREADY validated kind against
+ *  the install's manifest and data against the clone caps — the
+ *  factory only stamps defaults. Default box: a 480×320 card that
+ *  reads well as a placeholder when the plugin cannot render. */
+export function createPluginElement(
+  pluginId: string,
+  kind: string,
+  pluginVersion: string,
+  data: Record<string, unknown>,
+  init: BaseInit & Partial<PluginElement> = {}
+): PluginElement {
+  return {
+    ...baseElement('plugin', { width: 480, height: 320, ...init }),
+    type: 'plugin',
+    pluginId,
+    kind,
+    pluginVersion,
+    data,
     ...init,
   }
 }

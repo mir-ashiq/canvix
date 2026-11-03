@@ -12,9 +12,10 @@
 // ─────────────────────────────────────────────────────────────
 
 import Konva from 'konva'
-import type { AnyElement, AudioElement, ImageElement, PageData, VideoElement } from '@/lib/types'
+import type { AnyElement, AudioElement, ImageElement, PageData, PluginElement, VideoElement } from '@/lib/types'
 import { animateElementAt, pageHoldDuration } from '@/lib/animations'
 import { beatEnvelopeAt, beatSourceOf } from '@/lib/media/beat-detect'
+import { awaitRender, renderKey } from '@/lib/plugins/renderer-cache'
 
 export interface VideoExportOptions {
   designWidth: number
@@ -114,6 +115,27 @@ async function collectImages(pages: PageData[]): Promise<Map<string, HTMLImageEl
     unique.map(async (src) => {
       const img = await loadImage(src)
       if (img) map.set(src, img)
+    })
+  )
+
+  // v0.13 (P4): plugin elements — await each renderer (bounded by
+  // the 10 s contract deadline) and load the sanitized data URL as
+  // the element's raster. Failures (missing/failed plugin) leave no
+  // entry: buildKonvaNode draws the placeholder card instead.
+  const pluginEls: PluginElement[] = []
+  const walkPlugins = (els: AnyElement[]) => {
+    for (const el of els) {
+      if (el.type === 'plugin') pluginEls.push(el)
+      else if (el.type === 'group') walkPlugins(el.children)
+    }
+  }
+  for (const p of pages) walkPlugins(p.elements)
+  await Promise.all(
+    pluginEls.slice(0, 60).map(async (el) => {
+      const entry = await awaitRender(el, 'export')
+      if (entry.status !== 'ok') return
+      const img = await loadImage(entry.dataUrl)
+      if (img) map.set(renderKey(el, 'export'), img)
     })
   )
   return map
@@ -278,6 +300,60 @@ function buildKonvaNode(el: AnyElement, images: Map<string, HTMLImageElement>): 
         cornerRadius: im.radius,
       })
       return node
+    }
+    case 'plugin': {
+      // v0.13 (P4): the renderer's sanitized output as an Image; no
+      // render (missing/failed/timed-out plugin) → the placeholder
+      // card, mirroring the editor canvas
+      const pl = el as PluginElement
+      const raster = images.get(renderKey(pl, 'export'))
+      if (raster) {
+        return new Konva.Image({
+          id: pl.id,
+          x: pl.x,
+          y: pl.y,
+          width: pl.width,
+          height: pl.height,
+          image: raster,
+        })
+      }
+      const group = new Konva.Group({ id: pl.id, x: pl.x, y: pl.y })
+      group.add(
+        new Konva.Rect({
+          width: pl.width,
+          height: pl.height,
+          cornerRadius: Math.min(10, Math.min(pl.width, pl.height) / 8),
+          fill: '#F4F5F7',
+          stroke: '#C9CDD6',
+          strokeWidth: 1,
+          dash: [6, 4],
+        }),
+      )
+      const titleSize = Math.max(11, Math.min(20, Math.round(Math.min(pl.width, pl.height) / 12)))
+      group.add(
+        new Konva.Text({
+          y: pl.height / 2 - titleSize * 0.6,
+          width: pl.width,
+          align: 'center',
+          text: pl.name?.trim() || pl.kind,
+          fontSize: titleSize,
+          fontStyle: '600',
+          fontFamily: 'Inter, system-ui, sans-serif',
+          fill: '#3A3F4B',
+        }),
+      )
+      group.add(
+        new Konva.Text({
+          y: pl.height / 2 + titleSize * 0.6,
+          width: pl.width,
+          align: 'center',
+          text: pl.pluginId,
+          fontSize: Math.max(9, Math.round(titleSize * 0.72)),
+          fontFamily: 'Inter, system-ui, sans-serif',
+          fill: '#878E9C',
+        }),
+      )
+      return group
     }
     case 'audio': {
       // vector waveform card — geometry mirrors element-node.tsx AudioNode

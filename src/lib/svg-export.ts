@@ -28,6 +28,8 @@ import type {
   GroupElement,
 } from '@/lib/types'
 import { arcForCurve, embedLayout, frameClipPathD, hostOf, tableGeometry, youtubeThumbUrl } from '@/lib/v06-geometry'
+import type { PluginElement } from '@/lib/types'
+import { getRenderEntry, renderKey } from '@/lib/plugins/renderer-cache'
 
 // ── escaping ─────────────────────────────────────────────────
 
@@ -164,6 +166,46 @@ function starPoints(cx: number, cy: number, outer: number, inner: number): strin
     pts.push(`${(cx + inner * Math.cos(innerAngle)).toFixed(2)},${(cy + inner * Math.sin(innerAngle)).toFixed(2)}`)
   }
   return pts.join(' ')
+}
+
+// ── v0.13 (P4): plugin element embedding ────────────────────
+
+/** Opening <svg …> tag scanner — attrs may not run past the next
+ *  `<` (same hardening as the plugin sanitizer's TAG_RE). */
+const PLUGIN_SVG_OPEN_RE = /^\uFEFF?\s*(?:<\?xml[^>]*\?>\s*)?<svg\b((?:"[^"]*"|'[^']*'|[^>"'<])*)>/
+
+/**
+ * Re-emit a (sanitized) plugin svg as a NESTED <svg> pinned to the
+ * element box: keep the plugin's viewBox and attributes, override
+ * x/y/width/height with host geometry. Returns null when the string
+ * does not parse as an <svg> document (caller falls back to the
+ * placeholder card — never a broken export).
+ */
+function nestPluginSvg(svg: string, x: number, y: number, w: number, h: number): string | null {
+  const m = PLUGIN_SVG_OPEN_RE.exec(svg)
+  if (!m) return null
+  const end = svg.lastIndexOf('</svg>')
+  if (end === -1 || end < m[0].length) return null
+  const inner = svg.slice(m[0].length, end)
+  // keep the plugin's own attributes (viewBox, xmlns, defs ids…) but
+  // strip any x/y/width/height — duplicates would invalidate the
+  // document, and geometry is the HOST's call, never the plugin's
+  const attrs = (m[1] ?? '').replace(/\s(?:x|y|width|height)\s*=\s*(?:"[^"]*"|'[^']*')/g, '')
+  return `<svg${attrs} x="${x}" y="${y}" width="${w}" height="${h}">${inner}</svg>`
+}
+
+/** The export-side placeholder card — mirrors the canvas card so a
+ *  missing/failed plugin still shows an honest, styled box. */
+function pluginPlaceholderSvg(el: PluginElement, rotate: string): string {
+  const title = el.name?.trim() || el.kind
+  const titleSize = Math.max(11, Math.min(20, Math.round(Math.min(el.width, el.height) / 12)))
+  const subSize = Math.max(9, Math.round(titleSize * 0.72))
+  const r = Math.min(10, Math.min(el.width, el.height) / 8)
+  return `  <g${rotate ? ` transform="${rotate.trim()}"` : ''}>
+    <rect x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}" rx="${r}" fill="#F4F5F7" stroke="#C9CDD6" stroke-width="1" stroke-dasharray="6 4" />
+    <text x="${el.x + el.width / 2}" y="${el.y + el.height / 2}" text-anchor="middle" dominant-baseline="central" font-size="${titleSize}" font-weight="600" font-family="Inter, system-ui, sans-serif" fill="#3A3F4B">${esc(title)}</text>
+    <text x="${el.x + el.width / 2}" y="${el.y + el.height / 2 + titleSize}" text-anchor="middle" font-size="${subSize}" font-family="Inter, system-ui, sans-serif" fill="#878E9C">${esc(el.pluginId)}</text>
+  </g>`
 }
 
 function serializeElement(el: AnyElement, ctx: SvgContext): string {
@@ -321,6 +363,31 @@ function serializeElement(el: AnyElement, ctx: SvgContext): string {
       const cx = sk.x + sk.width / 2
       const cy = sk.y + sk.height / 2
       return `  <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${sk.fontSize}" font-family="'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif"${opacityAttr(sk)}${transformBase ? ` transform="rotate(${sk.rotation} ${cx} ${cy})"` : ''}>${esc(sk.char)}</text>`
+    }
+
+    // v0.13 (P4): plugin elements — the renderer's SANITIZED svg is
+    // embedded as a nested <svg> positioned at the element box (the
+    // research §4.4/§4.5 promise: plugin elements in every export
+    // with zero per-plugin code). No cached render (plugin missing /
+    // failed / timed out) → the same neutral placeholder card the
+    // canvas shows — the element stays VISIBLE in the file.
+    case 'plugin': {
+      const pl = el as PluginElement
+      const entry = getRenderEntry(renderKey(pl, 'export'))
+      const cx = pl.x + pl.width / 2
+      const cy = pl.y + pl.height / 2
+      const rotate = pl.rotation ? ` rotate(${pl.rotation} ${cx} ${cy})` : ''
+      if (entry?.status === 'ok' && entry.svg) {
+        const nested = nestPluginSvg(entry.svg, pl.x, pl.y, pl.width, pl.height)
+        if (nested) {
+          return `  <g${rotate ? ` transform="${rotate.trim()}"` : ''}${opacityAttr(pl)}${shadowAttrs(pl, ctx)}>${nested}</g>`
+        }
+      }
+      if (entry?.status === 'ok' && entry.dataUrl) {
+        // raster renderer output — embed like an image
+        return `  <image href="${esc(entry.dataUrl)}" x="${pl.x}" y="${pl.y}" width="${pl.width}" height="${pl.height}"${rotate ? ` transform="${rotate.trim()}"` : ''}${opacityAttr(pl)} preserveAspectRatio="none" />`
+      }
+      return pluginPlaceholderSvg(pl, rotate)
     }
 
     case 'group': {

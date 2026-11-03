@@ -5,6 +5,7 @@ import { Download, Loader2, FileImage, FileType2, FileCode2, Film } from 'lucide
 import { useEditorStore } from '@/store/editor-store'
 import { captureStage, canvasBridge } from './canvas/canvas-bridge'
 import { exportDesignToSVGs, downloadSVG } from '@/lib/svg-export'
+import { collectPluginElements, primePluginRenders } from '@/lib/plugins/renderer-cache'
 import { detectVideoFormat, downloadVideo, estimateVideoDuration, exportVideo } from '@/lib/video-export'
 import { toast } from '@/hooks/use-toast'
 import { Progress } from '@/components/ui/progress'
@@ -93,8 +94,13 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         return
       }
       if (format === 'svg') {
-        // true vector export — no rasterization of vector elements
-        const svgs = exportDesignToSVGs(allPages ? pages : [pages[currentPage]], canvasBridge.pageWidth, canvasBridge.pageHeight)
+        // true vector export — no rasterization of vector elements.
+        // v0.13 (P4): plugin renders are awaited FIRST (bounded by
+        // the 10 s contract deadline) so their sanitized svg can be
+        // embedded; missing plugins degrade to placeholder cards.
+        const pagesToExport = allPages ? pages : [pages[currentPage]]
+        await primePluginRenders(collectPluginElements(pagesToExport), 'export')
+        const svgs = exportDesignToSVGs(pagesToExport, canvasBridge.pageWidth, canvasBridge.pageHeight)
         for (let k = 0; k < svgs.length; k++) {
           const suffix = svgs.length > 1 ? `-page-${(allPages ? 0 : currentPage) + k + 1}` : ''
           downloadSVG(svgs[k], `${base}${suffix}.svg`)

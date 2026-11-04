@@ -18,9 +18,19 @@ export interface DesignMeta {
   /** v0.9.1: ownerless AND attributed to this exact browser — the only rows
    *  the bulk "Save my designs" action will claim. */
   mine?: boolean
+  /** v0.14 (D6): the folder this design is filed under (null = root). */
+  folderId?: string | null
   deletedAt: string | null
   createdAt: string
   updatedAt: string
+}
+
+/** v0.14 (D6): one dashboard folder — the caller's own, always. */
+export interface FolderMeta {
+  id: string
+  name: string
+  createdAt: string
+  designCount: number
 }
 
 function toRecord(row: Record<string, unknown>): DesignRecord {
@@ -56,9 +66,19 @@ interface DesignsPage {
   nextCursor: { cursor: string; id: string } | null
 }
 
-async function fetchDesignsPage(cursor?: { cursor: string; id: string } | null): Promise<DesignsPage> {
-  const qs = cursor ? `?cursor=${encodeURIComponent(cursor.cursor)}&id=${encodeURIComponent(cursor.id)}` : ''
-  const res = await fetch(`/api/designs${qs}`, { cache: 'no-store' })
+async function fetchDesignsPage(
+  cursor?: { cursor: string; id: string } | null,
+  folderId?: string | null
+): Promise<DesignsPage> {
+  const params = new URLSearchParams()
+  if (cursor) {
+    params.set('cursor', cursor.cursor)
+    params.set('id', cursor.id)
+  }
+  // v0.14 (D6): a folder filter scopes the list to that folder
+  if (folderId) params.set('folder', folderId)
+  const qs = params.toString()
+  const res = await fetch(`/api/designs${qs ? `?${qs}` : ''}`, { cache: 'no-store' })
   if (!res.ok) {
     const err = await readApiError(res)
     throw new ApiError(err.message, err.code, err.fix)
@@ -67,9 +87,13 @@ async function fetchDesignsPage(cursor?: { cursor: string; id: string } | null):
   return { designs: body.designs ?? [], nextCursor: body.nextCursor ?? null }
 }
 
-export function useDesigns() {
+export function useDesigns(folderId?: string | null) {
   const [designs, setDesigns] = useState<DesignMeta[] | null>(null)
-  const [loading, setLoading] = useState(true)
+  // v0.14 (D6): the folder the held `designs` page belongs to. When it
+  // differs from `folderId` the hook is (re)loading a new view — the
+  // DERIVED `loading` below flips true synchronously on the switch,
+  // without any setState inside the effect (react-hooks rule).
+  const [loadedFor, setLoadedFor] = useState<string | null>(null)
   // v0.8: null = healthy; otherwise an error code/message from the API
   const [dbIssue, setDbIssue] = useState<string | null>(null)
   // v0.9.2: pagination state — true when the server says there is another page
@@ -79,7 +103,7 @@ export function useDesigns() {
 
   const refresh = useCallback(async () => {
     try {
-      const page = await fetchDesignsPage()
+      const page = await fetchDesignsPage(null, folderId)
       setDesigns(page.designs)
       setHasMore(page.nextCursor !== null)
       nextCursorRef.current = page.nextCursor
@@ -90,16 +114,16 @@ export function useDesigns() {
       setHasMore(false)
       nextCursorRef.current = null
     } finally {
-      setLoading(false)
+      setLoadedFor(folderId ?? null)
     }
-  }, [])
+  }, [folderId])
 
   /** v0.9.2: append the next page (guard against double-clicks/stale calls). */
   const loadMore = useCallback(async () => {
     if (loadingMoreRef.current || !nextCursorRef.current) return
     loadingMoreRef.current = true
     try {
-      const page = await fetchDesignsPage(nextCursorRef.current)
+      const page = await fetchDesignsPage(nextCursorRef.current, folderId)
       nextCursorRef.current = page.nextCursor
       setHasMore(page.nextCursor !== null)
       setDesigns((prev) => (prev ? [...prev, ...page.designs] : page.designs))
@@ -108,16 +132,86 @@ export function useDesigns() {
     } finally {
       loadingMoreRef.current = false
     }
-  }, [])
+  }, [folderId])
 
   useEffect(() => {
     // kick the fetch off in a microtask so the effect body itself never
     // calls setState synchronously (react-hooks/set-state-in-effect);
     // refresh() only sets state after its awaits resolve anyway.
+    // v0.14 (D6): switching folders re-runs this because refresh is
+    // keyed on folderId.
     void Promise.resolve().then(() => refresh())
   }, [refresh])
 
+  // loading = nothing loaded yet, OR the held page belongs to a
+  // different folder than the one being viewed (mid-switch skeletons)
+  const loading = designs === null || loadedFor !== (folderId ?? null)
+
   return { designs, loading, refresh, dbIssue, clearDbIssue: () => setDbIssue(null), hasMore, loadMore }
+}
+
+// ── v0.14 (D6): folders ─────────────────────────────────────
+
+export function useFolders() {
+  const [folders, setFolders] = useState<FolderMeta[] | null>(null)
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch('/api/folders', { cache: 'no-store' })
+      if (!res.ok) throw new Error('failed')
+      const body = (await res.json()) as { folders?: FolderMeta[] }
+      setFolders(body.folders ?? [])
+    } catch {
+      setFolders([]) // honest empty tree — folders are never critical-path
+    }
+  }, [])
+
+  useEffect(() => {
+    void Promise.resolve().then(() => refresh())
+  }, [refresh])
+
+  return { folders, refresh }
+}
+
+export async function createFolder(name: string): Promise<FolderMeta> {
+  const res = await fetch('/api/folders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+  if (!res.ok) {
+    const err = await readApiError(res)
+    throw new ApiError(err.message, err.code, err.fix)
+  }
+  const body = (await res.json()) as { folder: FolderMeta }
+  return body.folder
+}
+
+export async function renameFolder(id: string, name: string): Promise<void> {
+  const res = await fetch(`/api/folders/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+  if (!res.ok) throw new Error('Failed to rename folder')
+}
+
+export async function deleteFolder(id: string): Promise<void> {
+  const res = await fetch(`/api/folders/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete folder')
+}
+
+/** File a design into one of the caller's folders (null = the root). */
+export async function moveDesignToFolder(id: string, folderId: string | null): Promise<void> {
+  const res = await fetch(`/api/designs/${id}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folderId }),
+  })
+  if (!res.ok) {
+    const err = await readApiError(res)
+    throw new ApiError(err.message, err.code, err.fix)
+  }
 }
 
 export async function createDesign(opts: {
@@ -126,6 +220,8 @@ export async function createDesign(opts: {
   height: number
   pages: PageData[]
   source?: string
+  /** v0.14 (D6): create directly inside one of the caller's folders. */
+  folderId?: string | null
 }): Promise<DesignRecord> {
   const res = await fetch('/api/designs', {
     method: 'POST',
@@ -136,6 +232,7 @@ export async function createDesign(opts: {
       height: opts.height,
       pages: opts.pages,
       source: opts.source ?? 'blank',
+      folderId: opts.folderId ?? null,
     }),
   })
   if (!res.ok) {
@@ -154,14 +251,18 @@ export async function fetchDesign(id: string): Promise<DesignRecord> {
   return toRecord(await res.json())
 }
 
-export async function duplicateDesign(id: string): Promise<DesignRecord> {
+export async function duplicateDesign(id: string, folderId?: string | null): Promise<DesignRecord> {
   const source = await fetchDesign(id)
+  // v0.14 (D6): a duplicate stays in its folder when the caller asks
+  // for it (the dashboard passes the design's folder only when it is
+  // one of the caller's own — foreign folders 404 at the API).
   return createDesign({
     name: `${source.name} copy`,
     width: source.width,
     height: source.height,
     pages: source.pages,
     source: `duplicate:${id}`,
+    folderId: folderId ?? null,
   })
 }
 

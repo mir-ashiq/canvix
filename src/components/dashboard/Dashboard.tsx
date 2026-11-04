@@ -29,6 +29,10 @@ import {
   LogIn,
   LogOut,
   FolderInput,
+  Folder,
+  FolderPlus,
+  FolderMinus,
+  Check,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
@@ -46,15 +50,20 @@ import { cn } from '@/lib/utils'
 import {
   ApiError,
   createDesign,
+  createFolder,
   deleteDesign,
   deleteDesignForever,
+  deleteFolder,
   duplicateDesign,
   fetchDesign,
   listTrash,
+  moveDesignToFolder,
   renameDesign,
+  renameFolder,
   restoreDesign,
   timeAgo,
   useDesigns,
+  useFolders,
   type DesignMeta,
 } from './hooks'
 import {
@@ -69,6 +78,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { toast } from '@/hooks/use-toast'
@@ -111,7 +124,11 @@ export function Dashboard() {
   const goLanding = useAppStore((s) => s.goLanding)
   const openEditor = useAppStore((s) => s.openEditor)
   const loadEditorDesign = useEditorStore((s) => s.loadDesign)
-  const { designs, loading, refresh, dbIssue, hasMore, loadMore } = useDesigns()
+  // v0.14 (D6): folder organization — activeFolder null = "All designs"
+  // (the root, the pre-v0.14 view). The designs hook refetches on switch.
+  const [activeFolder, setActiveFolder] = useState<string | null>(null)
+  const { designs, loading, refresh, dbIssue, hasMore, loadMore } = useDesigns(activeFolder)
+  const { folders, refresh: refreshFolders } = useFolders()
   const isMobile = useIsMobile()
   const [helpOpen, setHelpOpen] = useState(false)
 
@@ -139,6 +156,11 @@ export function Dashboard() {
   const [trashOpen, setTrashOpen] = useState(false)
   const [trash, setTrash] = useState<DesignMeta[] | null>(null)
   const [sort, setSort] = useState<'recent' | 'name'>('recent')
+  // v0.14 (D6): the create/rename folder dialog (one dialog, two modes)
+  const [folderDialog, setFolderDialog] = useState<
+    { mode: 'create' } | { mode: 'rename'; id: string; name: string } | null
+  >(null)
+  const [folderValue, setFolderValue] = useState('')
 
   const refreshTrash = useCallback(async () => {
     try {
@@ -201,6 +223,8 @@ export function Dashboard() {
   )
 
   // ── actions ─────────────────────────────────────────────────
+  // v0.14 (D6): anything created from this dashboard is born inside the
+  // folder the user is currently viewing (null = the root)
   const startBlank = async (w: number, h: number, name?: string) => {
     setCreating(true)
     try {
@@ -209,6 +233,7 @@ export function Dashboard() {
         width: w,
         height: h,
         pages: newBlankPages(),
+        folderId: activeFolder,
       })
       openEditor(record)
       loadEditorDesign(record)
@@ -228,6 +253,7 @@ export function Dashboard() {
         height: t.height,
         pages: t.pages,
         source: `template:${t.slug}`,
+        folderId: activeFolder,
       })
       openEditor(record)
       loadEditorDesign(record)
@@ -250,10 +276,14 @@ export function Dashboard() {
     }
   }
 
-  const doDuplicate = async (id: string) => {
+  const doDuplicate = async (d: DesignMeta) => {
     try {
-      await duplicateDesign(id)
-      await refresh()
+      // v0.14 (D6): the copy stays in the design's folder — but only when
+      // that folder is one of the caller's own (foreign folders 404)
+      const mineFolder =
+        d.folderId && (folders ?? []).some((f) => f.id === d.folderId) ? d.folderId : null
+      await duplicateDesign(d.id, mineFolder)
+      await Promise.all([refresh(), refreshFolders()])
       toast({ title: 'Design duplicated' })
     } catch {
       toast({ title: 'Could not duplicate', variant: 'destructive' })
@@ -281,6 +311,67 @@ export function Dashboard() {
       await refresh()
     } catch {
       toast({ title: 'Could not rename', variant: 'destructive' })
+    }
+  }
+
+  // ── v0.14 (D6): folder actions ──────────────────────────────
+  const openCreateFolder = () => {
+    setFolderValue('')
+    setFolderDialog({ mode: 'create' })
+  }
+
+  const openRenameFolder = (id: string, name: string) => {
+    setFolderValue(name)
+    setFolderDialog({ mode: 'rename', id, name })
+  }
+
+  const doFolderSubmit = async () => {
+    if (!folderDialog) return
+    const dialog = folderDialog
+    const name = folderValue.trim()
+    setFolderDialog(null)
+    if (!name) return
+    try {
+      if (dialog.mode === 'create') {
+        const folder = await createFolder(name)
+        await refreshFolders()
+        toast({ title: `Folder “${folder.name}” created` })
+      } else {
+        await renameFolder(dialog.id, name)
+        await refreshFolders()
+        toast({ title: 'Folder renamed' })
+      }
+    } catch (error) {
+      apiErrorToast(error, 'Could not save the folder')
+    }
+  }
+
+  const doDeleteFolder = async (id: string, name: string) => {
+    const ok = window.confirm(
+      `Delete the folder “${name}”?\n\nThe designs inside are NOT deleted — they return to All designs.`,
+    )
+    if (!ok) return
+    try {
+      await deleteFolder(id)
+      if (activeFolder === id) setActiveFolder(null)
+      await Promise.all([refreshFolders(), refresh()])
+      toast({ title: `Folder “${name}” deleted — its designs are in All designs` })
+    } catch {
+      toast({ title: 'Could not delete the folder', variant: 'destructive' })
+    }
+  }
+
+  const doMoveDesign = async (id: string, folderId: string | null, name: string) => {
+    try {
+      await moveDesignToFolder(id, folderId)
+      await Promise.all([refresh(), refreshFolders()])
+      toast({
+        title: folderId
+          ? `“${name}” moved to “${(folders ?? []).find((f) => f.id === folderId)?.name ?? 'folder'}”`
+          : `“${name}” moved to All designs`,
+      })
+    } catch (error) {
+      apiErrorToast(error, 'Could not move the design')
     }
   }
 
@@ -622,7 +713,11 @@ export function Dashboard() {
         {/* ── Recent designs ── */}
         <section id="cv-recents" className="pt-12 scroll-mt-20">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <h2 className="text-xl font-bold">Recent designs</h2>
+            <h2 className="text-xl font-bold">
+              {activeFolder
+                ? (folders ?? []).find((f) => f.id === activeFolder)?.name ?? 'Folder'
+                : 'Recent designs'}
+            </h2>
             {/* v0.4: canva-style sort control */}
             <div className="flex items-center gap-1 rounded-full border border-white/10 p-0.5" role="group" aria-label="Sort designs">
               {(['recent', 'name'] as const).map((mode) => (
@@ -640,6 +735,70 @@ export function Dashboard() {
               ))}
             </div>
           </div>
+
+          {/* v0.14 (D6): folder chips — All designs + the caller's folders. */}
+          <div className="mt-3 flex items-center gap-2 flex-wrap" role="group" aria-label="Design folders">
+            <button
+              onClick={() => setActiveFolder(null)}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium border transition-colors',
+                activeFolder === null
+                  ? 'bg-[#7630D7] text-white border-transparent'
+                  : 'bg-transparent border-white/12 text-white/60 hover:border-white/30 hover:text-white'
+              )}
+              aria-pressed={activeFolder === null}
+            >
+              <LayoutGrid size={14} /> All designs
+            </button>
+            {(folders ?? []).map((f) => (
+              <span
+                key={f.id}
+                className={cn(
+                  'inline-flex items-center rounded-full border transition-colors',
+                  activeFolder === f.id
+                    ? 'bg-[#7630D7] text-white border-transparent'
+                    : 'bg-transparent border-white/12 text-white/60 hover:border-white/30',
+                )}
+              >
+                <button
+                  onClick={() => setActiveFolder(f.id)}
+                  className="inline-flex items-center gap-1.5 rounded-l-full pl-3.5 py-1.5 pr-1.5 text-sm font-medium hover:text-white transition-colors"
+                  aria-pressed={activeFolder === f.id}
+                  aria-label={`Open folder ${f.name}`}
+                >
+                  <Folder size={14} /> {f.name}
+                  <span className="text-xs text-white/40">{f.designCount}</span>
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 rounded-r-full text-white/50 hover:bg-white/10 hover:text-white"
+                      aria-label={`Options for folder ${f.name}`}
+                    >
+                      <MoreHorizontal size={13} />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-40 bg-[#16181D] border-white/10 text-white">
+                    <DropdownMenuItem onClick={() => openRenameFolder(f.id, f.name)}>
+                      <Pencil size={14} className="mr-2" /> Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => void doDeleteFolder(f.id, f.name)}>
+                      <Trash2 size={14} className="mr-2" /> Delete folder
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </span>
+            ))}
+            <button
+              onClick={openCreateFolder}
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium border border-dashed border-white/20 text-white/50 hover:border-white/40 hover:text-white transition-colors"
+              aria-label="New folder"
+            >
+              <FolderPlus size={14} /> New folder
+            </button>
+          </div>
           {loading ? (
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -653,10 +812,14 @@ export function Dashboard() {
           ) : filteredDesigns.length === 0 ? (
             <div className="mt-6 rounded-2xl border-2 border-dashed border-white/12 p-10 text-center">
               <div className="mx-auto h-14 w-14 rounded-2xl bg-brand-gradient-soft flex items-center justify-center text-[#A78BFA]">
-                <Plus size={24} />
+                {activeFolder ? <Folder size={24} /> : <Plus size={24} />}
               </div>
-              <p className="mt-4 font-semibold">No designs yet</p>
-              <p className="mt-1 text-sm text-white/45">Pick a preset or template above to get started.</p>
+              <p className="mt-4 font-semibold">{activeFolder ? 'This folder is empty' : 'No designs yet'}</p>
+              <p className="mt-1 text-sm text-white/45">
+                {activeFolder
+                  ? 'Open a design’s ⋯ menu and “Move to folder”, or create something new — it lands here.'
+                  : 'Pick a preset or template above to get started.'}
+              </p>
             </div>
           ) : (
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -709,9 +872,44 @@ export function Dashboard() {
                         <DropdownMenuItem onClick={() => { setRenameTarget({ id: d.id, name: d.name }); setRenameValue(d.name) }}>
                           <Pencil size={14} className="mr-2" /> Rename
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => doDuplicate(d.id)}>
+                        <DropdownMenuItem onClick={() => void doDuplicate(d)}>
                           <Copy size={14} className="mr-2" /> Duplicate
                         </DropdownMenuItem>
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger className="gap-2">
+                            <Folder size={14} /> Move to folder
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="w-44 bg-[#16181D] border-white/10 text-white">
+                            {(folders ?? []).length === 0 ? (
+                              <DropdownMenuItem disabled>
+                                Create a folder first — “New folder” above
+                              </DropdownMenuItem>
+                            ) : (
+                              (folders ?? []).map((f) => (
+                                <DropdownMenuItem
+                                  key={f.id}
+                                  onClick={() => void doMoveDesign(d.id, f.id, d.name)}
+                                  className="gap-2"
+                                >
+                                  {d.folderId === f.id ? (
+                                    <Check size={14} className="text-[#A78BFA]" />
+                                  ) : (
+                                    <span className="w-[14px]" />
+                                  )}
+                                  <span className="truncate">{f.name}</span>
+                                </DropdownMenuItem>
+                              ))
+                            )}
+                            {d.folderId && (
+                              <>
+                                <DropdownMenuSeparator className="bg-white/10" />
+                                <DropdownMenuItem onClick={() => void doMoveDesign(d.id, null, d.name)}>
+                                  <FolderMinus size={14} className="mr-2" /> Remove from folder
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
                         <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => setDeleteTarget(d.id)}>
                           <Trash2 size={14} className="mr-2" /> Delete
                         </DropdownMenuItem>
@@ -976,6 +1174,36 @@ export function Dashboard() {
         </DialogContent>
       </Dialog>
 
+      {/* ── v0.14 (D6): create / rename folder dialog ── */}
+      <Dialog open={!!folderDialog} onOpenChange={(open) => !open && setFolderDialog(null)}>
+        <DialogContent className="rounded-[28px] sm:max-w-sm bg-[#16181D] border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle>{folderDialog?.mode === 'rename' ? 'Rename folder' : 'New folder'}</DialogTitle>
+            {folderDialog?.mode === 'create' && (
+              <DialogDescription className="text-white/55">
+                Folders organize your designs — deleting one never deletes the designs inside.
+              </DialogDescription>
+            )}
+          </DialogHeader>
+          <Input
+            value={folderValue}
+            onChange={(e) => setFolderValue(e.target.value)}
+            autoFocus
+            maxLength={60}
+            placeholder="Folder name"
+            onKeyDown={(e) => e.key === 'Enter' && void doFolderSubmit()}
+            className="bg-white/[0.06] border-white/10 text-white"
+            aria-label="Folder name"
+          />
+          <DialogFooter>
+            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setFolderDialog(null)}>Cancel</Button>
+            <Button className="btn-cv" onClick={() => void doFolderSubmit()}>
+              {folderDialog?.mode === 'rename' ? 'Save' : 'Create'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ── v0.9: account sign-in / sign-up ── */}
       <AuthDialog
         open={authOpen}
@@ -983,8 +1211,10 @@ export function Dashboard() {
         initialMode={authMode}
         onAuthed={() => {
           // the session changed — re-read auth state AND the dashboard scope
+          // (v0.14 D6: folders were claimed into the account on login)
           void refreshAuth()
           void refresh()
+          void refreshFolders()
         }}
       />
     </div>

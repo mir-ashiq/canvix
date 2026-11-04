@@ -8,6 +8,36 @@ import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 import { withLogging } from '@/lib/observability'
 
+/** v0.14 (D6): resolve a ?folder= id / POST folderId to a folder the
+ *  CALLER owns, or null. Foreign and absent ids are indistinguishable
+ *  (flat 404 upstream) — folders are private organization, so probing
+ *  ids must not reveal which exist. Returns:
+ *    { ok: true, folderId }  — mine, use it
+ *    { ok: false, status: 400|404 } — reject the request
+ */
+async function resolveOwnFolder(
+  req: NextRequest,
+  ownerId: string | null,
+  rawFolderId: unknown
+): Promise<{ ok: true; folderId: string | null } | { ok: false; status: 400 | 404 }> {
+  if (rawFolderId === undefined || rawFolderId === null) return { ok: true, folderId: null }
+  if (typeof rawFolderId !== 'string' || !rawFolderId) {
+    return { ok: false, status: 400 }
+  }
+  const token = readAnonToken(req)
+  const anonKey = ownerId ? null : token ? anonKeyHash(token) : null
+  if (!ownerId && !anonKey) return { ok: false, status: 404 }
+  const owned = await db.$queryRawUnsafe<{ id: string }[]>(
+    `SELECT id FROM "Folder" WHERE id = $1 AND (
+      ("ownerId" = $2 AND $2 IS NOT NULL) OR ("anonKey" = $3 AND $3 IS NOT NULL))`,
+    rawFolderId,
+    ownerId,
+    anonKey,
+  )
+  if (owned.length === 0) return { ok: false, status: 404 }
+  return { ok: true, folderId: rawFolderId }
+}
+
 // Normalise incoming pages payload (accepts object or legacy JSON string)
 // into a value suitable for the Postgres jsonb column.
 function toPages(value: unknown): Prisma.InputJsonValue {
@@ -46,6 +76,15 @@ async function __canvix_get(req: NextRequest) {
     const cursorId = req.nextUrl.searchParams.get('id')
     const user = await getSessionUser(req)
 
+    // v0.14 (D6): ?folder=<id> — one of the caller's own folders, or a
+    // flat 404. Absent param = "All designs" (unchanged behaviour).
+    let folderFilter: string | null = null
+    if (req.nextUrl.searchParams.has('folder')) {
+      const resolved = await resolveOwnFolder(req, user?.id ?? null, req.nextUrl.searchParams.get('folder'))
+      if (!resolved.ok) return NextResponse.json({ error: 'Folder not found' }, { status: resolved.status })
+      folderFilter = resolved.folderId
+    }
+
     // Compose scoping + keyset via AND — never spread two `OR` keys into
     // the same object (the second would silently replace the first and
     // leak private designs to other accounts).
@@ -66,6 +105,7 @@ async function __canvix_get(req: NextRequest) {
       deletedAt: trash ? { not: null } : null,
       AND: filters,
     }
+    if (folderFilter) where.folderId = folderFilter
     const designs = await db.design.findMany({
       where,
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
@@ -79,6 +119,7 @@ async function __canvix_get(req: NextRequest) {
         source: true,
         ownerId: true,
         anonKey: true,
+        folderId: true,
         deletedAt: true,
         createdAt: true,
         updatedAt: true,
@@ -121,6 +162,17 @@ async function __canvix_post(req: NextRequest) {
     const user = await getSessionUser(req)
     const body = await req.json()
 
+    // v0.14 (D6): optional folderId — a design can be born filed into
+    // one of the caller's folders ("create inside folder"). Foreign
+    // ids are a flat 404, the same rule as the move route.
+    const folderResolved = await resolveOwnFolder(req, user?.id ?? null, (body as { folderId?: unknown }).folderId)
+    if (!folderResolved.ok) {
+      return NextResponse.json(
+        folderResolved.status === 404 ? { error: 'Folder not found' } : { error: 'folderId must be a folder id or null.' },
+        { status: folderResolved.status },
+      )
+    }
+
     if (user) {
       const design = await db.design.create({
         data: {
@@ -131,12 +183,15 @@ async function __canvix_post(req: NextRequest) {
           source: typeof body.source === 'string' ? body.source.slice(0, 120) : 'blank',
           thumbnail: typeof body.thumbnail === 'string' ? body.thumbnail : null,
           ownerId: user.id,
+          folderId: folderResolved.folderId,
         },
       })
       return NextResponse.json(design, { status: 201 })
     }
 
     // Anonymous: mint/refresh this browser's attribution, stamp the row.
+    // The folder check above already ran against this browser's cookie —
+    // a folder the anonymous caller does not own never gets here.
     const token = readAnonToken(req) ?? newAnonToken()
     const design = await db.design.create({
       data: {
@@ -147,6 +202,7 @@ async function __canvix_post(req: NextRequest) {
         source: typeof body.source === 'string' ? body.source.slice(0, 120) : 'blank',
         thumbnail: typeof body.thumbnail === 'string' ? body.thumbnail : null,
         anonKey: anonKeyHash(token),
+        folderId: folderResolved.folderId,
       },
     })
     const res = NextResponse.json(design, { status: 201 })

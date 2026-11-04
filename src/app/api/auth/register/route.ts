@@ -7,6 +7,7 @@ import { rateLimit } from '@/lib/ai/provider'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { withLogging } from '@/lib/observability'
 import { claimAnonMedia } from '@/lib/auth/claim-media'
+import { claimAnonFolders } from '@/lib/auth/claim-folders'
 
 // POST /api/auth/register — create an account (username + password).
 // Free forever: no email, no verification, no external provider — a
@@ -38,6 +39,8 @@ async function __canvix_post(req: NextRequest) {
     const res = NextResponse.json({ user }, { status: 201 })
     // v0.14 (D1): this browser's anonymous uploads follow the account
     await claimAnonMedia(req, user.id)
+    // v0.14 (D6): so does its folder organization
+    await claimAnonFolders(req, user.id)
     await createSession(user.id, res)
     return res
   } catch (error) {

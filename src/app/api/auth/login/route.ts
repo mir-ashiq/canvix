@@ -7,6 +7,7 @@ import { rateLimit } from '@/lib/ai/provider'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { withLogging } from '@/lib/observability'
 import { claimAnonMedia } from '@/lib/auth/claim-media'
+import { claimAnonFolders } from '@/lib/auth/claim-folders'
 
 // POST /api/auth/login — exchange username + password for a session cookie.
 // One deliberately generic error message: never reveal whether the
@@ -38,6 +39,8 @@ async function __canvix_post(req: NextRequest) {
 
     // v0.14 (D1): this browser's anonymous uploads follow the account
     await claimAnonMedia(req, user.id)
+    // v0.14 (D6): so does its folder organization
+    await claimAnonFolders(req, user.id)
     const res = NextResponse.json({ user: { id: user.id, username: user.username, createdAt: user.createdAt } })
     await createSession(user.id, res)
     return res

@@ -12,15 +12,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const dbMock = vi.hoisted(() => ({
-  design: { findMany: vi.fn() },
+  design: { findMany: vi.fn(), create: vi.fn() },
+  $queryRawUnsafe: vi.fn(),
 }))
 vi.mock('@/lib/db', () => ({ db: dbMock }))
 
 const getSessionUser = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/auth/session', () => ({ getSessionUser }))
 
+const readAnonToken = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/auth/anon', () => ({
+  readAnonToken,
+  newAnonToken: () => 'fresh-token',
+  anonKeyHash: (t: string) => `hash(${t})`,
+  setAnonCookie: vi.fn(),
+  anonHashFrom: () => null,
+}))
+
 import { NextRequest } from 'next/server'
-import { GET } from './route'
+import { GET, POST } from './route'
 
 const USER_A = { id: 'user-a', username: 'alpha', createdAt: new Date() }
 
@@ -125,5 +135,106 @@ describe('GET /api/designs (v0.9.2 pagination)', () => {
       { updatedAt: 'desc' },
       { id: 'desc' },
     ])
+  })
+})
+
+
+// ── v0.14 (D6): folder scoping on the list + create ────────────────
+//
+// ?folder=<id> must filter to one of the CALLER'S OWN folders; a
+// foreign id is a flat 404 (folders are private organization, and
+// probing must not reveal which exist). POST accepts folderId under
+// the same rule — a design can be born filed.
+
+function postReq(opts: { user?: unknown; body?: unknown; origin?: string } = {}) {
+  getSessionUser.mockResolvedValue(opts.user ?? null)
+  readAnonToken.mockReturnValue(null)
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', host: 'canvix.test' }
+  if (opts.origin) headers.origin = opts.origin
+  return new NextRequest('http://canvix.test/api/designs', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(opts.body ?? {}),
+  })
+}
+
+describe('GET /api/designs ?folder= (v0.14 D6)', () => {
+  it("filters the list to the caller's own folder", async () => {
+    dbMock.$queryRawUnsafe.mockResolvedValueOnce([{ id: 'f1' }])
+    dbMock.design.findMany.mockResolvedValue([])
+    const res = await get({
+      user: USER_A,
+      url: 'http://canvix.test/api/designs?folder=f1',
+    })
+    expect(res.status).toBe(200)
+    // the ownership check scoped by the caller's attribution
+    expect(dbMock.$queryRawUnsafe.mock.calls[0][0]).toContain('FROM "Folder"')
+    expect(dbMock.$queryRawUnsafe.mock.calls[0][2]).toBe('user-a')
+    // the list where carries the folder filter
+    expect(dbMock.design.findMany.mock.calls[0][0].where.folderId).toBe('f1')
+  })
+
+  it('a foreign folder id is a flat 404 — the list never runs', async () => {
+    dbMock.$queryRawUnsafe.mockResolvedValueOnce([]) // not the caller's
+    const res = await get({
+      user: USER_A,
+      url: 'http://canvix.test/api/designs?folder=f-foreign',
+    })
+    expect(res.status).toBe(404)
+    expect(dbMock.design.findMany).not.toHaveBeenCalled()
+  })
+
+  it('an empty folder param is a 400, not an empty list', async () => {
+    const res = await get({ url: 'http://canvix.test/api/designs?folder=' })
+    expect(res.status).toBe(400)
+    expect(dbMock.design.findMany).not.toHaveBeenCalled()
+  })
+
+  it('no folder param = All designs, no folder query at all', async () => {
+    dbMock.design.findMany.mockResolvedValue([])
+    await get()
+    expect(dbMock.$queryRawUnsafe).not.toHaveBeenCalled()
+    expect(dbMock.design.findMany.mock.calls[0][0].where.folderId).toBeUndefined()
+  })
+
+  it("scopes the folder check for anonymous callers by anonKey", async () => {
+    readAnonToken.mockReturnValue('tok-1')
+    dbMock.$queryRawUnsafe.mockResolvedValueOnce([{ id: 'f1' }])
+    dbMock.design.findMany.mockResolvedValue([])
+    const res = await get({ url: 'http://canvix.test/api/designs?folder=f1' })
+    expect(res.status).toBe(200)
+    expect(dbMock.$queryRawUnsafe.mock.calls[0][2]).toBeNull()
+    expect(dbMock.$queryRawUnsafe.mock.calls[0][3]).toBe('hash(tok-1)')
+  })
+})
+
+describe('POST /api/designs folderId (v0.14 D6)', () => {
+  it('creates the design filed into the caller own folder', async () => {
+    dbMock.$queryRawUnsafe.mockResolvedValueOnce([{ id: 'f1' }])
+    dbMock.design.create.mockResolvedValueOnce({ id: 'd-new' })
+    const res = await POST(postReq({
+      user: USER_A,
+      body: { name: 'Filed', width: 800, height: 600, folderId: 'f1' },
+    }))
+    expect(res.status).toBe(201)
+    expect(dbMock.design.create.mock.calls[0][0].data.folderId).toBe('f1')
+  })
+
+  it('a foreign folderId is a flat 404 — nothing is created', async () => {
+    dbMock.$queryRawUnsafe.mockResolvedValueOnce([])
+    const res = await POST(postReq({
+      user: USER_A,
+      body: { name: 'Nope', folderId: 'f-foreign' },
+    }))
+    expect(res.status).toBe(404)
+    expect(dbMock.design.create).not.toHaveBeenCalled()
+  })
+
+  it('no folderId creates at the root (unchanged pre-v0.14 behaviour)', async () => {
+    dbMock.design.create.mockResolvedValueOnce({ id: 'd-root' })
+    const res = await POST(postReq({ user: USER_A, body: { name: 'Root' } }))
+    expect(res.status).toBe(201)
+    expect(dbMock.$queryRawUnsafe).not.toHaveBeenCalled()
+    expect(dbMock.design.create.mock.calls[0][0].data.folderId).toBeNull()
   })
 })

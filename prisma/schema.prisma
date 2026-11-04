@@ -38,6 +38,7 @@ model User {
   passwordHash String
   createdAt    DateTime  @default(now())
   designs      Design[]  @relation("DesignOwner")
+  folders      Folder[]  @relation("FolderOwner")
   sessions     Session[]
 }
 
@@ -75,11 +76,41 @@ model Design {
   // design created before attribution existed (claimable only via the
   // explicit per-design adopt endpoint).
   anonKey    String?
+  // v0.14 (D6): dashboard organization — the folder this design is
+  // filed under. null = "All designs" (the root; unchanged pre-v0.14
+  // behaviour). Deleting a folder unfiles its designs (SetNull) — a
+  // folder delete never destroys work.
+  folderId    String?
+  folder      Folder?         @relation("DesignFolder", fields: [folderId], references: [id], onDelete: SetNull)
   // soft delete (dashboard Trash) — null = live design
-  deletedAt  DateTime?
+  deletedAt   DateTime?
   versions   DesignVersion[]
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
+
+  @@index([ownerId])
+  @@index([anonKey])
+  @@index([folderId])
+}
+
+// ── v0.14 (D6): dashboard folders ───────────────────────────
+// A named group of the caller's designs. Attribution mirrors Design/
+// Media exactly: signed-in → ownerId, anonymous → anonKey (the
+// canvix_anon cookie hash). Folders are PRIVATE organization — the
+// list endpoint only ever returns the caller's own rows — while the
+// designs inside keep their own visibility (the anonymous commons
+// stays shared). claim-on-login moves anon folders into the account
+// (src/lib/auth/claim-folders.ts), so organization follows the user
+// across devices just like uploads (D1).
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String?
+  owner     User?    @relation("FolderOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  anonKey   String?
+  designs   Design[] @relation("DesignFolder")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([ownerId])
   @@index([anonKey])

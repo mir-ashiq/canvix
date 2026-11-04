@@ -48,8 +48,14 @@ async function register(page: Page, tag: string): Promise<string> {
     data: { username, password: `D2-E2e-${username}-17!q` },
   })
   expect(res.status()).toBeLessThan(300)
+  if (!SHARED_ACCOUNT) SHARED_ACCOUNT = { username, password: `D2-E2e-${username}-17!q` }
   return username
 }
+
+// one account per FILE (tests run sequentially, workers: 1) — the
+// suite-wide register budget is 5/h/IP, so the read-only test's
+// design owner logs in here instead of registering a 3rd user
+let SHARED_ACCOUNT: { username: string; password: string } | null = null
 
 async function createDesign(page: Page, name: string, elements: unknown[]): Promise<string> {
   const res = await page.request.post('/api/designs', {
@@ -73,6 +79,8 @@ async function elementCount(page: Page, designId: string, pred: (e: Record<strin
 }
 
 test.describe('System clipboard (v0.14 D2)', () => {
+  // two full editor opens per test — slow self-host boxes need room
+  test.setTimeout(120_000)
   test('copy in tab A pastes in tab B with a fresh element id', async ({ browser }) => {
     const ctx = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] })
     const pageA = await ctx.newPage()
@@ -143,11 +151,17 @@ test.describe('System clipboard (v0.14 D2)', () => {
   })
 
   test('read-only designs never paste', async ({ browser }) => {
-    // owner creates a design with content…
+    // a REGISTERED owner makes the design private (ownerless designs
+    // are the anonymous commons — editable, not read-only). The owner
+    // logs into the account test 1 created: one registration per file.
+    expect(SHARED_ACCOUNT, 'a prior test registered the shared account').not.toBeNull()
     const ownerCtx = await browser.newContext()
     const ownerPage = await ownerCtx.newPage()
-    const username = await register(ownerPage, 'owner')
-    const design = await createDesign(ownerPage, `cvx_d2_ro_${username}`, [TEXT_ELEMENT])
+    const login = await ownerPage.request.post('/api/auth/login', {
+      data: { username: SHARED_ACCOUNT!.username, password: SHARED_ACCOUNT!.password },
+    })
+    expect(login.status()).toBe(200)
+    const design = await createDesign(ownerPage, 'cvx_d2_ro_owned', [TEXT_ELEMENT])
     await ownerCtx.close()
 
     // …an anonymous viewer opens it (read-only)

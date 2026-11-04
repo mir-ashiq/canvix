@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import {
   Bold, Italic, Underline, Strikethrough, CaseUpper, AlignLeft, AlignCenter, AlignRight,
   AlignJustify, Minus, Plus, LetterText, Percent, Sparkles, Move, CopyPlus, Trash2,
@@ -9,7 +9,7 @@ import {
   AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd,
   FlipHorizontal, FlipVertical, Sun, Contrast, Palette, RotateCcw, Replace, Lock, LockOpen,
   Layers, SquareDashed, Crop, Spline, Table2, Rows3, Columns3, Trash, Upload, ExternalLink,
-  Music, Film, Play, Repeat, Volume2, VolumeX, SlidersHorizontal, Activity, Puzzle, LayoutGrid,
+  Music, Film, Play, Repeat, Volume2, VolumeX, SlidersHorizontal, Activity, Puzzle, LayoutGrid, Wand2,
 } from 'lucide-react'
 import { useEditorStore, selectedElements, currentPageData } from '@/store/editor-store'
 import type { AudioElement, EmbedElement, FrameElement, ImageElement, LineElement, PluginElement, ShapeElement, StickerElement, TableElement, TextElement, VideoElement, AnyElement, FrameShape } from '@/lib/types'
@@ -21,6 +21,8 @@ import { getPluginSystemState, subscribePluginSystem } from '@/lib/plugins/rende
 import { applyDesignAction } from '@/lib/design-actions'
 import { FontDropdown } from './toolbar/FontDropdown'
 import { ColorMenu } from './toolbar/ColorMenu'
+import { IMAGE_FILTER_PRESETS, applyPresetToImageData, isImageFilterId, clampFilterIntensity } from '@/lib/image-filters'
+import { useLoadedImage } from './canvas/use-loaded-image'
 import { ToolbarPopover, SliderRow, IconTile } from './toolbar/popover-kit'
 import { BgRemoverButton, MagicEraserPopover, EnhanceButton } from './ImageAI'
 
@@ -340,7 +342,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           <MagicEraserPopover el={image} />
           <EnhanceButton el={image} />
           <Divider />
-          <ColorMenu value="#FFFFFF" onChange={() => undefined} title="Filter tint (soon)" />
+          <ImageFilterPopover el={image} ids={ids} />
           <ToolbarPopover trigger={(open) => (
             <button className="cv-tbtn" data-active={open} aria-label="Transparency" title="Transparency">
               <Percent size={14} />
@@ -789,6 +791,88 @@ function ImageAdjustPopover({ el, ids }: { el: ImageElement; ids: string[] }) {
       </div>
     </ToolbarPopover>
   )
+}
+
+/** v0.14 (D4): the filter gallery — preset chips with live previews
+ *  of the element's own image + an intensity slider. Replaces the old
+ *  "Filter tint (soon)" stub. */
+function ImageFilterPopover({ el, ids }: { el: ImageElement; ids: string[] }) {
+  const update = useEditorStore((s) => s.updateElements)
+  const updateLive = useEditorStore((s) => s.updateElementsLive)
+  const image = useLoadedImage(el.src)
+  const active = isImageFilterId(el.filter) ? el.filter : 'none'
+  const intensity = clampFilterIntensity(el.filterIntensity)
+  return (
+    <ToolbarPopover
+      width={268}
+      trigger={(open) => (
+        <button className="cv-tbtn gap-1 !px-2.5" data-active={open || active !== 'none'} aria-label="Filters" title="Filters">
+          <Wand2 size={14} /> <span className="text-[12px] hidden lg:inline">Filters</span>
+        </button>
+      )}
+    >
+      <div className="grid grid-cols-4 gap-1.5 mb-2.5">
+        {IMAGE_FILTER_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            title={p.hint}
+            aria-label={`Filter ${p.label}`}
+            aria-pressed={active === p.id}
+            onClick={() => update(ids, { filter: p.id, filterIntensity: p.id === 'none' ? 100 : intensity })}
+            className={cn(
+              'rounded-lg overflow-hidden border transition-colors',
+              active === p.id ? 'border-[#7630D7] bg-white/[0.13]' : 'border-white/10 hover:border-white/25'
+            )}
+          >
+            <FilterThumb image={image} preset={p.id} intensity={intensity} />
+            <div className="text-[10px] text-white/80 py-1 text-center leading-none">{p.label}</div>
+          </button>
+        ))}
+      </div>
+      {active !== 'none' && (
+        <SliderRow label="Intensity" value={intensity} min={0} max={100} step={1}
+          onChange={(v) => updateLive(ids, { filterIntensity: v })}
+          onCommit={() => update(ids, { filterIntensity: el.filterIntensity ?? 100 })} />
+      )}
+    </ToolbarPopover>
+  )
+}
+
+/** tiny live preview — the preset applied to the element's own image */
+function FilterThumb({ image, preset, intensity }: { image: HTMLImageElement | null; preset: string; intensity: number }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const canvas = ref.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const w = 56
+    const h = 40
+    canvas.width = w
+    canvas.height = h
+    ctx.clearRect(0, 0, w, h)
+    if (!image) return
+    // cover-crop the source into the thumb
+    const sr = image.naturalWidth / image.naturalHeight
+    const tr = w / h
+    let sw = image.naturalWidth
+    let sh = image.naturalHeight
+    let sx = 0
+    let sy = 0
+    if (sr > tr) {
+      sw = image.naturalHeight * tr
+      sx = (image.naturalWidth - sw) / 2
+    } else {
+      sh = image.naturalWidth / tr
+      sy = (image.naturalHeight - sh) / 2
+    }
+    ctx.drawImage(image, sx, sy, sw, sh, 0, 0, w, h)
+    if (preset === 'none' || intensity <= 0) return
+    const data = ctx.getImageData(0, 0, w, h)
+    applyPresetToImageData(data, preset, intensity / 100)
+    ctx.putImageData(data, 0, 0)
+  }, [image, preset, intensity])
+  return <canvas ref={ref} className="block w-full aspect-[7/5] bg-white/[0.06]" />
 }
 
 function SliderRowMini({ label, value, min, max, onChange, onCommit }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void; onCommit: () => void }) {

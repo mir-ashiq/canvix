@@ -17,6 +17,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { AnyElement, ElementType } from '@/lib/types'
+import { isImageFilterId, clampFilterIntensity } from '@/lib/image-filters'
 
 export const CANVIX_MIME = 'application/x-canvix'
 
@@ -104,6 +105,12 @@ export function sanitizePastedElements(raw: unknown): AnyElement[] {
     if (typeof s.locked !== 'boolean') s.locked = false
     const opacity = typeof s.opacity === 'number' ? s.opacity : 1
     s.opacity = Math.min(1, Math.max(0, opacity))
+    // v0.14 (D4): image filter fields are whitelisted + clamped — a
+    // pasted 'EVIL' preset id or a 1e9 intensity never enters the store
+    if (s.type === 'image') {
+      s.filter = isImageFilterId(s.filter) ? s.filter : 'none'
+      s.filterIntensity = clampFilterIntensity(s.filterIntensity)
+    }
     // groups carry children through the same gauntlet
     if (s.type === 'group' && Array.isArray(s.children)) {
       s.children = sanitizePastedElements(s.children)

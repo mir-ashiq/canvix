@@ -193,9 +193,16 @@ model Media {
   finalizedAt DateTime?
   createdAt   DateTime  @default(now())
 
+  // v0.14 (D1): the persistent uploads library
+  contentHash   String? // sha256 of the finalized bytes — same-owner dedupe
+  name          String? // original filename, surfaced in the library
+  keepInLibrary Boolean @default(false) // library membership; GC-protected
+
   @@index([ownerId])
   @@index([anonKey])
   @@index([finalizedAt, createdAt])
+  @@index([contentHash])
+  @@index([ownerId, keepInLibrary])
 }
 
 // Provider accounting + abuse telemetry for AI routes.

@@ -383,3 +383,88 @@ export async function addVideoFromFile(
     })
   )
 }
+
+// ── v0.14 (D1): the persistent uploads library ──────────────
+
+/**
+ * Upload an image through the media store (NOT document embedding):
+ * the original bytes land server-side — sha256-deduped within the
+ * account, quota-counted, and listed in the Uploads panel from the
+ * database. Returns the element-facing src + natural dimensions.
+ */
+export async function uploadImageToLibrary(
+  file: File,
+  onProgress?: (ratio: number) => void,
+): Promise<{ id: string; src: string; w: number; h: number }> {
+  if (!file.type.startsWith('image/')) throw new Error('Not an image')
+  const { uploadMediaFile, mediaSrc } = await import('@/lib/media/media-client')
+  const handle = await uploadMediaFile(file, onProgress)
+  const { w, h } = await probeImageSize(mediaSrc(handle.id))
+  return { id: handle.id, src: mediaSrc(handle.id), w, h }
+}
+
+/** natural dimensions of an image URL (same-origin media or data). */
+export function probeImageSize(src: string): Promise<{ w: number; h: number }> {
+  return new Promise((resolve) => {
+    const img = new window.Image()
+    img.onload = () => resolve({ w: img.naturalWidth || 500, h: img.naturalHeight || 500 })
+    img.onerror = () => resolve({ w: 500, h: 500 })
+    img.src = src
+  })
+}
+
+/** Insert an image that already lives in the media store (library). */
+export function addImageFromLibrary(id: string, w: number, h: number) {
+  addImageFromSrc(`/api/media/${id}`, w, h)
+}
+
+/**
+ * Insert audio that already lives in the media store — the element
+ * references the served URL; duration is probed from the fetched blob
+ * (the store keeps bytes, not metadata).
+ */
+export async function addAudioFromLibrary(id: string, name: string): Promise<void> {
+  const { analyzeAudioFile } = await import('@/lib/media/decode')
+  const { createAudioElement } = await import('@/lib/types')
+  const blob = await fetch(`/api/media/${id}`).then((r) => {
+    if (!r.ok) throw new Error('Media unavailable')
+    return r.blob()
+  })
+  const analysis = await analyzeAudioFile(new File([blob], name || 'audio', { type: blob.type }))
+  const store = useEditorStore.getState()
+  const w = Math.min(520, Math.max(360, store.width * 0.55))
+  const pos = placement(w, 96, store.pages[store.currentPage].elements.length)
+  store.addElement(
+    createAudioElement(`/api/media/${id}`, (name || 'Audio').replace(/\.[^.]+$/, '').slice(0, 60), analysis.duration, {
+      ...pos,
+      width: Math.round(w),
+      height: 96,
+      peaks: analysis.peaks,
+      bpm: analysis.bpm,
+      beats: analysis.beats,
+    })
+  )
+}
+
+/** Insert video that already lives in the media store (library). */
+export async function addVideoFromLibrary(id: string, name: string): Promise<void> {
+  const { probeVideoFile } = await import('@/lib/media/decode')
+  const { createVideoElement } = await import('@/lib/types')
+  const blob = await fetch(`/api/media/${id}`).then((r) => {
+    if (!r.ok) throw new Error('Media unavailable')
+    return r.blob()
+  })
+  const probe = await probeVideoFile(new File([blob], name || 'video', { type: blob.type }))
+  const store = useEditorStore.getState()
+  const maxW = store.width * 0.7
+  const w = Math.round(Math.min(maxW, Math.max(200, probe.naturalWidth || 480)))
+  const h = Math.round(probe.naturalWidth ? (w * probe.naturalHeight) / probe.naturalWidth : w * 0.5625)
+  const pos = placement(w, h, store.pages[store.currentPage].elements.length)
+  store.addElement(
+    createVideoElement(`/api/media/${id}`, probe.poster, probe.duration, probe.naturalWidth, probe.naturalHeight, {
+      ...pos,
+      width: w,
+      height: h,
+    })
+  )
+}

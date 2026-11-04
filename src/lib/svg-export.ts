@@ -42,10 +42,75 @@ function esc(s: string): string {
     .replace(/'/g, '&apos;')
 }
 
-function safeHref(src: string): string | null {
+export function safeHref(src: string): string | null {
   if (src.startsWith('data:image/')) return src
   if (/^https?:\/\//i.test(src)) return src
+  // v0.14 (D1): media-store images are first-party same-origin — the
+  // export inlines them to data URLs (inlineMediaImages) so files are
+  // portable; if inlining failed we still emit the relative URL (a
+  // visibly broken image beats silently losing content)
+  if (src.startsWith('/api/media/')) return src
   return null
+}
+
+// ── v0.14 (D1): inline media-store images for portable exports ──
+
+/** every image element src in these pages (media-store URLs only) */
+function collectMediaSrcs(pages: { elements: unknown[] }[]): Set<string> {
+  const srcs = new Set<string>()
+  const walk = (value: unknown): void => {
+    if (value && typeof value === 'object') {
+      const v = value as { src?: unknown; children?: unknown[]; elements?: unknown[] }
+      if (typeof v.src === 'string' && v.src.startsWith('/api/media/')) srcs.add(v.src)
+      for (const key of ['children', 'elements'] as const) {
+        if (Array.isArray(v[key])) v[key]!.forEach(walk)
+      }
+    }
+  }
+  for (const page of pages) walk(page)
+  return srcs
+}
+
+/**
+ * Rewrite every media-store image src in the pages to an inlined data
+ * URL, so the exported .svg is self-contained (opens anywhere, not
+ * just against the instance that served the bytes). Best-effort per
+ * image: a fetch that fails leaves the original relative src, which
+ * safeHref still accepts. Called by ExportDialog before serializing.
+ */
+export async function inlineMediaImages<T extends { elements: unknown[] }>(pages: T[]): Promise<T[]> {
+  const srcs = Array.from(collectMediaSrcs(pages))
+  if (!srcs.length) return pages
+  const dataUrl = new Map<string, string>()
+  await Promise.all(
+    srcs.map(async (src) => {
+      try {
+        const res = await fetch(src)
+        if (!res.ok) return
+        const blob = await res.blob()
+        if (blob.size > 8 * 1024 * 1024) return // cap inlined size
+        // Buffer-based data URL — no FileReader (node/worker safe)
+        const b64 = Buffer.from(await blob.arrayBuffer()).toString('base64')
+        dataUrl.set(src, `data:${blob.type || 'application/octet-stream'};base64,${b64}`)
+      } catch {
+        // leave the relative src — safeHref accepts it
+      }
+    }),
+  )
+  if (!dataUrl.size) return pages
+  const rewrite = (value: unknown): void => {
+    if (value && typeof value === 'object') {
+      const v = value as { src?: string; children?: unknown[]; elements?: unknown[] }
+      if (typeof v.src === 'string' && dataUrl.has(v.src)) v.src = dataUrl.get(v.src)!
+      for (const key of ['children', 'elements'] as const) {
+        if (Array.isArray(v[key])) v[key]!.forEach(rewrite)
+      }
+    }
+  }
+  // deep-copy so the live document is never mutated by an export
+  const copy: T[] = JSON.parse(JSON.stringify(pages))
+  for (const page of copy) rewrite(page)
+  return copy
 }
 
 // ── id sanitization for url(#id) references ─────────────────

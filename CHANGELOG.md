@@ -3,6 +3,62 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.14.0] — 2026-11-04
+
+### Added
+
+- **Daily-driver depth, part 1 of the v0.14 menu — the persistent
+  uploads library (D1).** Uploads used to live two half-lives: images
+  embedded as data URLs inside the document (bloated designs, no
+  reuse, no account), audio/video in the media store but invisible
+  after reload. Both now share one DB-backed library that survives
+  reload and follows the account — upload on device A, log in on
+  device B, insert from the Uploads panel.
+  - **Images join the media store**: the upload rail accepts
+    `image/*` alongside audio/video (same chunked protocol, same
+    32 MB cap), with the original bytes kept server-side — no more
+    silent downscaling into the document.
+  - **sha256 dedupe at finalize**: identical bytes within the SAME
+    attribution (account or anon cookie — never across accounts, so
+    uploads can't be probed through someone else's library) collapse
+    to the existing row; the finalize response carries
+    `deduplicated: true` and the old id.
+  - **Quota, surfaced**: `CANVIX_UPLOAD_QUOTA_MB` (default 256 MB)
+    per attribution, enforced at upload-init (in-flight rows count
+    too, so parallel uploads can't sail past the cap together) and
+    shown in the panel footer ("42.3 MB of 256.0 MB").
+  - **Library API**: `GET /api/media/library` (projection-only —
+    never the bytes; attribution-scoped), `PATCH`/`DELETE
+    /api/media/library/[id]` (rename / remove). A foreign id is a
+    flat 404 — no cross-account existence oracle. Removing an item
+    clears `keepInLibrary` only: designs already referencing it keep
+    working; the orphan GC owns reaping unreferenced rows.
+  - **Anonymous uploads follow the account**: login/register claims
+    this browser's anon-attributed media rows (scoped by the
+    canvix_anon hash — the design-adopt lesson, with none of the
+    eligibility subtlety).
+  - **UploadsPanel reads the DB**: grid of your files (image
+    thumbnails from the serve route, audio/video rows with icons),
+    click-to-insert (images keep replace-mode, audio/video re-probe
+    their blobs for duration/peaks), inline rename, hover delete,
+    set-as-background, upload progress, and the quota line.
+  - **Portable SVG exports**: media-store images inline to data URLs
+    at export time (`inlineMediaImages`, deep-copy — the live
+    document is never mutated); `safeHref` accepts the first-party
+    `/api/media/` srcs. A fetch that fails degrades honestly: the
+    relative URL stays (a visibly broken image beats silently
+    losing content).
+  - **GC discipline**: the media orphan GC skips `keepInLibrary`
+    rows (a library item is kept on purpose, not orphaned);
+    `--prune-library` opts back in.
+  - **Verification**: 23 new unit tests (library scoping/authz/CSRF,
+    dedupe + attribution-scoping, claim-on-login, safeHref +
+    inlining + no-mutation) and a 3-spec e2e acceptance
+    (`tests/e2e/uploads-library.spec.ts`): upload → reload →
+    second-design insert → inlined SVG export; remove-never-breaks-
+    designs; anonymous upload claimed on register (checked from a
+    second browser context).
+
 ## [0.13.4] — 2026-11-03
 
 ### Added

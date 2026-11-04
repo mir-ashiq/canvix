@@ -6,6 +6,7 @@ import { createSession } from '@/lib/auth/session'
 import { rateLimit } from '@/lib/ai/provider'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { withLogging } from '@/lib/observability'
+import { claimAnonMedia } from '@/lib/auth/claim-media'
 
 // POST /api/auth/login — exchange username + password for a session cookie.
 // One deliberately generic error message: never reveal whether the
@@ -35,6 +36,8 @@ async function __canvix_post(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid username or password.' }, { status: 401 })
     }
 
+    // v0.14 (D1): this browser's anonymous uploads follow the account
+    await claimAnonMedia(req, user.id)
     const res = NextResponse.json({ user: { id: user.id, username: user.username, createdAt: user.createdAt } })
     await createSession(user.id, res)
     return res

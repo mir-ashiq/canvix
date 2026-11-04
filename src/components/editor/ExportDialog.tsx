@@ -100,7 +100,11 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         // embedded; missing plugins degrade to placeholder cards.
         const pagesToExport = allPages ? pages : [pages[currentPage]]
         await primePluginRenders(collectPluginElements(pagesToExport), 'export')
-        const svgs = exportDesignToSVGs(pagesToExport, canvasBridge.pageWidth, canvasBridge.pageHeight)
+        // v0.14 (D1): media-store images inline to data URLs so the
+        // file is portable (deep-copy inside — the live pages untouched)
+        const { inlineMediaImages } = await import('@/lib/svg-export')
+        const inlined = await inlineMediaImages(pagesToExport)
+        const svgs = exportDesignToSVGs(inlined, canvasBridge.pageWidth, canvasBridge.pageHeight)
         for (let k = 0; k < svgs.length; k++) {
           const suffix = svgs.length > 1 ? `-page-${(allPages ? 0 : currentPage) + k + 1}` : ''
           downloadSVG(svgs[k], `${base}${suffix}.svg`)

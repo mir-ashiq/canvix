@@ -57,7 +57,7 @@ hello/
   "description": "Adds a greeting text box",
   "version": "1.0.0",
   "author": { "name": "Your Name" },
-  "engines": { "canvix": ">=0.13.4 <0.14.0" },
+  "engines": { "canvix": ">=0.13.4 <0.15.0" },
   "entry": { "panel": "panel.html" },
   "permissions": ["design:write"],
   "files": ["manifest.json", "panel.html", "panel.js"],

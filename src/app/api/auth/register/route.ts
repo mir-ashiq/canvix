@@ -6,6 +6,7 @@ import { createSession } from '@/lib/auth/session'
 import { rateLimit } from '@/lib/ai/provider'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { withLogging } from '@/lib/observability'
+import { claimAnonMedia } from '@/lib/auth/claim-media'
 
 // POST /api/auth/register — create an account (username + password).
 // Free forever: no email, no verification, no external provider — a
@@ -35,6 +36,8 @@ async function __canvix_post(req: NextRequest) {
     const user = await db.user.create({ data: { username, passwordHash }, select: { id: true, username: true, createdAt: true } })
 
     const res = NextResponse.json({ user }, { status: 201 })
+    // v0.14 (D1): this browser's anonymous uploads follow the account
+    await claimAnonMedia(req, user.id)
     await createSession(user.id, res)
     return res
   } catch (error) {

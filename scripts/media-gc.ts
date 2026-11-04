@@ -9,7 +9,11 @@
 //      upload-init route applies lazily, applied deterministically
 //   2. finalized uploads older than the grace period (default 14 d)
 //      whose id is not referenced by ANY live design's pages — an
-//      element references its media as `/api/media/<id>` in src
+//      element references its media as `/api/media/<id>` in src.
+//      v0.14 (D1): rows kept in the uploads library
+//      (keepInLibrary = true) are SKIPPED — a library item is kept
+//      on purpose, not orphaned; --prune-library opts back in and
+//      treats them like any unreferenced row.
 //
 // Default mode REPORTS only; --prune actually deletes. The grace
 // period exists because a freshly uploaded file can legitimately be
@@ -17,14 +21,16 @@
 // offline tab, or a design that was never saved at all).
 //
 // Usage:
-//   DATABASE_URL=... npx tsx scripts/media-gc.ts            # report
-//   DATABASE_URL=... npx tsx scripts/media-gc.ts --prune    # delete
-//   GRACE_DAYS=30 npx tsx scripts/media-gc.ts --prune       # custom grace
+//   DATABASE_URL=... npx tsx scripts/media-gc.ts                 # report
+//   DATABASE_URL=... npx tsx scripts/media-gc.ts --prune         # delete
+//   GRACE_DAYS=30 npx tsx scripts/media-gc.ts --prune            # custom grace
+//   DATABASE_URL=... npx tsx scripts/media-gc.ts --prune --prune-library  # also library items
 import { createScriptClient } from '../src/lib/db-script'
 
 const db = createScriptClient()
 
 const PRUNE = process.argv.includes('--prune')
+const PRUNE_LIBRARY = process.argv.includes('--prune-library')
 const GRACE_DAYS = Math.max(1, Number(process.env.GRACE_DAYS ?? 14))
 const ABANDON_MS = 24 * 3600 * 1000
 const GRACE_MS = GRACE_DAYS * 24 * 3600 * 1000
@@ -74,14 +80,25 @@ async function main() {
   }
 
   // 2. finalized orphans past the grace period
+  //    (v0.14 D1: library-kept rows only pruned with --prune-library)
   const candidates = await db.media.findMany({
-    where: { finalizedAt: { not: null }, createdAt: { lt: new Date(now - GRACE_MS) } },
-    select: { id: true, size: true, createdAt: true },
+    where: {
+      finalizedAt: { not: null },
+      createdAt: { lt: new Date(now - GRACE_MS) },
+      ...(PRUNE_LIBRARY ? {} : { keepInLibrary: false }),
+    },
+    select: { id: true, size: true, createdAt: true, keepInLibrary: true },
+  })
+  const kept = await db.media.count({
+    where: { finalizedAt: { not: null }, keepInLibrary: true, createdAt: { lt: new Date(now - GRACE_MS) } },
   })
   console.log(
     `\nfinalized uploads older than ${GRACE_DAYS} d: ${candidates.length}` +
       ` (${(candidates.reduce((n, m) => n + m.size, 0) / 1024 / 1024).toFixed(2)} MB)`,
   )
+  if (kept > 0 && !PRUNE_LIBRARY) {
+    console.log(`  (skipping ${kept} library-kept row${kept === 1 ? '' : 's'} — pass --prune-library to include them)`)
+  }
 
   // referenced set — scan live (non-trashed) designs in batches
   const referenced = new Set<string>()

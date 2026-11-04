@@ -3,6 +3,35 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.14.3] — 2026-11-05
+
+### Added
+
+- **Daily-driver depth, part 4 — the image filter gallery (D4).**
+  The context toolbar's "Filter tint (soon)" stub is gone: image
+  elements now carry a filter preset + intensity, rendered live in
+  the editor, in video exports, and approximated in SVG exports.
+  - **Eight presets** — Original, Mono (grayscale), Warm, Cool,
+    Vintage (sepia-lerp + black-lift), Blur (3-pass box ≈ gaussian),
+    Sharpen (3×3 unsharp) and Vignette (radial falloff) — as a chip
+    grid in the new **Filters** popover, each chip a live preview
+    canvas of the element's own image, plus an intensity slider.
+  - **One pixel pipeline, every renderer** (`src/lib/image-filters.ts`):
+    the editor rides the existing Konva cache pipeline; the video
+    exporter pre-bakes pixels through a Konva-exact twin (and now
+    exports flips/rotation for image elements too — a parity gap
+    closed while here); SVG exports emit real filter primitives
+    (`feColorMatrix`/`feComponentTransfer`/`feConvolveMatrix`/
+    `feGaussianBlur`, vignette as a clipped radial-gradient overlay)
+    with each approximation documented in the module header. Adjust
+    (brightness/contrast/saturation) now renders in exports as well
+    — previously editor-only.
+  - **Persistent + safe**: `filter`/`filterIntensity` live on the
+    element (undo/redo, collab, autosave all just work); pasted
+    elements whitelist the preset id and clamp intensity (junk
+    resets to none, never throws); `update_element` (MCP) patches
+    images' adjustments and filter fields too.
+
 ## [0.14.2] — 2026-11-04
 
 ### Added

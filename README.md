@@ -941,6 +941,19 @@ tool descriptions so agents pick the right format.
       [`docs/PLUGINS.md`](docs/PLUGINS.md) — quickstart, manifest
       spec, RPC reference, renderer contract, hosting guide
       *(v0.13.4)*
+- [x] Persistent uploads library (v0.14 D1) — one DB-backed library
+      for images AND audio/video: the media store now accepts `image/*`
+      (same chunked rail), finalizes with sha256 dedupe scoped to your
+      attribution (never across accounts), enforces + surfaces a
+      per-account quota (`CANVIX_UPLOAD_QUOTA_MB`, default 256 MB), and
+      lists everything in the Uploads panel — thumbnails, click-to-insert,
+      rename, delete. Uploads survive reload, and login/register claims
+      this browser's anonymous uploads, so the library follows the
+      account across devices. Removing an item never breaks designs
+      using it (rows survive while referenced; the orphan GC skips
+      library-kept rows unless `--prune-library`). SVG exports inline
+      media images to data URLs so files stay portable
+      *(v0.14.0)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)

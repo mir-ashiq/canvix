@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
@@ -69,7 +70,39 @@ async function __canvix_put(req: NextRequest, { params }: { params: Promise<{ id
         { status: 409 },
       )
     }
-    await db.media.update({ where: { id }, data: { finalizedAt: new Date() } })
+    // v0.14 (D1): finalize = hash the bytes, dedupe within the SAME
+    // attribution (account or anon cookie — never across accounts, so
+    // one user's uploads can't be probed through another's), then keep
+    // the row in the persistent uploads library.
+    const byteRows = await db.$queryRawUnsafe<{ bytes: Buffer; ownerId: string | null; anonKey: Buffer | null }[]>(
+      `SELECT bytes, "ownerId", "anonKey" FROM "Media" WHERE id = $1 AND "finalizedAt" IS NULL`,
+      id,
+    )
+    if (!byteRows.length) return NextResponse.json({ error: 'Not found or already finalized.' }, { status: 404 })
+    const { ownerId, anonKey } = byteRows[0]
+    const contentHash = createHash('sha256').update(byteRows[0].bytes).digest('hex')
+
+    const dupe = await db.$queryRawUnsafe<{ id: string }[]>(
+      `SELECT id FROM "Media"
+        WHERE "contentHash" = $1 AND "finalizedAt" IS NOT NULL AND id != $2 AND (
+          ("ownerId" = $3 AND $3 IS NOT NULL) OR ("anonKey" = $4 AND $4 IS NOT NULL))
+        ORDER BY "createdAt" ASC LIMIT 1`,
+      contentHash,
+      id,
+      ownerId,
+      anonKey,
+    )
+    if (dupe.length) {
+      // identical bytes already in this attribution's library — the new
+      // row is redundant: point the caller at the old id and drop it
+      await db.media.delete({ where: { id } }).catch(() => { /* already gone */ })
+      return NextResponse.json({ id: dupe[0].id, deduplicated: true })
+    }
+
+    await db.media.update({
+      where: { id },
+      data: { finalizedAt: new Date(), contentHash, keepInLibrary: true },
+    })
     return NextResponse.json({ id })
   } catch (error) {
     console.error('[media/finalize] failed', error)

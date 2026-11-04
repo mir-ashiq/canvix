@@ -13,6 +13,7 @@
 
 import Konva from 'konva'
 import type { AnyElement, AudioElement, ImageElement, PageData, PluginElement, VideoElement } from '@/lib/types'
+import { imageHasFilters, renderFilteredCanvas } from '@/lib/image-filters'
 import { animateElementAt, pageHoldDuration } from '@/lib/animations'
 import { beatEnvelopeAt, beatSourceOf } from '@/lib/media/beat-detect'
 import { awaitRender, renderKey } from '@/lib/plugins/renderer-cache'
@@ -290,14 +291,24 @@ function buildKonvaNode(el: AnyElement, images: Map<string, HTMLImageElement>): 
     }
     case 'image': {
       const im = el as ImageElement
+      // v0.14 (D4): adjustments + filter preset are pre-baked into the
+      // bitmap (pixel-exact twin of the editor's Konva pipeline) — and
+      // while here, flips/rotation finally export too (parity fix)
+      const img = images.get(im.src)
+      const bitmap = img && imageHasFilters(im) ? renderFilteredCanvas(im, img, im.width, im.height) : img
       const node = new Konva.Image({
         id: im.id,
         x: im.x,
         y: im.y,
         width: im.width,
         height: im.height,
-        image: images.get(im.src) ?? undefined,
+        image: bitmap ?? undefined,
         cornerRadius: im.radius,
+        scaleX: im.flipH ? -1 : 1,
+        scaleY: im.flipV ? -1 : 1,
+        offsetX: im.flipH ? im.width : 0,
+        offsetY: im.flipV ? im.height : 0,
+        rotation: im.rotation ?? 0,
       })
       return node
     }

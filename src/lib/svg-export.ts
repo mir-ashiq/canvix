@@ -27,6 +27,7 @@ import type {
   TextElement,
   GroupElement,
 } from '@/lib/types'
+import { svgImageFilterParts } from '@/lib/image-filters'
 import { arcForCurve, embedLayout, frameClipPathD, hostOf, tableGeometry, youtubeThumbUrl } from '@/lib/v06-geometry'
 import type { PluginElement } from '@/lib/types'
 import { getRenderEntry, renderKey } from '@/lib/plugins/renderer-cache'
@@ -420,7 +421,19 @@ function serializeElement(el: AnyElement, ctx: SvgContext): string {
       const transform = [fx, fy, im.rotation ? `rotate(${im.rotation} ${cxImg} ${cyImg})` : '']
         .filter(Boolean)
         .join(' ')
-      return `  <image href="${esc(href)}" x="${im.x}" y="${im.y}" width="${im.width}" height="${im.height}"${clipId ? ` clip-path="url(#${clipId})"` : ''}${transform ? ` transform="${transform}"` : ''}${opacityAttr(im)}${shadowAttrs(im, ctx)} preserveAspectRatio="none" />`
+      // v0.14 (D4): adjustments + filter preset as SVG filter primitives
+      // (documented approximations — see lib/image-filters.ts); the
+      // vignette preset renders as a clipped radial-gradient overlay
+      // riding the same clip + transform as the image
+      const filt = svgImageFilterParts(
+        im,
+        { defs: (markup) => ctx.defs.push(markup), nextId: refId },
+        { x: im.x, y: im.y, w: im.width, h: im.height },
+        `${clipId ? ` clip-path="url(#${clipId})"` : ''}${transform ? ` transform="${transform}"` : ''}`
+      )
+      const image = `  <image href="${esc(href)}" x="${im.x}" y="${im.y}" width="${im.width}" height="${im.height}"${clipId ? ` clip-path="url(#${clipId})"` : ''}${transform ? ` transform="${transform}"` : ''}${filt.attr}${opacityAttr(im)}${shadowAttrs(im, ctx)} preserveAspectRatio="none" />`
+      return filt.overlay ? `${image}
+${filt.overlay}` : image
     }
 
     case 'sticker': {

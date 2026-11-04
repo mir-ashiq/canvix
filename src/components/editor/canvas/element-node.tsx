@@ -24,6 +24,7 @@ import { isLine, withAlpha, type GradientFill } from '@/lib/types'
 import { elementGradientProps } from '@/lib/editor-utils'
 import { useEditorStore } from '@/store/editor-store'
 import { useLoadedImage } from './use-loaded-image'
+import { isImageFilterId, clampFilterIntensity, applyPresetToImageData } from '@/lib/image-filters'
 import { CurvedTextNode, EmbedNode, FrameNode, TableNode, type TableCellRef } from './v06-nodes'
 import { PluginNode } from './PluginNode'
 
@@ -96,15 +97,24 @@ function ImageNode({ el, common }: { el: ImageElement; common: Record<string, un
   const bright = (el.brightness ?? 0) / 100 // konva Brighten: -0.5..0.5 approx
   const contrast = el.contrast ?? 0
   const sat = el.saturation ?? 0
-  const needsFilters = bright !== 0 || contrast !== 0 || sat !== 0
+  // v0.14 (D4): filter-gallery preset rides the same cached pipeline
+  const preset = isImageFilterId(el.filter) ? el.filter : 'none'
+  const intensity = clampFilterIntensity(el.filterIntensity) / 100
+  const needsFilters = bright !== 0 || contrast !== 0 || sat !== 0 || (preset !== 'none' && intensity > 0)
 
   useEffect(() => {
     const node = nodeRef.current
     if (!node || !image) return
-    const filters: Array<typeof Konva.Filters.Brighten> = []
+    const filters: Konva.Filter[] = []
     if (bright !== 0) filters.push(Konva.Filters.Brighten)
     if (contrast !== 0) filters.push(Konva.Filters.Contrast)
     if (sat !== 0) filters.push(Konva.Filters.HSL)
+    if (preset !== 'none' && intensity > 0) {
+      // pure pixel kernel as a Konva filter (no `this` needed)
+      const id = preset
+      const t = intensity
+      filters.push((imageData: ImageData) => applyPresetToImageData(imageData, id, t))
+    }
     node.filters(filters)
     node.brightness(bright)
     node.contrast(contrast)
@@ -112,7 +122,7 @@ function ImageNode({ el, common }: { el: ImageElement; common: Record<string, un
     if (filters.length) node.cache()
     else node.clearCache()
     node.getLayer()?.batchDraw()
-  }, [image, bright, contrast, sat])
+  }, [image, bright, contrast, sat, preset, intensity])
 
   return (
     <KonvaImage

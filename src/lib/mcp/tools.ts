@@ -8,6 +8,7 @@ import type { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { safeFetch } from './ssrf-guard'
 import { FONTS } from '@/lib/editor-utils'
+import { isImageFilterId } from '@/lib/image-filters'
 import { exportPageToSVG } from '@/lib/svg-export'
 import { magicAnimatePage, clearPageAnimations } from '@/lib/animations'
 import { hasProvider, getZAI, recordUsage, rateLimit } from '@/lib/ai/provider'
@@ -1105,7 +1106,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
 const COMMON_KEYS = new Set(['x', 'y', 'width', 'height', 'rotation', 'opacity', 'visible', 'locked', 'name'])
 const TEXT_KEYS = new Set([...COMMON_KEYS, 'text', 'fontSize', 'fontFamily', 'bold', 'italic', 'underline', 'strike', 'uppercase', 'fill', 'align', 'lineHeight', 'letterSpacing', 'curve'])
 const SHAPE_KEYS = new Set([...COMMON_KEYS, 'fill', 'stroke', 'strokeWidth', 'cornerRadius'])
-const IMAGE_KEYS = new Set([...COMMON_KEYS, 'src', 'radius'])
+const IMAGE_KEYS = new Set([...COMMON_KEYS, 'src', 'radius', 'brightness', 'contrast', 'saturation', 'filter', 'filterIntensity'])
 const TABLE_KEYS = new Set([...COMMON_KEYS, 'rows', 'cols', 'cells', 'colWidths', 'rowHeight', 'borderColor', 'borderWidth', 'headerFill', 'textColor', 'fontSize', 'fontFamily'])
 const FRAME_KEYS = new Set([...COMMON_KEYS, 'frameShape', 'src', 'radius'])
 const EMBED_KEYS = new Set([...COMMON_KEYS, 'url', 'title', 'tint'])
@@ -1161,6 +1162,17 @@ function sanitizePatch(patch: Record<string, unknown>, el: AnyElement, pageW: nu
         break
       case 'src':
         out.src = isHttpsUrl(value) || (typeof value === 'string' && value.startsWith('data:image/')) ? value : ((el as { src?: string }).src ?? '')
+        break
+      case 'brightness':
+      case 'contrast':
+      case 'saturation':
+        out[key] = clamp(asNumber(value, 0), -100, 100)
+        break
+      case 'filterIntensity':
+        out.filterIntensity = clamp(asNumber(value, 100), 0, 100)
+        break
+      case 'filter':
+        out.filter = isImageFilterId(value) ? value : 'none'
         break
       case 'url':
         out.url = isHttpsUrl(value) ? value : ((el as { url?: string }).url ?? '')

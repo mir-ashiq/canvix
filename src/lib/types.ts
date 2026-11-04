@@ -177,6 +177,12 @@ export interface ImageElement extends BaseElement {
   brightness?: number // -100..100
   contrast?: number // -100..100
   saturation?: number // -100..100
+  /** v0.14 (D4): filter-gallery preset id — see lib/image-filters.ts
+   *  ('none' or undefined = untouched; readers validate via
+   *  isImageFilterId() so hostile pastes can't smuggle junk in) */
+  filter?: string
+  /** preset strength 0..100 (default 100) */
+  filterIntensity?: number
 }
 
 export interface StickerElement extends BaseElement {
@@ -571,6 +577,8 @@ export function createImageElement(
     brightness: 0,
     contrast: 0,
     saturation: 0,
+    filter: 'none',
+    filterIntensity: 100,
     ...init,
   }
 }

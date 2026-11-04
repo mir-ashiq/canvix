@@ -33,6 +33,25 @@ function textEl(overrides: Record<string, unknown> = {}): Record<string, unknown
   }
 }
 
+/** v0.14 (D4): image factory for filter-field sanitizing tests */
+function imageEl(overrides: Record<string, unknown> = {}) {
+  return {
+    type: 'image',
+    id: 'im1',
+    x: 0,
+    y: 0,
+    width: 200,
+    height: 150,
+    rotation: 0,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    src: 'data:image/png;base64,AAAA',
+    radius: 12,
+    ...overrides,
+  }
+}
+
 describe('envelope round-trip', () => {
   it('serialize → parse survives with identical content', () => {
     const els = [textEl() as unknown as AnyElement]
@@ -86,6 +105,35 @@ describe('sanitizePastedElements — the untrusted-input gauntlet', () => {
     expect(rec).not.toHaveProperty('text')
     expect(rec).not.toHaveProperty('tags')
     expect(rec.fontSize).toBe(32)
+  })
+
+  it('v0.14 (D4): image filter fields are whitelisted + clamped', () => {
+    const out = sanitizePastedElements([
+      imageEl({ filter: 'vintage', filterIntensity: 80 }),
+    ])
+    const rec = out[0] as unknown as Record<string, unknown>
+    expect(rec.filter).toBe('vintage')
+    expect(rec.filterIntensity).toBe(80)
+  })
+
+  it('v0.14 (D4): junk preset ids reset to none, hostile intensity clamps', () => {
+    const out = sanitizePastedElements([
+      imageEl({ filter: 'EVIL<script>', filterIntensity: 1e9 }),
+      imageEl({ filter: 42, filterIntensity: 'hot' }),
+      imageEl({ filter: '__proto__' }),
+    ])
+    for (const el of out) {
+      const rec = el as unknown as Record<string, unknown>
+      expect(rec.filter).toBe('none')
+      expect(rec.filterIntensity).toBe(100)
+    }
+  })
+
+  it('v0.14 (D4): negative/NaN intensity falls back to the 100 default', () => {
+    const out = sanitizePastedElements([imageEl({ filter: 'warm', filterIntensity: -20 })])
+    const rec = out[0] as unknown as Record<string, unknown>
+    expect(rec.filter).toBe('warm')
+    expect(rec.filterIntensity).toBe(0) // -20 clamps to 0, not 100 (finite input is clamped, not defaulted)
   })
 
   it('caps the element count', () => {

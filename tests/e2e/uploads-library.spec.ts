@@ -32,8 +32,15 @@ async function register(page: Page, tag: string): Promise<string> {
     data: { username, password: `D1-E2e-${username}-17!q` },
   })
   expect(res.status(), `register ${username}`).toBeLessThan(300)
+  // stash the first account — the claim test logs into it instead of
+  // registering a 4th user (the suite-wide register budget is 5/h/IP)
+  if (!SHARED_ACCOUNT) SHARED_ACCOUNT = { username, password: `D1-E2e-${username}-17!q` }
   return username
 }
+
+// tests in this file run sequentially (workers: 1, no parallel) —
+// the first test to register publishes its credentials here
+let SHARED_ACCOUNT: { username: string; password: string } | null = null
 
 async function createBlankDesign(page: Page, name: string): Promise<string> {
   const res = await page.request.post('/api/designs', {
@@ -169,8 +176,15 @@ test.describe('Uploads library (v0.14 D1)', () => {
     // the anonymous library lists it…
     await expect(page.getByRole('heading', { name: 'Your library' })).toBeVisible({ timeout: 15_000 })
 
-    // …then registering claims the rows into the account
-    const username = await register(page, 'claim')
+    // …then LOGGING IN claims the rows into the account (the same
+    // claimAnonMedia path register uses — the suite's register budget
+    // is 5/h/IP, so this test borrows the account test 1 created)
+    expect(SHARED_ACCOUNT, 'a prior test registered the shared account').not.toBeNull()
+    const username = SHARED_ACCOUNT!.username
+    const login = await page.request.post('/api/auth/login', {
+      data: { username, password: SHARED_ACCOUNT!.password },
+    })
+    expect(login.status(), 'login as the shared account').toBeLessThan(300)
     // the API now attributes the library to the account
     const lib = await page.request.get('/api/media/library')
     expect(lib.status()).toBe(200)
@@ -181,10 +195,10 @@ test.describe('Uploads library (v0.14 D1)', () => {
     const ctx = await page.context().browser()!.newContext()
     const pageB = await ctx.newPage()
     await pageB.goto('/')
-    const login = await pageB.request.post('/api/auth/login', {
-      data: { username, password: `D1-E2e-${username}-17!q` },
+    const loginB = await pageB.request.post('/api/auth/login', {
+      data: { username, password: SHARED_ACCOUNT!.password },
     })
-    expect(login.status()).toBe(200)
+    expect(loginB.status()).toBe(200)
     const libB = await pageB.request.get('/api/media/library')
     const bodyB = (await libB.json()) as { items: { id: string }[] }
     expect(bodyB.items.map((i) => i.id).sort()).toEqual(body.items.map((i) => i.id).sort())

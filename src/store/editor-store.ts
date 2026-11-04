@@ -160,6 +160,8 @@ interface EditorState {
   copySelection: () => void
   cutSelection: () => void
   pasteClipboard: () => void
+  pasteElements: (elements: AnyElement[]) => void
+  hasInternalClipboard: () => boolean
   moveLayer: (id: string, dir: 'up' | 'down' | 'front' | 'back') => void
   reorderLayer: (dragId: string, targetIndex: number) => void
   setLock: (ids: string[], locked: boolean) => void
@@ -533,25 +535,53 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   copySelection: () => {
     const { selectedIds, pages, currentPage } = get()
     clipboard = clone(pages[currentPage].elements.filter((e) => selectedIds.includes(e.id)))
+    // v0.14 (D2): mirror to the SYSTEM clipboard (custom MIME + text
+    // fallback) so another tab — or another Canvix window — can paste.
+    // Best-effort: no permissions → internal clipboard still works.
+    if (clipboard.length && typeof navigator !== 'undefined') {
+      void import('@/lib/clipboard/system-clipboard').then((m) =>
+        m.copySelectionToSystem(clipboard),
+      ).catch(() => { /* internal clipboard still covers same-tab */ })
+    }
   },
 
   cutSelection: () => {
     const { selectedIds, pages, currentPage } = get()
     if (!selectedIds.length) return
     clipboard = clone(pages[currentPage].elements.filter((e) => selectedIds.includes(e.id)))
+    // v0.14 (D2): cut mirrors to the system clipboard too
+    if (typeof navigator !== 'undefined') {
+      void import('@/lib/clipboard/system-clipboard').then((m) =>
+        m.copySelectionToSystem(clipboard),
+      ).catch(() => { /* internal clipboard still covers same-tab */ })
+    }
     get().deleteSelection()
   },
 
   pasteClipboard: () => {
     if (!clipboard.length) return
+    get().pasteElements(clipboard)
+  },
+
+  // v0.14 (D2): the single insertion path for pasted elements —
+  // internal clipboard, system-clipboard envelope, whatever. Ids are
+  // ALWAYS remapped (a paste never reuses an existing element id) and
+  // the paste offset keeps stacks visually separated.
+  pasteElements: (elements: AnyElement[]) => {
+    if (!elements.length) return
     get().pushHistory()
-    const clones = clipboard.map((e) => ({ ...clone(e), id: uid(e.type), x: e.x + 32, y: e.y + 32, _m: nowHlc() }) as AnyElement)
+    const clones = elements.map((e) => ({ ...clone(e), id: uid(e.type), x: e.x + 32, y: e.y + 32, _m: nowHlc() }) as AnyElement)
     const { pages, currentPage } = get()
     const next = editPage(pages, currentPage)
     next[currentPage].elements = [...next[currentPage].elements, ...clones]
     set({ pages: next, selectedIds: clones.map((c) => c.id), dirty: true, version: get().version + 1 })
     emit({ kind: 'elements:add', pageId: next[currentPage].id, elements: clones })
   },
+
+  // v0.14 (D2): does the internal (same-tab) clipboard hold anything?
+  // The paste handler prefers system-clipboard content; this decides
+  // the internal fallback.
+  hasInternalClipboard: () => clipboard.length > 0,
 
   moveLayer: (id, dir) => {
     get().pushHistory()

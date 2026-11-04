@@ -3,6 +3,48 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.14.1] — 2026-11-04
+
+### Added
+
+- **Daily-driver depth, part 2 — the system clipboard & cross-tab
+  copy (D2).** Copy used to be tab-local (a module-level array): the
+  moment you switched tabs it was gone, and pasting anything from the
+  OS — a screenshot, an image copied from another site — did nothing.
+  Now the OS clipboard carries a Canvix envelope, and OS images paste
+  straight onto the canvas.
+  - **Copy/cut mirror to the system clipboard**: a JSON envelope
+    (`application/x-canvix` custom MIME where supported, plus the same
+    JSON as `text/plain` so Firefox's writeText-only clipboard still
+    round-trips). The internal clipboard stays the same-tab fast
+    path — zero latency, no permissions.
+  - **One native paste pipeline** (the old mod+V keydown branch is
+    gone — keydown can't read clipboard contents): OS image file →
+    image element through the uploads-library rail (D1) with document
+    embed as fallback; Canvix envelope → sanitized elements; anything
+    else → the internal clipboard. Read-only designs never paste;
+    typing surfaces keep their default paste.
+  - **Clipboard files are captured synchronously** — the DataTransfer
+    (and its files) is neutered the moment the handler returns, so the
+    byte read starts inside the event and the File is rebuilt after.
+    The envelope text is likewise read synchronously.
+  - **Pasting is an untrusted-input surface**: `sanitizePastedElements`
+    keeps only known element types, caps every string (20 KB) / array
+    (600) / depth (8) / element count (50), forces finite clamped
+    geometry, strips `__proto__`/`constructor`/underscore keys, and
+    recurses the same gauntlet through group children — the document
+    pipeline only ever sees shapes it could have produced itself.
+  - **Ids are always remapped** on paste (`pasteElements`, the single
+    insertion path) — a paste can never collide with an existing
+    element id, locally or through collab.
+  - **Verification**: 12 new unit tests (the sanitizer gauntlet:
+    hostile types, prototype pollution, oversized payloads, depth
+    bombs, geometry clamps, group recursion; envelope round-trip;
+    DataTransfer stubs) + a 3-spec e2e: copy in tab A pastes in tab B
+    with a fresh id and the paste offset; an OS image lands as an
+    image element with a media-store src; a read-only viewer pressing
+    paste adds nothing (API truth).
+
 ## [0.14.0] — 2026-11-04
 
 ### Added

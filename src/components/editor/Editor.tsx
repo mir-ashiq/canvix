@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { X, Keyboard, Eye } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore, type PanelId } from '@/store/editor-store'
+import { readPastedElements, capturePastedImage, fileFromClipboard } from '@/lib/clipboard/system-clipboard'
 import { TopBar } from './TopBar'
 import { LeftRail } from './LeftRail'
 import { ContextToolbar } from './PropertiesBar'
@@ -354,6 +355,66 @@ export default function Editor() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [save])
+
+  // ── v0.14 (D2): the paste pipeline ─────────────────────────
+  // ONE native handler (the keydown path can't read clipboardData):
+  //   1. an OS image file (screenshots, "copy image") → image element
+  //      through the uploads-library rail (D1), embed as fallback
+  //   2. a Canvix envelope (custom MIME, or the text/plain fallback
+  //      Firefox writes) → sanitized elements — cross-tab copy
+  //   3. otherwise the internal clipboard (same-tab latency path)
+  // Read-only designs never paste; typing surfaces keep their default.
+  useEffect(() => {
+    const isTyping = () => {
+      const el = document.activeElement
+      if (!el) return false
+      const tag = el.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (el as HTMLElement).isContentEditable
+    }
+    const onPaste = (e: ClipboardEvent) => {
+      if (isTyping()) return
+      const state = useEditorStore.getState()
+      if (state.readOnly) return
+      const dt = e.clipboardData
+      if (!dt) return
+
+      // read EVERYTHING synchronously — the DataTransfer is neutered
+      // the moment this handler returns (async continuations see '');
+      // for files that means starting the byte read inside the handler
+      const img = capturePastedImage(dt)
+      const els = readPastedElements(dt)
+
+      // 1. OS image → the media-store library rail (D1)
+      if (img) {
+        e.preventDefault()
+        void (async () => {
+          const file = await fileFromClipboard(img)
+          const { uploadImageToLibrary, addImageFromFile, addImageFromSrc } = await import('@/components/editor/add-element')
+          try {
+            const { src, w, h } = await uploadImageToLibrary(file)
+            addImageFromSrc(src, w, h)
+          } catch {
+            // library rail failed (quota/offline) → document embed
+            await addImageFromFile(file).catch(() => undefined)
+          }
+        })()
+        return
+      }
+      // 2. Canvix envelope (cross-tab / cross-window copy)
+      if (els.length) {
+        e.preventDefault()
+        state.pasteElements(els)
+        return
+      }
+      // 3. internal clipboard — the same-tab fast path
+      if (state.hasInternalClipboard()) {
+        e.preventDefault()
+        state.pasteClipboard()
+      }
+    }
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+  }, [])
 
   // ── drag & drop image files onto the canvas ───────────────
   useEffect(() => {

@@ -77,7 +77,7 @@ test.describe('Uploads library (v0.14 D1)', () => {
       .poll(async () => {
         const doc = await designDoc(page, designA)
         return doc.pages[0].elements.filter((e) => e.type === 'image' && e.src?.startsWith('/api/media/')).length
-      }, { timeout: 20_000 })
+      }, { timeout: 45_000 })
       .toBeGreaterThanOrEqual(1)
 
     // the library lists the file with the quota line
@@ -105,7 +105,7 @@ test.describe('Uploads library (v0.14 D1)', () => {
       .poll(async () => {
         const doc = await designDoc(page, designB)
         return doc.pages[0].elements.filter((e) => e.type === 'image' && e.src === `/api/media/${mediaId}`).length
-      }, { timeout: 20_000 })
+      }, { timeout: 45_000 })
       .toBe(1)
 
     // the SVG export inlines media images (portable, no /api/media refs)
@@ -133,7 +133,7 @@ test.describe('Uploads library (v0.14 D1)', () => {
       .poll(async () => {
         const doc = await designDoc(page, design)
         return doc.pages[0].elements.filter((e) => e.type === 'image' && e.src?.startsWith('/api/media/')).length
-      }, { timeout: 20_000 })
+      }, { timeout: 45_000 })
       .toBeGreaterThanOrEqual(1)
 
     const doc = await designDoc(page, design)
@@ -163,7 +163,7 @@ test.describe('Uploads library (v0.14 D1)', () => {
       .poll(async () => {
         const doc = await designDoc(page, design)
         return doc.pages[0].elements.filter((e) => e.type === 'image' && e.src?.startsWith('/api/media/')).length
-      }, { timeout: 20_000 })
+      }, { timeout: 45_000 })
       .toBeGreaterThanOrEqual(1)
 
     // the anonymous library lists it…

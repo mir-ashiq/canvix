@@ -34,6 +34,8 @@ export type RateLimitBucket =
   | 'designs:create'
   | 'designs:update'
   | 'designs:delete'
+  | 'folders:create'
+  | 'folders:update'
   | 'collab:events'
   | 'collab:presence'
   | 'comments:create'
@@ -55,6 +57,11 @@ export const RATE_LIMITS: Record<RateLimitBucket, RateLimitConfig> = {
   // room for multi-tab + collaboration saves before it ever bites
   'designs:update': { windowMs: 60_000, max: 300 },
   'designs:delete': { windowMs: 60_000, max: 60 },
+  // v0.14 (D6): folder CRUD is cheap but should never be scriptable
+  // at scale — 30 creates / 60 renames+deletes per minute per IP is
+  // far beyond any organizing session, well under abuse velocity
+  'folders:create': { windowMs: 60_000, max: 30 },
+  'folders:update': { windowMs: 60_000, max: 60 },
   // collab flush cadence is 400 ms per active client → 150/min
   'collab:events': { windowMs: 60_000, max: 600 },
   // presence heartbeats every 15 s → 4/min per client

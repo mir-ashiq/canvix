@@ -3,6 +3,56 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.14.2] — 2026-11-04
+
+### Added
+
+- **Daily-driver depth, part 3 — dashboard folders (D6).** "Recent
+  designs" was one flat grid; every project jostled every other. Now
+  the caller organizes designs into folders — private, attribution-
+  scoped, and account-following like everything else.
+  - **`Folder` model + `Design.folderId`** (migration 0008, additive
+    and nullable — zero folders = "All designs", byte-for-byte the
+    pre-v0.14 view). Deleting a folder UNFILES its designs (FK `ON
+    DELETE SET NULL`): a folder delete can never destroy work, live
+    or trashed. Trashed designs keep their folder and return to it on
+    restore.
+  - **API**: `GET/POST /api/folders` (list with live design counts;
+    create with name sanitize + 50-folder ceiling) and
+    `PATCH/DELETE /api/folders/[id]` — all attribution-scoped
+    (ownerId or the canvix_anon hash), foreign ids are a flat 404
+    (no cross-account existence oracle), CSRF-guarded, rate-limited
+    (`folders:create`/`folders:update` buckets). `GET /api/designs`
+    gains `?folder=<id>` (caller-owned or 404) and returns
+    `folderId`; `POST /api/designs` accepts `folderId` so designs can
+    be born filed; `POST /api/designs/[id]/move` files/unfiles (edit
+    access on the design + ownership of the target folder — never
+    someone else's tree).
+  - **Login/register claims this browser's anonymous folders**
+    (`claim-folders.ts`, the D1 media pattern) — organization follows
+    the account across devices.
+  - **Dashboard UI**: folder chips between the section header and
+    the grid ("All designs" + per-folder chips with counts + "New
+    folder"), one dialog for create/rename, chip ⋯ menu (rename /
+    delete with an honest confirm: "designs inside are NOT deleted"),
+    design-card ⋯ menu gains a "Move to folder" submenu (with a check
+    on the current folder + "Remove from folder"), the section title
+    shows the open folder, and anything created while a folder is
+    open is born inside it. Duplicates stay in their folder when it
+    is one of the caller's own.
+  - **Verification**: vitest 676/676 (32 new: folder list/create
+    scoping + sanitize + ceiling, rename/delete flat-404 matrices,
+    move-route authz incl. foreign-folder 404 + read-only 403,
+    designs `?folder=` + create-folderId paths); e2e +2 specs
+    (anonymous full lifecycle: create → file → filter → rename →
+    delete → designs survive at the root, API-truth asserts; and
+    cross-attribution isolation: a second browser cannot list,
+    mutate, filter by, or create into the first one's folders);
+    default suite 49 specs green locally (fresh-server batches —
+    see worklog for the fuse-watcher caveat), flag-on plugins 5/5;
+    tsc/eslint/build clean. Zero new registrations in the new specs
+    (the PR #26 register budget).
+
 ## [0.14.1] — 2026-11-04
 
 ### Added

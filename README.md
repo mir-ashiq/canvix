@@ -413,7 +413,7 @@ is right here.
 - **Templates** — 11 starter templates: Instagram posts & stories, pitch decks,
   posters, logos, YouTube thumbnails
 - **Backgrounds** — solid colors, curated palettes and gradient presets
-- **Uploads** — drag-and-drop your own images (kept locally in your session)
+- **Uploads** — drag-and-drop your own images (a persistent library since v0.14: uploads survive reload and follow your account)
 - **Undo / redo** — full history stack with keyboard shortcuts
 - **Autosave** — designs persist to the database automatically
 - **Export** — PNG & JPG at 1× / 2× / 3× quality, current page or all pages,
@@ -964,6 +964,18 @@ tool descriptions so agents pick the right format.
       depth/count caps, geometry clamps, prototype-pollution stripping)
       and every paste remaps element ids. Read-only designs never
       paste *(v0.14.1)*
+- [x] Folders (v0.14 D6) — organize the dashboard: private,
+      attribution-scoped folders (`Folder` model + nullable
+      `Design.folderId`, migration 0008 — zero folders = "All
+      designs" unchanged). Folder chips with counts, create/rename/
+      delete (a confirm notes the designs survive), a "Move to
+      folder" submenu on every design card, designs born inside the
+      open folder, duplicates inherit it, and login/register claims
+      anonymous folders so the tree follows the account. Deleting a
+      folder unfiles its designs — never deletes them (FK
+      `ON DELETE SET NULL`), and trashed designs return to their
+      folder on restore. Foreign folder ids are flat 404s everywhere
+      (no cross-account probe) *(v0.14.2)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)

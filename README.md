@@ -954,6 +954,16 @@ tool descriptions so agents pick the right format.
       library-kept rows unless `--prune-library`). SVG exports inline
       media images to data URLs so files stay portable
       *(v0.14.0)*
+- [x] System clipboard & cross-tab copy (v0.14 D2) — copy/cut mirror a
+      Canvix JSON envelope to the OS clipboard (custom MIME + text/plain
+      fallback for Firefox), and one native paste pipeline handles it
+      all: OS image files (screenshots!) become image elements through
+      the uploads library, envelopes paste as sanitized elements, and
+      the internal clipboard remains the same-tab fast path. Pasted
+      data runs a hostile-input gauntlet (type allowlist, string/array/
+      depth/count caps, geometry clamps, prototype-pollution stripping)
+      and every paste remaps element ids. Read-only designs never
+      paste *(v0.14.1)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)

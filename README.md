@@ -1013,6 +1013,29 @@ tool descriptions so agents pick the right format.
       measured the span off by the last box's size and refused
       overlapping selections (Canva/Figma distribute those; now so
       does Canvix) *(v0.14.5)*
+- [x] Rich text (v0.15 R1) — per-range styling inside ONE text box:
+  bold / italic / underline / strikethrough / colour / links as style
+  runs (`spans`) over the existing flat fields, which stay the
+  inherit-base. One shared geometry module (`src/lib/rich-text.ts`)
+  lays out the runs and the editor canvas, the SVG serializer and the
+  video-export frame builder all draw the SAME positions (the D7
+  charts pattern). Editing rides the existing textarea overlay with a
+  floating selection toolbar (B/I/U/S, colour, link, clear) and a
+  styled mirror so you see the formatting as you apply it; typing
+  reconciles the runs per keystroke. Migration is lossless by
+  construction — legacy elements render through the untouched flat
+  path until a user styles a range, and "Clear styling" drops the
+  spans with the base fields never having been touched. Links are
+  http(s)-only (`sanitizeLink` fail-closed — `javascript:` and
+  friends are stripped on every write path: editor, MCP
+  `update_element`, normalize). Undo is ONE step per editing session.
+  Honest limits, on the record: **collab merge stays whole-box LWW**
+  — two offline editors of one text box still last-writer-win the
+  entire element (text + spans together; per-span stamps are a
+  post-1.0 evaluation on real usage) — curved text (`curve ≠ 0`)
+  ignores spans in all three renderers, the splice ghost-copies
+  effect falls back to the flat path, and SVG exports render links
+  styled but not as `<a>` anchors. *(v0.15.0)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)

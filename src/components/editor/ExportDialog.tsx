@@ -1,12 +1,22 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Download, Loader2, FileImage, FileType2, FileCode2, Film } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { captureStage, canvasBridge } from './canvas/canvas-bridge'
 import { exportDesignToSVGs, downloadSVG } from '@/lib/svg-export'
 import { collectPluginElements, primePluginRenders } from '@/lib/plugins/renderer-cache'
-import { detectVideoFormat, downloadVideo, estimateVideoDuration, exportVideo } from '@/lib/video-export'
+import {
+  chooseVideoExportEngine,
+  computeExportSize,
+  detectVideoFormat,
+  detectWebCodecsVideoSupport,
+  downloadVideo,
+  estimateVideoDuration,
+  exportVideo,
+  pagesHaveAutoplayAudio,
+  type VideoExportEngineDecision,
+} from '@/lib/video-export'
 import { toast } from '@/hooks/use-toast'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
@@ -63,6 +73,31 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const [progressLabel, setProgressLabel] = useState('')
   const videoFormat = detectVideoFormat()
   const videoDuration = estimateVideoDuration(pages)
+  // v0.15 R2: which engine will exportVideo use for THIS design?
+  // (audio designs keep MediaRecorder; silent designs get WebCodecs)
+  const [engine, setEngine] = useState<VideoExportEngineDecision | null>(null)
+  useEffect(() => {
+    let live = true
+    void (async () => {
+      const { width, height } = computeExportSize(
+        canvasBridge.pageWidth || 1080,
+        canvasBridge.pageHeight || 1080,
+        scale === 3 ? 1920 : scale === 2 ? 1440 : 960,
+      )
+      const wc = await detectWebCodecsVideoSupport(width, height)
+      const mr = detectVideoFormat()
+      const decision = chooseVideoExportEngine({
+        webcodecs: wc.supported,
+        mediaRecorder: mr !== null,
+        mediaRecorderAudio: mr?.audio ?? false,
+        hasPageAudio: pagesHaveAutoplayAudio(pages),
+      })
+      if (live) setEngine(decision)
+    })()
+    return () => {
+      live = false
+    }
+  }, [pages, scale])
 
   const base = sanitizeFilename(name)
   const pageCount = allPages ? pages.length : 1
@@ -215,12 +250,23 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                   Renders <strong>{videoDuration.toFixed(1)}s</strong> of animated playback ({pages.length} page{pages.length > 1 ? 's' : ''}) — element animations and page transitions included.
                 </p>
                 <p>
-                  {videoFormat ? (
-                    <>Format: <strong>{videoFormat.label}</strong>{videoFormat.extension === 'webm' && <> — this browser can’t encode MP4, so Canvix produces WebM (plays everywhere)</>}</>
+                  {engine === null ? (
+                    <>Choosing the export engine…</>
+                  ) : engine.engine === 'webcodecs' ? (
+                    <>Engine: <strong>WebCodecs → WebM (VP9)</strong> — frame-exact timeline, explicit bitrate, rendered locally (no upload)</>
+                  ) : engine.engine === 'mediarecorder' && videoFormat ? (
+                    <>
+                      Engine: <strong>MediaRecorder → {videoFormat.label}</strong>
+                      {engine.reason.includes('page audio') ? (
+                        <> — renders the page audio</>
+                      ) : videoFormat.extension === 'webm' ? (
+                        <> — this browser can’t encode MP4, so Canvix produces WebM (plays everywhere)</>
+                      ) : null}
+                      {' '}· rendered locally (no upload)
+                    </>
                   ) : (
-                    <span className="text-red-500">This browser cannot record video — try Chrome or Edge.</span>
+                    <span className="text-red-500">This browser cannot export video — try Chrome or Edge.</span>
                   )}
-                  · rendered locally (no upload)
                 </p>
               </div>
             ) : (

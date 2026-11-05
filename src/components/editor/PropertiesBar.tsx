@@ -22,6 +22,7 @@ import { beatSourceOf } from '@/lib/media/beat-detect'
 import { cn } from '@/lib/utils'
 import { getPluginSystemState, subscribePluginSystem } from '@/lib/plugins/renderer-cache'
 import { applyDesignAction } from '@/lib/design-actions'
+import { normalizeSpans } from '@/lib/rich-text'
 import { FontDropdown } from './toolbar/FontDropdown'
 import { ColorMenu } from './toolbar/ColorMenu'
 import { IMAGE_FILTER_PRESETS, applyPresetToImageData, isImageFilterId, clampFilterIntensity } from '@/lib/image-filters'
@@ -142,18 +143,36 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
             title="Text colour"
           />
 
-          <TBtn onClick={() => update(ids, { bold: !text.bold })} dataActive={text.bold} title="Bold" ariaLabel="Bold">
-            <Bold size={14} />
-          </TBtn>
-          <TBtn onClick={() => update(ids, { italic: !text.italic })} dataActive={text.italic} title="Italic" ariaLabel="Italic">
-            <Italic size={14} />
-          </TBtn>
-          <TBtn onClick={() => update(ids, { underline: !text.underline })} dataActive={text.underline} title="Underline" ariaLabel="Underline">
-            <Underline size={14} />
-          </TBtn>
-          <TBtn onClick={() => update(ids, { strike: !text.strike })} dataActive={text.strike} title="Strikethrough" ariaLabel="Strikethrough">
-            <Strikethrough size={14} />
-          </TBtn>
+          {/* v0.15 (R1): while the element carries rich spans, per-range
+              styles rule the canvas — offer the honest one-click clear back
+              to the flat base style instead of misleading flat toggles */}
+          {normalizeSpans(text.spans, text.text) ? (
+            <button
+              className="cv-tbtn"
+              style={{ width: 'auto', padding: '0 10px', fontSize: 11, gap: 6 }}
+              onClick={() => update(ids, { spans: null })}
+              title="Rich text active — clear per-range styling back to the base style"
+              aria-label="Clear rich text styling"
+              data-testid="clear-rich-text"
+            >
+              Rich text · Clear
+            </button>
+          ) : (
+            <>
+              <TBtn onClick={() => update(ids, { bold: !text.bold })} dataActive={text.bold} title="Bold" ariaLabel="Bold">
+                <Bold size={14} />
+              </TBtn>
+              <TBtn onClick={() => update(ids, { italic: !text.italic })} dataActive={text.italic} title="Italic" ariaLabel="Italic">
+                <Italic size={14} />
+              </TBtn>
+              <TBtn onClick={() => update(ids, { underline: !text.underline })} dataActive={text.underline} title="Underline" ariaLabel="Underline">
+                <Underline size={14} />
+              </TBtn>
+              <TBtn onClick={() => update(ids, { strike: !text.strike })} dataActive={text.strike} title="Strikethrough" ariaLabel="Strikethrough">
+                <Strikethrough size={14} />
+              </TBtn>
+            </>
+          )}
           <TBtn onClick={() => update(ids, { uppercase: !text.uppercase })} dataActive={text.uppercase} title="Uppercase" ariaLabel="Uppercase">
             <CaseUpper size={14} />
           </TBtn>

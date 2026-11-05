@@ -26,6 +26,8 @@ import { elementGradientProps } from '@/lib/editor-utils'
 import { useEditorStore } from '@/store/editor-store'
 import { useLoadedImage } from './use-loaded-image'
 import { isImageFilterId, clampFilterIntensity, applyPresetToImageData } from '@/lib/image-filters'
+import { createCanvasMeasure, layoutRichLines, normalizeSpans } from '@/lib/rich-text'
+import type { TextSpan } from '@/lib/types'
 import { CurvedTextNode, EmbedNode, FrameNode, TableNode, type TableCellRef } from './v06-nodes'
 import { PluginNode } from './PluginNode'
 import { ChartNode } from './chart-node'
@@ -68,6 +70,99 @@ function shadowProps(el: AnyElement) {
 }
 
 /** canva-style text effect presets → Konva text attrs */
+/** v0.15 (R1): the browser-side measure for rich text layout — canvas 2d
+ *  with the codebase's graceful no-canvas fallback (svg-export pattern). */
+const richMeasure = createCanvasMeasure()
+
+/** shift a Konva gradient's anchor points so a per-run node maps the
+ *  ELEMENT-box gradient continuously instead of restarting per run */
+function shiftGradientForRun(grad: Record<string, unknown>, dx: number, dy: number): Record<string, unknown> {
+  const pointKeys = new Set([
+    'fillLinearGradientStartPoint', 'fillLinearGradientEndPoint',
+    'fillRadialGradientStartPoint', 'fillRadialGradientEndPoint',
+  ])
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(grad)) {
+    if (pointKeys.has(k) && v && typeof v === 'object') {
+      const p = v as { x: number; y: number }
+      out[k] = { x: p.x - dx, y: p.y - dy }
+    } else {
+      out[k] = v
+    }
+  }
+  return out
+}
+
+/**
+ * v0.15 (R1): rich text — one Konva.Text per positioned run at the exact
+ * coordinates from the shared geometry module (src/lib/rich-text.ts);
+ * the SVG serializer and the video-export frame builder draw the SAME
+ * positions. Gradient fills map across the whole element box via
+ * per-run point offsets; hollow/outline strokes follow the run colour.
+ * The Group carries an explicit block height so the post-edit height
+ * sync (CanvasStage's rAF) reads the true text block height, matching
+ * the flat Konva.Text behaviour.
+ */
+function RichTextNode({
+  t,
+  spans,
+  common,
+  effect,
+}: {
+  t: TextElement
+  spans: TextSpan[]
+  common: Record<string, unknown>
+  effect: Record<string, unknown>
+}) {
+  const runs = useMemo(() => layoutRichLines(t, spans, richMeasure), [t, spans])
+  const blockH = runs.length
+    ? Math.max(...runs.map((r) => r.y)) + t.fontSize * t.lineHeight
+    : t.fontSize * t.lineHeight
+  const grad =
+    t.fillGradient && (!t.effect || ['none', 'shadow', 'lift', 'echo', 'splice'].includes(t.effect))
+      ? elementGradientProps(t.fillGradient, t.width, Math.max(t.height, blockH), 'corner')
+      : {}
+  const strokeEffect = t.effect === 'hollow' || t.effect === 'outline'
+  return (
+    <Group {...common} height={blockH}>
+      {/* the element's declared box as a transparent hit rect — keeps the
+          Group's clientRect (and therefore the Transformer's anchors and
+          the click/marquee hit region) on the DECLARED box exactly like
+          the flat Konva.Text, instead of the tight glyph bbox (without
+          it, a click at the element centre lands on a bottom anchor and
+          fires a phantom transformstart → an undo step that changes
+          nothing) */}
+      <Rect width={t.width} height={Math.max(t.height, blockH)} fill="transparent" perfectDrawEnabled={false} />
+      {t.effect === 'background' && (
+        <Rect width={t.width} height={Math.max(t.height, blockH)} fill={t.effectBackground ?? '#EFEFEF'} cornerRadius={Math.min(8, t.fontSize * 0.2)} />
+      )}
+      {runs.map((run, i) => {
+        const runGrad =
+          Object.keys(grad).length && !strokeEffect && run.style.color === t.fill
+            ? shiftGradientForRun(grad, run.x, run.y)
+            : {}
+        const runEffect = strokeEffect ? { ...effect, fill: 'transparent', stroke: run.style.color } : effect
+        return (
+          <Text
+            key={i}
+            x={run.x}
+            y={run.y}
+            text={run.text}
+            fontSize={t.fontSize}
+            fontFamily={t.fontFamily}
+            fontStyle={`${run.style.italic ? 'italic ' : ''}${run.style.bold ? 'bold' : 'normal'}`}
+            textDecoration={[run.style.underline ? 'underline' : '', run.style.strike ? 'line-through' : ''].filter(Boolean).join(' ')}
+            fill={Object.keys(runGrad).length ? undefined : run.style.color}
+            {...runGrad}
+            {...runEffect}
+            perfectDrawEnabled={false}
+          />
+        )
+      })}
+    </Group>
+  )
+}
+
 function textEffectProps(t: TextElement): Record<string, string | number> {
   switch (t.effect) {
     case 'shadow':
@@ -474,6 +569,13 @@ function ElementNodeImpl({ element: el, interactive, hiding, hideCell, registerN
       const t = el as TextElement
       const effect = t.effect && t.effect !== 'none' ? textEffectProps(t) : {}
       const rendered = t.uppercase ? t.text.toUpperCase() : t.text
+      // v0.15 (R1): rich text — spans render through the shared layout;
+      // curved text and the splice ghost-copies effect stay on the flat
+      // path (single-style by design, documented in README · R1)
+      const richSpans = (t.curve ?? 0) === 0 && t.effect !== 'splice' ? normalizeSpans(t.spans, t.text) : null
+      if (richSpans) {
+        return <RichTextNode t={t} spans={richSpans} common={common} effect={effect} />
+      }
       // gradient fill (skipped for effects that own the fill, e.g. Hollow)
       const textGrad: GradientFill | null | undefined = t.fillGradient
       const gradProps =

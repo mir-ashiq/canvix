@@ -25,6 +25,7 @@ import {
   type ChartKind,
 } from '@/lib/types'
 import { isChartKind, sanitizeChartLabels, sanitizeChartSeries, clampChartHole, CHART_PALETTE } from '@/lib/chart-geometry'
+import { normalizeSpans } from '@/lib/rich-text'
 
 export const SERVER_VERSION = '0.6.1'
 
@@ -1212,7 +1213,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
 // ── patch sanitizer (whitelist per element type) ──────────────
 
 const COMMON_KEYS = new Set(['x', 'y', 'width', 'height', 'rotation', 'opacity', 'visible', 'locked', 'name'])
-const TEXT_KEYS = new Set([...COMMON_KEYS, 'text', 'fontSize', 'fontFamily', 'bold', 'italic', 'underline', 'strike', 'uppercase', 'fill', 'align', 'lineHeight', 'letterSpacing', 'curve'])
+const TEXT_KEYS = new Set([...COMMON_KEYS, 'text', 'fontSize', 'fontFamily', 'bold', 'italic', 'underline', 'strike', 'uppercase', 'fill', 'align', 'lineHeight', 'letterSpacing', 'curve', 'spans'])
 const SHAPE_KEYS = new Set([...COMMON_KEYS, 'fill', 'stroke', 'strokeWidth', 'cornerRadius'])
 const IMAGE_KEYS = new Set([...COMMON_KEYS, 'src', 'radius', 'brightness', 'contrast', 'saturation', 'filter', 'filterIntensity'])
 const TABLE_KEYS = new Set([...COMMON_KEYS, 'rows', 'cols', 'cells', 'colWidths', 'rowHeight', 'borderColor', 'borderWidth', 'headerFill', 'textColor', 'fontSize', 'fontFamily'])
@@ -1262,6 +1263,14 @@ function sanitizePatch(patch: Record<string, unknown>, el: AnyElement, pageW: nu
       case 'title':
         out[key] = asString(value).slice(0, 500)
         break
+      // v0.15 (R1): rich text — runs are normalized against the possibly-
+      // patched text (patch {text, spans} lands atomically); a malformed
+      // array is dropped to null (flat), never stored, never corrupts text
+      case 'spans': {
+        const effectiveText = typeof out.text === 'string' ? out.text : ((el as { text?: string }).text ?? '')
+        out.spans = normalizeSpans(Array.isArray(value) ? (value as import('@/lib/types').TextSpan[]) : null, effectiveText)
+        break
+      }
       case 'fill':
       case 'stroke':
       case 'borderColor':

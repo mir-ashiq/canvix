@@ -26,11 +26,13 @@ import type {
   StickerElement,
   TableElement,
   TextElement,
+  TextSpan,
   GroupElement,
 } from '@/lib/types'
 import { svgImageFilterParts } from '@/lib/image-filters'
 import { chartPrimitives } from '@/lib/chart-geometry'
 import { arcForCurve, embedLayout, frameClipPathD, hostOf, tableGeometry, youtubeThumbUrl } from '@/lib/v06-geometry'
+import { layoutRichLines, normalizeSpans } from '@/lib/rich-text'
 import type { PluginElement } from '@/lib/types'
 import { getRenderEntry, renderKey } from '@/lib/plugins/renderer-cache'
 
@@ -276,6 +278,43 @@ function pluginPlaceholderSvg(el: PluginElement, rotate: string): string {
   </g>`
 }
 
+// v0.15 (R1): rich text — per-run tspans at the shared layout's exact
+// positions. The measure adapter wraps this serializer's own
+// measureText (adding letterSpacing per character) so SVG output stays
+// consistent with the editor's canvas metrics to the pixel.
+function richTextSvg(t: TextElement, spans: TextSpan[], ctx: SvgContext): string {
+  const runs = layoutRichLines(t, spans, (text, style) => measureText(text, t.fontFamily, t.fontSize, style.bold) + style.letterSpacing * text.length)
+  const gradientFill = t.fillGradient ? gradientRefFor(t, ctx) : null
+  const sharedAttrs = [
+    `font-family="${esc(t.fontFamily)}"`,
+    `font-size="${t.fontSize}"`,
+    t.letterSpacing ? `letter-spacing="${t.letterSpacing}"` : '',
+    opacityAttr(t),
+    shadowAttrs(t, ctx),
+  ]
+    .filter(Boolean)
+    .join(' ')
+  const transform = t.rotation ? ` transform="rotate(${t.rotation} ${t.x} ${t.y})"` : ''
+  const tspans = runs
+    .map((r) => {
+      const decor = [r.style.underline ? 'underline' : '', r.style.strike ? 'line-through' : ''].filter(Boolean).join(' ')
+      const fill = gradientFill && r.style.color === t.fill ? gradientFill : esc(r.style.color)
+      const attrs = [
+        `x="${(t.x + r.x).toFixed(2)}"`,
+        `y="${(t.y + r.y + t.fontSize * 0.8).toFixed(2)}"`,
+        `font-weight="${r.style.bold ? 700 : 400}"`,
+        `font-style="${r.style.italic ? 'italic' : 'normal'}"`,
+        decor ? `text-decoration="${decor}"` : '',
+        `fill="${fill}"`,
+      ]
+        .filter(Boolean)
+        .join(' ')
+      return `<tspan ${attrs}>${esc(r.text)}</tspan>`
+    })
+    .join('')
+  return `  <text ${sharedAttrs}${transform} xml:space="preserve">${tspans}</text>`
+}
+
 function serializeElement(el: AnyElement, ctx: SvgContext): string {
   if (!el.visible) return ''
   const transformBase = rotationTransform(el)
@@ -284,6 +323,13 @@ function serializeElement(el: AnyElement, ctx: SvgContext): string {
     case 'text': {
       const t = el as TextElement
       const rendered = t.uppercase ? t.text.toUpperCase() : t.text
+
+      // v0.15 (R1): rich text — spans before the flat paths (curved text
+      // stays flat: the arc path is single-style by design)
+      if (t.curve === 0 || t.curve === undefined) {
+        const richSpans = normalizeSpans(t.spans, t.text)
+        if (richSpans) return richTextSvg(t, richSpans, ctx)
+      }
 
       // v0.6: curved text → textPath on an arc (path def carries the translate)
       const arc = arcForCurve(t.curve ?? 0, t.width)

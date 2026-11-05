@@ -10,10 +10,12 @@ import {
   FlipHorizontal, FlipVertical, Sun, Contrast, Palette, RotateCcw, Replace, Lock, LockOpen,
   Layers, SquareDashed, Crop, Spline, Table2, Rows3, Columns3, Trash, Upload, ExternalLink,
   Music, Film, Play, Repeat, Volume2, VolumeX, SlidersHorizontal, Activity, Puzzle, LayoutGrid, Wand2,
+  BarChart3, LineChart, PieChart, ScatterChart,
 } from 'lucide-react'
 import { useEditorStore, selectedElements, currentPageData } from '@/store/editor-store'
-import type { AudioElement, EmbedElement, FrameElement, ImageElement, LineElement, PluginElement, ShapeElement, StickerElement, TableElement, TextElement, VideoElement, AnyElement, FrameShape } from '@/lib/types'
-import { FRAME_SHAPES, isGroup } from '@/lib/types'
+import type { AudioElement, ChartElement, ChartSeries, EmbedElement, FrameElement, ImageElement, LineElement, PluginElement, ShapeElement, StickerElement, TableElement, TextElement, VideoElement, AnyElement, FrameShape, ChartKind } from '@/lib/types'
+import { FRAME_SHAPES, isGroup, CHART_KINDS, CHART_KIND_LABELS } from '@/lib/types'
+import { CHART_PALETTE, MAX_CHART_LABELS, MAX_CHART_SERIES, CHART_VALUE_LIMIT } from '@/lib/chart-geometry'
 import { TEXT_EFFECTS } from '@/lib/types'
 import { beatSourceOf } from '@/lib/media/beat-detect'
 import { cn } from '@/lib/utils'
@@ -67,6 +69,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
   const table = first.type === 'table' ? (first as TableElement) : null
   const frame = first.type === 'frame' ? (first as FrameElement) : null
   const embed = first.type === 'embed' ? (first as EmbedElement) : null
+  const chart = first.type === 'chart' ? (first as ChartElement) : null
   const plugin = first.type === 'plugin' ? (first as PluginElement) : null
   const audio = first.type === 'audio' ? (first as AudioElement) : null
   const video = first.type === 'video' ? (first as VideoElement) : null
@@ -390,6 +393,15 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
               onCommit={() => update(ids, { opacity: embed.opacity })}
               format={(v) => `${100 - v}% transparent`} />
           </ToolbarPopover>
+          <Divider />
+          <PositionPopover ids={ids} count={1} element={first} />
+        </>
+      ) : chart ? (
+        <>
+          <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0 flex items-center gap-1.5">
+            <BarChart3 size={13} /> {CHART_KIND_LABELS[chart.kind]}
+          </span>
+          <ChartToolbar chart={chart} ids={ids} />
           <Divider />
           <PositionPopover ids={ids} count={1} element={first} />
         </>
@@ -1032,5 +1044,324 @@ function PluginToolbar({ plugin, ids }: { plugin: PluginElement; ids: string[] }
         <LayoutGrid size={14} />
       </TBtn>
     </>
+  )
+}
+
+// ── v0.14 (D7): chart toolbar — kind switcher, data editor, options ──
+
+const CHART_KIND_ICONS: Record<ChartKind, typeof BarChart3> = {
+  bar: BarChart3,
+  line: LineChart,
+  donut: PieChart,
+  scatter: ScatterChart,
+}
+
+function ChartToolbar({ chart, ids }: { chart: ChartElement; ids: string[] }) {
+  const update = useEditorStore((s) => s.updateElements)
+  const updateLive = useEditorStore((s) => s.updateElementsLive)
+
+  /** convert in place — scatter keeps labels empty; scatter→other reuses
+   *  the y values as data so nothing is lost in the round trip */
+  const switchKind = (k: ChartKind) => {
+    if (k === chart.kind) return
+    const patch: Partial<ChartElement> = { kind: k }
+    if (k === 'scatter') {
+      patch.labels = []
+    } else if (chart.kind === 'scatter' && !chart.labels.length) {
+      const n = Math.max(2, Math.floor((chart.series[0]?.values.length ?? 0) / 2))
+      patch.labels = Array.from({ length: n }, (_, i) => `Item ${i + 1}`)
+      patch.series = chart.series.map((sr) => ({ ...sr, values: sr.values.filter((_, j) => j % 2 === 1) }))
+    }
+    update(ids, patch)
+  }
+
+  return (
+    <>
+      {CHART_KINDS.map((k) => {
+        const Icon = CHART_KIND_ICONS[k]
+        return (
+          <TBtn key={k} onClick={() => switchKind(k)} title={CHART_KIND_LABELS[k]} ariaLabel={`Convert to ${CHART_KIND_LABELS[k]}`} dataActive={chart.kind === k}>
+            <Icon size={15} />
+          </TBtn>
+        )
+      })}
+      <Divider />
+      <ToolbarPopover
+        width={540}
+        trigger={(open) => (
+          <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Edit chart data" title="Edit chart data">
+            <Table2 size={14} /> <span className="text-[12px] hidden lg:inline">Edit data</span>
+          </button>
+        )}
+      >
+        <ChartDataEditor chart={chart} ids={ids} />
+      </ToolbarPopover>
+      <ToolbarPopover
+        trigger={(open) => (
+          <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Chart options" title="Chart options">
+            <SlidersHorizontal size={14} /> <span className="text-[12px] hidden lg:inline">Options</span>
+          </button>
+        )}
+      >
+        <div className="text-[12px] font-bold text-white/90 mb-2">Chart options</div>
+        {chart.kind === 'bar' && (
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[11px] text-white/60 w-16">Bars</span>
+            <ChartToggle label="Group" active={chart.barMode !== 'stack'} onClick={() => update(ids, { barMode: 'group' })} />
+            <ChartToggle label="Stack" active={chart.barMode === 'stack'} onClick={() => update(ids, { barMode: 'stack' })} />
+          </div>
+        )}
+        {chart.kind === 'donut' && (
+          <SliderRow
+            label="Hole size"
+            value={Math.round(chart.hole * 100)}
+            min={0}
+            max={85}
+            step={1}
+            onChange={(v) => updateLive(ids, { hole: v / 100 })}
+            onCommit={() => update(ids, { hole: chart.hole })}
+            format={(v) => `${v}%`}
+          />
+        )}
+        {chart.kind === 'line' && (
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[11px] text-white/60 w-16">Line</span>
+            <ChartToggle label="Smooth" active={chart.smooth} onClick={() => update(ids, { smooth: !chart.smooth })} />
+          </div>
+        )}
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <ChartToggle label="Grid" active={chart.showGrid} onClick={() => update(ids, { showGrid: !chart.showGrid })} />
+          <ChartToggle label="Values" active={chart.showValues} onClick={() => update(ids, { showValues: !chart.showValues })} />
+          <ChartToggle label="Legend" active={chart.showLegend} onClick={() => update(ids, { showLegend: !chart.showLegend })} />
+        </div>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[11px] text-white/60">Panel</span>
+          <ColorMenu value={chart.fill} onChange={(c, committed) => committed ? update(ids, { fill: c }) : updateLive(ids, { fill: c })} title="Chart background" />
+          <span className="text-[11px] text-white/60 ml-2">Text</span>
+          <ColorMenu value={chart.textColor} onChange={(c, committed) => committed ? update(ids, { textColor: c }) : updateLive(ids, { textColor: c })} title="Text colour" />
+        </div>
+        <SliderRow
+          label="Text size"
+          value={chart.fontSize}
+          min={8}
+          max={24}
+          step={1}
+          onChange={(v) => updateLive(ids, { fontSize: v })}
+          onCommit={() => update(ids, { fontSize: chart.fontSize })}
+        />
+      </ToolbarPopover>
+      <ToolbarPopover trigger={(open) => (
+        <button className="cv-tbtn" data-active={open} aria-label="Transparency" title="Transparency">
+          <Percent size={14} />
+        </button>
+      )}>
+        <SliderRow label="Transparency" value={Math.round(chart.opacity * 100)} min={0} max={100} step={1}
+          onChange={(v) => updateLive(ids, { opacity: v / 100 })}
+          onCommit={() => update(ids, { opacity: chart.opacity })}
+          format={(v) => `${100 - v}% transparent`} />
+      </ToolbarPopover>
+    </>
+  )
+}
+
+function ChartToggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'h-7 rounded-md px-2.5 text-[11px] border transition-colors shrink-0',
+        active ? 'bg-[#7630D7] border-[#7630D7] text-white' : 'bg-white/[0.05] border-white/10 text-white/60 hover:text-white'
+      )}
+    >
+      {label}
+    </button>
+  )
+}
+
+/** number input with a typing draft — "-" and partial numbers never
+ *  snap back mid-edit, valid numbers commit live (the house pattern) */
+function ChartNumInput({ value, onCommit, ariaLabel, className }: { value: number; onCommit: (n: number) => void; ariaLabel: string; className?: string }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      aria-label={ariaLabel}
+      value={draft ?? String(value)}
+      onChange={(e) => {
+        const raw = e.target.value
+        setDraft(raw)
+        if (raw === '' || raw === '-' || raw === '.' || raw === '-.') return
+        const n = Number(raw)
+        if (Number.isFinite(n)) onCommit(Math.max(-CHART_VALUE_LIMIT, Math.min(CHART_VALUE_LIMIT, n)))
+      }}
+      onBlur={() => setDraft(null)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+      }}
+      className={cn('w-14 bg-white/[0.06] rounded-md px-1.5 py-1 text-[12px] text-white/90 border border-white/10 focus:border-[#7630D7] outline-none tabular-nums', className)}
+    />
+  )
+}
+
+const CV_INPUT_CLS = 'bg-white/[0.06] rounded-md px-1.5 py-1 text-[12px] text-white/90 border border-white/10 focus:border-[#7630D7] outline-none'
+
+function ChartDataEditor({ chart, ids }: { chart: ChartElement; ids: string[] }) {
+  const update = useEditorStore((s) => s.updateElements)
+  const updateLive = useEditorStore((s) => s.updateElementsLive)
+  const scatter = chart.kind === 'scatter'
+
+  // typing = live (house pattern — table cells do the same);
+  // structural ops = one undo step each
+  const setLabels = (labels: string[]) => updateLive(ids, { labels })
+  const setSeries = (series: ChartSeries[]) => updateLive(ids, { series })
+  const setSeriesField = (i: number, patch: Partial<ChartSeries>) =>
+    setSeries(chart.series.map((sr, j) => (j === i ? { ...sr, ...patch } : sr)))
+
+  const setLabel = (i: number, v: string) => {
+    const labels = [...chart.labels]
+    labels[i] = v.slice(0, 24)
+    setLabels(labels)
+  }
+  const addLabel = () => {
+    if (chart.labels.length >= MAX_CHART_LABELS) return
+    update(ids, {
+      labels: [...chart.labels, `Item ${chart.labels.length + 1}`],
+      series: chart.series.map((sr) => ({ ...sr, values: [...sr.values, 0] })),
+    })
+  }
+  const removeLabel = () => {
+    if (chart.labels.length <= 1) return
+    update(ids, {
+      labels: chart.labels.slice(0, -1),
+      series: chart.series.map((sr) => ({ ...sr, values: sr.values.slice(0, -1) })),
+    })
+  }
+  const addSeries = () => {
+    if (chart.series.length >= MAX_CHART_SERIES) return
+    const values = scatter ? [10, 20, 30, 40] : chart.labels.map((_, i) => 20 + i * 5)
+    update(ids, {
+      series: [...chart.series, { name: `Series ${chart.series.length + 1}`, color: CHART_PALETTE[chart.series.length % CHART_PALETTE.length], values }],
+    })
+  }
+  const removeSeries = (i: number) => {
+    if (chart.series.length <= 1) return
+    update(ids, { series: chart.series.filter((_, j) => j !== i) })
+  }
+  const setValue = (si: number, vi: number, n: number) => {
+    const values = [...chart.series[si].values]
+    values[vi] = n
+    setSeriesField(si, { values })
+  }
+  const addPoint = (si: number) => {
+    const values = [...chart.series[si].values]
+    if (values.length >= 48) return
+    const lastX = values.length >= 2 ? values[values.length - 2] : 0
+    values.push(Math.round(lastX + 10), 50)
+    setSeriesField(si, { values })
+  }
+  const removePoint = (si: number, pi: number) => {
+    if (chart.series[si].values.length <= 4) return
+    const values = [...chart.series[si].values]
+    values.splice(pi * 2, 2)
+    setSeriesField(si, { values })
+  }
+
+  return (
+    <div>
+      <div className="text-[12px] font-bold text-white/90 mb-2">Chart data</div>
+      {scatter ? (
+        <div className="max-h-[320px] overflow-y-auto cv-scroll-dark pr-1">
+          {chart.series.map((sr, si) => (
+            <div key={si} className="mb-3 pb-2 border-b border-white/[0.07] last:border-b-0">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <ColorMenu value={sr.color} onChange={(c, committed) => committed ? update(ids, { series: chart.series.map((x, j) => (j === si ? { ...x, color: c } : x)) }) : setSeriesField(si, { color: c })} title={`Series ${si + 1} colour`} />
+                <input value={sr.name} onChange={(e) => setSeriesField(si, { name: e.target.value.slice(0, 40) })} aria-label={`Series ${si + 1} name`} className={cn(CV_INPUT_CLS, 'w-28')} />
+                {chart.series.length > 1 && (
+                  <TBtn onClick={() => removeSeries(si)} title="Remove series" ariaLabel={`Remove series ${si + 1}`} danger className="!h-7 !w-7">
+                    <Trash2 size={12} />
+                  </TBtn>
+                )}
+              </div>
+              {Array.from({ length: Math.floor(sr.values.length / 2) }, (_, pi) => (
+                <div key={pi} className="flex items-center gap-1.5 mb-1">
+                  <span className="w-4 text-[10px] text-white/35 text-right">x</span>
+                  <ChartNumInput value={sr.values[pi * 2] ?? 0} onCommit={(n) => setValue(si, pi * 2, n)} ariaLabel={`Series ${si + 1} point ${pi + 1} x`} />
+                  <span className="w-4 text-[10px] text-white/35 text-right">y</span>
+                  <ChartNumInput value={sr.values[pi * 2 + 1] ?? 0} onCommit={(n) => setValue(si, pi * 2 + 1, n)} ariaLabel={`Series ${si + 1} point ${pi + 1} y`} />
+                  <TBtn onClick={() => removePoint(si, pi)} title="Remove point" ariaLabel={`Remove point ${pi + 1}`} disabled={sr.values.length <= 4} className="!h-6 !w-6">
+                    <Minus size={11} />
+                  </TBtn>
+                </div>
+              ))}
+              <button onClick={() => addPoint(si)} disabled={sr.values.length >= 48} className="btn-cv h-7 px-3 text-[11px] mt-1">
+                + Point
+              </button>
+            </div>
+          ))}
+          <p className="text-[10px] text-white/35">Each point is an x, y pair on numeric axes.</p>
+        </div>
+      ) : (
+        <div>
+          <div className="max-h-[240px] overflow-auto cv-scroll-dark">
+            <table className="border-collapse text-[12px]">
+              <thead>
+                <tr>
+                  <th className="sticky left-0 bg-[#1B1D24] z-10 pr-2 pb-2 text-left text-white/40 font-medium text-[10px] w-[128px]">Series \ Labels</th>
+                  {chart.labels.map((l, i) => (
+                    <th key={i} className="px-1 pb-2">
+                      <input value={l} onChange={(e) => setLabel(i, e.target.value)} aria-label={`Label ${i + 1}`} className={cn(CV_INPUT_CLS, 'w-16')} />
+                    </th>
+                  ))}
+                  <th className="pl-1 pb-2 w-[52px]">
+                    <TBtn onClick={addLabel} title="Add label" ariaLabel="Add label" disabled={chart.labels.length >= MAX_CHART_LABELS} className="!h-6 !w-6">
+                      <Plus size={11} />
+                    </TBtn>
+                  </th>
+                  <th className="pb-2 w-[36px]">
+                    <TBtn onClick={removeLabel} title="Remove last label" ariaLabel="Remove last label" disabled={chart.labels.length <= 1} className="!h-6 !w-6">
+                      <Minus size={11} />
+                    </TBtn>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {chart.series.map((sr, si) => (
+                  <tr key={si}>
+                    <td className="sticky left-0 bg-[#1B1D24] z-10 pr-2 pb-2">
+                      <div className="flex items-center gap-1">
+                        <ColorMenu value={sr.color} onChange={(c, committed) => committed ? update(ids, { series: chart.series.map((x, j) => (j === si ? { ...x, color: c } : x)) }) : setSeriesField(si, { color: c })} title={`Series ${si + 1} colour`} />
+                        <input value={sr.name} onChange={(e) => setSeriesField(si, { name: e.target.value.slice(0, 40) })} aria-label={`Series ${si + 1} name`} className={cn(CV_INPUT_CLS, 'w-16')} />
+                        {chart.series.length > 1 && (
+                          <TBtn onClick={() => removeSeries(si)} title="Remove series" ariaLabel={`Remove series ${si + 1}`} danger className="!h-6 !w-6">
+                            <Trash2 size={11} />
+                          </TBtn>
+                        )}
+                      </div>
+                    </td>
+                    {chart.labels.map((_, vi) => (
+                      <td key={vi} className="px-1 pb-2">
+                        <ChartNumInput value={sr.values[vi] ?? 0} onCommit={(n) => setValue(si, vi, n)} ariaLabel={`Series ${si + 1} value ${vi + 1}`} />
+                      </td>
+                    ))}
+                    <td />
+                    <td />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      <div className="flex items-center gap-2 mt-2">
+        <button onClick={addSeries} disabled={chart.series.length >= MAX_CHART_SERIES} className="btn-cv h-7 px-3 text-[11px]">
+          + Series
+        </button>
+        <span className="text-[10px] text-white/35">
+          {scatter ? 'One x,y point per row.' : chart.kind === 'donut' ? 'Donut renders the first series.' : 'Values update the chart live.'}
+        </span>
+      </div>
+    </div>
   )
 }

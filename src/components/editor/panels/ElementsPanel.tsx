@@ -3,10 +3,10 @@
 import { useMemo, useState } from 'react'
 import { Square, Circle, Triangle, Star, Minus, ArrowRight, MoveHorizontal, Search, Hexagon, Pentagon, Diamond, CircleDashed, Frame, Youtube, MapPin, Link2 } from 'lucide-react'
 import { GRAPHICS, STICKER_GROUPS } from '@/lib/editor-utils'
-import { addEmbed, addFrame, addGraphic, addLine, addShape, addSticker, addTable, type TableStyle } from '../add-element'
+import { addChart, addEmbed, addFrame, addGraphic, addLine, addShape, addSticker, addTable, type TableStyle } from '../add-element'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { FRAME_SHAPES } from '@/lib/types'
+import { FRAME_SHAPES, type ChartKind } from '@/lib/types'
 
 function GraphicIcon({ path }: { path: string }) {
   return (
@@ -51,10 +51,67 @@ const CATEGORY_TABS = [
   { value: 'lines', label: 'Lines' },
   { value: 'graphics', label: 'Graphics' },
   { value: 'stickers', label: 'Stickers' },
+  { value: 'charts', label: 'Charts' },
   { value: 'tables', label: 'Tables' },
   { value: 'frames', label: 'Frames' },
   { value: 'embeds', label: 'Embeds' },
 ] as const
+
+/** v0.14 (D7): chart tiles — small pure-SVG minis (decorative, not live). */
+const CHART_TILES: { kind: ChartKind; label: string; mini: React.ReactNode }[] = [
+  {
+    kind: 'bar',
+    label: 'Bar',
+    mini: (
+      <svg viewBox="0 0 56 40" className="h-10 w-14" aria-hidden="true">
+        <rect x="4" y="14" width="8" height="22" rx="2" fill="#7630D7" />
+        <rect x="16" y="8" width="8" height="28" rx="2" fill="#02C0CC" />
+        <rect x="28" y="18" width="8" height="18" rx="2" fill="#FF5C8A" />
+        <rect x="40" y="4" width="8" height="32" rx="2" fill="#FFD166" />
+      </svg>
+    ),
+  },
+  {
+    kind: 'line',
+    label: 'Line',
+    mini: (
+      <svg viewBox="0 0 56 40" className="h-10 w-14" aria-hidden="true">
+        <polyline points="4,30 18,22 30,26 44,10 52,14" fill="none" stroke="#7630D7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="4" cy="30" r="3" fill="#7630D7" />
+        <circle cx="18" cy="22" r="3" fill="#7630D7" />
+        <circle cx="30" cy="26" r="3" fill="#7630D7" />
+        <circle cx="44" cy="10" r="3" fill="#7630D7" />
+        <circle cx="52" cy="14" r="3" fill="#7630D7" />
+      </svg>
+    ),
+  },
+  {
+    kind: 'donut',
+    label: 'Donut',
+    mini: (
+      <svg viewBox="0 0 56 40" className="h-10 w-14" aria-hidden="true">
+        <circle cx="28" cy="20" r="14" fill="none" stroke="#7630D7" strokeWidth="8" strokeDasharray="44 88" transform="rotate(-90 28 20)" />
+        <circle cx="28" cy="20" r="14" fill="none" stroke="#02C0CC" strokeWidth="8" strokeDasharray="30 88" strokeDashoffset="-44" transform="rotate(-90 28 20)" />
+        <circle cx="28" cy="20" r="14" fill="none" stroke="#FFD166" strokeWidth="8" strokeDasharray="14 88" strokeDashoffset="-74" transform="rotate(-90 28 20)" />
+      </svg>
+    ),
+  },
+  {
+    kind: 'scatter',
+    label: 'Scatter',
+    mini: (
+      <svg viewBox="0 0 56 40" className="h-10 w-14" aria-hidden="true">
+        <circle cx="8" cy="32" r="3" fill="#02C0CC" />
+        <circle cx="16" cy="24" r="3" fill="#02C0CC" />
+        <circle cx="22" cy="30" r="3" fill="#02C0CC" />
+        <circle cx="30" cy="16" r="3" fill="#02C0CC" />
+        <circle cx="38" cy="22" r="3" fill="#02C0CC" />
+        <circle cx="46" cy="8" r="3" fill="#02C0CC" />
+        <circle cx="50" cy="18" r="3" fill="#02C0CC" />
+      </svg>
+    ),
+  },
+]
 
 /** One shared class ⇒ identical height, padding, type size and states on every tab.
  *  text-white/65 on the white@5% bar = 7.38:1 (WCAG AA, was ~1.3:1 via text-foreground). */
@@ -190,6 +247,27 @@ export function ElementsPanel() {
             </div>
           </div>
         ))}
+      </TabsContent>
+
+      {/* v0.14 (D7): data-bound charts */}
+      <TabsContent value="charts" className="flex-1 overflow-y-auto cv-scroll-dark p-4 mt-0">
+        <p className="text-[11px] text-white/45 leading-relaxed mb-3">
+          Charts are data-bound elements — select one on the canvas and use <span className="text-white/70">Edit data</span> in the toolbar to change labels, values, colours and kind.
+        </p>
+        <SectionTitle>Types</SectionTitle>
+        <div className="grid grid-cols-2 gap-2">
+          {CHART_TILES.map((t) => (
+            <button
+              key={t.kind}
+              onClick={() => addChart(t.kind)}
+              className="flex flex-col items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-3 h-[92px] hover:border-[#7630D7] hover:bg-[#7630D7]/10 transition-all"
+              aria-label={`Add ${t.label} chart`}
+            >
+              {t.mini}
+              <span className="text-[11px] text-white/55">{t.label}</span>
+            </button>
+          ))}
+        </div>
       </TabsContent>
 
       {/* v0.6: native tables */}

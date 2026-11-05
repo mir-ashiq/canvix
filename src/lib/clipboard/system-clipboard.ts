@@ -18,12 +18,13 @@
 
 import type { AnyElement, ElementType } from '@/lib/types'
 import { isImageFilterId, clampFilterIntensity } from '@/lib/image-filters'
+import { isChartKind, clampChartHole, sanitizeChartLabels, sanitizeChartSeries } from '@/lib/chart-geometry'
 
 export const CANVIX_MIME = 'application/x-canvix'
 
 const KNOWN_TYPES: ReadonlySet<string> = new Set([
   'text', 'rect', 'ellipse', 'triangle', 'star', 'line', 'path', 'stroke',
-  'image', 'sticker', 'group', 'table', 'frame', 'embed', 'audio', 'video', 'plugin',
+  'image', 'sticker', 'group', 'table', 'frame', 'embed', 'audio', 'video', 'plugin', 'chart',
 ])
 
 export const MAX_PASTE_ELEMENTS = 50
@@ -110,6 +111,21 @@ export function sanitizePastedElements(raw: unknown): AnyElement[] {
     if (s.type === 'image') {
       s.filter = isImageFilterId(s.filter) ? s.filter : 'none'
       s.filterIntensity = clampFilterIntensity(s.filterIntensity)
+    }
+    // v0.14 (D7): chart fields are whitelisted + capped — a pasted
+    // 'EVIL' kind or a 60-series payload never enters the store
+    if (s.type === 'chart') {
+      const kind = isChartKind(s.kind) ? s.kind : 'bar'
+      const scatter = kind === 'scatter'
+      s.kind = kind
+      s.labels = sanitizeChartLabels(s.labels)
+      s.series = sanitizeChartSeries(s.series, scatter)
+      s.barMode = s.barMode === 'stack' ? 'stack' : 'group'
+      s.hole = clampChartHole(s.hole)
+      s.smooth = s.smooth !== false
+      s.showGrid = s.showGrid !== false
+      s.showValues = s.showValues === true
+      s.showLegend = s.showLegend !== false
     }
     // groups carry children through the same gauntlet
     if (s.type === 'group' && Array.isArray(s.children)) {

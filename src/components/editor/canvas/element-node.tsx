@@ -7,6 +7,7 @@ import type { KonvaEventObject } from 'konva/lib/Node'
 import type {
   AnyElement,
   AudioElement,
+  ChartElement,
   EmbedElement,
   FrameElement,
   GroupElement,
@@ -27,6 +28,7 @@ import { useLoadedImage } from './use-loaded-image'
 import { isImageFilterId, clampFilterIntensity, applyPresetToImageData } from '@/lib/image-filters'
 import { CurvedTextNode, EmbedNode, FrameNode, TableNode, type TableCellRef } from './v06-nodes'
 import { PluginNode } from './PluginNode'
+import { ChartNode } from './chart-node'
 
 export interface ElementNodeProps {
   element: AnyElement
@@ -648,6 +650,12 @@ function ElementNodeImpl({ element: el, interactive, hiding, hideCell, registerN
     case 'embed': {
       const em = el as EmbedElement
       return <EmbedNode el={em} common={common} />
+    }
+
+    // v0.14 (D7): data-bound chart — geometry from lib/chart-geometry.ts
+    case 'chart': {
+      const ch = el as ChartElement
+      return <ChartNode el={ch} common={common} />
     }
 
     // v0.13 (P4): plugin-owned elements — pixels delegated to the

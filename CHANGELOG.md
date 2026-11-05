@@ -3,6 +3,54 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.15.1] — 2026-11-05
+
+### Added
+
+- **Rich content & export, part 2 — WebCodecs export pipeline (R2).**
+  Silent designs export through `VideoEncoder` (VP9 with a VP8
+  fallback, `latencyMode: 'quality'`, explicit bitrate) into a
+  hand-rolled WebM muxer — zero new dependencies.
+  - **`src/lib/webm-muxer.ts`** — an EBML writer with the ordering
+    trap handled explicitly (small trees composed bottom-up;
+    streamed Segment/Cluster elements get 8-byte placeholders that
+    `finalize()` patches), 1 ms timecode scale, a cluster split
+    policy (≤ 5 s age, keyframe splits at ≥ 1 s, int16 relative
+    timecode ceiling, out-of-order re-base guard) and one CuePoint
+    per cluster. 21 unit tests verify it through an INDEPENDENT
+    mini EBML parser, plus an ffprobe cross-check that muxes real
+    ffmpeg-encoded VP9 frames and reads the file back as
+    matroska,webm.
+  - **Deterministic frame pacing** — every frame carries its exact
+    `frame / fps` microsecond stamp; there is no wall clock in the
+    loop, so slow rendering can only make the export take longer,
+    never drop or duplicate a frame. Backpressure rides
+    `encodeQueueSize`.
+  - **One render session, two engines** — the MediaRecorder loop
+    and the WebCodecs loop share the same canvas, Konva stages and
+    frame compositor (extracted in this release), so they draw
+    identical pixels.
+  - **Engine matrix** (`chooseVideoExportEngine`, pure and
+    unit-tested): page-audio designs keep MediaRecorder when it can
+    mux audio (WebCodecs is video-only for now — Opus-in-WebM via
+    `AudioEncoder` is a documented post-R3 evaluation); silent
+    designs get WebCodecs; WebCodecs-less browsers keep
+    MediaRecorder; a browser with audio but no audio-muxing
+    recorder now exports silent WebM instead of hard-failing.
+  - The export dialog shows which engine will run before you click.
+- **MP4 decision point, on the record**: MP4-everywhere needs a
+  hand-rolled moov/mdat muxer (multi-week) or a ~30 KB muxing
+  dependency — both rejected for R2; MP4 stays on the MediaRecorder
+  path where the browser can encode H.264.
+
+### Fixed
+
+- A float-precision trap in the muxer's vint bounds check: at
+  doubles ≥ 2^53 the guard `> 2**56 - 2` silently never fired
+  because `2**56 - 2` rounds back to `2**56` (16-wide spacing); the
+  guard is now `>= 2**56`. Found by the unit suite before any real
+  file was written.
+
 ## [0.15.0] — 2026-11-05
 
 ### Added

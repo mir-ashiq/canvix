@@ -1,14 +1,15 @@
 // ─────────────────────────────────────────────────────────────
-// Video export (v0.5) — REAL rendering pipeline, fully local
+// Video export — REAL rendering pipeline, fully local
 //
 //   Canvix document → animation timeline → frame renderer
-//   → MediaRecorder canvas capture → MP4 (H.264, where the
-//   browser can encode it) or WebM (VP9/VP8 fallback)
+//   → [v0.15 R2] WebCodecs VideoEncoder + WebM muxer (silent
+//     designs: deterministic µs-stamped frames, explicit bitrate,
+//     latencyMode 'quality') — or — MediaRecorder canvas capture
+//     → MP4 (H.264 where the browser can encode it) / WebM,
+//     which stays the path for page-audio designs (it muxes audio).
 //
-// Fixed-timestep rendering: frames are pushed manually via
-// captureStream(0) + requestFrame(), so output timing is exact
-// even when rendering is slower than realtime. Static PNG/JPG/
-// PDF/SVG exports are unaffected (animations are ignored there).
+// Static PNG/JPG/PDF/SVG exports are unaffected (animations are
+// ignored there). See chooseVideoExportEngine for the matrix.
 // ─────────────────────────────────────────────────────────────
 
 import Konva from 'konva'
@@ -20,6 +21,7 @@ import { createCanvasMeasure, layoutRichLines, normalizeSpans } from '@/lib/rich
 import { animateElementAt, pageHoldDuration } from '@/lib/animations'
 import { beatEnvelopeAt, beatSourceOf } from '@/lib/media/beat-detect'
 import { awaitRender, renderKey } from '@/lib/plugins/renderer-cache'
+import { WebMMuxer } from '@/lib/webm-muxer'
 
 export interface VideoExportOptions {
   designWidth: number
@@ -741,121 +743,151 @@ function applyGradient(
 /**
  * Render the design timeline into a real video file (in-browser).
  */
-export async function exportVideo(opts: VideoExportOptions): Promise<VideoExportResult> {
-  const format = detectVideoFormat()
-  if (!format) throw new Error('This browser cannot record video (MediaRecorder unavailable).')
+// ─────────────────────────────────────────────────────────────
+// v0.15 (R2): two export engines behind one entry point.
+//
+//   'webcodecs'     — silent designs: VideoEncoder (VP9, VP8
+//                     fallback) + the hand-rolled WebM muxer.
+//                     DETERMINISTIC frame pacing (every frame gets
+//                     its exact timestamp — nothing is dropped
+//                     when rendering is slow), explicit bitrate,
+//                     latencyMode 'quality'. No wall clock.
+//   'mediarecorder' — designs with page audio (it muxes the audio
+//                     the WebCodecs path can't, yet) and browsers
+//                     without WebCodecs. MP4/H.264 rides this path.
+//
+// The engine choice is a pure function of three facts (WebCodecs
+// support at this size, MediaRecorder availability + audio muxing,
+// whether the design has autoplay audio) — see
+// chooseVideoExportEngine. Both paths share ONE render session
+// (canvas + Konva stages + the frame compositor), so the WebCodecs
+// path draws exactly what the MediaRecorder path draws.
+// ─────────────────────────────────────────────────────────────
 
-  const fps = opts.fps ?? 30
-  const scale = Math.min(1, (opts.maxWidth ?? 1280) / Math.max(opts.designWidth, opts.designHeight))
-  const width = Math.max(2, Math.round((opts.designWidth * scale) / 2) * 2)
-  const height = Math.max(2, Math.round((opts.designHeight * scale) / 2) * 2)
+/** Output pixel size for a design at a maxWidth cap (even numbers —
+ *  VP8/VP9 chroma subsampling demands it). */
+export function computeExportSize(
+  designWidth: number,
+  designHeight: number,
+  maxWidth: number,
+): { width: number; height: number } {
+  const scale = Math.min(1, maxWidth / Math.max(designWidth, designHeight))
+  return {
+    width: Math.max(2, Math.round((designWidth * scale) / 2) * 2),
+    height: Math.max(2, Math.round((designHeight * scale) / 2) * 2),
+  }
+}
 
-  const { segments, total } = buildTimeline(opts.pages)
-  const totalFrames = Math.max(1, Math.round(total * fps))
+/** Does any page carry an autoplay audio element? (The same filter
+ *  the MediaRecorder path uses for its audio muxing.) */
+export function pagesHaveAutoplayAudio(pages: PageData[]): boolean {
+  return pages.some((p) =>
+    (p.elements as AnyElement[]).some((e) => e.type === 'audio' && e.visible !== false && e.autoplay),
+  )
+}
 
+export interface WebCodecsVideoSupport {
+  supported: boolean
+  /** Matroska CodecID the muxer should declare. */
+  codecId: 'V_VP9' | 'V_VP8' | null
+  /** The WebCodecs codec string to configure. */
+  codecString: string | null
+}
+
+/** Probe WebCodecs VP9→VP8 at the real export size (isConfigSupported
+ *  is size-sensitive; a 640×360 yes does not promise 1920×1080). */
+export async function detectWebCodecsVideoSupport(width: number, height: number): Promise<WebCodecsVideoSupport> {
+  const none: WebCodecsVideoSupport = { supported: false, codecId: null, codecString: null }
+  if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') return none
+  const candidates: { codecId: 'V_VP9' | 'V_VP8'; codecString: string }[] = [
+    { codecId: 'V_VP9', codecString: 'vp09.00.10.08' },
+    { codecId: 'V_VP8', codecString: 'vp8' },
+  ]
+  for (const c of candidates) {
+    try {
+      const probe = await VideoEncoder.isConfigSupported({
+        codec: c.codecString,
+        width,
+        height,
+        bitrate: 1_000_000,
+        framerate: 30,
+      })
+      if (probe.supported) return { supported: true, codecId: c.codecId, codecString: c.codecString }
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return none
+}
+
+export interface VideoEngineInputs {
+  webcodecs: boolean
+  mediaRecorder: boolean
+  /** the recorder candidate can mux audio (mp4a/opus in its mime) */
+  mediaRecorderAudio: boolean
+  hasPageAudio: boolean
+}
+
+export type VideoExportEngineDecision =
+  | { engine: 'webcodecs'; reason: string }
+  | { engine: 'mediarecorder'; reason: string }
+  | { engine: null; reason: string }
+
+/** The engine matrix, as one pure function (unit-tested):
+ *   - page audio + a recorder that can mux it → MediaRecorder
+ *     (the WebCodecs path is silent; Opus-in-WebM via AudioEncoder
+ *     is a documented post-R3 evaluation)
+ *   - WebCodecs available otherwise → WebCodecs (frame-exact)
+ *   - neither → null (exportVideo throws, as before) */
+export function chooseVideoExportEngine(inputs: VideoEngineInputs): VideoExportEngineDecision {
+  if (inputs.hasPageAudio && inputs.mediaRecorder && inputs.mediaRecorderAudio) {
+    return { engine: 'mediarecorder', reason: 'page audio — MediaRecorder muxes it (the WebCodecs path is video-only for now)' }
+  }
+  if (inputs.webcodecs) {
+    if (inputs.hasPageAudio) {
+      return {
+        engine: 'webcodecs',
+        reason: inputs.mediaRecorder
+          ? 'audio-preserving MediaRecorder unavailable here — exporting silent via WebCodecs'
+          : 'MediaRecorder unavailable — WebCodecs is the only engine in this browser',
+      }
+    }
+    return { engine: 'webcodecs', reason: 'frame-exact VP9/VP8 WebM at an explicit bitrate' }
+  }
+  if (inputs.mediaRecorder) {
+    return { engine: 'mediarecorder', reason: 'WebCodecs unavailable in this browser' }
+  }
+  return { engine: null, reason: 'neither WebCodecs nor MediaRecorder can encode video here' }
+}
+
+/** Everything both engines share: the render canvas, the per-page
+ *  Konva stages, and the timeline compositor (renderFrameAt). */
+interface RenderSession {
+  readonly canvas: HTMLCanvasElement
+  readonly ctx: CanvasRenderingContext2D
+  readonly segments: TimelineSegment[]
+  readonly segStarts: number[]
+  readonly totalFrames: number
+  renderFrameAt(frameNo: number, t: number): void
+  destroy(): void
+}
+
+async function createRenderSession(
+  opts: VideoExportOptions,
+  width: number,
+  height: number,
+  segments: TimelineSegment[],
+  totalFrames: number,
+): Promise<RenderSession> {
   // preload every image source first (dataURLs resolve instantly)
   opts.onProgress?.(0, 'Loading images…')
   const images = await collectImages(opts.pages)
 
-  // recorder canvas with manual frame pushing
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Could not create the rendering canvas.')
-  const stream = canvas.captureStream(0)
-  const track = stream.getVideoTracks()[0] as MediaStreamTrack & { requestFrame?: () => void }
-
-  // ── v0.11: page-audio muxing (best-effort) ──────────────────
-  // Each segment's autoplay audio elements play through a shared
-  // AudioContext MediaStreamDestination while their page is on the
-  // timeline; the wall-clock pacing of the frame loop keeps A/V aligned.
-  // Every step is individually guarded — a browser that refuses any of
-  // this (autoplay policy, codec) still produces a correct silent video.
-  const segmentAudio: HTMLAudioElement[][] = segments.map((s) =>
-    (s.page.elements as AnyElement[])
-      .filter((e): e is AudioElement => e.type === 'audio' && e.visible !== false && e.autoplay)
-      .map((el) => {
-        const a = new Audio(el.src)
-        a.volume = Math.min(1, Math.max(0, Number.isFinite(el.volume) ? el.volume : 0.8))
-        a.loop = el.loop
-        return a
-      }),
-  )
-  let audioCtx: AudioContext | null = null
-  let audioDest: MediaStreamAudioDestinationNode | null = null
-  if (format.audio && segmentAudio.some((els) => els.length)) {
-    try {
-      const Ctx: typeof AudioContext =
-        window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-      audioCtx = new Ctx()
-      // v0.11.1 fix: resume() is async — a context that is still suspended
-      // when the recorder starts records DIGITAL SILENCE for the whole
-      // export (racy in headless browsers, possible on real ones after a
-      // background-tab suspension). Wait (bounded) for it to run before
-      // any audio flows; on timeout we still proceed honestly — the
-      // guards below keep the export correct, just silent.
-      await Promise.race([audioCtx.resume(), new Promise<void>((r) => setTimeout(r, 750))]).catch(() => {
-        /* suspended → silent track */
-      })
-      audioDest = audioCtx.createMediaStreamDestination()
-      for (const els of segmentAudio) {
-        for (const a of els) audioCtx.createMediaElementSource(a).connect(audioDest)
-      }
-    } catch {
-      audioCtx = null
-      audioDest = null
-    }
-  }
-  // v0.11.1 fix: WAIT for the audio to be buffered before recording starts.
-  // The render loop below yields via MessageChannel in a tight cycle, which
-  // starves the media element's resource-selection task — a not-yet-loaded
-  // element at recorder.start() never loads during the export (readyState
-  // stays 0, play() aborts in the finally) and the track records digital
-  // silence. Here the main thread is still idle: the fetch completes in
-  // milliseconds. Bounded at 1.5 s — a slow network still exports (silent,
-  // honestly) instead of hanging.
-  if (audioDest) {
-    const all = segmentAudio.flat()
-    await Promise.race([
-      Promise.all(
-        all.map(
-          (a) =>
-            new Promise<void>((resolve) => {
-              if (a.readyState >= 3) return resolve()
-              const done = () => {
-                a.removeEventListener('canplay', done)
-                a.removeEventListener('error', done)
-                resolve()
-              }
-              a.addEventListener('canplay', done)
-              a.addEventListener('error', done)
-              try {
-                a.load() // explicit resource selection — don't rely on the queued task
-              } catch {
-                resolve()
-              }
-            }),
-        ),
-      ),
-      new Promise<void>((resolve) => setTimeout(resolve, 1_500)),
-    ])
-  }
-
-  const recordStream = audioDest ? new MediaStream([track, ...audioDest.stream.getAudioTracks()]) : stream
-
-  const recorder = new MediaRecorder(recordStream, {
-    mimeType: format.mimeType,
-    videoBitsPerSecond: Math.round(width * height * fps * 0.12),
-  })
-  const chunks: BlobPart[] = []
-  recorder.ondataavailable = (e) => {
-    if (e.data.size > 0) chunks.push(e.data)
-  }
-  const done = new Promise<void>((resolve) => {
-    recorder.onstop = () => resolve()
-  })
-  recorder.start()
 
   // hidden host for the Konva stages
   const host = document.createElement('div')
@@ -1043,6 +1075,249 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
     }
   }
 
+
+  /** tear down the Konva stages + hidden host (stream/audio teardown
+   *  belongs to the engine path that created them). */
+  const destroy = (): void => {
+    for (const stage of stageForPage.values()) stage.destroy()
+    host.remove()
+  }
+
+  return { canvas, ctx, segments, segStarts, totalFrames, renderFrameAt, destroy }
+}
+
+export async function exportVideo(opts: VideoExportOptions): Promise<VideoExportResult> {
+  const fps = opts.fps ?? 30
+  const { width, height } = computeExportSize(opts.designWidth, opts.designHeight, opts.maxWidth ?? 1280)
+  const { segments, total } = buildTimeline(opts.pages)
+  const totalFrames = Math.max(1, Math.round(total * fps))
+
+  const wc = await detectWebCodecsVideoSupport(width, height)
+  const mr = detectVideoFormat()
+  const decision = chooseVideoExportEngine({
+    webcodecs: wc.supported,
+    mediaRecorder: mr !== null,
+    mediaRecorderAudio: mr?.audio ?? false,
+    hasPageAudio: pagesHaveAutoplayAudio(opts.pages),
+  })
+  if (decision.engine === 'webcodecs' && wc.codecId && wc.codecString) {
+    return exportViaWebCodecs(opts, wc, { fps, width, height, segments, total, totalFrames })
+  }
+  if (decision.engine === null) {
+    throw new Error('This browser cannot record video (no WebCodecs encoder and no MediaRecorder).')
+  }
+  if (!mr) throw new Error('This browser cannot record video (MediaRecorder unavailable).')
+  return exportViaMediaRecorder(opts, mr, { fps, width, height, segments, total, totalFrames })
+}
+
+interface SizedExport {
+  fps: number
+  width: number
+  height: number
+  segments: TimelineSegment[]
+  total: number
+  totalFrames: number
+}
+
+// ── engine A: WebCodecs → WebM (v0.15 R2) ─────────────────────
+
+async function exportViaWebCodecs(
+  opts: VideoExportOptions,
+  wc: WebCodecsVideoSupport,
+  sized: SizedExport,
+): Promise<VideoExportResult> {
+  const { fps, width, height, segments, total, totalFrames } = sized
+  const session = await createRenderSession(opts, width, height, segments, totalFrames)
+  const { canvas, ctx, renderFrameAt } = session
+
+  const gopFrames = Math.max(1, Math.round(fps * 2))
+  const bitrate = Math.min(20_000_000, Math.max(250_000, Math.round(width * height * fps * 0.14)))
+  const mimeType = wc.codecId === 'V_VP9' ? 'video/webm;codecs=vp9' : 'video/webm;codecs=vp8'
+  const muxer = new WebMMuxer({
+    width,
+    height,
+    codec: wc.codecId ?? 'V_VP9',
+    durationMs: Math.round((totalFrames / fps) * 1000),
+  })
+
+  let encodeError: DOMException | null = null
+  const encoder = new VideoEncoder({
+    output: (chunk) => {
+      const data = new Uint8Array(chunk.byteLength)
+      chunk.copyTo(data)
+      muxer.addFrame({
+        data,
+        keyframe: chunk.type === 'key',
+        timestampUs: chunk.timestamp,
+        durationUs: chunk.duration !== null && chunk.duration > 0 ? chunk.duration : Math.round(1e6 / fps),
+      })
+    },
+    error: (e) => {
+      encodeError = e
+    },
+  })
+  encoder.configure({
+    codec: wc.codecString ?? 'vp09.00.10.08',
+    width,
+    height,
+    bitrate,
+    framerate: fps,
+    // no realtime constraint — the file export prefers quality
+    latencyMode: 'quality',
+    alpha: 'discard',
+  })
+
+  /** tiny yield so the encoder queue and the UI can breathe */
+  const breathe = (): Promise<void> => new Promise<void>((r) => setTimeout(r, 4))
+
+  try {
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillRect(0, 0, width, height)
+
+    // DETERMINISTIC PACING — every frame carries its exact µs stamp
+    // (frame / fps). There is no wall clock anywhere in this loop:
+    // slow rendering only makes the export take longer, never drops
+    // or duplicates a frame. Backpressure rides encodeQueueSize.
+    for (let frame = 0; frame < totalFrames; frame++) {
+      if (encodeError) throw encodeError
+      const t = frame / fps
+      renderFrameAt(frame, t)
+      while (encoder.encodeQueueSize > 4 && !encodeError) await breathe()
+      const videoFrame = new VideoFrame(canvas, {
+        timestamp: Math.round((frame * 1e6) / fps),
+        duration: Math.round(1e6 / fps),
+      })
+      encoder.encode(videoFrame, { keyFrame: frame % gopFrames === 0 })
+      videoFrame.close()
+      if (frame % 10 === 0) {
+        opts.onProgress?.(frame / totalFrames, `Encoding frame ${frame + 1} / ${totalFrames}`)
+        await breathe()
+      }
+    }
+    await encoder.flush()
+    if (encodeError) throw encodeError
+
+    opts.onProgress?.(1, 'Finalizing…')
+    const bytes = muxer.finalize()
+    if (muxer.frames === 0 || bytes.length === 0) {
+      throw new Error('The video encoder produced an empty file — try fewer pages or a smaller resolution.')
+    }
+    return { blob: new Blob([bytes], { type: mimeType }), mimeType, extension: 'webm', durationSec: total, frames: muxer.frames }
+  } finally {
+    try {
+      encoder.close()
+    } catch {
+      /* already closed on error */
+    }
+    session.destroy()
+  }
+}
+
+// ── engine B: MediaRecorder (unchanged behaviour) ─────────────
+
+async function exportViaMediaRecorder(
+  opts: VideoExportOptions,
+  format: { mimeType: string; extension: string; label: string; audio: boolean },
+  sized: SizedExport,
+): Promise<VideoExportResult> {
+  const { fps, width, height, segments, total, totalFrames } = sized
+  const session = await createRenderSession(opts, width, height, segments, totalFrames)
+  const { canvas, ctx, renderFrameAt, segStarts } = session
+
+  const stream = canvas.captureStream(0)
+  const track = stream.getVideoTracks()[0] as MediaStreamTrack & { requestFrame?: () => void }
+
+  // ── v0.11: page-audio muxing (best-effort) ──────────────────
+  // Each segment's autoplay audio elements play through a shared
+  // AudioContext MediaStreamDestination while their page is on the
+  // timeline; the wall-clock pacing of the frame loop keeps A/V aligned.
+  // Every step is individually guarded — a browser that refuses any of
+  // this (autoplay policy, codec) still produces a correct silent video.
+  const segmentAudio: HTMLAudioElement[][] = segments.map((s) =>
+    (s.page.elements as AnyElement[])
+      .filter((e): e is AudioElement => e.type === 'audio' && e.visible !== false && e.autoplay)
+      .map((el) => {
+        const a = new Audio(el.src)
+        a.volume = Math.min(1, Math.max(0, Number.isFinite(el.volume) ? el.volume : 0.8))
+        a.loop = el.loop
+        return a
+      }),
+  )
+  let audioCtx: AudioContext | null = null
+  let audioDest: MediaStreamAudioDestinationNode | null = null
+  if (format.audio && segmentAudio.some((els) => els.length)) {
+    try {
+      const Ctx: typeof AudioContext =
+        window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      audioCtx = new Ctx()
+      // v0.11.1 fix: resume() is async — a context that is still suspended
+      // when the recorder starts records DIGITAL SILENCE for the whole
+      // export (racy in headless browsers, possible on real ones after a
+      // background-tab suspension). Wait (bounded) for it to run before
+      // any audio flows; on timeout we still proceed honestly — the
+      // guards below keep the export correct, just silent.
+      await Promise.race([audioCtx.resume(), new Promise<void>((r) => setTimeout(r, 750))]).catch(() => {
+        /* suspended → silent track */
+      })
+      audioDest = audioCtx.createMediaStreamDestination()
+      for (const els of segmentAudio) {
+        for (const a of els) audioCtx.createMediaElementSource(a).connect(audioDest)
+      }
+    } catch {
+      audioCtx = null
+      audioDest = null
+    }
+  }
+  // v0.11.1 fix: WAIT for the audio to be buffered before recording starts.
+  // The render loop below yields via MessageChannel in a tight cycle, which
+  // starves the media element's resource-selection task — a not-yet-loaded
+  // element at recorder.start() never loads during the export (readyState
+  // stays 0, play() aborts in the finally) and the track records digital
+  // silence. Here the main thread is still idle: the fetch completes in
+  // milliseconds. Bounded at 1.5 s — a slow network still exports (silent,
+  // honestly) instead of hanging.
+  if (audioDest) {
+    const all = segmentAudio.flat()
+    await Promise.race([
+      Promise.all(
+        all.map(
+          (a) =>
+            new Promise<void>((resolve) => {
+              if (a.readyState >= 3) return resolve()
+              const done = () => {
+                a.removeEventListener('canplay', done)
+                a.removeEventListener('error', done)
+                resolve()
+              }
+              a.addEventListener('canplay', done)
+              a.addEventListener('error', done)
+              try {
+                a.load() // explicit resource selection — don't rely on the queued task
+              } catch {
+                resolve()
+              }
+            }),
+        ),
+      ),
+      new Promise<void>((resolve) => setTimeout(resolve, 1_500)),
+    ])
+  }
+
+  const recordStream = audioDest ? new MediaStream([track, ...audioDest.stream.getAudioTracks()]) : stream
+
+  const recorder = new MediaRecorder(recordStream, {
+    mimeType: format.mimeType,
+    videoBitsPerSecond: Math.round(width * height * fps * 0.12),
+  })
+  const chunks: BlobPart[] = []
+  recorder.ondataavailable = (e) => {
+    if (e.data.size > 0) chunks.push(e.data)
+  }
+  const done = new Promise<void>((resolve) => {
+    recorder.onstop = () => resolve()
+  })
+  recorder.start()
+
   try {
     ctx.fillStyle = '#FFFFFF'
     ctx.fillRect(0, 0, width, height)
@@ -1133,8 +1408,7 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
     await done
     opts.onProgress?.(1, 'Finalizing…')
   } finally {
-    for (const stage of stageForPage.values()) stage.destroy()
-    host.remove()
+    session.destroy()
     stream.getTracks().forEach((tr) => tr.stop())
     for (const els of segmentAudio) {
       for (const a of els) {

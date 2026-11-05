@@ -1036,6 +1036,29 @@ tool descriptions so agents pick the right format.
   ignores spans in all three renderers, the splice ghost-copies
   effect falls back to the flat path, and SVG exports render links
   styled but not as `<a>` anchors. *(v0.15.0)*
+- [x] WebCodecs export pipeline (v0.15 R2) — a SECOND export engine
+  for silent designs: `VideoEncoder` (VP9, VP8 fallback,
+  `latencyMode: 'quality'`, explicit bitrate) feeding a hand-rolled
+  **WebM muxer** (`src/lib/webm-muxer.ts` — EBML writer with patched
+  segment/cluster sizes, 1 ms timecode scale, cluster split policy,
+  per-cluster Cues; zero new dependencies). Frame pacing is
+  **deterministic**: every frame carries its exact `frame/fps` µs
+  stamp and there is no wall clock anywhere in the loop, so slow
+  rendering can only make the export take longer — it can never
+  drop or duplicate a frame (the MediaRecorder path paced against
+  real time and dropped when behind). Both engines share ONE render
+  session, so they draw identical pixels. **Engine matrix**
+  (also in `chooseVideoExportEngine`, unit-tested): designs with
+  autoplay page audio keep MediaRecorder when it can mux audio
+  (the WebCodecs path is video-only — Opus-in-WebM via
+  `AudioEncoder` is a documented post-R3 evaluation); silent
+  designs get WebCodecs; browsers without WebCodecs keep
+  MediaRecorder; browsers with neither still fail honestly.
+  **MP4 decision point, on the record**: MP4-everywhere would need
+  either a hand-rolled moov/mdat muxer (a multi-week project) or a
+  ~30 KB muxing dependency (mux.js et al.) — rejected for now; MP4
+  stays on the MediaRecorder path where the browser can encode
+  H.264. *(v0.15.1)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)

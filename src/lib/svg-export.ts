@@ -14,6 +14,7 @@
 
 import type {
   AnyElement,
+  ChartElement,
   EmbedElement,
   FrameElement,
   GradientFill,
@@ -28,6 +29,7 @@ import type {
   GroupElement,
 } from '@/lib/types'
 import { svgImageFilterParts } from '@/lib/image-filters'
+import { chartPrimitives } from '@/lib/chart-geometry'
 import { arcForCurve, embedLayout, frameClipPathD, hostOf, tableGeometry, youtubeThumbUrl } from '@/lib/v06-geometry'
 import type { PluginElement } from '@/lib/types'
 import { getRenderEntry, renderKey } from '@/lib/plugins/renderer-cache'
@@ -526,6 +528,49 @@ ${filt.overlay}` : image
       }
       const open = `<g${rotate}${opacityAttr(fr)}${shadowAttrs(fr, ctx)}>`
       return `${open}\n${content}\n  </g>`
+    }
+
+    case 'chart': {
+      // v0.14 (D7): primitives → SVG. Geometry identical to the editor
+      // and video export by construction (lib/chart-geometry.ts).
+      const ch = el as ChartElement
+      const f = (n: number): string => (Math.round(n * 10) / 10).toString()
+      const parts: string[] = []
+      for (const p of chartPrimitives(ch)) {
+        switch (p.kind) {
+          case 'rect':
+            parts.push(`  <rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}"${p.r ? ` rx="${f(p.r)}"` : ''} fill="${p.fill}"${p.stroke ? ` stroke="${p.stroke}" stroke-width="${f(p.strokeWidth ?? 1)}"` : ''} />`)
+            break
+          case 'line':
+            parts.push(`  <line x1="${f(p.x1)}" y1="${f(p.y1)}" x2="${f(p.x2)}" y2="${f(p.y2)}" stroke="${p.stroke}" stroke-width="${f(p.width)}"${p.dash ? ` stroke-dasharray="${p.dash.join(' ')}"` : ''} />`)
+            break
+          case 'polyline':
+            parts.push(`  <polyline points="${p.points.map(f).join(' ')}" fill="none" stroke="${p.stroke}" stroke-width="${f(p.width)}" stroke-linecap="round" stroke-linejoin="round" />`)
+            break
+          case 'circle':
+            parts.push(`  <circle cx="${f(p.cx)}" cy="${f(p.cy)}" r="${f(p.r)}" fill="${p.fill}"${p.stroke ? ` stroke="${p.stroke}" stroke-width="${f(p.strokeWidth ?? 1)}"` : ''} />`)
+            break
+          case 'arc': {
+            // annular sector path (clockwise in the y-down system)
+            const x0 = p.cx + p.rOut * Math.cos(p.a0)
+            const y0 = p.cy + p.rOut * Math.sin(p.a0)
+            const x1 = p.cx + p.rOut * Math.cos(p.a1)
+            const y1 = p.cy + p.rOut * Math.sin(p.a1)
+            const x2 = p.cx + p.rIn * Math.cos(p.a1)
+            const y2 = p.cy + p.rIn * Math.sin(p.a1)
+            const x3 = p.cx + p.rIn * Math.cos(p.a0)
+            const y3 = p.cy + p.rIn * Math.sin(p.a0)
+            const large = p.a1 - p.a0 > Math.PI ? 1 : 0
+            parts.push(`  <path d="M ${f(x0)} ${f(y0)} A ${f(p.rOut)} ${f(p.rOut)} 0 ${large} 1 ${f(x1)} ${f(y1)} L ${f(x2)} ${f(y2)} A ${f(p.rIn)} ${f(p.rIn)} 0 ${large} 0 ${f(x3)} ${f(y3)} Z" fill="${p.fill}" />`)
+            break
+          }
+          case 'text':
+            parts.push(`  <text x="${f(p.x)}" y="${f(p.y)}" font-family="${esc(p.family)}" font-size="${f(p.size)}"${p.bold ? ' font-weight="700"' : ''} fill="${p.fill}" text-anchor="${p.anchor}">${esc(p.text)}</text>`)
+            break
+        }
+      }
+      const transform = `translate(${ch.x} ${ch.y})${ch.rotation ? ` rotate(${ch.rotation})` : ''}`
+      return `<g transform="${transform}"${opacityAttr(ch)}${shadowAttrs(ch, ctx)}>\n${parts.join('\n')}\n  </g>`
     }
 
     case 'embed': {

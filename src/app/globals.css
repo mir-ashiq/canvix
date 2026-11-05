@@ -538,3 +538,87 @@ input[type="number"] {
 .cv-panel-bg {
   background: var(--cv-panel);
 }
+
+/* ── v0.15 (R1): rich-text editing overlay ─────────────────── */
+
+/* styled mirror behind the (transparent) textarea — same geometry,
+   same font metrics, pointer-transparent */
+.cv-rich-mirror {
+  position: absolute;
+  pointer-events: none;
+  border: none;
+  background: transparent;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  overflow: hidden;
+  transform-origin: top left;
+  z-index: 39; /* under the textarea overlay (z-index 40) */
+  padding: 0;
+  margin: 0;
+}
+
+/* the floating selection toolbar (B / I / U / S / colour / link) */
+.cv-rich-toolbar {
+  position: absolute;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: var(--cv-surface, #1f2226);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  transform-origin: top left;
+}
+
+.cv-rich-toolbar .cv-tbtn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cv-rich-color-input {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* the link editor popover (opens off the Link button) */
+.cv-rich-link-pop {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  background: var(--cv-surface, #1f2226);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  z-index: 46;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+
+.cv-rich-link-pop input {
+  width: 200px;
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  outline: none;
+}
+
+.cv-rich-link-pop input:focus {
+  border-color: var(--cv-violet, #9954ff);
+}

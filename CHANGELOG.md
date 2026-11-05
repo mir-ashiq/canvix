@@ -3,6 +3,74 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.15.0] — 2026-11-05
+
+### Added
+
+- **Rich content & export, part 1 — rich text (R1).** Per-range
+  styling inside a single text box: bold, italic, underline,
+  strikethrough, colour and links as `spans` — style runs laid over
+  `TextElement.text`, with the existing flat fields kept as the
+  inherit-base.
+  - **One geometry module for all three renderers** —
+    `src/lib/rich-text.ts` normalizes, sanitizes, edits and LAYS OUT
+    the runs (`layoutRichLines`: greedy word-wrap across span
+    boundaries, hard breaks for over-wide words, textarea `\n` as a
+    hard line break, trailing whitespace dropped at wraps, per-run
+    coalescing, align-resolved line x). The editor's Konva nodes, the
+    SVG serializer and the video-export frame builder all consume the
+    same `PositionedRun[]` — the D7 charts pattern, so no renderer
+    re-derives positions.
+  - **The editing UX** — the existing textarea overlay gains a
+    floating selection toolbar (B / I / U / S, a colour input, a link
+    popover with Apply/Remove, and clear-styling) that applies to the
+    current selection, plus a styled mirror layer behind a transparent
+    textarea so the formatting is visible while editing. Every
+    keystroke reconciles the runs (`reconcileSpans`: common
+    prefix/suffix diff — insert, delete, cut, paste and replace all
+    ride one path; typing at a style boundary extends the run you are
+    inside).
+  - **Migration is lossless by construction** — legacy elements have
+    no `spans` and render through the untouched flat path; styling a
+    range CREATES the array; clearing it returns to flat with the base
+    fields never modified. A malformed array (text-length mismatch,
+    over the 128-run cap) normalizes to `null` — styling data can
+    never corrupt the text. 38 new unit tests cover the module
+    (sanitization, normalization, range ops, keystroke reconcile,
+    layout math with a deterministic fake measure).
+  - **Security** — links are http(s)-only, control-char-stripped and
+    length-capped (`sanitizeLink`, fail-closed) on every write path:
+    the editor toolbar, the MCP `update_element` patch whitelist, and
+    the normalize pass. The MCP patch validates runs against the
+    (possibly simultaneously patched) text and drops malformed arrays
+    instead of storing them.
+  - **Two bugs found by the new e2e while wiring the renderers,
+    both fixed**: the rich `Group`'s tight glyph `clientRect` put the
+    Transformer's anchors on the text itself (a click at the element
+    centre hit a bottom anchor and fired a phantom `transformstart`,
+    eating an undo step — now a transparent hit rect keeps the
+    declared box exactly like the flat `Konva.Text`), and a blur from
+    the textarea into the link popover committed the editing session
+    early (blur now ignores focus moves inside the toolbar).
+  - **Honest limits, on the record** — collab merge stays whole-box
+    LWW: two offline editors of one text box still last-writer-win
+    the ENTIRE element (text + spans ride together; per-span stamps
+    are a post-1.0 evaluation on real usage). Curved text
+    (`curve ≠ 0`) ignores spans in all three renderers. The splice
+    ghost-copies effect falls back to the flat path. SVG exports
+    render links styled (blue + underline) but not as clickable
+    `<a>` anchors. Gradient fills map across the whole element box
+    via per-run point offsets.
+  - **e2e acceptance** (anonymous, zero registrations): a legacy flat
+    element opens losslessly; bolding a range saves exactly
+    `[{Hello, bold}, { rich world}]` with the text untouched; the
+    mirror carries `<strong>` while editing; ONE undo reverts the
+    spans to null; the exported SVG contains both `font-weight="700"`
+    and `font-weight="400"` tspans; a `javascript:` URL applied
+    through the UI is stripped (never stored) while an `https://` URL
+    survives; the properties-bar "Rich text · Clear" chip flattens
+    the element.
+
 ## [0.14.5] — 2026-11-05
 
 ### Added

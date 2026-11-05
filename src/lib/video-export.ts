@@ -16,6 +16,7 @@ import type { AnyElement, AudioElement, ChartElement, EmbedElement, FrameElement
 import { imageHasFilters, renderFilteredCanvas } from '@/lib/image-filters'
 import { chartPrimitives } from '@/lib/chart-geometry'
 import { embedLayout, hexPoints, hostOf, tableGeometry, youtubeThumbUrl } from '@/lib/v06-geometry'
+import { createCanvasMeasure, layoutRichLines, normalizeSpans } from '@/lib/rich-text'
 import { animateElementAt, pageHoldDuration } from '@/lib/animations'
 import { beatEnvelopeAt, beatSourceOf } from '@/lib/media/beat-detect'
 import { awaitRender, renderKey } from '@/lib/plugins/renderer-cache'
@@ -192,10 +193,40 @@ function frameClipFunc(fr: FrameElement): (ctx: Konva.Context) => void {
   }
 }
 
+/** v0.15 (R1): browser-side measure for rich text runs (same canvas-2d
+ *  metrics the editor's Konva renderer uses — frame parity by sharing
+ *  the geometry module, the D7 charts pattern). */
+const videoRichMeasure = createCanvasMeasure()
+
 function buildKonvaNode(el: AnyElement, images: Map<string, HTMLImageElement>): Konva.Node {
   switch (el.type) {
     case 'text': {
       const t = el
+      // v0.15 (R1): rich text — one Text node per positioned run from the
+      // shared layout module (curved text stays flat, single-style by design)
+      if ((t.curve ?? 0) === 0) {
+        const richSpans = normalizeSpans(t.spans, t.text)
+        if (richSpans) {
+          const runs = layoutRichLines(t, richSpans, videoRichMeasure)
+          const group = new Konva.Group({ id: t.id, x: t.x, y: t.y })
+          group.height(runs.length ? Math.max(...runs.map((r) => r.y)) + t.fontSize * t.lineHeight : t.fontSize * t.lineHeight)
+          for (const run of runs) {
+            group.add(
+              new Konva.Text({
+                x: run.x,
+                y: run.y,
+                text: run.text,
+                fontSize: t.fontSize,
+                fontFamily: t.fontFamily,
+                fontStyle: `${run.style.italic ? 'italic ' : ''}${run.style.bold ? 'bold' : 'normal'}`,
+                textDecoration: [run.style.underline ? 'underline' : '', run.style.strike ? 'line-through' : ''].filter(Boolean).join(' '),
+                fill: run.style.color,
+              }),
+            )
+          }
+          return group
+        }
+      }
       return new Konva.Text({
         id: t.id,
         x: t.x,

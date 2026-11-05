@@ -121,6 +121,23 @@ export interface BaseElement {
   }
 }
 
+/**
+ * v0.15 (R1) rich text — one styled run laid over `TextElement.text`.
+ * Concatenated span text must equal `el.text` (UTF-16 units; the
+ * textarea's selection offsets). Every key is optional: absent means
+ * INHERIT the element's flat field. See src/lib/rich-text.ts.
+ */
+export interface TextSpan {
+  text: string
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  strike?: boolean
+  color?: string
+  /** http(s) only — sanitizeLink() gates every write */
+  link?: string
+}
+
 export interface TextElement extends BaseElement {
   type: 'text'
   text: string
@@ -139,6 +156,9 @@ export interface TextElement extends BaseElement {
   letterSpacing: number
   /** v0.6 canva curved text — arc angle in degrees (−180..180, 0 = straight) */
   curve?: number
+  /** v0.15 (R1) rich text — optional style runs over `text`; null/absent = flat.
+   *  Malformed arrays normalize to null (fail-safe, never corrupts `text`). */
+  spans?: TextSpan[] | null
   /** text background block colour (canva "Background" effect) */
   effectBackground?: string
   /** canva-style effect preset */

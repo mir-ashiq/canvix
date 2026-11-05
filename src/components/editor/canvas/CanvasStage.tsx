@@ -16,6 +16,17 @@ import { CollabOverlay } from './CollabOverlay'
 import { CommentPins } from './CommentPins'
 import { getActiveCollabSession } from '@/hooks/use-collab'
 import { tableGeometry } from '@/lib/v06-geometry'
+import {
+  applyStyleToRange,
+  LINK_COLOR,
+  normalizeSpans,
+  reconcileSpans,
+  styleStateInRange,
+  type RangeStyleState,
+  type SpanStylePatch,
+} from '@/lib/rich-text'
+import type { TextSpan } from '@/lib/types'
+import { Bold, Check, Italic, Link2, Strikethrough, Underline, X } from 'lucide-react'
 
 /** canva-measured tokens */
 const GUIDE_COLOR = '#9954FF' // rgb(153,84,255) — measured 2026-09-03
@@ -68,6 +79,20 @@ export default function CanvasStage() {
   /** v0.6: table cell being edited via the overlay ({ id, row, col }) */
   const [editingCell, setEditingCell] = useState<{ id: string; row: number; col: number } | null>(null)
   const [editValue, setEditValue] = useState('')
+  /** v0.15 (R1): rich text — spans for the element being edited (null = flat) */
+  const [editSpans, setEditSpans] = useState<TextSpan[] | null>(null)
+  /** toolbar chip state for the CURRENT textarea selection */
+  const [selState, setSelState] = useState<RangeStyleState | null>(null)
+  /** true while the textarea has a NON-collapsed selection (drives the
+   *  toolbar buttons' disabled state) */
+  const [hasSelRange, setHasSelRange] = useState(false)
+  /** link popover */
+  const [linkOpen, setLinkOpen] = useState(false)
+  const [linkDraft, setLinkDraft] = useState('')
+  /** live mirror of {value, spans} — the onChange diff needs the PREVIOUS
+   *  value synchronously, and commit must read the freshest spans */
+  const textEditRef = useRef<{ value: string; spans: TextSpan[] | null }>({ value: '', spans: null })
+  const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
   /** freehand draft: [x0,y0,x1,y1,…] in page coords */
   const [draft, setDraft] = useState<number[] | null>(null)
   /** marquee draft in PAGE coords */
@@ -290,7 +315,14 @@ export default function CanvasStage() {
     // if the text lives inside a group, edit via double-click is disabled for simplicity
     state.pushHistory()
     setEditingTextId(id)
-    setEditValue((el as TextElement).text)
+    const startText = (el as TextElement).text
+    const startSpans = normalizeSpans((el as TextElement).spans ?? null, startText)
+    setEditValue(startText)
+    setEditSpans(startSpans)
+    textEditRef.current = { value: startText, spans: startSpans }
+    setSelState(null)
+    setHasSelRange(false)
+    setLinkOpen(false)
   }, [])
 
   const commitEditText = useCallback(async () => {
@@ -311,7 +343,12 @@ export default function CanvasStage() {
     }
     if (!id) return
     setEditingTextId(null)
-    useEditorStore.getState().updateElementsLive([id], { text })
+    setEditSpans(null)
+    setSelState(null)
+    setHasSelRange(false)
+    setLinkOpen(false)
+    const final = textEditRef.current
+    useEditorStore.getState().updateElementsLive([id], { text: final.value, spans: final.spans })
     // sync measured height after the Konva text re-renders
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
@@ -682,6 +719,27 @@ export default function CanvasStage() {
 
   const editingText = editingTextId ? (page.elements.find((e) => e.id === editingTextId) as TextElement | undefined) : undefined
 
+  /** v0.15 (R1): apply a rich-text style patch to the CURRENT textarea
+   *  selection (one live element patch — the editing session already owns
+   *  a single history entry from beginEditText, so undo stays one step). */
+  const applyRichStyle = useCallback(
+    (patch: SpanStylePatch) => {
+      const ta = textAreaRef.current
+      if (!ta || !editingTextId) return
+      const start = ta.selectionStart
+      const end = ta.selectionEnd
+      if (start === end) return
+      const cur = textEditRef.current
+      const next = applyStyleToRange(cur.spans, cur.value, start, end, patch)
+      textEditRef.current = { value: cur.value, spans: next }
+      setEditSpans(next)
+      useEditorStore.getState().updateElementsLive([editingTextId], { spans: next })
+      setSelState(styleStateInRange(next, cur.value, start, end))
+      setHasSelRange(start !== end)
+    },
+    [editingTextId],
+  )
+
   // v0.6: table cell overlay geometry
   const editingTable = editingCell ? (page.elements.find((e) => e.id === editingCell.id) as import('@/lib/types').TableElement | undefined) : undefined
   const cellStyle: React.CSSProperties | null = editingTable && editingCell
@@ -919,31 +977,146 @@ export default function CanvasStage() {
         />
       )}
 
+      {/* v0.15 (R1): rich-text editing — floating selection toolbar */}
+      {editingText && textareaStyle && (editingText.curve ?? 0) === 0 && (
+        <div
+          className="cv-rich-toolbar"
+          role="toolbar"
+          aria-label="Rich text formatting"
+          data-testid="rich-toolbar"
+          style={{
+            left: Math.max(8, pan.x + editingText.x * zoom),
+            top: Math.max(8, pan.y + editingText.y * zoom - 46),
+          }}
+          onMouseDown={(e) => {
+            // keep the textarea's selection & focus — but never block the
+            // native colour picker's own activation
+            if (!(e.target as HTMLElement).closest('input')) e.preventDefault()
+          }}
+        >
+          <button className="cv-tbtn" title="Bold" aria-label="Bold selection" data-active={selState?.bold === 'all' ? 'true' : undefined} disabled={!hasSelRange} onClick={() => applyRichStyle({ bold: selState?.bold !== 'all' })}>
+            <Bold size={14} />
+          </button>
+          <button className="cv-tbtn" title="Italic" aria-label="Italic selection" data-active={selState?.italic === 'all' ? 'true' : undefined} disabled={!hasSelRange} onClick={() => applyRichStyle({ italic: selState?.italic !== 'all' })}>
+            <Italic size={14} />
+          </button>
+          <button className="cv-tbtn" title="Underline" aria-label="Underline selection" data-active={selState?.underline === 'all' ? 'true' : undefined} disabled={!hasSelRange} onClick={() => applyRichStyle({ underline: selState?.underline !== 'all' })}>
+            <Underline size={14} />
+          </button>
+          <button className="cv-tbtn" title="Strikethrough" aria-label="Strikethrough selection" data-active={selState?.strike === 'all' ? 'true' : undefined} disabled={!hasSelRange} onClick={() => applyRichStyle({ strike: selState?.strike !== 'all' })}>
+            <Strikethrough size={14} />
+          </button>
+          <label className="cv-tbtn" title="Colour" aria-label="Colour selection" style={{ position: 'relative', overflow: 'hidden' }}>
+            <input
+              type="color"
+              className="cv-rich-color-input"
+              aria-label="Rich text colour"
+              value={typeof selState?.color === 'string' ? selState.color : '#FFFFFF'}
+              onChange={(e) => applyRichStyle({ color: e.target.value })}
+            />
+          </label>
+          <button className="cv-tbtn" title="Link" aria-label="Link selection" data-active={selState?.link ? 'true' : undefined} onClick={() => { setLinkDraft(typeof selState?.link === 'string' ? selState.link : ''); setLinkOpen((o) => !o) }}>
+            <Link2 size={14} />
+          </button>
+          <button className="cv-tbtn" title="Clear styling" aria-label="Clear styling" disabled={!hasSelRange} onClick={() => applyRichStyle({ bold: false, italic: false, underline: false, strike: false, color: null, link: null })}>
+            <X size={14} />
+          </button>
+          {linkOpen && (
+            <span className="cv-rich-link-pop" role="dialog" aria-label="Link editor">
+              <input
+                aria-label="Link URL"
+                placeholder="https://…"
+                value={linkDraft}
+                onChange={(e) => setLinkDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    applyRichStyle({ link: linkDraft })
+                    setLinkOpen(false)
+                  }
+                  e.stopPropagation()
+                }}
+              />
+              <button className="cv-tbtn" title="Apply link" aria-label="Apply link" onClick={() => { applyRichStyle({ link: linkDraft }); setLinkOpen(false) }}>
+                <Check size={14} />
+              </button>
+              <button className="cv-tbtn" title="Remove link" aria-label="Remove link" disabled={selState?.link == null} onClick={() => { applyRichStyle({ link: null }); setLinkOpen(false) }}>
+                <X size={14} />
+              </button>
+            </span>
+          )}
+        </div>
+      )}
+
       {/* text editing overlay */}
       {editingText && textareaStyle && (
-        <textarea
-          className="cv-textarea-overlay"
-          style={textareaStyle}
-          value={editValue}
-          autoFocus
-          onChange={(e) => {
-            setEditValue(e.target.value)
-            useEditorStore.getState().updateElementsLive([editingText.id], { text: e.target.value })
-          }}
-          onBlur={() => void commitEditText()}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              e.preventDefault()
+        <>
+          {editSpans && (
+            <div
+              className="cv-rich-mirror"
+              aria-hidden="true"
+              data-testid="rich-mirror"
+              style={{ ...textareaStyle, outline: 'none', color: editingText.fill }}
+            >
+              {editSpans.map((s, i) => {
+                let node: React.ReactNode = s.text
+                if (s.bold) node = <strong>{node}</strong>
+                if (s.italic) node = <em>{node}</em>
+                const color = s.color ?? (s.link ? LINK_COLOR : undefined)
+                const decor = [s.underline ? 'underline' : '', s.strike ? 'line-through' : ''].filter(Boolean).join(' ')
+                if (color || decor || s.link) {
+                  node = (
+                    <span style={{ color, textDecoration: decor || (s.link ? 'underline' : undefined) }}>
+                      {node}
+                    </span>
+                  )
+                }
+                return <span key={i}>{node}</span>
+              })}
+            </div>
+          )}
+          <textarea
+            ref={textAreaRef}
+            className={`cv-textarea-overlay${editSpans ? ' cv-rich-editing' : ''}`}
+            style={editSpans ? { ...textareaStyle, color: 'transparent', caretColor: editingText.fill } : textareaStyle}
+            value={editValue}
+            autoFocus
+            onChange={(e) => {
+              const v = e.target.value
+              const prev = textEditRef.current
+              const nextSpans = reconcileSpans(prev.spans, prev.value, v)
+              textEditRef.current = { value: v, spans: nextSpans }
+              setEditValue(v)
+              setEditSpans(nextSpans)
+              useEditorStore.getState().updateElementsLive([editingText.id], { text: v, spans: nextSpans })
+            }}
+            onSelect={(e) => {
+              const ta = e.currentTarget
+              setHasSelRange(ta.selectionStart !== ta.selectionEnd)
+              setSelState(styleStateInRange(textEditRef.current.spans, textEditRef.current.value, ta.selectionStart, ta.selectionEnd))
+            }}
+            onBlur={(e) => {
+              // v0.15 (R1): focus moving INTO the floating toolbar (colour
+              // picker, link popover input) is not an editing-session exit
+              // — only a blur outside the whole overlay commits
+              const related = e.relatedTarget as HTMLElement | null
+              if (related && related.closest('.cv-rich-toolbar')) return
               void commitEditText()
-            }
-            e.stopPropagation()
-          }}
-          onFocus={(e) => {
-            const len = e.target.value.length
-            e.target.setSelectionRange(len, len)
-          }}
-          aria-label="Edit text"
-        />
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                void commitEditText()
+              }
+              e.stopPropagation()
+            }}
+            onFocus={(e) => {
+              const len = e.target.value.length
+              e.target.setSelectionRange(len, len)
+            }}
+            aria-label="Edit text"
+          />
+        </>
       )}
 
       {/* v0.6: table cell editing overlay */}

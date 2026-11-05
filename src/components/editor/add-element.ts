@@ -9,7 +9,9 @@ import {
   createTableElement,
   createFrameElement,
   createEmbedElement,
+  createChartElement,
   type AnyElement,
+  type ChartKind,
   type FrameShape,
 } from '@/lib/types'
 import { useEditorStore } from '@/store/editor-store'
@@ -153,6 +155,15 @@ export function addEmbed(url: string, title?: string) {
   if (!trimmed) return
   const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
   addCentered(createEmbedElement(withProto, { width: 340, height: 214, ...(title ? { title } : {}) }))
+}
+
+// ── v0.14 (D7): data-bound charts ──────────────────────────
+
+/** Add a native chart — data stays editable from the context toolbar. */
+export function addChart(kind: ChartKind) {
+  const w = kind === 'donut' ? 380 : kind === 'scatter' ? 520 : 560
+  const h = kind === 'donut' ? 380 : 360
+  addCentered(createChartElement(kind, { width: w, height: h }))
 }
 
 /** If a page point lands inside a frame element, fill that frame with the image (canva drop-to-fill). */

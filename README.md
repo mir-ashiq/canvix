@@ -414,6 +414,10 @@ is right here.
   posters, logos, YouTube thumbnails
 - **Backgrounds** — solid colors, curated palettes and gradient presets
 - **Uploads** — drag-and-drop your own images (a persistent library since v0.14: uploads survive reload and follow your account)
+- **Charts** — data-bound bar / line / donut / scatter charts: add one from
+  the Elements panel, edit labels, values and series in the toolbar's
+  spreadsheet editor, convert between kinds in place — geometry stays
+  live in the editor, video exports and SVG exports
 - **Undo / redo** — full history stack with keyboard shortcuts
 - **Autosave** — designs persist to the database automatically
 - **Export** — PNG & JPG at 1× / 2× / 3× quality, current page or all pages,
@@ -976,6 +980,18 @@ tool descriptions so agents pick the right format.
       `ON DELETE SET NULL`), and trashed designs return to their
       folder on restore. Foreign folder ids are flat 404s everywhere
       (no cross-account probe) *(v0.14.2)*
+- [x] Charts (v0.14 D7) — a native, data-bound `chart` element
+      (bar/line/donut/scatter) replaces the old one-shot exploded
+      charts: one pure geometry module drives the editor, video
+      exports and SVG exports (parity by construction), the toolbar
+      edits labels/values/series in a spreadsheet popover and converts
+      kinds in place, donuts take the first series with a centre
+      total, scatter uses flat x,y pairs on numeric axes, pasted
+      charts run the hostile-input gauntlet (kind whitelist, series
+      caps), and MCP gains `add_chart` + series support in
+      `update_element`. While wiring the video exporter, tables,
+      frames and embed cards stopped vanishing from video exports
+      (a pre-existing parity gap) *(v0.14.4)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)

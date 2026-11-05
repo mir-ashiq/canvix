@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Lock, LockOpen, Eye, EyeOff, Trash2, Type, Image as ImageIcon, Square, Minus, Smile, PenTool, Group as GroupIcon, Table2, Frame as FrameIcon, ExternalLink } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Lock, LockOpen, Eye, EyeOff, Trash2, Type, Image as ImageIcon, Square, Minus, Smile, PenTool, Group as GroupIcon, Table2, Frame as FrameIcon, ExternalLink, BarChart3 } from 'lucide-react'
 import { useEditorStore, currentPageData } from '@/store/editor-store'
 import { cn } from '@/lib/utils'
 import type { AnyElement } from '@/lib/types'
+import { CHART_KIND_LABELS } from '@/lib/types'
 
 function elementIcon(el: AnyElement) {
   switch (el.type) {
@@ -18,6 +19,7 @@ function elementIcon(el: AnyElement) {
     case 'table': return Table2
     case 'frame': return FrameIcon
     case 'embed': return ExternalLink
+    case 'chart': return BarChart3
     default: return Square
   }
 }
@@ -34,6 +36,7 @@ function elementLabel(el: AnyElement): string {
   if (el.type === 'table') return 'Table'
   if (el.type === 'frame') return el.src ? 'Frame' : 'Empty frame'
   if (el.type === 'embed') return 'Embed card'
+  if (el.type === 'chart') return CHART_KIND_LABELS[el.kind] ?? 'Chart'
   return el.type.charAt(0).toUpperCase() + el.type.slice(1)
 }
 

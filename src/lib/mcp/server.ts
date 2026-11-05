@@ -148,7 +148,7 @@ export function handleInitialize(msg: JsonRpcRequest): JsonRpcResponse {
       },
       instructions:
         'Canvix is a self-hosted, open-source design tool. Every tool creates or edits REAL, editable designs: ' +
-        'create/generate designs, add text/shapes/images/tables/embeds, restyle, animate, comment and export (svg/png/json). ' +
+        'create/generate designs, add text/shapes/images/tables/charts/embeds, restyle, animate, comment and export (svg/png/json). ' +
         'Start with get_capabilities, then list_templates / search_designs. Edits made here appear live to humans in the editor.',
     },
   }

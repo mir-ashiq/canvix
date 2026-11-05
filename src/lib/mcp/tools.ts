@@ -18,10 +18,13 @@ import {
   createImageElement,
   createTableElement,
   createEmbedElement,
+  createChartElement,
   createPage,
   type AnyElement,
   type PageData,
+  type ChartKind,
 } from '@/lib/types'
+import { isChartKind, sanitizeChartLabels, sanitizeChartSeries, clampChartHole, CHART_PALETTE } from '@/lib/chart-geometry'
 
 export const SERVER_VERSION = '0.6.1'
 
@@ -196,6 +199,10 @@ function summarizeElement(el: AnyElement) {
     base.kind = el.kind
   } else if (el.type === 'frame') {
     base.hasImage = Boolean(el.src)
+  } else if (el.type === 'chart') {
+    base.kind = el.kind
+    base.labels = el.labels.slice(0, 12)
+    base.series = el.series.map((sr) => ({ name: sr.name, values: sr.values.slice(0, 12) }))
   }
   return base
 }
@@ -208,6 +215,10 @@ function pageTextContent(page: PageData): string[] {
     if (el.type === 'text') out.push(el.text)
     if (el.type === 'table') out.push(...el.cells.map((c) => c.text).filter((t) => t.trim()))
     if (el.type === 'embed' && el.title) out.push(el.title)
+    if (el.type === 'chart') {
+      out.push(...el.labels.filter(Boolean))
+      out.push(...el.series.map((sr) => sr.name).filter(Boolean))
+    }
     if (el.type === 'group') {
       for (const c of el.children) {
         if (c.type === 'text' && c.visible) out.push(c.text)
@@ -728,6 +739,102 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
     },
   }
 
+  const addChart: ToolDef = {
+    name: 'add_chart',
+    description:
+      'Add a native data-bound chart element (bar/line/donut/scatter) to a design page. Series data stays editable in the editor toolbar and via update_element. Scatter uses flat [x,y,...] point arrays and no labels; the other kinds take one value per label.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        design_id: { type: 'string' },
+        page: { type: 'number', minimum: 0 },
+        kind: { type: 'string', enum: ['bar', 'line', 'donut', 'scatter'] },
+        x: { type: 'number' },
+        y: { type: 'number' },
+        width: { type: 'number' },
+        height: { type: 'number' },
+        labels: { type: 'array', items: { type: 'string' }, description: 'Category labels (bar/line/donut; omit for scatter)' },
+        series: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              color: { type: 'string', description: 'hex colour, e.g. #7630D7' },
+              values: { type: 'array', items: { type: 'number' } },
+            },
+          },
+          description: 'Data series (max 6); values follow the kind shape. Omit for sensible sample data.',
+        },
+        bar_mode: { type: 'string', enum: ['group', 'stack'] },
+        hole: { type: 'number', minimum: 0, maximum: 0.85, description: 'donut inner-radius ratio' },
+        smooth: { type: 'boolean' },
+        show_grid: { type: 'boolean' },
+        show_values: { type: 'boolean' },
+        show_legend: { type: 'boolean' },
+      },
+      required: ['design_id', 'kind'],
+    },
+    handler: async (args) => {
+      const designId = asString(args.design_id)
+      const kindRaw = asString(args.kind)
+      if (!isChartKind(kindRaw)) return fail('kind must be one of bar | line | donut | scatter.')
+      const kind = kindRaw as ChartKind
+      const scatter = kind === 'scatter'
+      let labels = args.labels !== undefined ? sanitizeChartLabels(args.labels) : []
+      let seriesIn = args.series !== undefined ? sanitizeChartSeries(args.series, scatter) : []
+      // friendly completion: labels without series → one sample series;
+      // series without labels → Item N categories (non-scatter kinds)
+      if (!scatter && labels.length > 0 && seriesIn.length === 0) {
+        seriesIn = [{ name: 'Series 1', color: CHART_PALETTE[0], values: labels.map((_, i) => 20 + i * 5) }]
+      }
+      if (!scatter && labels.length === 0 && seriesIn.length > 0) {
+        const n = Math.max(1, ...seriesIn.map((sr) => sr.values.length))
+        labels = Array.from({ length: n }, (_, i) => `Item ${i + 1}`)
+      }
+      const hasData = seriesIn.length > 0 && (scatter || labels.length > 0)
+      return mutateDesign(designId, (pages, w, h) => {
+        const pageIndex = clamp(asInt(args.page, 0), 0, pages.length - 1)
+        const page = pageAt(pages, pageIndex)
+        if (!page) return null
+        const chartW = clamp(asNumber(args.width, kind === 'donut' ? 380 : 560), 120, w)
+        const chartH = clamp(asNumber(args.height, kind === 'donut' ? 380 : 360), 120, h)
+        const el = createChartElement(kind, {
+          x: clamp(asNumber(args.x, (w - chartW) / 2), -w, w),
+          y: clamp(asNumber(args.y, h * 0.3), -h, h),
+          width: chartW,
+          height: chartH,
+          ...(hasData
+            ? {
+                labels,
+                series: seriesIn.map((sr, i) => ({
+                  ...sr,
+                  color: /^#[0-9a-fA-F]{3,8}$/.test(sr.color) ? sr.color : CHART_PALETTE[i % CHART_PALETTE.length],
+                })),
+              }
+            : {}),
+          ...(args.bar_mode !== undefined ? { barMode: args.bar_mode === 'stack' ? ('stack' as const) : ('group' as const) } : {}),
+          ...(args.hole !== undefined ? { hole: clampChartHole(args.hole) } : {}),
+          ...(args.smooth !== undefined ? { smooth: args.smooth === true } : {}),
+          ...(args.show_grid !== undefined ? { showGrid: args.show_grid === true } : {}),
+          ...(args.show_values !== undefined ? { showValues: args.show_values === true } : {}),
+          ...(args.show_legend !== undefined ? { showLegend: args.show_legend === true } : {}),
+        })
+        const next = pages.map((p, i) => (i === pageIndex ? { ...p, elements: [...p.elements, el] } : p))
+        return {
+          pages: next,
+          summary: {
+            added: `chart (${kind})`,
+            element_id: el.id,
+            page: pageIndex,
+            labels: el.labels.length,
+            series: el.series.map((sr) => sr.name),
+          },
+        }
+      })
+    },
+  }
+
   const addEmbed: ToolDef = {
     name: 'add_embed',
     description: 'Add an embed link card (YouTube / Google Maps / generic link) to a design page. The card is native vector content that opens the URL in previews and shared views.',
@@ -1089,6 +1196,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
     addShape,
     addImage,
     addTable,
+    addChart,
     addEmbed,
     setBackground,
     updateElement,
@@ -1110,6 +1218,7 @@ const IMAGE_KEYS = new Set([...COMMON_KEYS, 'src', 'radius', 'brightness', 'cont
 const TABLE_KEYS = new Set([...COMMON_KEYS, 'rows', 'cols', 'cells', 'colWidths', 'rowHeight', 'borderColor', 'borderWidth', 'headerFill', 'textColor', 'fontSize', 'fontFamily'])
 const FRAME_KEYS = new Set([...COMMON_KEYS, 'frameShape', 'src', 'radius'])
 const EMBED_KEYS = new Set([...COMMON_KEYS, 'url', 'title', 'tint'])
+const CHART_KEYS = new Set([...COMMON_KEYS, 'kind', 'labels', 'series', 'barMode', 'hole', 'smooth', 'showGrid', 'showValues', 'showLegend', 'fill', 'textColor', 'fontSize'])
 
 function sanitizePatch(patch: Record<string, unknown>, el: AnyElement, pageW: number, pageH: number): Record<string, unknown> {
   const allowed =
@@ -1118,6 +1227,7 @@ function sanitizePatch(patch: Record<string, unknown>, el: AnyElement, pageW: nu
     : el.type === 'table' ? TABLE_KEYS
     : el.type === 'frame' ? FRAME_KEYS
     : el.type === 'embed' ? EMBED_KEYS
+    : el.type === 'chart' ? CHART_KEYS
     : el.type === 'line' ? new Set([...COMMON_KEYS, 'stroke', 'strokeWidth', 'dashed'])
     : SHAPE_KEYS
 
@@ -1176,6 +1286,26 @@ function sanitizePatch(patch: Record<string, unknown>, el: AnyElement, pageW: nu
         break
       case 'url':
         out.url = isHttpsUrl(value) ? value : ((el as { url?: string }).url ?? '')
+        break
+      // v0.14 (D7): chart data patches — series/labels run the same
+      // whitelisting as pastes; the effective kind decides the shape
+      case 'kind': {
+        if (isChartKind(value)) out.kind = value
+        break
+      }
+      case 'labels':
+        out.labels = sanitizeChartLabels(value)
+        break
+      case 'series': {
+        const effective = (out.kind ?? (el as { kind?: unknown }).kind) === 'scatter'
+        out.series = sanitizeChartSeries(value, effective)
+        break
+      }
+      case 'barMode':
+        out.barMode = value === 'stack' ? 'stack' : 'group'
+        break
+      case 'hole':
+        out.hole = clampChartHole(value)
         break
       case 'fontFamily': {
         const f = asString(value, '')

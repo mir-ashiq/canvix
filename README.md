@@ -992,6 +992,27 @@ tool descriptions so agents pick the right format.
       `update_element`. While wiring the video exporter, tables,
       frames and embed cards stopped vanishing from video exports
       (a pre-existing parity gap) *(v0.14.4)*
+- [x] Image filters (v0.14 D4) — a preset gallery on every image:
+      grayscale / warm / cool / vintage / blur / sharpen / vignette
+      with an intensity slider and live thumbnail previews. One pure
+      pixel pipeline feeds the editor (Konva filters on the existing
+      cache rail), the video exporter (bit-exact pre-bake + images
+      finally export flip/rotation) and the SVG exporter
+      (feComponentTransfer / feColorMatrix / feConvolveMatrix / exact-
+      variance feGaussianBlur equivalents, approximations documented).
+      Adjustments and filters persist in the element, pasted images
+      validate filter ids + clamp intensity, and MCP image patches
+      accept the new fields *(v0.14.3)*
+- [x] Even distribute (v0.14 D3) — select ≥ 3 elements and space
+      them evenly (Canva/Figma "spacing"): equal gaps between edges,
+      extremes fixed, one undo step. One pure geometry module
+      (`src/lib/distribute.ts`) powers the Position popover's new
+      Spacing H/V tiles, the store action (fresh HLC stamps on
+      touched elements only, one collab `page:replace`) and the
+      AI/plugin `distributeElements` action — whose old inline math
+      measured the span off by the last box's size and refused
+      overlapping selections (Canva/Figma distribute those; now so
+      does Canvix) *(v0.14.5)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)
@@ -1001,7 +1022,8 @@ landscape research, prioritized epics with effort estimates, risk
 register) lives in `research/V0118-ROADMAP-RESEARCH.md`. The arc:
 **v0.12** trust & rails (CI gate, security headers, rate limits, ops
 runbook) → **v0.13** plugin system MVP → **v0.14** daily-driver editor
-depth (persistent uploads, clipboard, folders, filters, charts) →
+depth (persistent uploads, clipboard, folders, filters, charts,
+distribute) →
 **v0.15** rich content & export (rich text, WebCodecs video, vector
 PDF) → **v0.16** mobile & collaboration scale (touch-first editing,
 LISTEN/NOTIFY fan-out) → **v1.0** = every promise on this page shipped

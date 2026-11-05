@@ -3,6 +3,47 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.14.5] — 2026-11-05
+
+### Added
+
+- **Daily-driver depth, part 6 — even distribution (D3).** Select
+  three or more elements and space them evenly, the Canva/Figma
+  "spacing" behaviour: equal gaps between element edges, the outermost
+  elements stay exactly where they were.
+  - **One pure geometry module** — `src/lib/distribute.ts` holds the
+    distribution math (edge-gap semantics, floats walked with integer
+    output so rounding never drifts); the store action, the AI
+    assistant path and the unit tests all share it. Geometry uses the
+    element's local box, the same documented simplification the
+    page-align modes use.
+  - **A real store action** — `distributeElements` follows the
+    `alignElements` house pattern: ONE history entry (one undo step —
+    the old assistant path did one `updateElements` per element),
+    fresh HLC stamps on touched elements only, one collab
+    `page:replace` broadcast.
+  - **Position popover tiles** — a "Distribute" section with
+    Spacing H / Spacing V appears when three or more elements are
+    selected (hidden below the threshold where there is nothing to
+    space evenly).
+  - **Assistant + plugin parity** — the `distributeElements` agent
+    action (already in the Assistant vocabulary and the plugin
+    allowlist) now rides the same store action and geometry. Two
+    honest fixes came with it: the old inline math measured the span
+    to the last box's *leading* edge (off by its size — gaps were
+    uneven for unequal elements), and it refused overlapping
+    selections outright; Canva and Figma distribute those (the
+    overlap is evened out), and now Canvix does too.
+  - **Fixed** while auditing the README roadmap: the v0.14 checklist
+    was missing its image-filters entry (shipped as 0.14.3) — added.
+
+### Changed
+
+- The `distributeElements` AI/plugin action no longer refuses
+  overlapping selections with "Elements overlap — no distribution
+  applied"; it distributes them evenly (Canva/Figma behaviour) and
+  reports success.
+
 ## [0.14.4] — 2026-11-05
 
 ### Added

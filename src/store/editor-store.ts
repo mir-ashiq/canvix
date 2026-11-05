@@ -22,6 +22,7 @@ import {
 import type { ElementAnimation, PageTransition } from '@/lib/types'
 import type { CollabOp, DesignEventRow } from '@/lib/collab/protocol'
 import type { Collaborator, CollabStatus } from '@/lib/collab/protocol'
+import { distributeEvenly } from '@/lib/distribute'
 
 export type PanelId =
   | 'templates'
@@ -169,6 +170,7 @@ interface EditorState {
   groupSelection: () => void
   ungroupSelection: () => void
   alignElements: (ids: string[], mode: 'left' | 'cx' | 'right' | 'top' | 'cy' | 'bottom') => void
+  distributeElements: (ids: string[], axis: 'x' | 'y') => void
   flipSelection: (axis: 'h' | 'v') => void
 
   // page ops
@@ -694,6 +696,38 @@ export const useEditorStore = create<EditorState>((set, get) => ({
               })()
               return { ...el, ...touched, _m: h } as AnyElement
             }),
+          }
+    )
+    set({ pages: next, dirty: true, version: version + 1 })
+    emit({ kind: 'page:replace', pageId: next[currentPage].id, page: next[currentPage] })
+  },
+
+  // v0.14 (D3): even distribution — Canva/Figma "spacing". Equal gaps
+  // between element edges, extremes stay fixed; ONE history entry and
+  // one collab page:replace (the assistant path used to do N separate
+  // updateElements calls = N undo steps — this is the house pattern).
+  distributeElements: (ids, axis) => {
+    if (ids.length < 3) return
+    get().pushHistory()
+    const { pages, currentPage, version } = get()
+    const h = nowHlc()
+    const next = pages.map((p, i) =>
+      i !== currentPage
+        ? p
+        : {
+            ...p,
+            elements: (() => {
+              const targets = p.elements.filter((el) => ids.includes(el.id))
+              if (targets.length < 3) return p.elements
+              const positions = distributeEvenly(targets, axis)
+              const byId = new Map(targets.map((el, idx) => [el.id, positions[idx]]))
+              return p.elements.map((el) => {
+                const pos = byId.get(el.id)
+                // v0.10: only the DISTRIBUTED elements get a fresh stamp —
+                // untouched elements keep theirs so concurrent remote edits win
+                return pos ? ({ ...el, ...pos, _m: h } as AnyElement) : el
+              })
+            })(),
           }
     )
     set({ pages: next, dirty: true, version: version + 1 })

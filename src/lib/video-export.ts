@@ -12,8 +12,10 @@
 // ─────────────────────────────────────────────────────────────
 
 import Konva from 'konva'
-import type { AnyElement, AudioElement, ImageElement, PageData, PluginElement, VideoElement } from '@/lib/types'
+import type { AnyElement, AudioElement, ChartElement, EmbedElement, FrameElement, ImageElement, PageData, PluginElement, TableElement, VideoElement } from '@/lib/types'
 import { imageHasFilters, renderFilteredCanvas } from '@/lib/image-filters'
+import { chartPrimitives } from '@/lib/chart-geometry'
+import { embedLayout, hexPoints, hostOf, tableGeometry, youtubeThumbUrl } from '@/lib/v06-geometry'
 import { animateElementAt, pageHoldDuration } from '@/lib/animations'
 import { beatEnvelopeAt, beatSourceOf } from '@/lib/media/beat-detect'
 import { awaitRender, renderKey } from '@/lib/plugins/renderer-cache'
@@ -107,7 +109,13 @@ async function collectImages(pages: PageData[]): Promise<Map<string, HTMLImageEl
     for (const el of els) {
       if (el.type === 'image') sources.push(el.src)
       else if (el.type === 'video') sources.push(el.poster) // v0.11: poster dataURL
-      else if (el.type === 'group') walk(el.children)
+      else if (el.type === 'frame' && el.src) sources.push(el.src) // v0.14 D7 parity: frames render in video
+      else if (el.type === 'embed') {
+        // v0.14 D7 parity: youtube thumbs attempted via the CORS loader —
+        // a blocked thumb degrades to the tinted band (same as SVG export)
+        const t = el.kind === 'youtube' ? youtubeThumbUrl(el.url) : null
+        if (t) sources.push(t)
+      } else if (el.type === 'group') walk(el.children)
     }
   }
   for (const p of pages) walk(p.elements)
@@ -143,6 +151,46 @@ async function collectImages(pages: PageData[]): Promise<Map<string, HTMLImageEl
 }
 
 // ── Konva node builders (geometry mirrors element-node.tsx) ──
+
+/** clip function for a frame shape (mirrors v06-nodes frameClip) */
+function frameClipFunc(fr: FrameElement): (ctx: Konva.Context) => void {
+  return (ctx: Konva.Context) => {
+    const w = fr.width
+    const h = fr.height
+    if (fr.frameShape === 'ellipse' || fr.frameShape === 'circle') {
+      const rx = fr.frameShape === 'circle' ? Math.min(w, h) / 2 : w / 2
+      const ry = fr.frameShape === 'circle' ? Math.min(w, h) / 2 : h / 2
+      ctx.beginPath()
+      ctx.ellipse(w / 2, h / 2, rx, ry, 0, 0, Math.PI * 2, false)
+      ctx.closePath()
+    } else if (fr.frameShape === 'triangle') {
+      ctx.beginPath()
+      ctx.moveTo(0, h)
+      ctx.lineTo(w / 2, 0)
+      ctx.lineTo(w, h)
+      ctx.closePath()
+    } else if (fr.frameShape === 'hexagon') {
+      const pts = hexPoints(w, h)
+      ctx.beginPath()
+      ctx.moveTo(pts[0][0], pts[0][1])
+      for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i][0], pts[i][1])
+      ctx.closePath()
+    } else {
+      const rr = Math.min(fr.radius, w / 2, h / 2)
+      ctx.beginPath()
+      ctx.moveTo(rr, 0)
+      ctx.lineTo(w - rr, 0)
+      ctx.quadraticCurveTo(w, 0, w, rr)
+      ctx.lineTo(w, h - rr)
+      ctx.quadraticCurveTo(w, h, w - rr, h)
+      ctx.lineTo(rr, h)
+      ctx.quadraticCurveTo(0, h, 0, h - rr)
+      ctx.lineTo(0, rr)
+      ctx.quadraticCurveTo(0, 0, rr, 0)
+      ctx.closePath()
+    }
+  }
+}
 
 function buildKonvaNode(el: AnyElement, images: Map<string, HTMLImageElement>): Konva.Node {
   switch (el.type) {
@@ -431,6 +479,197 @@ function buildKonvaNode(el: AnyElement, images: Map<string, HTMLImageElement>): 
       group.add(play)
       return group
     }
+    // ── v0.14 (D7): charts + the table/frame/embed parity fix ──
+    // these previously fell through to the default (empty group) —
+    // tables, frames and embed cards simply VANISHED from video
+    // exports. Geometry mirrors the editor nodes (v06-nodes.tsx).
+
+    case 'chart': {
+      const ch = el as ChartElement
+      const group = new Konva.Group({ id: ch.id, x: ch.x, y: ch.y, rotation: ch.rotation ?? 0, opacity: ch.opacity ?? 1 })
+      for (const p of chartPrimitives(ch)) {
+        switch (p.kind) {
+          case 'rect':
+            group.add(new Konva.Rect({ x: p.x, y: p.y, width: p.w, height: p.h, cornerRadius: p.r ?? 0, fill: p.fill, ...(p.stroke ? { stroke: p.stroke, strokeWidth: p.strokeWidth ?? 1 } : {}) }))
+            break
+          case 'line':
+            group.add(new Konva.Line({ points: [p.x1, p.y1, p.x2, p.y2], stroke: p.stroke, strokeWidth: p.width, ...(p.dash ? { dash: p.dash } : {}), lineCap: 'round' }))
+            break
+          case 'polyline':
+            group.add(new Konva.Line({ points: p.points, stroke: p.stroke, strokeWidth: p.width, lineCap: 'round', lineJoin: 'round' }))
+            break
+          case 'circle':
+            group.add(new Konva.Circle({ x: p.cx, y: p.cy, radius: p.r, fill: p.fill, ...(p.stroke ? { stroke: p.stroke, strokeWidth: p.strokeWidth ?? 1 } : {}) }))
+            break
+          case 'arc':
+            // Konva.Arc: sweep `angle` from `rotation` (degrees, 0 = 3 o'clock)
+            group.add(new Konva.Arc({ x: p.cx, y: p.cy, innerRadius: p.rIn, outerRadius: p.rOut, angle: ((p.a1 - p.a0) * 180) / Math.PI, rotation: (p.a0 * 180) / Math.PI, fill: p.fill }))
+            break
+          case 'text': {
+            const props: Record<string, unknown> = {
+              y: p.y - p.size * 0.78,
+              text: p.text,
+              fontSize: p.size,
+              fontFamily: p.family,
+              fill: p.fill,
+              fontStyle: p.bold ? '700' : '400',
+            }
+            if (p.anchor === 'middle') {
+              props.x = p.x - 2000
+              props.width = 4000
+              props.align = 'center'
+            } else if (p.anchor === 'end') {
+              props.x = p.x - 1000
+              props.width = 1000
+              props.align = 'right'
+            } else {
+              props.x = p.x
+            }
+            group.add(new Konva.Text(props))
+            break
+          }
+        }
+      }
+      return group
+    }
+
+    case 'table': {
+      const tb = el as TableElement
+      const group = new Konva.Group({ id: tb.id, x: tb.x, y: tb.y, rotation: tb.rotation ?? 0, opacity: tb.opacity ?? 1 })
+      const geo = tableGeometry(tb)
+      for (let idx = 0; idx < tb.rows * tb.cols; idx += 1) {
+        const r = Math.floor(idx / tb.cols)
+        const c = idx % tb.cols
+        const cell = tb.cells[idx] ?? { text: '' }
+        const isHeader = r === 0
+        const cellFill = cell.fill ?? (isHeader ? tb.headerFill : tb.fill)
+        group.add(
+          new Konva.Rect({
+            x: geo.colX[c],
+            y: r * geo.rowH,
+            width: geo.colW[c],
+            height: geo.rowH,
+            ...(cellFill !== 'transparent' ? { fill: cellFill } : {}),
+            stroke: tb.borderColor,
+            strokeWidth: tb.borderWidth,
+          }),
+        )
+        if (cell.text) {
+          group.add(
+            new Konva.Text({
+              x: geo.colX[c] + 10,
+              y: r * geo.rowH,
+              width: Math.max(8, geo.colW[c] - 20),
+              height: geo.rowH,
+              text: cell.text,
+              fontSize: tb.fontSize,
+              fontFamily: tb.fontFamily,
+              fontStyle: cell.bold || isHeader ? 'bold' : 'normal',
+              fill: isHeader ? (tb.headerTextColor ?? '#FFFFFF') : tb.textColor,
+              verticalAlign: 'middle',
+              wrap: 'none',
+              ellipsis: true,
+            }),
+          )
+        }
+      }
+      return group
+    }
+
+    case 'frame': {
+      const fr = el as FrameElement
+      const group = new Konva.Group({ id: fr.id, x: fr.x, y: fr.y, rotation: fr.rotation ?? 0, opacity: fr.opacity ?? 1 })
+      const img = fr.src ? images.get(fr.src) : undefined
+      if (img && fr.naturalWidth > 0 && fr.naturalHeight > 0) {
+        const scale = Math.max(fr.width / fr.naturalWidth, fr.height / fr.naturalHeight)
+        const dw = fr.naturalWidth * scale
+        const dh = fr.naturalHeight * scale
+        group.clipFunc(frameClipFunc(fr))
+        group.add(new Konva.Image({ image: img, x: (fr.width - dw) / 2, y: (fr.height - dh) / 2, width: dw, height: dh }))
+      } else {
+        const stroke = 'rgba(255,255,255,0.85)'
+        if (fr.frameShape === 'ellipse' || fr.frameShape === 'circle') {
+          const rx = fr.frameShape === 'circle' ? Math.min(fr.width, fr.height) / 2 : fr.width / 2
+          const ry = fr.frameShape === 'circle' ? Math.min(fr.width, fr.height) / 2 : fr.height / 2
+          group.add(new Konva.Ellipse({ x: fr.width / 2, y: fr.height / 2, radiusX: rx, radiusY: ry, fill: fr.fill, fillOpacity: 0.16, stroke, strokeWidth: 2, dash: [8, 6] }))
+        } else if (fr.frameShape === 'triangle') {
+          group.add(new Konva.Line({ points: [0, fr.height, fr.width / 2, 0, fr.width, fr.height], closed: true, fill: fr.fill, fillOpacity: 0.16, stroke, strokeWidth: 2, dash: [8, 6] }))
+        } else if (fr.frameShape === 'hexagon') {
+          group.add(new Konva.Line({ points: hexPoints(fr.width, fr.height).flat(), closed: true, fill: fr.fill, fillOpacity: 0.16, stroke, strokeWidth: 2, dash: [8, 6] }))
+        } else {
+          group.add(new Konva.Rect({ width: fr.width, height: fr.height, cornerRadius: fr.radius, fill: fr.fill, fillOpacity: 0.16, stroke, strokeWidth: 2, dash: [8, 6] }))
+        }
+      }
+      return group
+    }
+
+    case 'embed': {
+      const em = el as EmbedElement
+      const group = new Konva.Group({ id: em.id, x: em.x, y: em.y, rotation: em.rotation ?? 0, opacity: em.opacity ?? 1 })
+      const { bandH, iconR } = embedLayout(em.width, em.height)
+      const cx = em.width / 2
+      const cy = bandH / 2
+      group.add(new Konva.Rect({ width: em.width, height: em.height, cornerRadius: 14, fill: '#15171C' }))
+      const thumbUrl = em.kind === 'youtube' ? youtubeThumbUrl(em.url) : null
+      const thumb = thumbUrl ? images.get(thumbUrl) : undefined
+      if (thumb) {
+        group.add(new Konva.Image({ image: thumb, y: 0, width: em.width, height: bandH, crop: { x: 45, y: 0, width: 270, height: 157 } }))
+      } else {
+        group.add(new Konva.Rect({ y: 0, width: em.width, height: bandH, cornerRadius: [14, 14, 0, 0], fill: em.tint, opacity: 0.28 }))
+      }
+      if (em.kind === 'youtube') {
+        group.add(new Konva.Ellipse({ x: cx, y: cy, radiusX: iconR, radiusY: iconR, fill: 'rgba(255,255,255,0.92)' }))
+        group.add(new Konva.Line({ points: [cx - iconR * 0.32, cy - iconR * 0.42, cx - iconR * 0.32, cy + iconR * 0.42, cx + iconR * 0.46, cy], closed: true, fill: '#FF0033' }))
+      } else if (em.kind === 'map') {
+        group.add(new Konva.Ellipse({ x: cx, y: cy, radiusX: iconR, radiusY: iconR, fill: 'rgba(255,255,255,0.95)' }))
+        group.add(new Konva.Ellipse({ x: cx, y: cy - iconR * 0.12, radiusX: iconR * 0.34, radiusY: iconR * 0.46, fill: '#34A853' }))
+        group.add(new Konva.Line({ points: [cx - iconR * 0.24, cy + iconR * 0.1, cx, cy + iconR * 0.58, cx + iconR * 0.24, cy + iconR * 0.1], closed: true, fill: '#34A853' }))
+      } else {
+        const sc = iconR * 0.8
+        group.add(new Konva.Ellipse({ x: cx, y: cy, radiusX: iconR, radiusY: iconR, fill: 'rgba(255,255,255,0.14)', stroke: 'rgba(255,255,255,0.9)', strokeWidth: 2.5 }))
+        group.add(
+          new Konva.Path({
+            data: `M ${cx - sc * 0.4} ${cy + sc * 0.4} L ${cx + sc * 0.42} ${cy - sc * 0.42} M ${cx - sc * 0.05} ${cy - sc * 0.42} L ${cx + sc * 0.42} ${cy - sc * 0.42} L ${cx + sc * 0.42} ${cy + sc * 0.05}`,
+            stroke: '#FFFFFF',
+            strokeWidth: Math.max(2, iconR * 0.16),
+            lineCap: 'round',
+            lineJoin: 'round',
+          }),
+        )
+      }
+      group.add(
+        new Konva.Text({
+          x: 14,
+          y: bandH + 10,
+          width: Math.max(8, em.width - 28),
+          height: 18,
+          text: hostOf(em.url).toUpperCase(),
+          fontSize: Math.max(9, Math.round(em.height * 0.055)),
+          fontFamily: 'Inter',
+          fill: 'rgba(255,255,255,0.55)',
+          letterSpacing: 1.2,
+          wrap: 'none',
+          ellipsis: true,
+        }),
+      )
+      group.add(
+        new Konva.Text({
+          x: 14,
+          y: bandH + 30,
+          width: Math.max(8, em.width - 28),
+          height: Math.max(16, em.height - bandH - 40),
+          text: em.title ?? em.url,
+          fontSize: Math.max(11, Math.round(em.height * 0.07)),
+          fontFamily: 'Inter',
+          fontStyle: '600',
+          fill: '#FFFFFF',
+          wrap: 'word',
+          ellipsis: true,
+        }),
+      )
+      return group
+    }
+
     case 'group': {
       const g = el
       const group = new Konva.Group({ id: g.id, x: g.x, y: g.y, rotation: g.rotation ?? 0 })

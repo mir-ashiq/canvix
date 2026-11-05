@@ -20,6 +20,7 @@ export type ElementType =
   | 'audio'
   | 'video'
   | 'plugin'
+  | 'chart'
 
 export type TextAlign = 'left' | 'center' | 'right' | 'justify'
 
@@ -276,6 +277,54 @@ export interface EmbedElement extends BaseElement {
   tint: string
 }
 
+// ── v0.14 D7: data-bound charts ───────────────────────────────
+
+export const CHART_KINDS = ['bar', 'line', 'donut', 'scatter'] as const
+export type ChartKind = (typeof CHART_KINDS)[number]
+
+export const CHART_KIND_LABELS: Record<ChartKind, string> = {
+  bar: 'Bar chart',
+  line: 'Line chart',
+  donut: 'Donut chart',
+  scatter: 'Scatter chart',
+}
+
+/** One data series. `values` holds one number per `labels` entry
+ *  (bar/line/donut); scatter stores flat [x0,y0,x1,y1,…] pairs instead
+ *  (labels stays empty). Both shapes are capped + whitelisted on every
+ *  untrusted boundary (paste, MCP) — see lib/chart-geometry.ts. */
+export interface ChartSeries {
+  name: string
+  color: string
+  values: number[]
+}
+
+/** v0.14 (D7): native data-bound chart element — the geometry lives in
+ *  lib/chart-geometry.ts (one pure module; the editor, the video
+ *  exporter and the SVG exporter all map the same primitives). */
+export interface ChartElement extends BaseElement {
+  type: 'chart'
+  kind: ChartKind
+  /** category labels (bar/line/donut); scatter keeps this empty */
+  labels: string[]
+  series: ChartSeries[]
+  /** bar layout: series side-by-side or stacked */
+  barMode: 'group' | 'stack'
+  /** donut inner-radius ratio 0–0.85 */
+  hole: number
+  /** line: Catmull-Rom smoothed segments */
+  smooth: boolean
+  showGrid: boolean
+  /** numeric value labels on bars / dots / slices */
+  showValues: boolean
+  showLegend: boolean
+  /** panel background ('transparent' allowed) */
+  fill: string
+  textColor: string
+  fontFamily: string
+  fontSize: number
+}
+
 // ── v0.11: audio/video elements + Beat Sync ──────────────────
 
 /** Hard caps keeping collab ops + saved documents small: the waveform and
@@ -394,6 +443,7 @@ export type AnyElement =
   | AudioElement
   | VideoElement
   | PluginElement
+  | ChartElement
 
 export type Background =
   | { type: 'solid'; color: string }
@@ -699,6 +749,72 @@ export function detectEmbedKind(url: string): EmbedKind {
   }
 }
 
+/** v0.14 (D7): chart factory — seeds real-looking sample data per kind so
+ *  the canvas never shows an empty shell; every field stays editable. */
+export function createChartElement(
+  kind: ChartKind,
+  init: BaseInit & Partial<ChartElement> = {}
+): ChartElement {
+  const effectiveKind = init.kind ?? kind
+  const sample = sampleChartData(effectiveKind)
+  return {
+    ...baseElement('chart', { width: 560, height: 360, ...init }),
+    type: 'chart',
+    labels: sample.labels,
+    series: sample.series,
+    barMode: 'group',
+    hole: 0.62,
+    smooth: true,
+    showGrid: true,
+    showValues: false,
+    showLegend: true,
+    fill: '#FFFFFF',
+    textColor: '#3A3F4B',
+    fontFamily: 'Inter',
+    fontSize: 13,
+    ...init,
+    kind: effectiveKind,
+  }
+}
+
+/** Default per-kind sample data (also the MCP add_chart fallback). */
+export function sampleChartData(kind: ChartKind): { labels: string[]; series: ChartSeries[] } {
+  switch (kind) {
+    case 'bar':
+      return {
+        labels: ['Q1', 'Q2', 'Q3', 'Q4'],
+        series: [
+          { name: 'Revenue', color: '#7630D7', values: [128, 155, 141, 190] },
+          { name: 'Costs', color: '#02C0CC', values: [86, 92, 90, 104] },
+        ],
+      }
+    case 'line':
+      return {
+        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+        series: [
+          { name: 'Visitors', color: '#7630D7', values: [420, 510, 480, 610, 580, 690] },
+          { name: 'Signups', color: '#FF5C8A', values: [120, 150, 140, 180, 175, 210] },
+        ],
+      }
+    case 'donut':
+      return {
+        labels: ['Design', 'Code', 'Review', 'Test', 'Ship'],
+        series: [{ name: 'Hours', color: '#7630D7', values: [32, 41, 18, 22, 12] }],
+      }
+    case 'scatter':
+      return {
+        labels: [],
+        series: [
+          {
+            name: 'Cohort',
+            color: '#02C0CC',
+            values: [12, 34, 18, 52, 24, 47, 31, 66, 38, 58, 45, 74, 52, 81, 58, 77],
+          },
+        ],
+      }
+  }
+}
+
 /** v0.11: audio factory — media-store src + the analysis baked in at upload. */
 export function createAudioElement(
   src: string,
@@ -848,4 +964,7 @@ export function isFrame(el: AnyElement): el is FrameElement {
 }
 export function isEmbed(el: AnyElement): el is EmbedElement {
   return el.type === 'embed'
+}
+export function isChart(el: AnyElement): el is ChartElement {
+  return el.type === 'chart'
 }

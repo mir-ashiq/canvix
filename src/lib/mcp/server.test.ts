@@ -40,7 +40,7 @@ describe('JSON-RPC id echo', () => {
     expect(Array.isArray(tools)).toBe(true)
     expect(tools.length).toBeGreaterThanOrEqual(20)
     const names = tools.map((t) => t.name)
-    for (const expected of ['create_design', 'add_text', 'add_shape', 'add_image', 'export_design']) {
+    for (const expected of ['create_design', 'add_text', 'add_shape', 'add_image', 'add_chart', 'update_element', 'export_design']) {
       expect(names).toContain(expected)
     }
     for (const t of tools) {

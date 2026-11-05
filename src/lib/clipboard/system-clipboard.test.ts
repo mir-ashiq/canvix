@@ -52,6 +52,20 @@ function imageEl(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function chartEl(overrides: Record<string, unknown> = {}) {
+  return {
+    type: 'chart',
+    x: 40,
+    y: 40,
+    width: 560,
+    height: 360,
+    kind: 'bar',
+    labels: ['Q1', 'Q2'],
+    series: [{ name: 'Revenue', color: '#7630D7', values: [10, 20] }],
+    ...overrides,
+  }
+}
+
 describe('envelope round-trip', () => {
   it('serialize → parse survives with identical content', () => {
     const els = [textEl() as unknown as AnyElement]
@@ -134,6 +148,49 @@ describe('sanitizePastedElements — the untrusted-input gauntlet', () => {
     const rec = out[0] as unknown as Record<string, unknown>
     expect(rec.filter).toBe('warm')
     expect(rec.filterIntensity).toBe(0) // -20 clamps to 0, not 100 (finite input is clamped, not defaulted)
+  })
+
+  it('v0.14 (D7): chart fields survive a paste whitelisted + capped', () => {
+    const out = sanitizePastedElements([chartEl({ hole: 0.7, barMode: 'stack' })])
+    const rec = out[0] as unknown as Record<string, unknown>
+    expect(rec.kind).toBe('bar')
+    expect(rec.labels).toEqual(['Q1', 'Q2'])
+    expect(rec.series).toEqual([{ name: 'Revenue', color: '#7630D7', values: [10, 20] }])
+    expect(rec.hole).toBe(0.7)
+    expect(rec.barMode).toBe('stack')
+  })
+
+  it('v0.14 (D7): hostile chart payloads reset to safe defaults', () => {
+    const out = sanitizePastedElements([
+      chartEl({
+        kind: 'EVIL',
+        labels: ['ok', 7, 'x'.repeat(60)],
+        series: [
+          { name: 'a', color: 'javascript:alert(1)', values: [1, 'x', 2e12] },
+          'junk',
+          null,
+        ],
+        barMode: 'diagonal',
+        hole: 5,
+        showValues: 'yes',
+      }),
+    ])
+    const rec = out[0] as unknown as Record<string, unknown>
+    expect(rec.kind).toBe('bar') // junk kind falls back, never reaches the geometry switch
+    expect(rec.labels).toEqual(['ok', 'x'.repeat(24)])
+    expect(rec.series).toEqual([{ name: 'a', color: '#7630D7', values: [1, 1e9] }])
+    expect(rec.barMode).toBe('group')
+    expect(rec.hole).toBe(0.85)
+    expect(rec.showValues).toBe(false)
+  })
+
+  it('v0.14 (D7): scatter pastes keep even-length pair arrays', () => {
+    const out = sanitizePastedElements([
+      chartEl({ kind: 'scatter', labels: ['drop', 'me'], series: [{ name: 'p', color: '#02C0CC', values: [1, 2, 3, 4, 5] }] }),
+    ])
+    const rec = out[0] as unknown as Record<string, unknown>
+    expect(rec.labels).toEqual(['drop', 'me']) // labels are kept: harmless for scatter, preserved for kind round-trips
+    expect(rec.series).toEqual([{ name: 'p', color: '#02C0CC', values: [1, 2, 3, 4] }]) // odd length trimmed
   })
 
   it('caps the element count', () => {

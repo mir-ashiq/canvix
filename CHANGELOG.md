@@ -3,6 +3,45 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.14.4] — 2026-11-05
+
+### Added
+
+- **Daily-driver depth, part 5 — data-bound charts (D7).** Charts
+  were one-shot decorations (the Apps panel exploded them into loose
+  rects and lines — edit one bar and the "chart" was gone). They are
+  now a native `chart` element whose data stays editable.
+  - **Four kinds, one element** — bar (grouped or stacked), line
+    (optional Catmull-Rom smoothing), donut (first series, centre
+    total, adjustable hole) and scatter (flat x,y pairs on numeric
+    axes). The toolbar converts between kinds in place; converting
+    out of scatter reuses the y values so nothing is lost.
+  - **One geometry module, three renderers** —
+    `src/lib/chart-geometry.ts` turns the element into pure vector
+    primitives; the editor (react-konva), the video exporter (Konva)
+    and the SVG exporter (strings) are thin adapters over the same
+    list, so all three render identical geometry by construction.
+    Smooth lines are sampled in the geometry itself; anchored text
+    uses the same wide-box trick in both Konva and SVG.
+  - **Editable after creation** — the toolbar's "Edit data" popover
+    is a spreadsheet: category labels, per-series values, series
+    names and colours, add/remove labels and series (typing updates
+    live; structural edits are one undo step each — the house
+    pattern). Plus grid / values / legend toggles, text size and
+    panel colours.
+  - **Everywhere a chart should be** — Elements panel "Charts" tab,
+    the Apps rail (now adding the native element), the layers panel,
+    SVG exports (annular-sector arc paths for donuts), video exports
+    — and while wiring the video exporter, tables, frames and embed
+    cards stopped vanishing from video exports entirely (they
+    previously fell through to an empty group; a pre-existing parity
+    gap closed while here).
+  - **Safe + agent-ready** — pasted charts run the hostile-input
+    gauntlet (kind whitelist with bar fallback, ≤ 6 series / 24
+    labels / finite clamped values, hole clamped); MCP gains
+    `add_chart` and `update_element` understands `series`,
+    `labels`, `kind`, `barMode`, `hole` and the display toggles.
+
 ## [0.14.3] — 2026-11-05
 
 ### Added

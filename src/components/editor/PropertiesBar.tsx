@@ -7,6 +7,7 @@ import {
   Group, Ungroup, ArrowUpToLine, ArrowDownToLine, BringToFront, SendToBack,
   AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd,
   AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd,
+  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter,
   FlipHorizontal, FlipVertical, Sun, Contrast, Palette, RotateCcw, Replace, Lock, LockOpen,
   Layers, SquareDashed, Crop, Spline, Table2, Rows3, Columns3, Trash, Upload, ExternalLink,
   Music, Film, Play, Repeat, Volume2, VolumeX, SlidersHorizontal, Activity, Puzzle, LayoutGrid, Wand2,
@@ -752,6 +753,16 @@ function PositionPopover({ ids, count, element }: { ids: string[]; count: number
           <IconTile icon={<AlignHorizontalJustifyEnd size={15} />} label="Right" onClick={() => store.alignElements(ids, 'right')} />
         </div>
       </div>
+
+      {count >= 3 && (
+        <div className="border-t border-white/[0.08] pt-2 mb-2.5">
+          <div className="text-[10px] font-semibold text-white/45 uppercase tracking-wide mb-1.5">Distribute</div>
+          <div className="grid grid-cols-3 gap-1">
+            <IconTile icon={<AlignHorizontalDistributeCenter size={15} />} label="Spacing H" onClick={() => store.distributeElements(ids, 'x')} />
+            <IconTile icon={<AlignVerticalDistributeCenter size={15} />} label="Spacing V" onClick={() => store.distributeElements(ids, 'y')} />
+          </div>
+        </div>
+      )}
 
       {count === 1 && el && (
         <div className="border-t border-white/[0.08] pt-2">

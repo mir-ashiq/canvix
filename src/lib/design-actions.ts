@@ -323,22 +323,16 @@ export async function applyDesignAction(action: DesignAction, caller?: ActionCal
       const ids = resolveIds(action.ids)
       if (ids.length < 3) return 'Needs at least 3 elements'
       const axis = String(action.axis) === 'y' ? 'y' : 'x'
+      // v0.14 (D3): one store action = one undo step + one collab
+      // broadcast, sharing the same pure geometry as the toolbar
+      // tiles. The old inline loop did N updateElements (N undo
+      // steps), computed the span against the last box's LEADING
+      // edge (off by its size) and refused overlapping selections —
+      // Canva/Figma distribute those; now we do too.
+      useEditorStore.getState().distributeElements(ids, axis)
       const page = currentPageElements()
-      const els = page.filter((e) => ids.includes(e.id)).sort((a, b) => (axis === 'x' ? a.x - b.x : a.y - b.y))
-      const first = els[0]
-      const last = els[els.length - 1]
-      const start = axis === 'x' ? first.x : first.y
-      const end = axis === 'x' ? last.x : last.y
-      const sizes = els.reduce((sum, e) => sum + (axis === 'x' ? e.width : e.height), 0)
-      const gap = (end - start - sizes) / (els.length - 1)
-      if (gap < 0) return 'Elements overlap — no distribution applied'
-      let cursor = start
-      for (const el of els) {
-        const patch = axis === 'x' ? { x: Math.round(cursor) } : { y: Math.round(cursor) }
-        useEditorStore.getState().updateElements([el.id], patch)
-        cursor += (axis === 'x' ? el.width : el.height) + gap
-      }
-      return `Distributed ${els.length} elements evenly`
+      const moved = page.filter((e) => ids.includes(e.id)).length
+      return moved < 3 ? 'Needs at least 3 elements on this page' : `Distributed ${moved} elements evenly`
     }
 
     case 'addPage':

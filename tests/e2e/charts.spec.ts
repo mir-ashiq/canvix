@@ -17,20 +17,10 @@ import { readFileSync } from 'node:fs'
  *      HOSTILE clipboard envelope pastes as a sanitized chart (junk
  *      kind → bar fallback, caps applied, id remapped)
  *
- * Register budget: ONE registration per run (the second test logs in
- * with the shared account — the PR #26 discipline).
+ * Register budget: ZERO — the whole spec runs anonymously (each test
+ * gets its own browser context/attribution). The suite-wide budget is
+ * 5/h/IP and this spec must not spend any of it (the PR #26/#30 lesson).
  */
-
-let SHARED_ACCOUNT: { username: string; password: string } | null = null
-
-async function register(page: Page, tag: string): Promise<string> {
-  const username = `d7_${tag}_${Date.now().toString(36)}`
-  const password = `D7-E2e-${username}-17!q`
-  const res = await page.request.post('/api/auth/register', { data: { username, password } })
-  expect(res.status(), `register ${username}`).toBeLessThan(300)
-  if (!SHARED_ACCOUNT) SHARED_ACCOUNT = { username, password }
-  return username
-}
 
 async function createDesign(page: Page, name: string, elements: unknown[]): Promise<string> {
   const res = await page.request.post('/api/designs', {
@@ -81,8 +71,9 @@ test.describe('Charts (v0.14 D7)', () => {
   test.setTimeout(180_000)
 
   test('add bar → edit data → convert to donut → persist → SVG exports', async ({ page }) => {
-    const username = await register(page, 'main')
-    const design = await createDesign(page, `cvx_d7_${username}`, [])
+    // fully anonymous — designs work in the anon commons and this spec
+    // must not spend a registration (the suite-wide 5/h/IP budget)
+    const design = await createDesign(page, `cvx_d7_${Date.now().toString(36)}`, [])
     await openEditor(page, design)
 
     // ── add a bar chart from the Elements panel ──
@@ -171,15 +162,10 @@ test.describe('Charts (v0.14 D7)', () => {
   })
 
   test('line + scatter shapes land, hostile envelope pastes sanitized', async ({ browser }) => {
-    expect(SHARED_ACCOUNT, 'a prior test registered the shared account').not.toBeNull()
     const ctx = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] })
     const page = await ctx.newPage()
-    const login = await page.request.post('/api/auth/login', {
-      data: { username: SHARED_ACCOUNT!.username, password: SHARED_ACCOUNT!.password },
-    })
-    expect(login.status(), 'login as the shared account').toBeLessThan(300)
 
-    const design = await createDesign(page, `cvx_d7_b_${SHARED_ACCOUNT!.username}`, [])
+    const design = await createDesign(page, `cvx_d7_b_${Date.now().toString(36)}`, [])
     await openEditor(page, design)
 
     // ── line chart ──

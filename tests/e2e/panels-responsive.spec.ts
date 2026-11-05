@@ -18,7 +18,7 @@ import { test, expect, type Page } from '@playwright/test'
  */
 
 const MOBILE_WIDTHS = [320, 360, 390, 430] as const
-const CATEGORIES = ['Shapes', 'Lines', 'Graphics', 'Stickers', 'Tables', 'Frames', 'Embeds'] as const
+const CATEGORIES = ['Shapes', 'Lines', 'Graphics', 'Stickers', 'Charts', 'Tables', 'Frames', 'Embeds'] as const
 
 async function openEditorPanel(page: Page, panel: string) {
   await page.goto('/')
@@ -145,7 +145,7 @@ test('Elements strip stays a single row on desktop (320px sidebar)', async ({ pa
     ...new Set(els.map((el) => Math.round(el.getBoundingClientRect().y))),
   ])
   expect(ys).toHaveLength(1)
-  // desktop panel is 320px wide — the 7 tabs still overflow into a scroll row
+  // desktop panel is 320px wide — the 8 tabs still overflow into a scroll row
   const strip = page.getByRole('tablist', { name: 'Element categories' })
   const geom = await strip.evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth }))
   expect(geom.sw).toBeGreaterThan(geom.cw)

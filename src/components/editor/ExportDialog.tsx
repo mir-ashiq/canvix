@@ -53,7 +53,7 @@ const SCALES = [
 const FORMATS = [
   { id: 'png', label: 'PNG', hint: 'Lossless · transparency', icon: FileImage },
   { id: 'jpg', label: 'JPG', hint: 'Smaller file', icon: FileImage },
-  { id: 'pdf', label: 'PDF', hint: 'Print-ready · all pages', icon: FileType2 },
+  { id: 'pdf', label: 'PDF', hint: 'Vector text · all pages', icon: FileType2 },
   { id: 'svg', label: 'SVG', hint: 'Vector · editable', icon: FileCode2 },
   { id: 'mp4', label: 'Video', hint: 'MP4 / WebM · animated', icon: Film },
 ] as const
@@ -154,27 +154,32 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         return
       }
       if (format === 'pdf') {
-        // multi-page PDF via jsPDF (client-side, no watermark)
-        const { jsPDF } = await import('jspdf')
-        const pw = canvasBridge.pageWidth
-        const ph = canvasBridge.pageHeight
-        const orientation = pw >= ph ? 'landscape' : 'portrait'
-        const pdf = new jsPDF({ orientation, unit: 'px', format: [pw, ph], compress: true })
-        const savedPage = currentPage
-        const indices = allPages ? pages.map((_, i) => i) : [currentPage]
-        for (let k = 0; k < indices.length; k++) {
-          const idx = indices[k]
-          if (idx !== useEditorStore.getState().currentPage) {
-            setCurrentPage(idx)
-            await new Promise((r) => setTimeout(r, 260))
-          }
-          const url = await captureStage({ pixelScale: scale, mimeType: 'image/jpeg', quality: 0.95 })
-          if (k > 0) pdf.addPage([pw, ph], orientation)
-          pdf.addImage(url, 'JPEG', 0, 0, pw, ph)
-        }
-        if (savedPage !== useEditorStore.getState().currentPage) setCurrentPage(savedPage)
-        pdf.save(`${base}.pdf`)
-        toast({ title: `PDF downloaded (${pageCount} page${pageCount > 1 ? 's' : ''})` })
+        // v0.15 (R4): vector-text PDF — real selectable, searchable text
+        // with embedded subset fonts. Pages render from DATA (no stage
+        // capture, no page-flip waits); anything vectors can't express
+        // (emoji, plugin renders, filtered images, shadows) falls back to
+        // per-element raster strips at the chosen detail level.
+        const pagesToExport = allPages ? pages : [pages[currentPage]]
+        await primePluginRenders(collectPluginElements(pagesToExport), 'export')
+        const { inlineMediaImages } = await import('@/lib/svg-export')
+        const inlined = await inlineMediaImages(pagesToExport)
+        const { exportDesignToPdf, downloadPdf } = await import('@/lib/pdf-export')
+        const result = await exportDesignToPdf({
+          designWidth: canvasBridge.pageWidth || 1080,
+          designHeight: canvasBridge.pageHeight || 1080,
+          pages: inlined,
+          pixelScale: scale,
+          title: name,
+          onProgress: (ratio, label) => {
+            setProgress(Math.round(ratio * 100))
+            setProgressLabel(label)
+          },
+        })
+        downloadPdf(result, `${base}.pdf`)
+        toast({
+          title: `PDF downloaded (${result.pages} page${result.pages > 1 ? 's' : ''})`,
+          description: 'Vector text — selectable & searchable, fonts embedded when available.',
+        })
         onOpenChange(false)
         return
       }
@@ -244,6 +249,11 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             {format === 'svg' ? (
               <p className="text-[11px] text-muted-foreground py-3">
                 Vector export — resolution-independent, opens in browsers & vector editors.
+              </p>
+            ) : format === 'pdf' ? (
+              <p className="text-[11px] text-muted-foreground py-3">
+                Vector text with embedded fonts — selectable & searchable, print-ready.
+                The detail level sets the resolution of photos, stickers and other raster content.
               </p>
             ) : format === 'mp4' ? (
               <div className="text-[11px] text-muted-foreground space-y-1.5 py-1">

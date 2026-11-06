@@ -3,6 +3,38 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.15.4] — 2026-11-06
+
+### Added
+
+- **Rich content & export, part 5 — GIF export (R5).** Animated,
+  looping GIFs from any page range, rendered entirely in the browser
+  with **zero new dependencies** (a hand-rolled GIF89a writer + LZW
+  compressor, the R2/R4 house pattern). Every dependency decision is
+  on record in `docs/GIF-EXPORT.md`; the highlights:
+  - **One render session, three engines.** The GIF engine rides the
+    exact `createRenderSession` the two video engines use — R2's
+    deterministic fixed-timestep pacing and R3's frame-accurate
+    autoplay videos apply to GIFs for free.
+  - **A real quantizer, not a first-fit hack.** Median cut over 8
+    deterministic timeline samples (the same design always yields
+    the same palette); each palette colour is the most-popular
+    colour of its box, so flat fills pass through exactly. Per-pixel
+    indexing is a 15-bit nearest-colour LUT — O(1) per pixel.
+  - **Dithering is an option** (default on): standard Floyd–Steinberg,
+    error clamped into gamut. Turn it off for smaller files.
+  - **Size cap + honest timing.** 480/720/1080 px caps, a 25 MB byte
+    cap checked *during* the encode (early abort with advice), an
+    1800-frame cap refused *before* rendering in the dialog. Delays
+    are centiseconds and durations are reported from the actual
+    encoded delays (15 fps = 7 cs = 14.29 effective — stated, not
+    hidden). GIFs are silent; the dialog says so before you click.
+  - **Verified**: unit 60 new (PIL golden LZW streams decoded by an
+    independent in-test decoder; byte-level container assertions;
+    4096-entry table exhaustion) · new anonymous zero-registration
+    e2e with ffprobe as the independent parser, the page-range
+    acceptance, and the pre-flight cap refusal.
+
 ## [0.15.3] — 2026-11-06
 
 ### Added

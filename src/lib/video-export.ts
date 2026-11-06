@@ -71,7 +71,7 @@ export function detectVideoFormat(): { mimeType: string; extension: string; labe
   return null
 }
 
-interface TimelineSegment {
+export interface TimelineSegment {
   page: PageData
   /** hold time before the transition (seconds) */
   hold: number
@@ -1044,7 +1044,7 @@ export function chooseVideoExportEngine(inputs: VideoEngineInputs): VideoExportE
  * rendered pixel-perfect by this same compositor. */
 /** Everything both engines share: the render canvas, the per-page
  *  Konva stages, and the timeline compositor (renderFrameAt). */
-interface RenderSession {
+export interface RenderSession {
   readonly canvas: HTMLCanvasElement
   readonly ctx: CanvasRenderingContext2D
   readonly segments: TimelineSegment[]
@@ -1060,7 +1060,10 @@ interface RenderSession {
   destroy(): void
 }
 
-async function createRenderSession(
+/** v0.15 (R5): the GIF engine rides the SAME render session as
+ * the two video engines — one compositor, one source of truth
+ * about what is on screen at time t. */
+export async function createRenderSession(
   opts: VideoExportOptions,
   width: number,
   height: number,

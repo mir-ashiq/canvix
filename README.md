@@ -38,7 +38,7 @@ Pro tier, no subscription, no trial countdown, no watermark ransom, no
 is a design tool that never asks you for a credit card:
 
 - All **110 templates** — including the entire premium collection — are free
-- All **exports** (PNG, JPG, SVG, PDF, video) are free and unwatermarked
+- All **exports** (PNG, JPG, SVG, PDF, video, GIF) are free and unwatermarked
 - All **AI features** (magic edit, magic write, background removal, translate)
   run against your own API keys, so there is nothing for us to meter
 - **Accounts are free** — username + password, no email, no verification,
@@ -253,6 +253,14 @@ is right here.
   Honest format detection is shown before you export. No uploads, no server
   rendering. Since **v0.11** the page's audio is muxed into the recording
   (best-effort per browser) and beat-synced pulses render into the video
+- **GIF export** *(v0.15 R5)* — animated, looping GIFs from any page
+  range: 480/720/1080 px caps, 10/15/20 fps, optional Floyd–Steinberg
+  dithering, a 25 MB cap enforced during the encode, and an 1800-frame
+  cap refused before rendering. Hand-rolled GIF89a + LZW encoder with
+  **zero new dependencies** (decisions on record in
+  `docs/GIF-EXPORT.md`); rides the same deterministic frame renderer
+  as video export. GIFs are silent — the dialog says so before you
+  click
 - **Audio/video elements & Beat Sync** *(v0.11, video export v0.15)* —
   upload MP3/WAV/MP4/WebM through the chunked media store (works within
   every serverless body limit); audio renders as a waveform card with the

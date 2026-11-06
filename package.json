@@ -1,8 +1,8 @@
 {
   "name": "canvix",
-  "version": "0.15.3",
+  "version": "0.15.4",
   "private": false,
-  "description": "Canvix — free & open-source graphic design tool. A community-built Canva alternative.",
+  "description": "Canvix \u2014 free & open-source graphic design tool. A community-built Canva alternative.",
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
     "build": "node scripts/build.mjs",

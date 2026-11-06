@@ -1080,6 +1080,21 @@ tool descriptions so agents pick the right format.
   and load failures (CORS-blocked remotes, gone media ids) keep the
   poster render — the presentation semantic, fail-closed. Decode is
   capped at 12 simultaneous videos; the rest keep posters. *(v0.15.2)*
+- [x] Vector-text PDF (v0.15 R4) — the PDF export emits **real
+  selectable, searchable text** with embedded subset fonts (plus
+  vector shapes/tables/charts, JPEG passthrough for photos, and
+  per-element raster strips for emoji, plugin renders, filtered
+  images and shadows — a page never degrades as a whole). The text
+  geometry is the shared one (`layoutRichLines`, Konva-exact
+  baselines and decorations); per-glyph `TJ` positioning comes from
+  the same canvas measurements the editor wraps with. Fonts resolve
+  through a fail-closed ladder: subset the real Google TTF (via a
+  tiny legacy-UA css2 negotiation route) → documented per-category
+  standard-14 fallback (Helvetica/Times/Courier + WinAnsi) when
+  offline → rasterize the element only when glyph coverage drops
+  below 75%. jsPDF is gone (net deps −1); the architecture and
+  dependency decisions are on record in
+  `docs/PDF-VECTOR-EXPORT.md`. *(v0.15.3)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)

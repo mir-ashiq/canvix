@@ -110,7 +110,7 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
   })
 }
 
-async function collectImages(pages: PageData[]): Promise<Map<string, HTMLImageElement>> {
+export async function collectImages(pages: PageData[]): Promise<Map<string, HTMLImageElement>> {
   const map = new Map<string, HTMLImageElement>()
   const sources: string[] = []
   const walk = (els: AnyElement[]) => {
@@ -301,7 +301,7 @@ function frameClipFunc(fr: FrameElement): (ctx: Konva.Context) => void {
  *  the geometry module, the D7 charts pattern). */
 const videoRichMeasure = createCanvasMeasure()
 
-function buildKonvaNode(
+export function buildKonvaNode(
   el: AnyElement,
   images: Map<string, HTMLImageElement>,
   videos: Map<string, VideoAsset>,
@@ -1038,6 +1038,10 @@ export function chooseVideoExportEngine(inputs: VideoEngineInputs): VideoExportE
   return { engine: null, reason: 'neither WebCodecs nor MediaRecorder can encode video here' }
 }
 
+/** v0.15 (R4): buildKonvaNode + collectImages are ALSO the PDF export's
+ * raster-strip path — any element the vector PDF cannot express
+ * (stickers, plugin renders, filtered images, shadows, fx text) is
+ * rendered pixel-perfect by this same compositor. */
 /** Everything both engines share: the render canvas, the per-page
  *  Konva stages, and the timeline compositor (renderFrameAt). */
 interface RenderSession {

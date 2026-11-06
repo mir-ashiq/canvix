@@ -31,6 +31,7 @@ export type PanelId =
   | 'brand'
   | 'uploads'
   | 'photos'
+  | 'videos'
   | 'tools'
   | 'projects'
   | 'apps'

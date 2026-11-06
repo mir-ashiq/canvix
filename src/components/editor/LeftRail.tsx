@@ -1,12 +1,17 @@
 'use client'
 
-import { LayoutTemplate, Shapes, Type, Upload, Palette, Layers, Wrench, FolderOpen, LayoutGrid, BookMarked, Image } from 'lucide-react'
+import { useMemo } from 'react'
+import { LayoutTemplate, Shapes, Type, Upload, Palette, Layers, Wrench, FolderOpen, LayoutGrid, BookMarked, Image, Video } from 'lucide-react'
 import { useEditorStore, type PanelId } from '@/store/editor-store'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useStockVideo } from '@/hooks/use-stock-video'
 import { Tip } from './tooltip'
 
-/** Canva-2026 rail: 9 tabs (72×72), 72px wide — Templates / Elements / Text / Brand / Uploads / Photos / Tools / Projects / Apps */
+/** Canva-2026 rail: up to 10 tabs (72×72), 72px wide — Templates / Elements / Text / Brand / Uploads / Photos / Videos / Tools / Projects / Apps.
+ *  Videos (v0.15 R6) is provider-gated: the tab is rendered only when
+ *  /api/stock-video/available says the instance has a stock-video key —
+ *  no provider = feature hidden, everything else works (the F2b pattern). */
 const PANELS: { id: Exclude<PanelId, null>; label: string; icon: typeof LayoutTemplate }[] = [
   { id: 'templates', label: 'Templates', icon: LayoutTemplate },
   { id: 'elements', label: 'Elements', icon: Shapes },
@@ -14,6 +19,7 @@ const PANELS: { id: Exclude<PanelId, null>; label: string; icon: typeof LayoutTe
   { id: 'brand', label: 'Brand', icon: BookMarked },
   { id: 'uploads', label: 'Uploads', icon: Upload },
   { id: 'photos', label: 'Photos', icon: Image },
+  { id: 'videos', label: 'Videos', icon: Video },
   { id: 'tools', label: 'Tools', icon: Wrench },
   { id: 'projects', label: 'Projects', icon: FolderOpen },
   { id: 'apps', label: 'Apps', icon: LayoutGrid },
@@ -24,6 +30,15 @@ export function LeftRail({ vertical = true }: { vertical?: boolean }) {
   const setPanel = useEditorStore((s) => s.setPanel)
   void useIsMobile()
 
+  // v0.15 (R6): fail-closed visibility — the probe starts false, so an
+  // unkeyed instance never flashes the tab; a keyed instance reveals it
+  // once the (cached, module-level) answer lands
+  const stockVideo = useStockVideo()
+  const panels = useMemo(
+    () => (stockVideo.available ? PANELS : PANELS.filter((p) => p.id !== 'videos')),
+    [stockVideo.available],
+  )
+
   return (
     <nav
       className={cn(
@@ -32,7 +47,7 @@ export function LeftRail({ vertical = true }: { vertical?: boolean }) {
       )}
       aria-label="Editor tools"
     >
-      {PANELS.map((p) => {
+      {panels.map((p) => {
         const active = panel === p.id
         return (
           <Tip key={p.id} label={p.label} side={vertical ? 'right' : 'top'}>

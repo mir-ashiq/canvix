@@ -42,6 +42,7 @@ export type RateLimitBucket =
   | 'media:init'
   | 'plugins:install'
   | 'plugins:serve'
+  | 'stockvideo:search'
 
 export interface RateLimitConfig {
   /** window length in milliseconds */
@@ -74,6 +75,11 @@ export const RATE_LIMITS: Record<RateLimitBucket, RateLimitConfig> = {
   // one panel mount loads ~5–10 assets; 600/min covers a session
   // of panel open/close without inviting scrape-the-DB abuse
   'plugins:serve': { windowMs: 60_000, max: 600 },
+  // v0.15 (R6): stock-video search spends PROVIDER quota on every
+  // call — 20/min per IP is beyond any typing session (the panel
+  // debounces at 600 ms and caches server-side for 24 h) while
+  // stopping scripted drain of the self-hoster's key
+  'stockvideo:search': { windowMs: 60_000, max: 20 },
 }
 
 export function rateLimitsDisabled(): boolean {

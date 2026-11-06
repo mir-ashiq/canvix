@@ -400,6 +400,14 @@ export interface VideoElement extends BaseElement {
   /** playback window (seconds into the source) */
   trimStart: number
   trimEnd: number
+  /** v0.15 (R6): stock-video attribution — sanitized at ingest by
+   *  src/lib/stock-video.ts and stored DURABLY so it rides autosave,
+   *  versions, collab replication and offline merge like any element
+   *  field. Surfaced in the insert toast and the properties bar;
+   *  deliberately NOT rendered on canvas or burned into exports (a
+   *  forced overlay would corrupt the design; neither provider
+   *  license demands on-content credit). Absent on user uploads. */
+  credit?: { provider: string; author: string; license: string; url: string }
 }
 
 // ── v0.13 (P4): the plugin element — research/PLUGIN-SYSTEM.md §4.5 ──

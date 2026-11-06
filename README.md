@@ -261,6 +261,15 @@ is right here.
   `docs/GIF-EXPORT.md`); rides the same deterministic frame renderer
   as video export. GIFs are silent — the dialog says so before you
   click
+- **Stock videos** *(v0.15 R6)* — a provider-gated **Videos** rail:
+  search Pexels and/or Pixabay with free self-hoster keys (no key =
+  the tab hides itself, everything else works). Inserts download in
+  the browser into your existing media library (quota + dedupe + the
+  32 MB cap apply; oversized renditions fall back to smaller ones
+  automatically), and every element carries **durable attribution** —
+  creator, provider and license shown at insert, on selection, and
+  saved with the design. Zero new dependencies; decisions + operator
+  guide in `docs/STOCK-VIDEO.md`
 - **Audio/video elements & Beat Sync** *(v0.11, video export v0.15)* —
   upload MP3/WAV/MP4/WebM through the chunked media store (works within
   every serverless body limit); audio renders as a waveform card with the
@@ -727,6 +736,7 @@ limited per IP and logs usage into the `AIUsage` table.
 | Magic Layers, AI Assistant, Magic Write | ⚙️ needs a server AI provider |
 | AI image generation / eraser / enhance | ⚙️ needs a server AI provider |
 | Translate, live photo search | ⚙️ needs a server AI provider |
+| Stock video search | ⚙️ needs `PEXELS_API_KEY` or `PIXABAY_API_KEY` (free) |
 | MCP server (agent tools) | ✅ with token set — `generate_design` additionally needs the AI provider |
 
 ## 🤖 AI agents (MCP)
@@ -1103,6 +1113,25 @@ tool descriptions so agents pick the right format.
   below 75%. jsPDF is gone (net deps −1); the architecture and
   dependency decisions are on record in
   `docs/PDF-VECTOR-EXPORT.md`. *(v0.15.3)*
+- [x] GIF export (v0.15 R5) — animated, looping social GIFs from any
+      page range: 480/720/1080 px caps, 10/15/20 fps, optional
+      Floyd–Steinberg dithering, a 25 MB cap enforced *during* the
+      encode and an 1800-frame cap refused before rendering — a
+      hand-rolled GIF89a + LZW encoder with **zero new dependencies**
+      (decisions on record in `docs/GIF-EXPORT.md`), riding the same
+      deterministic frame renderer as video export. GIFs are silent;
+      the dialog says so before you click. *(v0.15.4)*
+- [x] Stock video depth (v0.15 R6) — a provider-gated **Videos**
+      rail: configurable Pexels/Pixabay connectors (free
+      self-hoster keys; no key = feature hidden, the F2b pattern),
+      one normalized result set parsed defensively, inserts that
+      ride the existing chunked media store with an
+      automatic smaller-rendition fallback, and **durable
+      attribution** — creator, provider and license stored on the
+      element, visible at insert and on selection, never burned
+      into exports. Zero new dependencies; tested against recorded
+      provider fixtures + a local mock-provider acceptance suite
+      wired into CI. *(v0.15.5)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)

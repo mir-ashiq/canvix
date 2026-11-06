@@ -472,6 +472,21 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
             duration={video.duration}
             trim={{ start: video.trimStart, end: video.trimEnd }}
           />
+          {/* v0.15 (R6): durable stock-video attribution — the element
+              carries its credit; selected = visible (license + source
+              page in the tooltip). User uploads show nothing. */}
+          {video.credit ? (
+            <a
+              href={video.credit.url || undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[11px] font-semibold text-[#02C0CC] bg-[#02C0CC]/10 border border-[#02C0CC]/25 rounded-full px-2 py-0.5 shrink-0 max-w-[190px] truncate"
+              title={`${video.credit.license}${video.credit.url ? ` — ${video.credit.url}` : ''}`}
+              aria-label={`Stock video by ${video.credit.author} on ${video.credit.provider}`}
+            >
+              {video.credit.provider} · {video.credit.author}
+            </a>
+          ) : null}
           <Divider />
           <PositionPopover ids={ids} count={1} element={first} />
         </>

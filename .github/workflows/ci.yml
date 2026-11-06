@@ -133,6 +133,16 @@ jobs:
       - name: Run Playwright plugins suite (CANVIX_PLUGINS=1)
         run: npx playwright test -c playwright.plugins.config.ts
 
+      # v0.15 (R6): the stock-video acceptance suite — a second dev
+      # server keyed to a LOCAL MOCK Pexels API (tests/stock-video/
+      # mock-provider.mjs serves real ffmpeg-generated renditions),
+      # so the full search → insert → durable-attribution path runs
+      # without spending real provider quota. The default suite
+      # above keeps the keys unset (its spec asserts the F2b gate:
+      # hidden rail + 503 NO_PROVIDER).
+      - name: Run Playwright stock-video suite (mock provider)
+        run: npx playwright test -c playwright.stockvideo.config.ts
+
       - name: Upload Playwright traces (on failure)
         if: failure()
         uses: actions/upload-artifact@v4

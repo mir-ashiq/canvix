@@ -479,3 +479,65 @@ export async function addVideoFromLibrary(id: string, name: string): Promise<voi
     })
   )
 }
+
+// ── v0.15 (R6): stock videos ─────────────────────────────────
+
+/**
+ * Download a stock-video rendition in the BROWSER (both provider
+ * CDNs answer Access-Control-Allow-Origin: * on GET — verified
+ * empirically, see src/lib/stock-video.ts) and ride the existing
+ * upload → probe → element path, so quota, sha256 dedupe, the
+ * 32 MB cap, poster capture and the R3 export semantics all apply
+ * unchanged. The rendition list is a LADDER: when the media store
+ * rejects the primary (size cap 413, quota) or a download fails,
+ * the next smaller rendition is tried; the FIRST error is rethrown
+ * once every tier fails. The sanitized credit block is stored
+ * durably on the element (toast + properties bar surface it).
+ */
+export async function addStockVideo(
+  stock: {
+    id: string
+    mp4: string
+    alternates: string[]
+    width: number
+    height: number
+    credit: { provider: string; author: string; license: string; url: string }
+  },
+  onProgress?: (ratio: number) => void,
+): Promise<void> {
+  const { uploadMediaFile, mediaSrc } = await import('@/lib/media/media-client')
+  const { probeVideoFile } = await import('@/lib/media/decode')
+  const { createVideoElement } = await import('@/lib/types')
+
+  let firstError: unknown = null
+  for (const url of [stock.mp4, ...stock.alternates]) {
+    try {
+      const blob = await fetch(url).then((r) => {
+        if (!r.ok) throw new Error(`Download failed (${r.status}).`)
+        return r.blob()
+      })
+      const file = new File([blob], `${stock.id}.mp4`, { type: blob.type || 'video/mp4' })
+      const [handle, probe] = await Promise.all([uploadMediaFile(file, onProgress), probeVideoFile(file)])
+
+      const store = useEditorStore.getState()
+      const naturalW = probe.naturalWidth || stock.width || 480
+      const naturalH = probe.naturalHeight || stock.height || Math.round(naturalW * 0.5625)
+      const maxW = store.width * 0.7
+      const w = Math.round(Math.min(maxW, Math.max(200, naturalW)))
+      const h = Math.round((w * naturalH) / naturalW)
+      const pos = placement(w, h, store.pages[store.currentPage].elements.length)
+      store.addElement(
+        createVideoElement(mediaSrc(handle.id), probe.poster, probe.duration, naturalW, naturalH, {
+          ...pos,
+          width: w,
+          height: h,
+          credit: stock.credit,
+        })
+      )
+      return
+    } catch (err) {
+      firstError ??= err
+    }
+  }
+  throw firstError instanceof Error ? firstError : new Error('Could not add the stock video.')
+}

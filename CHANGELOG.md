@@ -3,6 +3,51 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.15.5] — 2026-11-07
+
+### Added
+
+- **Rich content & export, part 6 — stock video depth (R6).** A
+  provider-gated **Videos** rail: configurable stock-video
+  connectors (Pexels + Pixabay — free self-hoster keys), license
+  and attribution surfaced, **zero new dependencies**. Decisions
+  and the operator guide live in `docs/STOCK-VIDEO.md`; the
+  highlights:
+  - **The F2b gate, one class over.** No `PEXELS_API_KEY` /
+    `PIXABAY_API_KEY` on the server ⇒ the rail item never renders
+    and `/api/stock-video/*` answers `503 NO_PROVIDER` —
+    everything else in the editor keeps working. Availability is
+    probed once per editor mount from a secret-free endpoint.
+  - **One normalized result set.** `src/lib/stock-video.ts` maps
+    both providers to one shape (mp4 ladder + poster + sanitized
+    credit), parses every field defensively (unknown keys
+    ignored, `javascript:` URLs can never become credit links,
+    control characters stripped, lengths hard-capped) and caches
+    responses in memory for 24 h per instance (Pixabay's request).
+  - **Inserts ride the existing rails.** The browser downloads
+    the chosen rendition (both CDNs are CORS-open on GET —
+    verified, not assumed) into the chunked media store, so
+    quota, sha256 dedupe, the 32 MB cap and the library listing
+    all apply; a 413 or failed download falls back to the next
+    smaller rendition automatically.
+  - **Attribution is durable.** The credit block is stored on
+    `VideoElement.credit` (it rides autosave, versions, collab
+    and the offline merge), shown in the insert toast and as a
+    chip in the properties bar whenever the element is selected —
+    deliberately never rendered on canvas or burned into exports.
+  - **Honest testing without provider keys.** Unit suite parses
+    recorded provider fixtures; the acceptance e2e runs the FULL
+    path (search → browser download → upload → poster probe →
+    element with credit) against a local mock Pexels API serving
+    real ffmpeg-generated renditions
+    (`playwright.stockvideo.config.ts`, wired into CI); the
+    default suite asserts the gated world (hidden rail + 503).
+- **Verified**: tsc/eslint clean · unit 975/975 (25 new) ·
+  anonymous zero-registration e2e: gated spec + mock-provider
+  acceptance 2/2 · full local regression 65/65 in three
+  fresh-server batches · plugins flag-on 5/5 · production build
+  clean.
+
 ## [0.15.4] — 2026-11-06
 
 ### Added

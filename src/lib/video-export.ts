@@ -7,6 +7,11 @@
 //     latencyMode 'quality') — or — MediaRecorder canvas capture
 //     → MP4 (H.264 where the browser can encode it) / WebM,
 //     which stays the path for page-audio designs (it muxes audio).
+//   [v0.15 R3] autoplay VIDEO elements render their moving content
+//     frame-accurately: windowedSourceTime is the one source-time
+//     mapping; the WebCodecs engine seeks each video to its exact
+//     per-frame position, the MediaRecorder engine plays them in wall
+//     clock beside the page audio.
 //
 // Static PNG/JPG/PDF/SVG exports are unaffected (animations are
 // ignored there). See chooseVideoExportEngine for the matrix.
@@ -153,6 +158,102 @@ async function collectImages(pages: PageData[]): Promise<Map<string, HTMLImageEl
   return map
 }
 
+// ── v0.15 (R3): live video preload ──────────────────────────
+
+/** A preloaded live <video> backing one autoplay video element. */
+interface VideoAsset {
+  el: HTMLVideoElement
+  /** canplay fired within budget — false ⇒ the node keeps the poster */
+  ok: boolean
+  /** the loaded file's duration (NaN until metadata arrives) */
+  duration: number
+  /** last requested seek target in whole ms (−1 = never sought) */
+  lastSeekMs: number
+}
+
+/** Bounded wait for a media event — resolves false on timeout or the
+ *  error event, and always removes its listeners. */
+function waitMediaEvent(v: HTMLMediaElement, event: string, budgetMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false
+    const done = (val: boolean) => {
+      if (settled) return
+      settled = true
+      v.removeEventListener(event, onOk)
+      v.removeEventListener('error', onErr)
+      clearTimeout(timer)
+      resolve(val)
+    }
+    const onOk = () => done(true)
+    const onErr = () => done(false)
+    const timer = setTimeout(() => done(false), budgetMs)
+    v.addEventListener(event, onOk)
+    v.addEventListener('error', onErr)
+  })
+}
+
+/** R3: preload one live, MUTED <video> per autoplay video element.
+ *  Presentation semantics: a video moves in an export exactly when
+ *  presentation would play it — visible + autoplay; everything else
+ *  keeps the static poster render and gets no asset here.
+ *
+ *  CORS-clean by construction: crossOrigin='anonymous' means same-origin
+ *  media ids and data URLs load trivially while a remote without CORS
+ *  headers FAILS to load (poster fallback) instead of tainting the
+ *  canvas — fail-closed, the same rule as the image loader. Videos are
+ *  always muted: the export muxes page AUDIO only (the R3 acceptance
+ *  keeps that boundary — “audio mux unchanged”). Capped at
+ *  MAX_EXPORT_VIDEOS so a hostile design cannot demand unbounded
+ *  decode; elements past the cap fall back to their poster. */
+async function collectVideos(
+  pages: PageData[],
+  onProgress?: (ratio: number, stage: string) => void,
+): Promise<Map<string, VideoAsset>> {
+  const assets = new Map<string, VideoAsset>()
+  const els: VideoElement[] = []
+  const walk = (list: AnyElement[]): void => {
+    for (const el of list) {
+      if (isPlayableExportVideo(el)) els.push(el)
+      else if (el.type === 'group') walk(el.children)
+    }
+  }
+  for (const p of pages) walk(p.elements)
+  if (els.length === 0) return assets
+  onProgress?.(0, 'Loading videos…')
+  await Promise.all(
+    els.slice(0, MAX_EXPORT_VIDEOS).map(async (vd) => {
+      const v = document.createElement('video')
+      v.crossOrigin = 'anonymous'
+      v.muted = true
+      v.playsInline = true
+      v.preload = 'auto'
+      const asset: VideoAsset = { el: v, ok: false, duration: Number.NaN, lastSeekMs: -1 }
+      assets.set(vd.id, asset)
+      const loaded = waitMediaEvent(v, 'canplay', 12_000)
+      v.src = vd.src
+      asset.ok = await loaded
+      if (Number.isFinite(v.duration)) asset.duration = v.duration
+      if (!asset.ok) return
+      // park at the trim start so pre-roll and incoming transitions
+      // show the window's first frame in BOTH engines (bounded,
+      // best-effort — a failed park just means the first explicit
+      // seek / seek+play does the work instead)
+      const start = Math.max(0, Number.isFinite(vd.trimStart) ? vd.trimStart : 0)
+      if (start > 0.05) {
+        try {
+          v.currentTime = start
+          if (await waitMediaEvent(v, 'seeked', 3_000)) asset.lastSeekMs = Math.round(start * 1000)
+        } catch {
+          /* not seekable yet */
+        }
+      } else {
+        asset.lastSeekMs = 0 // a fresh canplay sits at 0
+      }
+    }),
+  )
+  return assets
+}
+
 // ── Konva node builders (geometry mirrors element-node.tsx) ──
 
 /** clip function for a frame shape (mirrors v06-nodes frameClip) */
@@ -200,7 +301,11 @@ function frameClipFunc(fr: FrameElement): (ctx: Konva.Context) => void {
  *  the geometry module, the D7 charts pattern). */
 const videoRichMeasure = createCanvasMeasure()
 
-function buildKonvaNode(el: AnyElement, images: Map<string, HTMLImageElement>): Konva.Node {
+function buildKonvaNode(
+  el: AnyElement,
+  images: Map<string, HTMLImageElement>,
+  videos: Map<string, VideoAsset>,
+): Konva.Node {
   switch (el.type) {
     case 'text': {
       const t = el
@@ -498,6 +603,22 @@ function buildKonvaNode(el: AnyElement, images: Map<string, HTMLImageElement>): 
       const vd = el as VideoElement
       const group = new Konva.Group({ id: vd.id, x: vd.x, y: vd.y })
       group.add(new Konva.Rect({ width: vd.width, height: vd.height, cornerRadius: 12, fill: '#101218' }))
+      // v0.15 (R3): an autoplay video with a loaded source renders its
+      // LIVE frame — the moving content IS the export representation
+      // (no play chip: that is an editor affordance, and this video is
+      // playing). Everything else keeps the v0.11 poster render.
+      const asset = videos.get(vd.id)
+      if (vd.autoplay && asset?.ok) {
+        group.add(
+          new Konva.Image({
+            width: vd.width,
+            height: vd.height,
+            cornerRadius: 12,
+            image: asset.el,
+          }),
+        )
+        return group
+      }
       group.add(
         new Konva.Image({
           width: vd.width,
@@ -707,7 +828,7 @@ function buildKonvaNode(el: AnyElement, images: Map<string, HTMLImageElement>): 
       const g = el
       const group = new Konva.Group({ id: g.id, x: g.x, y: g.y, rotation: g.rotation ?? 0 })
       for (const child of g.children.filter((c) => c.visible)) {
-        const childNode = buildKonvaNode(child, images)
+        const childNode = buildKonvaNode(child, images, videos)
         childNode.x(child.x - g.x)
         childNode.y(child.y - g.y)
         group.add(childNode as Konva.Shape | Konva.Group)
@@ -784,6 +905,63 @@ export function pagesHaveAutoplayAudio(pages: PageData[]): boolean {
   return pages.some((p) =>
     (p.elements as AnyElement[]).some((e) => e.type === 'audio' && e.visible !== false && e.autoplay),
   )
+}
+
+// ── v0.15 (R3): moving video in exports ──────────────────────
+
+/** Hard cap on simultaneously decoded export videos — each is a live
+ *  <video> the compositor seeks or plays; a hostile design must not be
+ *  able to demand unbounded decode. Elements past the cap keep their
+ *  poster render. */
+export const MAX_EXPORT_VIDEOS = 12
+
+/** The filter every export path shares (asset preload, the recorder's
+ *  segment lists, the dialog note): a video renders MOVING content in
+ *  an export exactly when presentation would play it — visible +
+ *  autoplay. Non-autoplay videos deliberately keep the static poster
+ *  render (the presentation semantic). */
+export function isPlayableExportVideo(el: AnyElement): el is VideoElement {
+  return el.type === 'video' && el.visible !== false && !!el.autoplay
+}
+
+/** Does any page carry a video that will move in the export? (dialog
+ *  honesty note — same shape as pagesHaveAutoplayAudio.) */
+export function pagesHaveAutoplayVideo(pages: PageData[]): boolean {
+  const walk = (els: AnyElement[]): boolean => els.some((el) => isPlayableExportVideo(el) || (el.type === 'group' && walk(el.children)))
+  return pages.some((p) => walk(p.elements))
+}
+
+/**
+ * The ONE source-time mapping both export engines share — the position
+ * (seconds into the source file) an autoplay video must show at
+ * PAGE-LOCAL time t. Mirrors presentation semantics exactly:
+ *
+ *   t = 0       → trimStart (the page appearing starts playback there)
+ *   looping     → wraps within [trimStart, end]
+ *   non-looping → HOLDS the final frame once the window is spent
+ *   end         → min(trimEnd, loadedDuration): a trim past what the
+ *                 file actually contains clamps to the file
+ *
+ * Every input is garbage-safe (finite-clamped with sane defaults): the
+ * mapping can never return NaN or a negative time.
+ */
+export function windowedSourceTime(
+  trimStart: number,
+  trimEnd: number,
+  loop: boolean,
+  t: number,
+  loadedDuration = Number.POSITIVE_INFINITY,
+): number {
+  const finite = (v: number, dflt: number): number => (Number.isFinite(v) ? v : dflt)
+  const dur = finite(loadedDuration, Number.POSITIVE_INFINITY)
+  let end = finite(trimEnd, 0)
+  if (Number.isFinite(dur) && dur > 0) end = Math.min(end, dur)
+  let start = Math.max(0, finite(trimStart, 0))
+  if (start > end) start = end
+  const span = end - start
+  if (span <= 0) return start
+  const tt = Math.max(0, finite(t, 0))
+  return loop ? start + (tt % span) : Math.min(start + tt, end)
 }
 
 export interface WebCodecsVideoSupport {
@@ -868,7 +1046,13 @@ interface RenderSession {
   readonly segments: TimelineSegment[]
   readonly segStarts: number[]
   readonly totalFrames: number
+  /** R3: preloaded live videos by element id (empty when no autoplay videos) */
+  readonly videos: ReadonlyMap<string, VideoAsset>
   renderFrameAt(frameNo: number, t: number): void
+  /** R3: deterministic engines call this BEFORE renderFrameAt so every
+   *  visible video sits at its exact source frame when the composite is
+   *  drawn (a no-op when the design has no autoplay videos). */
+  prepareFrameAt(t: number): Promise<void>
   destroy(): void
 }
 
@@ -882,6 +1066,10 @@ async function createRenderSession(
   // preload every image source first (dataURLs resolve instantly)
   opts.onProgress?.(0, 'Loading images…')
   const images = await collectImages(opts.pages)
+  // v0.15 (R3): live videos for the moving-content render (no-op when
+  // the design has none — the map stays empty and every code path
+  // below degrades to the v0.11 poster behaviour)
+  const videos = await collectVideos(opts.pages, opts.onProgress)
 
   const canvas = document.createElement('canvas')
   canvas.width = width
@@ -934,7 +1122,7 @@ async function createRenderSession(
     nodes = page.elements
       .filter((el) => el.visible)
       .map((el) => {
-        const node = buildKonvaNode(el, images)
+        const node = buildKonvaNode(el, images, videos)
         const shape = node as Konva.Shape
         if (el.shadow?.enabled && typeof shape.shadowColor === 'function') {
           shape.shadowColor(el.shadow.color)
@@ -1014,10 +1202,12 @@ async function createRenderSession(
     return start
   })
 
-  /** render the composite for timeline time t onto the recorder canvas */
-  const renderFrameAt = (frameNo: number, t: number): void => {
-    void frameNo
-    // locate the active segment
+  /** which pages are on screen at timeline time t: the active segment
+   *  (holding — or frozen at its FINAL state once its out-transition
+   *  starts) and, mid-transition, the incoming page entering at local
+   *  t = 0. One definition shared by the compositor and the R3 video
+   *  scheduler, so the two can never disagree about what is visible. */
+  const pagesVisibleAt = (t: number): { outSeg: number; outLocal: number; incSeg: number | null; progress: number } => {
     let segIdx = segments.length - 1
     let segLocal = t - segStarts[segments.length - 1]
     for (let i = 0; i < segments.length; i++) {
@@ -1031,20 +1221,31 @@ async function createRenderSession(
     }
     const seg = segments[segIdx]
     const inTransition = segLocal >= seg.hold && seg.transition > 0
-    const p = inTransition ? (segLocal - seg.hold) / seg.transition : 0
+    return {
+      outSeg: segIdx,
+      outLocal: inTransition ? seg.hold + seg.transition : segLocal,
+      incSeg: inTransition ? segIdx + 1 : null,
+      progress: inTransition ? (segLocal - seg.hold) / seg.transition : 0,
+    }
+  }
+
+  /** render the composite for timeline time t onto the recorder canvas */
+  const renderFrameAt = (frameNo: number, t: number): void => {
+    void frameNo
+    const { outSeg, outLocal, incSeg, progress: p } = pagesVisibleAt(t)
 
     ctx.fillStyle = '#FFFFFF'
     ctx.fillRect(0, 0, width, height)
 
-    if (!inTransition) {
-      const pageCanvas = drawPage(segIdx, segLocal)
+    if (incSeg === null) {
+      const pageCanvas = drawPage(outSeg, outLocal)
       if (pageCanvas) ctx.drawImage(pageCanvas, 0, 0, width, height)
     } else {
       // transition: outgoing holds its final state; incoming enters
-      const outCanvas = drawPage(segIdx, seg.hold + seg.transition) // final state
-      const inCanvas = drawPage(segIdx + 1, 0)
+      const outCanvas = drawPage(outSeg, outLocal) // final state
+      const inCanvas = drawPage(incSeg, 0)
 
-      const nextSeg = segments[segIdx + 1]
+      const nextSeg = segments[incSeg]
       const kind = nextSeg.page.transition?.kind ?? 'fade'
       const dir = nextSeg.page.transition?.direction ?? 'left'
 
@@ -1075,15 +1276,65 @@ async function createRenderSession(
     }
   }
 
+  /** v0.15 (R3): put every VISIBLE autoplay video at its exact source
+   *  position for timeline time t — the deterministic engine's
+   *  pre-render step. Seeks are deduped (same rounded target ⇒ no-op),
+   *  run in parallel across videos and are individually bounded: a seek
+   *  that never completes draws the last decoded frame — the export can
+   *  stall on NOTHING, it can only get slower. */
+  const prepareFrameAt = async (t: number): Promise<void> => {
+    if (videos.size === 0) return
+    const vis = pagesVisibleAt(t)
+    const jobs: Promise<void>[] = []
+    const schedulePage = (segIndex: number, localT: number): void => {
+      const walk = (els: AnyElement[]): void => {
+        for (const el of els) {
+          if (isPlayableExportVideo(el)) {
+            const asset = videos.get(el.id)
+            if (!asset?.ok) continue
+            const target = windowedSourceTime(el.trimStart, el.trimEnd, !!el.loop, localT, asset.duration)
+            const targetMs = Math.round(target * 1000)
+            if (targetMs === asset.lastSeekMs) continue // dedupe
+            asset.lastSeekMs = targetMs
+            jobs.push(
+              (async () => {
+                try {
+                  asset.el.currentTime = target
+                } catch {
+                  return // not seekable — keep the last decoded frame
+                }
+                await waitMediaEvent(asset.el, 'seeked', 3_000)
+              })(),
+            )
+          } else if (el.type === 'group') walk(el.children)
+        }
+      }
+      walk(segments[segIndex].page.elements)
+    }
+    schedulePage(vis.outSeg, vis.outLocal)
+    if (vis.incSeg !== null) schedulePage(vis.incSeg, 0)
+    if (jobs.length > 0) await Promise.all(jobs)
+  }
+
 
   /** tear down the Konva stages + hidden host (stream/audio teardown
    *  belongs to the engine path that created them). */
   const destroy = (): void => {
     for (const stage of stageForPage.values()) stage.destroy()
     host.remove()
+    // R3: release the video decoders
+    for (const asset of videos.values()) {
+      try {
+        asset.el.pause()
+        asset.el.removeAttribute('src')
+        asset.el.load()
+      } catch {
+        /* already released */
+      }
+    }
   }
 
-  return { canvas, ctx, segments, segStarts, totalFrames, renderFrameAt, destroy }
+  return { canvas, ctx, segments, segStarts, totalFrames, videos, renderFrameAt, prepareFrameAt, destroy }
 }
 
 export async function exportVideo(opts: VideoExportOptions): Promise<VideoExportResult> {
@@ -1181,6 +1432,7 @@ async function exportViaWebCodecs(
     for (let frame = 0; frame < totalFrames; frame++) {
       if (encodeError) throw encodeError
       const t = frame / fps
+      await session.prepareFrameAt(t) // R3: every video at its exact frame
       renderFrameAt(frame, t)
       while (encoder.encodeQueueSize > 4 && !encodeError) await breathe()
       const videoFrame = new VideoFrame(canvas, {
@@ -1222,7 +1474,28 @@ async function exportViaMediaRecorder(
 ): Promise<VideoExportResult> {
   const { fps, width, height, segments, total, totalFrames } = sized
   const session = await createRenderSession(opts, width, height, segments, totalFrames)
-  const { canvas, ctx, renderFrameAt, segStarts } = session
+  const { canvas, ctx, renderFrameAt, segStarts, videos } = session
+
+  // ── v0.15 (R3): moving video on the wall-clock engine ───────
+  // The recorder paces frames against real time, so autoplay videos
+  // PLAY alongside it — exactly how the page audio works — instead of
+  // being seeked per frame. Segment entry: seek to trimStart + play
+  // (muted — the export never muxes video-element audio). Segment
+  // exit: pause + reset. The loop's trim tick applies the window with
+  // the same rule the presentation rAF tick uses.
+  const segmentVideos = segments.map((s) => {
+    const list: { asset: VideoAsset; vd: VideoElement }[] = []
+    const walk = (els: AnyElement[]): void => {
+      for (const el of els) {
+        if (isPlayableExportVideo(el)) {
+          const asset = videos.get(el.id)
+          if (asset?.ok) list.push({ asset, vd: el })
+        } else if (el.type === 'group') walk(el.children)
+      }
+    }
+    walk(s.page.elements)
+    return list
+  })
 
   const stream = canvas.captureStream(0)
   const track = stream.getVideoTracks()[0] as MediaStreamTrack & { requestFrame?: () => void }
@@ -1371,9 +1644,46 @@ async function exportViaMediaRecorder(
               /* not seekable yet */
             }
           }
+          // R3: the outgoing page's videos pause + reset to their window
+          for (const { asset, vd } of segmentVideos[activeSeg]) {
+            asset.el.pause()
+            try {
+              asset.el.currentTime = Math.max(0, vd.trimStart)
+            } catch {
+              /* not seekable yet */
+            }
+          }
         }
         for (const a of segmentAudio[segIdx]) void a.play().catch(() => { /* stays silent */ })
+        // R3: the incoming page's videos start at their trim window
+        for (const { asset, vd } of segmentVideos[segIdx]) {
+          try {
+            asset.el.currentTime = Math.max(0, vd.trimStart)
+          } catch {
+            /* not seekable — plays from wherever it sits */
+          }
+          void asset.el.play().catch(() => { /* muted autoplay cannot be policy-blocked; belt and braces */ })
+        }
         activeSeg = segIdx
+      }
+
+      // R3: trim window on the playing videos — looping wraps back to
+      // trimStart, non-looping pauses and holds its final frame (only
+      // fight the element when the trim truly ends before the file:
+      // the same guard the presentation tick uses)
+      if (activeSeg >= 0) {
+        for (const { asset, vd } of segmentVideos[activeSeg]) {
+          const v = asset.el
+          if (Number.isFinite(asset.duration) && vd.trimEnd < asset.duration && v.currentTime >= vd.trimEnd) {
+            if (vd.loop) {
+              try {
+                v.currentTime = Math.max(0, vd.trimStart)
+              } catch {
+                /* not seekable */
+              }
+            } else v.pause()
+          }
+        }
       }
 
       // behind schedule? skip ahead to the frame the clock says we should render

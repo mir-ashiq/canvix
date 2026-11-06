@@ -15,6 +15,7 @@ import {
   estimateVideoDuration,
   exportVideo,
   pagesHaveAutoplayAudio,
+  pagesHaveAutoplayVideo,
   type VideoExportEngineDecision,
 } from '@/lib/video-export'
 import { toast } from '@/hooks/use-toast'
@@ -268,6 +269,9 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                     <span className="text-red-500">This browser cannot export video — try Chrome or Edge.</span>
                   )}
                 </p>
+                {pagesHaveAutoplayVideo(pages) ? (
+                  <p>Autoplay videos export with their moving content frame-accurately — non-autoplay videos keep their poster.</p>
+                ) : null}
               </div>
             ) : (
               <>

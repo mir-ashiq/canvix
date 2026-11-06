@@ -380,9 +380,10 @@ export interface AudioElement extends BaseElement {
 
 /** Native video element — the editor renders the poster frame (captured at
  * upload, stored as a dataURL so it replicates through the document);
- * playback runs in presentation/preview. Honest scope for v0.11: video
- * exports render the poster + beat pulses; the video itself is not
- * re-rendered into exports (documented in research/MEDIA-AND-BEAT-SYNC.md). */
+ * playback runs in presentation/preview AND in video exports (v0.15 R3:
+ * autoplay videos render their moving content frame-accurately through
+ * windowedSourceTime in src/lib/video-export.ts; non-autoplay videos and
+ * load failures keep the poster render — the presentation semantic). */
 export interface VideoElement extends BaseElement {
   type: 'video'
   src: string

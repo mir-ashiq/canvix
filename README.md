@@ -253,12 +253,14 @@ is right here.
   Honest format detection is shown before you export. No uploads, no server
   rendering. Since **v0.11** the page's audio is muxed into the recording
   (best-effort per browser) and beat-synced pulses render into the video
-- **Audio/video elements & Beat Sync** *(v0.11)* — upload MP3/WAV/MP4/WebM
-  through the chunked media store (works within every serverless body limit);
-  audio renders as a waveform card with the tempo detected in-browser, video
-  as a poster frame. Media plays in Preview/Present, and **any element can
-  pulse on the music's beats** — in the editor preview, presentation and
-  exported video. See `research/MEDIA-AND-BEAT-SYNC.md`
+- **Audio/video elements & Beat Sync** *(v0.11, video export v0.15)* —
+  upload MP3/WAV/MP4/WebM through the chunked media store (works within
+  every serverless body limit); audio renders as a waveform card with the
+  tempo detected in-browser, video as a poster frame in the editor. Media
+  plays in Preview/Present — and autoplay videos render their MOVING
+  content in exported videos, frame-accurately *(v0.15 R3)*. **Any
+  element can pulse on the music's beats** — in the editor preview,
+  presentation and exported video. See `research/MEDIA-AND-BEAT-SYNC.md`
 - **AI Assistant 2.0** — the assistant is now design-aware: it sees your page's
   elements, colors, fonts and selection, and answers with **structured, validated
   actions** ("move the title to the top", "change all heading colors to purple",
@@ -1059,6 +1061,25 @@ tool descriptions so agents pick the right format.
   ~30 KB muxing dependency (mux.js et al.) — rejected for now; MP4
   stays on the MediaRecorder path where the browser can encode
   H.264. *(v0.15.1)*
+- [x] Moving video in exports (v0.15 R3) — autoplay VIDEO elements
+  render their moving content, frame-accurately, in exported videos
+  (poster-only since v0.11). **`windowedSourceTime`** is the one
+  source-time mapping both engines share: page-local t=0 → trimStart,
+  looping wraps within the trim window, non-looping holds the final
+  frame, a trim past the file clamps to the file — garbage-safe (never
+  NaN, never negative). Each engine gets its own scheduler: the
+  **WebCodecs** engine seeks every visible video to its exact
+  per-frame position before drawing (seeks deduped, parallel,
+  individually bounded — a stuck seek draws the last decoded frame, so
+  a slow source can only make the export take longer, never wrong);
+  the **MediaRecorder** engine plays the videos in wall clock beside
+  the page audio (segment entry seeks to trimStart + plays; the loop
+  applies the trim window with the same rule the presentation tick
+  uses). Live videos are always muted — the export muxes page audio
+  only (audio mux unchanged, per the acceptance). Non-autoplay videos
+  and load failures (CORS-blocked remotes, gone media ids) keep the
+  poster render — the presentation semantic, fail-closed. Decode is
+  capped at 12 simultaneous videos; the rest keep posters. *(v0.15.2)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)

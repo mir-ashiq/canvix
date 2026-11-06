@@ -3,6 +3,54 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.15.2] — 2026-11-06
+
+### Added
+
+- **Rich content & export, part 3 — moving video in exports (R3).**
+  Autoplay video elements render their MOVING content in exported
+  videos — frame-accurately — instead of the poster frame they had
+  shown since v0.11.
+  - **`windowedSourceTime`** — the one source-time mapping both export
+    engines share (pure, unit-tested): page-local t=0 → trimStart,
+    looping wraps within the trim window, non-looping holds the final
+    frame, a trim past the file clamps to the loaded duration, and
+    every input is garbage-safe (never NaN, never negative).
+  - **WebCodecs engine: seek + draw per fixed timestep.** Before each
+    frame is composited, every visible autoplay video is seeked to its
+    exact source position — seeks are deduped (same rounded target ⇒
+    no-op), parallel across videos and individually bounded (3 s); a
+    seek that never completes draws the last decoded frame, so a slow
+    video source can only make the export take longer, never drop or
+    duplicate a frame (R2's deterministic pacing preserved).
+  - **MediaRecorder engine: wall-clock playback.** Autoplay videos
+    play beside the page audio — segment entry seeks to trimStart and
+    plays (muted — the export muxes page audio only; that boundary is
+    the R3 acceptance, unchanged), segment exit pauses + resets, and
+    the frame loop applies the trim window with the same rule the
+    presentation rAF tick uses.
+  - **Honest degradation everywhere**: non-autoplay videos keep the
+    static poster render (the presentation semantic); a source that
+    fails to load (CORS-blocked remote, gone media id, 12 s canplay
+    budget missed) falls back to the poster — fail-closed, the same
+    rule as the image loader; decode is capped at 12 simultaneous
+    videos (`MAX_EXPORT_VIDEOS`), the rest keep posters. Live videos
+    render without the play chip (an editor affordance — this one is
+    playing).
+  - The export dialog says so before you click: "Autoplay videos
+    export with their moving content frame-accurately."
+  - CPU cost, on the record: each visible autoplay video costs one
+    seek round-trip per exported frame on the WebCodecs path
+    (typically ~5–15 ms in Chromium — a 30 fps × 10 s page with one
+    video ≈ 300 seeks ≈ a few extra seconds); the MediaRecorder path
+    decodes in real time, same as presentation.
+  - New anonymous zero-registration e2e acceptance: a moving
+    test-pattern video uploads through the media store and exports
+    through BOTH engines; extracted frames at t=0.6 vs t=1.8 must
+    differ substantially (moving content) — while the same design
+    with autoplay OFF must stay static (the poster gate). Plus the
+    pure mapping/filter contracts in the unit suite.
+
 ## [0.15.1] — 2026-11-05
 
 ### Added

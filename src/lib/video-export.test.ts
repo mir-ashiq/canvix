@@ -17,7 +17,15 @@
 // ─────────────────────────────────────────────────────────────
 
 import { describe, expect, it } from 'vitest'
-import { chooseVideoExportEngine, computeExportSize, pagesHaveAutoplayAudio } from './video-export'
+import {
+  chooseVideoExportEngine,
+  computeExportSize,
+  isPlayableExportVideo,
+  MAX_EXPORT_VIDEOS,
+  pagesHaveAutoplayAudio,
+  pagesHaveAutoplayVideo,
+  windowedSourceTime,
+} from './video-export'
 import type { PageData } from './types'
 
 function page(elements: unknown[]): PageData {
@@ -129,5 +137,94 @@ describe('pagesHaveAutoplayAudio — mirrors the recorder filter exactly', () =>
         page([{ type: 'rect', autoplay: true, visible: true }]),
       ]),
     ).toBe(false)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// v0.15 R3 — moving video in exports
+//
+// windowedSourceTime is the ONE source-time mapping both engines
+// share (WebCodecs seeks to it per frame; MediaRecorder's trim tick
+// and segment resets assume it), and the playability filter decides
+// which videos get a live <video> at all. Both are pure — the whole
+// contract is unit-testable without a browser.
+// ─────────────────────────────────────────────────────────────
+
+describe('windowedSourceTime — the R3 source-time mapping', () => {
+  it('t = 0 → trimStart; plain playback advances 1:1 with page time', () => {
+    expect(windowedSourceTime(0.1, 1.8, false, 0)).toBe(0.1)
+    expect(windowedSourceTime(0.1, 1.8, false, 0.5)).toBe(0.6)
+    expect(windowedSourceTime(0, 6, false, 2.2)).toBe(2.2)
+  })
+
+  it('non-looping HOLDS the final frame once the window is spent', () => {
+    expect(windowedSourceTime(0.1, 1.8, false, 5)).toBe(1.8)
+    expect(windowedSourceTime(0, 6, false, 100)).toBe(6)
+  })
+
+  it('looping wraps within [trimStart, end]', () => {
+    // span = 1.7: 3.5 = 2 × 1.7 + 0.1 → 0.1 past the start
+    expect(windowedSourceTime(0.1, 1.8, true, 3.5)).toBeCloseTo(0.2, 10)
+    // an exact multiple of the span lands back on the start
+    expect(windowedSourceTime(0.1, 1.8, true, 1.7)).toBe(0.1)
+    expect(windowedSourceTime(0, 6, true, 14.5)).toBeCloseTo(2.5, 10)
+  })
+
+  it('a trim past what the file contains clamps to the loaded duration', () => {
+    expect(windowedSourceTime(0.1, 1.8, false, 0.5, 1.0)).toBe(0.6)
+    expect(windowedSourceTime(0.1, 1.8, false, 5, 1.0)).toBe(1.0)
+    expect(windowedSourceTime(0, 6, true, 14.5, 2.0)).toBeCloseTo(0.5, 10)
+  })
+
+  it('degenerate window (end ≤ start) holds the start, never NaN', () => {
+    expect(windowedSourceTime(2, 1, false, 10)).toBe(1)
+    expect(windowedSourceTime(1, 1, true, 10)).toBe(1)
+  })
+
+  it('garbage inputs never produce NaN or negative times', () => {
+    expect(windowedSourceTime(Number.NaN, Number.NaN, false, Number.NaN, Number.NaN)).toBe(0)
+    expect(windowedSourceTime(Number.NaN, Number.NaN, true, Number.NaN, 5)).toBe(0)
+    expect(windowedSourceTime(0, 10, false, -5)).toBe(0)
+    expect(windowedSourceTime(0.5, 2, true, -3)).toBe(0.5)
+    // Infinity page time is garbage too — clamped, and the loop branch
+    // can never reach Infinity % span = NaN
+    expect(windowedSourceTime(0, 10, false, Number.POSITIVE_INFINITY)).toBe(0)
+    expect(windowedSourceTime(0, 10, true, Number.POSITIVE_INFINITY)).toBe(0)
+  })
+})
+
+describe('isPlayableExportVideo / pagesHaveAutoplayVideo — the R3 gate', () => {
+  it('video + visible + autoplay plays in the export', () => {
+    expect(isPlayableExportVideo({ type: 'video', visible: true, autoplay: true } as never)).toBe(true)
+  })
+
+  it('non-autoplay and hidden videos keep the poster render', () => {
+    expect(isPlayableExportVideo({ type: 'video', visible: true, autoplay: false } as never)).toBe(false)
+    expect(isPlayableExportVideo({ type: 'video', visible: false, autoplay: true } as never)).toBe(false)
+    expect(isPlayableExportVideo({ type: 'video', visible: false, autoplay: false } as never)).toBe(false)
+  })
+
+  it('any other element type never counts', () => {
+    expect(isPlayableExportVideo({ type: 'audio', visible: true, autoplay: true } as never)).toBe(false)
+    expect(isPlayableExportVideo({ type: 'rect', visible: true, autoplay: true } as never)).toBe(false)
+  })
+
+  it('pagesHaveAutoplayVideo walks groups and needs at least one playable video', () => {
+    expect(pagesHaveAutoplayVideo([page([{ type: 'video', visible: true, autoplay: true }])])).toBe(true)
+    expect(
+      pagesHaveAutoplayVideo([
+        page([{ type: 'group', children: [{ type: 'video', visible: true, autoplay: true }] }]),
+      ]),
+    ).toBe(true)
+    expect(
+      pagesHaveAutoplayVideo([
+        page([]),
+        page([{ type: 'group', children: [{ type: 'video', visible: true, autoplay: false }] }]),
+      ]),
+    ).toBe(false)
+  })
+
+  it('MAX_EXPORT_VIDEOS pins the decode cap', () => {
+    expect(MAX_EXPORT_VIDEOS).toBe(12)
   })
 })

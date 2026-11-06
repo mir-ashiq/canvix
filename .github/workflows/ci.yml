@@ -114,6 +114,12 @@ jobs:
       - name: Install ffmpeg (video-export e2e dependencies)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
 
+      # v0.15 (R4): the vector-PDF e2e proves text extractability by
+      # reading the exported file back with poppler's pdftotext — the
+      # same "verify with an independent tool" discipline ffprobe has.
+      - name: Install poppler-utils (vector-pdf e2e dependencies)
+        run: sudo apt-get install -y --no-install-recommends poppler-utils
+
       - name: Set up database (migrations + template seed)
         run: npm run db:setup
 

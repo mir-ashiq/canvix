@@ -3,6 +3,52 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.15.3] — 2026-11-06
+
+### Added
+
+- **Rich content & export, part 4 — vector-text PDF (R4).** The PDF
+  export now emits **real selectable, searchable text** with embedded
+  subset fonts instead of rasterized pages, and shapes, lines,
+  strokes, tables, charts, embeds and frames render as true vectors
+  (photos keep their original JPEG bytes — `DCTDecode` passthrough).
+  The architecture and every dependency decision are on record in
+  `docs/PDF-VECTOR-EXPORT.md`; the highlights:
+  - **Text model via the SVG serializer's** — `layoutRichLines`
+    positions every run (rich spans or flat), baselines use Konva's
+    exact measured-metrics formula, underline/strike use Konva's
+    exact geometry, and per-glyph `TJ` adjustments are computed from
+    the same canvas measurements the editor wraps with, so glyph
+    placement matches the canvas to the pixel.
+  - **Font ladder, fail-closed:** embed a subset of the real Google
+    font (a tiny `/api/fonts/ttf` route negotiates TrueType bytes
+    through the same css2 CDN the app already renders with — legacy-UA
+    negotiation, weights snapped per family) → fall back to the
+    documented per-category standard-14 face (Helvetica/Times/
+    Courier + WinAnsi) when offline or unreachable → rasterize the
+    element only when glyph coverage drops below 75%.
+  - **Subsetting is hand-rolled** (`src/lib/pdf/ttf.ts`): used
+    glyphs only, composite components rewritten, re-indexed cmap,
+    rebuilt hmtx/loca/maxp, correct checksums — verified against
+    real Google-served fonts, cross-checked by fontTools on dev
+    machines, byte-compared through the module's own re-parser.
+  - **Per-element raster strips** (the video-export Konva compositor
+    reused) keep emoji stickers, plugin renders, filtered images,
+    drop shadows, curved/fx/gradient text pixel-perfect — a page
+    never degrades as a whole.
+  - **jsPDF removed** (net dependencies −1): the new ~250-line
+    writer covers the old raster path in 40 lines and does what no
+    jsPDF API exposes cleanly — per-glyph positioning, Type0
+    dictionaries, raw streams. 60 new unit tests (890 total), plus
+    an anonymous e2e asserting `pdftotext` extractability.
+
+### Changed
+
+- Export dialog: the PDF format renders from design data (no more
+  page-flipping waits during multi-page export); the quality control
+  now sets raster detail for photos/stickers while text stays
+  resolution-independent.
+
 ## [0.15.2] — 2026-11-06
 
 ### Added

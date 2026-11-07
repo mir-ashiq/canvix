@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin/guard'
 import { getProviders, AI_SLOTS } from '@/lib/admin/config'
 import { resolveSlot, makeClient, rateLimit, type ResolvedSlot } from '@/lib/ai/provider'
+import { probeSlot, classifyProbeError, SLOT_ENDPOINT } from '@/lib/ai/probe'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { withLogging } from '@/lib/observability'
 
@@ -20,10 +21,27 @@ export const dynamic = 'force-dynamic'
 //   { providerId: "p1…" }                  — test that provider of the table
 //   { providerId?, model: "some-model" }   — override the model for this probe
 //
-// The test always goes through the SDK constructor with the resolved
-// { baseUrl, apiKey } — never ZAI.create(), whose file-only config
-// lookup was the bug behind every failed test since A1 (see
-// src/lib/ai/provider.ts, makeClient).
+// v0.16.3 (A3) adds per-SLOT probing — the diagnostic gap behind "test
+// says OK but the feature is broken": a chat-only provider (NVIDIA NIM
+// et al.) passes every text test yet cannot serve image generation,
+// because it simply has no POST /v1/images/generations route. Body:
+//   { slot: "image" | "imageEdit" | "imageSearch" | "text" | "vision" }
+//
+//   text / vision → one minimal chat completion (the existing probe).
+//   image         → a REAL minimal generation — the only full proof;
+//                   on providers without the endpoint it 404s instantly
+//                   and costs nothing.
+//   imageEdit     → minimal probe against /images/generations/edit with
+//                   no input image — a 400-class "must provide images"
+//                   answer PROVES the endpoint exists (zero cost); 404
+//                   means the provider cannot run this slot.
+//   imageSearch   → one tiny search (count 1); 404 = not served.
+//
+// Verdicts classify the provider's answer so the console can say WHY,
+// not just "failed". The test always goes through the SDK constructor
+// with the resolved { baseUrl, apiKey } — never ZAI.create(), whose
+// file-only config lookup was the bug behind every failed test since
+// A1 (see src/lib/ai/provider.ts, makeClient).
 
 const TEST_TIMEOUT_MS = 15_000
 
@@ -100,6 +118,58 @@ async function __canvix_post(req: NextRequest) {
   }
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+
+  // v0.16.3 (A3): per-slot probe — test the ENDPOINT the slot uses,
+  // not just chat. { slot } resolves that slot's provider+model
+  // through the full chain (multi table → legacy → env → file).
+  const slotProbe = typeof body.slot === 'string' ? body.slot.trim() : null
+  if (slotProbe) {
+    if (!(slotProbe in SLOT_ENDPOINT)) {
+      return NextResponse.json({ ok: false, error: 'Unknown slot — use text, vision, image, imageEdit or imageSearch.' }, { status: 400 })
+    }
+    const resolved = await resolveSlot(slotProbe as 'text' | 'vision' | 'image' | 'imageEdit' | 'imageSearch')
+    if (!resolved) {
+      return NextResponse.json(
+        { ok: false, error: `The ${slotProbe} slot has no provider — pin one on the AI & models page.` },
+        { status: 503 }
+      )
+    }
+    const modelOverride = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : null
+    const target: TestTarget = {
+      baseUrl: resolved.baseUrl,
+      apiKey: resolved.apiKey,
+      model: modelOverride ?? resolved.model,
+      label: resolved.label ?? resolved.source,
+      source: resolved.source,
+    }
+    try {
+      const out = await probeSlot(slotProbe, target)
+      return NextResponse.json({
+        ok: out.verdict.ok,
+        slot: out.verdict.slot,
+        endpoint: out.verdict.endpoint,
+        providerLabel: target.label,
+        model: target.model ?? 'sdk-default',
+        httpStatus: out.verdict.httpStatus,
+        message: out.verdict.message,
+        ...(out.reply ? { reply: out.reply } : {}),
+      })
+    } catch (error) {
+      // probeSlot catches provider errors itself; this is only for the
+      // unexpected (client construction, timeouts before the race)
+      const verdict = classifyProbeError(slotProbe, error)
+      return NextResponse.json({
+        ok: false,
+        slot: verdict.slot,
+        endpoint: verdict.endpoint,
+        providerLabel: target.label,
+        model: target.model ?? 'sdk-default',
+        httpStatus: verdict.httpStatus,
+        message: verdict.message,
+      })
+    }
+  }
+
   const target = await resolveTarget(body)
   if (!target.ok) return target.res
 

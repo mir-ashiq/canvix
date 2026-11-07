@@ -100,6 +100,24 @@ interface TestState {
   message: string
 }
 
+/** Per-slot probe result (A3) — the verdict says WHY, not just pass/fail. */
+interface SlotTestState {
+  slot: string
+  ok: boolean
+  message: string
+  busy?: boolean
+}
+
+/** The endpoint each slot exercises — shown next to the slot so the
+ * provider-fit question ("can NVIDIA generate images?") answers itself. */
+const SLOT_ENDPOINT: Record<string, string> = {
+  text: 'chat/completions',
+  vision: 'chat/completions',
+  image: 'images/generations',
+  imageEdit: 'images/generations/edit',
+  imageSearch: 'images/search',
+}
+
 export function AdminAiConfig() {
   const [view, setView] = useState<ConfigView | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -192,6 +210,28 @@ export function AdminAiConfig() {
       })
     } else {
       setTest({ providerId: providerId ?? 'default', ok: false, message: (res.data.error as string) ?? `Test failed (${res.status})` })
+    }
+  }
+
+  const [slotTest, setSlotTest] = useState<SlotTestState | null>(null)
+
+  /** Probe the ENDPOINT the slot actually uses (A3) — a chat-only
+   * provider passes the text test but cannot generate images. */
+  async function testSlot(slot: string) {
+    setSlotTest({ slot, ok: true, busy: true, message: 'probing…' })
+    const res = await sendJson<{ ok: boolean; endpoint?: string; providerLabel?: string; message?: string; reply?: string; error?: string }>(
+      '/api/admin/config/ai-test',
+      'POST',
+      { slot }
+    )
+    if (res.ok && res.data.ok) {
+      setSlotTest({
+        slot,
+        ok: true,
+        message: `${res.data.providerLabel ?? 'Provider'} · ${res.data.message}${res.data.reply ? ` “${res.data.reply.slice(0, 60)}”` : ''}`,
+      })
+    } else {
+      setSlotTest({ slot, ok: false, message: res.data.message ?? res.data.error ?? `Test failed (${res.status})` })
     }
   }
 
@@ -375,6 +415,7 @@ export function AdminAiConfig() {
                 <div>
                   <p className="text-sm font-medium">{s.label}</p>
                   <p className="text-xs text-muted-foreground">{s.hint}</p>
+                  <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">uses {SLOT_ENDPOINT[s.key]}</p>
                 </div>
                 <label className="text-xs">
                   <span className="mb-1 block font-medium">Provider</span>
@@ -405,6 +446,21 @@ export function AdminAiConfig() {
                       : '→ not configured (feature reports unavailable)'}
                   </span>
                 </label>
+                <div className="flex items-end sm:col-start-3">
+                  <button
+                    onClick={() => void testSlot(s.key)}
+                    disabled={busy || slotTest?.busy === true}
+                    title={`Probe the real ${SLOT_ENDPOINT[s.key]} endpoint this slot uses`}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
+                  >
+                    <Zap size={14} /> Test {s.label.toLowerCase()}
+                  </button>
+                </div>
+                {slotTest && slotTest.slot === s.key && !slotTest.busy && (
+                  <p className={`sm:col-span-3 text-sm ${slotTest.ok ? 'text-emerald-600' : 'text-destructive'}`}>
+                    {slotTest.message}
+                  </p>
+                )}
               </div>
             )
           })}

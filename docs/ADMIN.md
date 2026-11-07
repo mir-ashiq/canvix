@@ -1,4 +1,4 @@
-# Admin console (v0.16 A1 · v0.16.2 A2)
+# Admin console (v0.16 A1 · v0.16.2 A2 · v0.16.3 A3)
 
 > **TL;DR** — set `CANVIX_ADMIN_USERS="your-username"`, restart, sign in:
 > the shield icon on the dashboard opens `/admin`. Everything below is
@@ -129,6 +129,34 @@ provider row has its own Test button; the fallback card tests the
 resolved text slot. The probe goes through the SDK constructor with the
 resolved `{ baseUrl, apiKey }` — never `ZAI.create()`, whose file-only
 lookup ignored env vars and broke every test since A1 (see D3).
+
+### Logs
+
+`/admin/logs` (v0.16.3 A3) answers "why isn't the AI feature working"
+without an SSH session. Two surfaces:
+
+- **AI slot status** — what each of the five capability slots (`text`,
+  `vision`, `image`, `imageEdit`, `imageSearch`) resolves to right now:
+  provider label, base URL, model id and which config layer answered
+  (providers table / legacy override / env / file). Never the key. A
+  slot wired to a chat-only provider is the classic silent breakage —
+  text features work, image generation 404s on the same key — and the
+  strip makes the wiring visible before anything is even tried.
+- **AI request log** — one row per AI request (the AIUsage table, see
+  §3): feature, provider · model, outcome chip (200-299 green;
+  403 rejected · 429 rate-limited · 503 unconfigured · provider HTTP
+  code red), round-trip duration and the scrubbed failure reason — the
+  same string the client's 502 body carries (one truth, two audiences).
+  Live tail (5 s poll, pauses when the tab is hidden), window (15 m …
+  7 d), feature and outcome filters, per-feature call/error counters.
+
+The per-slot **Test** buttons on the AI & models page probe the real
+endpoint each slot uses (chat completion for text/vision, a real
+minimal generation for image, a deliberately image-less probe for
+imageEdit — a 400-class rejection proves the endpoint exists — and a
+one-result search for imageSearch). A 404 verdict states the fix:
+chat-only providers cannot run image slots; pin them to a provider
+that serves image endpoints.
 
 ### Settings
 
@@ -280,7 +308,28 @@ probes that provider; `model` overrides the model for the probe.
   counters so the dashboard's refresh never dominates the “top routes”
   view; it is still recorded in the durable tables.
 
-## 6. Database changes (migration `0009_admin_console`)
+
+- **D14 (A3) — the AI request log lives IN AIUsage, not a new table.**
+  One row per AI request was already being written; the Logs view only
+  needed the columns (model/status/durationMs/error, all nullable,
+  migration `0010_ai_request_log`). No second write path, no join, no
+  new retention policy — 90 days, swept lazily like TrafficStat.
+- **D15 (A3) — provider error text is scrubbed, capped and shared.**
+  `describeProviderError()` extracts the HTTP status, masks
+  credential-shaped tokens (nvapi-/sk-/Bearer…), collapses whitespace
+  and caps at 240 chars. The same string flows to AIUsage (`error`),
+  the client 502 body (`detail`) and the console — no place shows a
+  raw provider body, and no place shows different truths.
+- **D16 (A3) — slot tests probe real endpoints, classified by verdict.**
+  A chat-only provider passing the old test while image generation
+  404'd was the diagnostic gap; now a 404/405 verdict says "not
+  served — pin image slots to a provider that serves image endpoints",
+  a 401/403 says "check the key", and a 400-class answer to the
+  deliberately-empty imageEdit probe says "reachable". The image slot
+  does a REAL minimal generation — the only full proof; on providers
+  without the endpoint it 404s instantly and costs nothing.
+
+## 6. Database changes (migration `0009_admin_console`, extended by `0010_ai_request_log`)
 
 ```sql
 ALTER TABLE "User" ADD COLUMN "role" TEXT NOT NULL DEFAULT 'user';
@@ -292,3 +341,11 @@ CREATE TABLE "DailyActive"  (…  UNIQUE(day, actor));
 `npm run db:setup` applies it; nothing else changes. **A2 adds no
 migration** — the multi-provider table is one more `AppConfig` row
 (`ai.providers`), and live traffic keeps no database state at all.
+
+### `0010_ai_request_log` (v0.16.3 A3)
+
+Four nullable columns on `AIUsage` — `model`, `status`, `durationMs`,
+`error` — written by `withProvider` for every outcome. Existing rows
+stay valid (nulls read as "not recorded"); rows are swept after 90
+days. Instances that never open `/admin/logs` accumulate exactly what
+they always did.

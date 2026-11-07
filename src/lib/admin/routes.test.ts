@@ -185,6 +185,110 @@ describe('GET/PUT /api/admin/config (v0.16 A1)', () => {
   })
 })
 
+describe('PUT /api/admin/config × providers section (v0.16.2 A2)', () => {
+  it('saves the multi-provider table and echoes it sanitized (masks, never keys)', async () => {
+    dbMock.session.findUnique.mockResolvedValue(ADMIN_SESSION)
+    // read #1: nothing stored; read #2 (post-write echo): the saved table
+    dbMock.appConfig.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([
+        {
+          key: 'ai.providers',
+          value: {
+            providers: [{ id: 'pnvidia', label: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com/v1', apiKey: 'nvapi-secret-abcdef-wxyz' }],
+            slots: { text: { providerId: 'pnvidia', model: 'meta/llama-3.1-70b-instruct' } },
+          },
+        },
+      ])
+    const res = await configPut(
+      req('http://localhost/api/admin/config', {
+        method: 'PUT',
+        body: {
+          providers: {
+            list: [{ id: 'pnvidia', label: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com/v1', apiKey: 'nvapi-secret-abcdef-wxyz' }],
+            slots: { text: { providerId: 'pnvidia', model: 'meta/llama-3.1-70b-instruct' } },
+          },
+        },
+      })
+    )
+    expect(res.status).toBe(200)
+    const text = await res.text()
+    expect(text).not.toContain('nvapi-secret-abcdef-wxyz')
+    const body = JSON.parse(text) as {
+      providers: { set: boolean; list: { id: string; keyMasked: string }[]; resolved: Record<string, { source: string; label: string | null } | null> }
+    }
+    expect(body.providers.set).toBe(true)
+    expect(body.providers.list[0].keyMasked).toBe('nvap…wxyz')
+    // the text slot resolves through the table; image (unpinned) may only
+    // resolve via env/file on this machine — assert the table answer only
+    expect(body.providers.resolved.text?.source).toBe('multi')
+    expect(body.providers.resolved.text?.label).toBe('NVIDIA NIM')
+    const upsertArg = dbMock.appConfig.upsert.mock.calls.find((c) => c[0].where.key === 'ai.providers')?.[0]
+    expect(upsertArg).toBeDefined()
+  })
+
+  it('keeps a stored key when the payload omits it (write-only credential)', async () => {
+    dbMock.session.findUnique.mockResolvedValue(ADMIN_SESSION)
+    dbMock.appConfig.findMany.mockResolvedValue([
+      {
+        key: 'ai.providers',
+        value: {
+          providers: [{ id: 'pnvidia', label: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com/v1', apiKey: 'nvapi-stored' }],
+          slots: {},
+        },
+      },
+    ])
+    const res = await configPut(
+      req('http://localhost/api/admin/config', {
+        method: 'PUT',
+        body: {
+          providers: {
+            list: [{ id: 'pnvidia', label: 'NVIDIA NIM (renamed)', baseUrl: 'https://integrate.api.nvidia.com/v1' }],
+            slots: {},
+          },
+        },
+      })
+    )
+    expect(res.status).toBe(200)
+    const upsertArg = dbMock.appConfig.upsert.mock.calls.find((c) => c[0].where.key === 'ai.providers')?.[0]
+    expect(JSON.stringify(upsertArg)).toContain('nvapi-stored')
+    expect(JSON.stringify(upsertArg)).toContain('renamed')
+  })
+
+  it('rejects slots that reference a provider not in the list', async () => {
+    dbMock.session.findUnique.mockResolvedValue(ADMIN_SESSION)
+    const res = await configPut(
+      req('http://localhost/api/admin/config', {
+        method: 'PUT',
+        body: {
+          providers: {
+            list: [{ label: 'A', baseUrl: 'https://a.example/v1', apiKey: 'k' }],
+            slots: { text: { providerId: 'pgone' } },
+          },
+        },
+      })
+    )
+    expect(res.status).toBe(400)
+  })
+
+  it('providers: null clears the table', async () => {
+    dbMock.session.findUnique.mockResolvedValue(ADMIN_SESSION)
+    const res = await configPut(req('http://localhost/api/admin/config', { method: 'PUT', body: { providers: null } }))
+    expect(res.status).toBe(200)
+    expect(dbMock.appConfig.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { key: 'ai.providers' }, update: { value: {} } })
+    )
+  })
+
+  it('importLegacyProvider with nothing stored → 400 with a helpful error', async () => {
+    dbMock.session.findUnique.mockResolvedValue(ADMIN_SESSION)
+    dbMock.appConfig.findMany.mockResolvedValue([])
+    const res = await configPut(req('http://localhost/api/admin/config', { method: 'PUT', body: { importLegacyProvider: true } }))
+    expect(res.status).toBe(400)
+    expect(((await res.json()) as { error: string }).error).toContain('nothing to import')
+  })
+})
+
 describe('POST /api/auth/register × signups switch (v0.16 A1)', () => {
   it('closed signups → 503 SIGNUPS_CLOSED before validation or rate limiting', async () => {
     dbMock.appConfig.findMany.mockResolvedValue([{ key: 'app.settings', value: { signupsOpen: false } }])

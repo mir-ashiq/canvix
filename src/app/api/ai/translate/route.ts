@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withProvider, getTextModel } from '@/lib/ai/provider'
+import { withProvider } from '@/lib/ai/provider'
 import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
@@ -55,9 +55,9 @@ async function __canvix_post(req: NextRequest) {
 
   const user = `Target language: ${language}\n\nTexts:\n${numbered}\n\nRespond with a JSON array of ${texts.length} translated strings, same order.`
 
-  return withProvider('translate', req, { limit: 15, windowSec: 60 }, async (zai) => {
-    const completion = await zai.chat.completions.create({
-      model: await getTextModel(),
+  return withProvider('translate', req, { limit: 15, windowSec: 60 }, async (ctx) => {
+    const completion = await ctx.zai.chat.completions.create({
+      model: ctx.model,
       messages: [
         { role: 'assistant', content: system },
         { role: 'user', content: user },

@@ -13,14 +13,22 @@ import {
   validateModels,
   validateFeatures,
   validateSettings,
+  validateProviderList,
+  validateSlots,
   maskApiKey,
   getFeatures,
   getSettings,
   getProviderOverride,
+  getProviders,
   getModels,
   setFeatures,
+  setProviders,
+  clearProviders,
   clearProvider,
+  importLegacyProvider,
+  invalidateAdminConfig,
   DEFAULT_FEATURES,
+  type StoredProviderEntry,
 } from './config'
 
 beforeEach(() => {
@@ -65,7 +73,10 @@ describe('validateModels (v0.16 A1)', () => {
 
   it('rejects garbage model ids and unknown junk only warns by ignoring', () => {
     expect(validateModels({ text: 'bad model!' }).ok).toBe(false)
-    expect(validateModels({ text: '../etc/passwd' }).ok).toBe(false)
+    expect(validateModels({ text: 'model;rm -rf /' }).ok).toBe(false) // ; and spaces are never legal
+    // "/" IS legal since v0.16.2 — NVIDIA NIM / HuggingFace namespaces
+    expect(validateModels({ text: 'meta/llama-3.1-70b-instruct' }).ok).toBe(true)
+    expect(validateModels({ text: 'openrouter/auto' }).ok).toBe(true)
     const out = validateModels({ evil: 'x', text: 'glm-4.6' })
     expect(out.ok).toBe(true)
     if (out.ok) expect(out.value).toEqual({ text: 'glm-4.6' })
@@ -163,5 +174,179 @@ describe('writers (v0.16 A1)', () => {
     expect(upsert).toHaveBeenCalledWith(
       expect.objectContaining({ where: { key: 'ai.provider' }, update: { value: {} } })
     )
+  })
+})
+
+describe('validateProviderList (v0.16.2 A2)', () => {
+  const existing = new Map<string, StoredProviderEntry>([
+    ['pkeep', { id: 'pkeep', label: 'Old label', baseUrl: 'https://old.example/v1', apiKey: 'sk-stored' }],
+  ])
+
+  it('validates a clean list and normalizes base URLs', () => {
+    const out = validateProviderList([{ id: 'pa', label: 'A', baseUrl: 'https://a.example/v1', apiKey: 'k-a' }])
+    expect(out.ok).toBe(true)
+    if (out.ok) expect(out.value[0]).toEqual({ id: 'pa', label: 'A', baseUrl: 'https://a.example/v1', apiKey: 'k-a' })
+  })
+
+  it('keeps the stored key when apiKey is omitted (write-only credential)', () => {
+    const out = validateProviderList([{ id: 'pkeep', label: 'Renamed', baseUrl: 'https://old.example/v1' }], { existing })
+    expect(out.ok).toBe(true)
+    if (out.ok) {
+      expect(out.value[0].apiKey).toBe('sk-stored')
+      expect(out.value[0].label).toBe('Renamed')
+    }
+  })
+
+  it('demands a key for a NEW provider (unknown id, no key)', () => {
+    const out = validateProviderList([{ label: 'New', baseUrl: 'https://n.example/v1' }], { existing })
+    expect(out.ok).toBe(false)
+  })
+
+  it('generates ids for new entries (injectable makeId) and enforces uniqueness', () => {
+    let n = 0
+    const out = validateProviderList(
+      [
+        { label: 'A', baseUrl: 'https://a.example/v1', apiKey: 'k' },
+        { label: 'B', baseUrl: 'https://b.example/v1', apiKey: 'k' },
+      ],
+      { makeId: () => 'p' + n++ }
+    )
+    expect(out.ok).toBe(true)
+    if (out.ok) {
+      expect(out.value.map((p) => p.id)).toEqual(['p0', 'p1'])
+      expect(out.value[0].id).toMatch(/^p[a-z0-9]+$/)
+    }
+    const dup = validateProviderList(
+      [
+        { id: 'psame', label: 'A', baseUrl: 'https://a.example/v1', apiKey: 'k' },
+        { id: 'psame', label: 'B', baseUrl: 'https://b.example/v1', apiKey: 'k' },
+      ],
+      { makeId: () => 'px' }
+    )
+    expect(dup.ok).toBe(false)
+  })
+
+  it('rejects malformed entries: label, URL, scheme, embedded credentials, cap', () => {
+    expect(validateProviderList('nope').ok).toBe(false)
+    expect(validateProviderList([{ label: '', baseUrl: 'https://x.io', apiKey: 'k' }]).ok).toBe(false)
+    expect(validateProviderList([{ label: 'A', baseUrl: 'not a url', apiKey: 'k' }]).ok).toBe(false)
+    expect(validateProviderList([{ label: 'A', baseUrl: 'ftp://x', apiKey: 'k' }]).ok).toBe(false)
+    expect(validateProviderList([{ label: 'A', baseUrl: 'https://u:p@x.io', apiKey: 'k' }]).ok).toBe(false)
+    expect(
+      validateProviderList(
+        Array.from({ length: 9 }, (_, i) => ({ label: `P${i}`, baseUrl: `https://p${i}.io`, apiKey: 'k' }))
+      ).ok
+    ).toBe(false)
+  })
+
+  it('an empty list is valid (clears the table)', () => {
+    expect(validateProviderList([])).toEqual({ ok: true, value: [] })
+  })
+})
+
+describe('validateSlots (v0.16.2 A2)', () => {
+  const ids = new Set(['pa', 'pb'])
+
+  it('keeps valid slots, drops unknown keys, omits empty models', () => {
+    const out = validateSlots(
+      { text: { providerId: 'pa', model: 'glm-4.6' }, vision: { providerId: 'pb', model: '' }, junk: { providerId: 'pa' } },
+      ids
+    )
+    expect(out.ok).toBe(true)
+    if (out.ok) {
+      expect(out.value).toEqual({ text: { providerId: 'pa', model: 'glm-4.6' }, vision: { providerId: 'pb' } })
+    }
+  })
+
+  it('null clears a slot; unknown providerId and bad models are rejected', () => {
+    expect(validateSlots({ text: null }, ids)).toEqual({ ok: true, value: {} })
+    expect(validateSlots({ text: { providerId: 'pgone' } }, ids).ok).toBe(false)
+    expect(validateSlots({ text: { providerId: 'pa', model: 'bad model!' } }, ids).ok).toBe(false)
+    expect(validateSlots([], ids).ok).toBe(false)
+  })
+})
+
+describe('multi-provider table read/write (v0.16.2 A2)', () => {
+  it('getProviders parses a stored table; absent/corrupt rows read as null', async () => {
+    findMany.mockResolvedValue([
+      {
+        key: 'ai.providers',
+        value: {
+          providers: [{ id: 'pa', label: 'A', baseUrl: 'https://a.example/v1', apiKey: 'k' }],
+          slots: { text: { providerId: 'pa', model: 'glm-4.6' } },
+        },
+      },
+    ])
+    const table = await getProviders()
+    expect(table?.providers).toHaveLength(1)
+    expect(table?.slots.text).toEqual({ providerId: 'pa', model: 'glm-4.6' })
+
+    invalidateAdminConfig()
+    findMany.mockResolvedValue([{ key: 'ai.providers', value: { providers: [{ label: 'no id' }] } }])
+    expect(await getProviders()).toBeNull()
+
+    invalidateAdminConfig()
+    findMany.mockResolvedValue([])
+    expect(await getProviders()).toBeNull()
+  })
+
+  it('setProviders upserts the table; clearProviders empties it', async () => {
+    upsert.mockResolvedValue({})
+    await setProviders({ providers: [{ id: 'pa', label: 'A', baseUrl: 'https://a.io', apiKey: 'k' }], slots: { text: { providerId: 'pa' } } })
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { key: 'ai.providers' } })
+    )
+    await clearProviders()
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { key: 'ai.providers' }, update: { value: {} } })
+    )
+  })
+})
+
+describe('importLegacyProvider (v0.16.2 A2)', () => {
+  it('imports the legacy override, wires empty slots to it, clears the legacy row', async () => {
+    findMany.mockResolvedValue([
+      { key: 'ai.provider', value: { baseUrl: 'https://legacy.example/v1', apiKey: 'sk-leg' } },
+    ])
+    upsert.mockResolvedValue({})
+    const out = await importLegacyProvider()
+    expect(out.ok).toBe(true)
+    if (out.ok) {
+      expect(out.value.added).toBe(true)
+      expect(out.value.list).toHaveLength(1)
+      expect(out.value.list[0].baseUrl).toBe('https://legacy.example/v1')
+      expect(out.value.list[0].apiKey).toBe('sk-leg')
+      expect(Object.keys(out.value.slots)).toHaveLength(5) // all slots wired
+    }
+    const calls = upsert.mock.calls.map((c) => c[0].where.key)
+    expect(calls).toContain('ai.providers')
+    expect(calls).toContain('ai.provider') // cleared
+  })
+
+  it('does not duplicate a provider that is already in the table', async () => {
+    findMany.mockResolvedValue([
+      { key: 'ai.provider', value: { baseUrl: 'https://same.example/v1', apiKey: 'sk-leg' } },
+      {
+        key: 'ai.providers',
+        value: {
+          providers: [{ id: 'pa', label: 'Same', baseUrl: 'https://same.example/v1', apiKey: 'sk-x' }],
+          slots: { text: { providerId: 'pa' } },
+        },
+      },
+    ])
+    upsert.mockResolvedValue({})
+    const out = await importLegacyProvider()
+    expect(out.ok).toBe(true)
+    if (out.ok) {
+      expect(out.value.added).toBe(false)
+      expect(out.value.list).toHaveLength(1)
+      expect(out.value.slots).toEqual({ text: { providerId: 'pa' } }) // existing slots kept
+    }
+  })
+
+  it('fails cleanly when nothing is stored', async () => {
+    findMany.mockResolvedValue([])
+    const out = await importLegacyProvider()
+    expect(out.ok).toBe(false)
   })
 })

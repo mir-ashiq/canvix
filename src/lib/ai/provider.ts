@@ -1,15 +1,29 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { existsSync, readFileSync } from 'fs'
 import { CSRF_REJECTED } from '@/lib/auth/csrf'
-import { getProviderOverride, aiFeatureEnabled, getModels, type AiFeature } from '@/lib/admin/config'
+import {
+  getProviderOverride,
+  getProviders,
+  getModels,
+  aiFeatureEnabled,
+  type AiFeature,
+  type AiSlot,
+  type StoredProvider,
+  type StoredProviders,
+  type StoredModels,
+} from '@/lib/admin/config'
+import { recordLiveAi } from '@/lib/admin/realtime'
 
 /**
- * Canvix AI provider abstraction (v0.5).
+ * Canvix AI provider abstraction (v0.5, multi-provider since v0.16.2 A2).
  *
  * Single server-side entry point for every AI capability. Centralizes:
- *   - provider configuration resolution (env override → .z-ai-config file → absent)
+ *   - provider configuration resolution, per capability slot:
+ *     multi-provider table (console) → legacy single override → env →
+ *     .z-ai-config file → absent
+ *   - SDK client construction
  *   - capability probing (which features can run on this server)
- *   - rate limiting + AIUsage accounting
+ *   - rate limiting + AIUsage accounting + live traffic counters
  *
  * CONTRACT: this module is SERVER-ONLY. It must never be imported from a
  * client component — the provider config contains credentials.
@@ -30,9 +44,10 @@ export interface AIProviderConfig {
 /** Default multimodal model for Magic Layers analysis (v0.16 A1: overridable from /admin). */
 export const DEFAULT_VISION_MODEL = 'glm-4.5v'
 
-// ── v0.16 (A1): model selection from the admin console ──────────
-// Stored in AppConfig (ai.models), validated by src/lib/admin/config.ts.
-// Undefined = let the SDK pick its own default — the pre-A1 behaviour.
+// ── legacy model getters (v0.16 A1) ──────────────────────────
+// Still used by the legacy fallback chain (ai.models feeds every slot
+// that resolves via the single override / env / file). The multi-
+// provider table carries its own per-slot model ids.
 
 export async function getTextModel(): Promise<string | undefined> {
   return (await getModels()).text
@@ -47,16 +62,16 @@ export async function getImageModel(): Promise<string | undefined> {
 }
 
 /**
- * Resolve the provider configuration.
+ * Resolve the FILE-level provider config.
  * Priority: ZAI_BASE_URL/ZAI_API_KEY env vars → .z-ai-config file (cwd → ~ → /etc) → null.
- * Returns null when no provider is configured (local-only mode).
+ * Returns null when no provider is configured at this layer.
  */
 export function resolveProviderConfig(): AIProviderConfig | null {
   const envUrl = process.env.ZAI_BASE_URL?.trim()
   const envKey = process.env.ZAI_API_KEY?.trim()
   if (envUrl && envKey) return { baseUrl: envUrl, apiKey: envKey }
   try {
-    // the SDK resolves the config file itself at ZAI.create(); mirror its lookup here
+    // the SDK resolves the config file itself; mirror its lookup here
     //
     // PORTABILITY (v0.9.3): on Cloudflare Workers there is no real fs —
     // OpenNext's unenv layer stubs node:fs so these calls either return
@@ -86,12 +101,100 @@ export function resolveProviderConfig(): AIProviderConfig | null {
   return null
 }
 
+// ── per-slot resolution (v0.16.2 A2) ─────────────────────────
+
+export type SlotSource = 'multi' | 'db' | 'env' | 'file'
+
+/** What one capability slot resolved to — never the key, but enough to act. */
+export interface ResolvedSlot {
+  baseUrl: string
+  apiKey: string
+  /** Model id to request (undefined = provider default). */
+  model?: string
+  /** Which provider of the table answered (multi only). */
+  providerId?: string
+  /** Human label of the answering provider (multi only). */
+  label?: string
+  source: SlotSource
+}
+
+/**
+ * Pure layer-picker (unit-tested): multi-provider table → legacy single
+ * override → env vars → .z-ai-config file → null. Exported for tests;
+ * runtime callers go through resolveSlot().
+ */
+export function pickSlot(
+  slot: AiSlot,
+  multi: StoredProviders | null,
+  legacy: StoredProvider | null,
+  models: StoredModels,
+  env: { baseUrl?: string; apiKey?: string },
+  file: StoredProvider | null
+): ResolvedSlot | null {
+  const tableSlot = multi?.slots[slot]
+  if (multi && tableSlot) {
+    const p = multi.providers.find((x) => x.id === tableSlot.providerId)
+    if (p) {
+      return {
+        baseUrl: p.baseUrl,
+        apiKey: p.apiKey,
+        model: tableSlot.model,
+        providerId: p.id,
+        label: p.label,
+        source: 'multi',
+      }
+    }
+    // slot references a provider that no longer exists — fall through
+    // to the legacy chain rather than failing the feature outright
+  }
+  // legacy chain: the single override / env / file answers every slot,
+  // with the old ai.models ids still steering text/vision/image
+  const legacyModel =
+    slot === 'text' ? models.text : slot === 'vision' ? models.vision : slot === 'image' ? models.image : undefined
+  if (legacy) return { baseUrl: legacy.baseUrl, apiKey: legacy.apiKey, model: legacyModel, source: 'db' }
+  if (env.baseUrl && env.apiKey) {
+    return { baseUrl: env.baseUrl, apiKey: env.apiKey, model: legacyModel, source: 'env' }
+  }
+  if (file) return { baseUrl: file.baseUrl, apiKey: file.apiKey, model: legacyModel, source: 'file' }
+  return null
+}
+
+/** Resolve one capability slot through every config layer. */
+export async function resolveSlot(slot: AiSlot): Promise<ResolvedSlot | null> {
+  const [multi, legacy, models] = await Promise.all([getProviders(), getProviderOverride(), getModels()])
+  return pickSlot(
+    slot,
+    multi,
+    legacy,
+    models,
+    { baseUrl: process.env.ZAI_BASE_URL?.trim(), apiKey: process.env.ZAI_API_KEY?.trim() },
+    resolveProviderConfig()
+  )
+}
+
+/** Feature name (withProvider's first arg) → capability slot. */
+const FEATURE_SLOTS: Record<string, AiSlot> = {
+  write: 'text',
+  translate: 'text',
+  assistant: 'text',
+  image: 'image',
+  'image-edit': 'imageEdit',
+  'magic-layers': 'vision',
+  search: 'imageSearch',
+}
+
+/** Async probe — does THIS slot have a provider behind it? */
+export async function hasProviderForSlot(slot: AiSlot): Promise<boolean> {
+  return (await resolveSlot(slot)) !== null
+}
+
+// ── legacy single-chain resolution (v0.16 A1) ────────────────
+// Kept for the console's legacy provider card and MCP capability text.
+
 /**
  * Full resolution with provenance (v0.16 A1): console DB override → env
- * vars → .z-ai-config file → null. The console-set override wins so an
- * operator can point the instance at a different provider without a
- * redeploy; `source` is surfaced in /admin (which layer answered —
- * never the secret itself).
+ * vars → .z-ai-config file → null. With the multi-provider table (A2)
+ * this is the FALLBACK chain — resolveSlot() is what features use.
  */
 export async function resolveProvider(): Promise<{ baseUrl: string; apiKey: string; source: 'db' | 'env' | 'file' } | null> {
   const fromDb = await getProviderOverride()
@@ -104,36 +207,82 @@ export async function resolveProvider(): Promise<{ baseUrl: string; apiKey: stri
   return null
 }
 
-/** Async probe used by /api/ai/capabilities, MCP tools and route guards. */
+/** Async probe used by MCP tools and route guards — any layer configured? */
 export async function hasProvider(): Promise<boolean> {
-  return (await resolveProvider()) !== null
+  return (await resolveSlot('text')) !== null
 }
 
-/**
- * Create a ZAI SDK instance (server-side only). Lazy-imports the SDK so it
- * never lands in a client bundle. Returns null when unconfigured.
- */
-export async function getZAI(): Promise<import('z-ai-web-dev-sdk').default | null> {
-  const cfg = await resolveProvider()
-  if (!cfg) return null
-  try {
-    // The SDK's ZAI.create() takes no arguments and resolves its own
-    // config from ZAI_BASE_URL/ZAI_API_KEY env or the .z-ai-config file
-    // (verified against the SDK's typings). A console-set (DB) provider
-    // is therefore injected through process.env before instantiation —
-    // server-side, in-memory, and exactly the variable the documented
-    // env setup uses, so the SDK keeps one consistent config surface.
-    // Decision recorded in docs/ADMIN.md.
-    if (cfg.source === 'db') {
-      process.env.ZAI_BASE_URL = cfg.baseUrl
-      process.env.ZAI_API_KEY = cfg.apiKey
+/** What the console shows about the provider setup (never the key). */
+export interface ProvidersSummary {
+  configured: boolean
+  source: SlotSource | null
+  providerCount: number
+  slotsSet: number
+}
+export async function providersSummary(): Promise<ProvidersSummary> {
+  const multi = await getProviders()
+  if (multi && multi.providers.length) {
+    return {
+      configured: true,
+      source: 'multi',
+      providerCount: multi.providers.length,
+      slotsSet: Object.keys(multi.slots).length,
     }
-    const { default: ZAI } = await import('z-ai-web-dev-sdk')
-    return await ZAI.create()
+  }
+  const text = await resolveSlot('text')
+  return { configured: text !== null, source: text?.source ?? null, providerCount: 0, slotsSet: 0 }
+}
+
+// ── SDK client construction ──────────────────────────────────
+
+/** Construct an SDK client directly from resolved config (server-side only). */
+export async function makeClient(baseUrl: string, apiKey: string): Promise<import('z-ai-web-dev-sdk').default> {
+  const { default: ZAI } = await import('z-ai-web-dev-sdk')
+  // v0.16.2 (A2): construct the SDK DIRECTLY with the resolved config.
+  //
+  // ZAI.create() only ever reads a .z-ai-config file (cwd → ~ → /etc) —
+  // it ignores ZAI_BASE_URL / ZAI_API_KEY entirely. Every console- or
+  // env-configured provider therefore failed instantiation with
+  // "Configuration file not found or invalid" — the bug behind every
+  // failed "Test connection" (and every 503 AI feature) since A1 on
+  // hosts that don't ship a config file. The class constructor takes
+  // exactly the { baseUrl, apiKey } shape we already resolved, and any
+  // OpenAI-compatible endpoint works through it. Decision recorded in
+  // docs/ADMIN.md.
+  //
+  // The SDK's .d.ts marks the constructor private (it wants you on
+  // create()), but the shipped dist/index.js declares a plain public
+  // `constructor(config)` — verified against the installed package.
+  // Cast to a constructor signature; the runtime shape matches.
+  type ZAIConstructor = new (config: { baseUrl: string; apiKey: string }) => import('z-ai-web-dev-sdk').default
+  const Ctor = ZAI as unknown as ZAIConstructor
+  return new Ctor({ baseUrl, apiKey })
+}
+
+/** A usable client plus the model id its slot wants (undefined = default). */
+export interface ProviderContext {
+  zai: import('z-ai-web-dev-sdk').default
+  model?: string
+  /** Which provider answered (multi table only) — for accounting labels. */
+  label?: string
+}
+
+/** Resolve a slot and construct its client. Null when unconfigured. */
+export async function getClientForSlot(slot: AiSlot): Promise<ProviderContext | null> {
+  const resolved = await resolveSlot(slot)
+  if (!resolved) return null
+  try {
+    const zai = await makeClient(resolved.baseUrl, resolved.apiKey)
+    return { zai, model: resolved.model, label: resolved.label }
   } catch (err) {
-    console.error('[ai] provider initialization failed', err)
+    console.error(`[ai] provider initialization failed (${slot})`, err)
     return null
   }
+}
+
+/** Legacy helper — the text-slot client (MCP generate_design, older tests). */
+export async function getZAI(): Promise<import('z-ai-web-dev-sdk').default | null> {
+  return (await getClientForSlot('text'))?.zai ?? null
 }
 
 // ── rate limiting (in-memory sliding window; per feature+IP) ──
@@ -183,6 +332,8 @@ export function rateLimit(feature: string, req: Pick<NextRequest, 'headers'>, li
 // ── usage accounting (best-effort, never blocks a request) ──
 
 export async function recordUsage(feature: string, provider: 'zai' | 'local', ok: boolean): Promise<void> {
+  // live console counters first — pure in-memory, synchronous, cannot throw
+  recordLiveAi(feature, ok)
   try {
     const { db } = await import('@/lib/db')
     await db.aIUsage.create({ data: { feature, provider, ok } })
@@ -203,18 +354,7 @@ export function providerUnavailable(res: NextResponse): NextResponse {
   return NextResponse.json(NO_PROVIDER_RESPONSE, { status: 503 })
 }
 
-/** Helper: wrap a route's provider call with rate limit + usage accounting. */
-
-/**
- * v0.9.2 abuse guard — strict same-origin check for AI routes.
- *
- * Unlike the cookie-CSRF variant in lib/auth/csrf.ts (which lets
- * Origin-less server-to-server calls through), AI generation is expensive
- * metered compute that must ONLY be drivable from the app's own pages.
- * Browsers always send Origin (or Referer) on POST — including same-origin
- * fetch() — so anything without a matching Origin is a direct API bot and
- * gets a flat 403 before any provider work happens.
- */
+/** v0.9.2 abuse guard — strict same-origin check for AI routes. */
 function isFromApp(req: NextRequest): boolean {
   const origin = req.headers.get('origin') ?? req.headers.get('referer')
   if (!origin) return false
@@ -246,11 +386,18 @@ export const FEATURE_DISABLED = {
   code: 'FEATURE_DISABLED',
 } as const
 
+/**
+ * Wrap a route's provider work. Resolves the feature's capability slot,
+ * constructs THAT provider's client and hands the handler a single
+ * context: { zai, model } (v0.16.2 A2 — the handler no longer resolves
+ * the model itself, so a per-slot provider+model pair can never drift
+ * apart between the client and the model id).
+ */
 export async function withProvider(
   feature: string,
   req: NextRequest,
   limits: { limit: number; windowSec: number },
-  fn: (zai: NonNullable<Awaited<ReturnType<typeof getZAI>>>) => Promise<NextResponse>
+  fn: (ctx: ProviderContext) => Promise<NextResponse>
 ): Promise<NextResponse> {
   // v0.16 (A1): per-feature kill switch from the admin console. Checked
   // before the abuse guard, rate limiting and any provider work — a
@@ -273,13 +420,14 @@ export async function withProvider(
       { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } }
     )
   }
-  const zai = await getZAI()
-  if (!zai) {
+  const slot = FEATURE_SLOTS[feature] ?? 'text'
+  const ctx = await getClientForSlot(slot)
+  if (!ctx) {
     await recordUsage(feature, 'zai', false)
     return providerUnavailable(NextResponse.json({}))
   }
   try {
-    const out = await fn(zai)
+    const out = await fn(ctx)
     void recordUsage(feature, 'zai', true)
     return out
   } catch (err) {

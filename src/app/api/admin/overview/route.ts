@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin, isAdminUser, adminSource } from '@/lib/admin/guard'
-import { resolveProvider } from '@/lib/ai/provider'
+import { providersSummary } from '@/lib/ai/provider'
 import { fillDays, sumSeries, dayKey, type DayPoint } from '@/lib/admin/series'
 import { APP_VERSION, withLogging } from '@/lib/observability'
 
@@ -86,7 +86,7 @@ async function __canvix_get(req: NextRequest) {
         take: 10,
         select: { id: true, username: true, role: true, createdAt: true },
       }),
-      resolveProvider(),
+      providersSummary(),
     ])
     const dbLatencyMs = Date.now() - probeStart
 
@@ -131,7 +131,12 @@ async function __canvix_get(req: NextRequest) {
         admin: isAdminUser(u),
         adminSource: adminSource(u),
       })),
-      provider: { configured: provider !== null, source: provider?.source ?? null },
+      provider: {
+        configured: provider.configured,
+        source: provider.source,
+        providerCount: provider.providerCount,
+        slotsSet: provider.slotsSet,
+      },
     })
   } catch (error) {
     console.error('GET /api/admin/overview failed', error)

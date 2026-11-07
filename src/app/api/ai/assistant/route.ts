@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withProvider, getTextModel } from '@/lib/ai/provider'
+import { withProvider } from '@/lib/ai/provider'
 import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
@@ -229,7 +229,7 @@ async function __canvix_post(req: NextRequest) {
   const message = (body.message ?? '').trim().slice(0, 1500)
   if (!message) return NextResponse.json({ error: 'A message is required.' }, { status: 400 })
 
-  return withProvider('assistant', req, { limit: 20, windowSec: 60 }, async (zai) => {
+  return withProvider('assistant', req, { limit: 20, windowSec: 60 }, async (ctx) => {
     const d = body.design ?? {}
     const els = (d.elements ?? []).slice(0, 80)
     const elementSummary = els
@@ -294,8 +294,8 @@ async function __canvix_post(req: NextRequest) {
       .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
       .map((m) => ({ role: m.role, content: m.content.slice(0, 1000) }))
 
-    const completion = await zai.chat.completions.create({
-      model: await getTextModel(),
+    const completion = await ctx.zai.chat.completions.create({
+      model: ctx.model,
       messages: [
         { role: 'assistant', content: system },
         { role: 'assistant', content: `Current design context:\n${designContext}` },

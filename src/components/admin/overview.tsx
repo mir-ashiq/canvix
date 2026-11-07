@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { getJson } from './fetch'
 import { StatCard, Card, Chip } from './bits'
 import { BarChart, LineChart, HBars, fmt, fmtBytes } from './charts'
+import { AdminRealtime } from './realtime'
 
 interface DayPoint {
   day: string
@@ -30,11 +31,12 @@ interface Overview {
   topRoutes: { route: string; method: string; hits: number }[]
   aiByFeature: { feature: string; calls: number; ok: number }[]
   recentUsers: { id: string; username: string; role: string; createdAt: string; admin: boolean }[]
-  provider: { configured: boolean; source: string | null }
+  provider: { configured: boolean; source: string | null; providerCount: number; slotsSet: number }
 }
 
 const SOURCE_LABEL: Record<string, string> = {
-  db: 'console',
+  multi: 'providers table',
+  db: 'console override',
   env: 'environment',
   file: 'config file',
 }
@@ -79,6 +81,8 @@ export function AdminOverview() {
 
   return (
     <>
+      <AdminRealtime />
+
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard label="Users" value={fmt(data.totals.users)} sub={`${data.windows.dauToday} active today`} />
         <StatCard label="Designs" value={fmt(data.totals.designs)} sub={`${fmt(data.totals.templates)} templates`} />
@@ -92,9 +96,15 @@ export function AdminOverview() {
         <StatCard label="Media stored" value={fmtBytes(data.totals.mediaBytes)} sub={`${fmt(data.totals.mediaCount)} files`} />
         <StatCard label="Comments" value={fmt(data.totals.comments)} sub="all designs" />
         <StatCard
-          label="AI provider"
-          value={data.provider.configured ? 'configured' : 'none'}
-          sub={data.provider.configured ? `via ${SOURCE_LABEL[data.provider.source ?? ''] ?? data.provider.source}` : 'local features only'}
+          label="AI providers"
+          value={data.provider.configured ? (data.provider.source === 'multi' ? String(data.provider.providerCount) : 'configured') : 'none'}
+          sub={
+            data.provider.configured
+              ? data.provider.source === 'multi'
+                ? `${data.provider.slotsSet}/5 slots wired · via ${SOURCE_LABEL[data.provider.source] ?? data.provider.source}`
+                : `via ${SOURCE_LABEL[data.provider.source ?? ''] ?? data.provider.source}`
+              : 'local features only'
+          }
         />
       </div>
 
@@ -165,13 +175,18 @@ export function AdminOverview() {
             <dd className="text-right font-medium tabular-nums">{data.version}</dd>
             <dt className="text-muted-foreground">Database latency</dt>
             <dd className="text-right font-medium tabular-nums">{data.dbLatencyMs} ms</dd>
-            <dt className="text-muted-foreground">AI provider</dt>
+            <dt className="text-muted-foreground">AI providers</dt>
             <dd className="text-right font-medium">
-              {data.provider.configured ? `configured · ${SOURCE_LABEL[data.provider.source ?? ''] ?? data.provider.source}` : 'not configured'}
+              {data.provider.configured
+                ? data.provider.source === 'multi'
+                  ? `${data.provider.providerCount} in table · ${data.provider.slotsSet}/5 slots wired`
+                  : `configured · ${SOURCE_LABEL[data.provider.source ?? ''] ?? data.provider.source}`
+                : 'not configured'}
             </dd>
           </dl>
           <p className="mt-4 text-xs text-muted-foreground">
-            Traffic counters are aggregate counts only — no ids, no IPs, no query strings. 90-day retention. Disable with{' '}
+            Live counters are in-memory (reset on restart); the charts above are the durable record. Traffic counters are aggregate
+            counts only — no ids, no IPs, no query strings. 90-day retention. Disable with{' '}
             <code className="rounded bg-muted px-1">CANVIX_TRAFFIC=0</code>.
           </p>
         </Card>

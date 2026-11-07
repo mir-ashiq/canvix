@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withProvider, getVisionModel } from '@/lib/ai/provider'
+import { withProvider, DEFAULT_VISION_MODEL } from '@/lib/ai/provider'
 import { validateAnalysis } from '@/lib/magic-layers/validate'
 import { withLogging } from '@/lib/observability'
 
@@ -30,7 +30,7 @@ async function __canvix_post(req: NextRequest) {
     return NextResponse.json({ error: 'Image too large — max ~6 MB after normalization.' }, { status: 413 })
   }
 
-  return withProvider('magic-layers', req, { limit: 10, windowSec: 60 }, async (zai) => {
+  return withProvider('magic-layers', req, { limit: 10, windowSec: 60 }, async (ctx) => {
     const system =
       'You are a precise design-image analyzer for a graphic-design editor. You look at a FLAT (raster) design ' +
       'image and decompose it into an editable layer structure: background, text regions, photo regions, shapes ' +
@@ -55,8 +55,8 @@ async function __canvix_post(req: NextRequest) {
       '9. If the background is a photo/illustration, use kind=photo and still list visible foreground regions.\n' +
       '10. notes = one short sentence about what the reconstruction will approximate (e.g. "illustration left of title will become a cropped image region").'
 
-    const completion = await zai.chat.completions.createVision({
-      model: await getVisionModel(),
+    const completion = await ctx.zai.chat.completions.createVision({
+      model: ctx.model ?? DEFAULT_VISION_MODEL,
       messages: [
         { role: 'system', content: system },
         {

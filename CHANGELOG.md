@@ -3,6 +3,59 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.16.2] — 2026-11-07
+
+### Fixed
+
+- **Every console/env-configured AI provider failed with "Configuration
+  file not found or invalid" (A2 root-cause fix).** A1 injected the
+  resolved provider into `process.env.ZAI_BASE_URL`/`ZAI_API_KEY` before
+  calling `ZAI.create()`, on the belief that the SDK resolved env vars.
+  It does not — the SDK's `loadConfig()` only ever reads
+  `.z-ai-config` files (cwd → ~ → /etc). On any host without that file
+  (the canvix.app VPS included) every "Test connection" answered
+  502 "Provider initialization failed" and every AI feature answered
+  503, no matter what was saved in the console. `makeClient()`
+  (src/lib/ai/provider.ts) now constructs the SDK directly with the
+  resolved `{ baseUrl, apiKey }` — the constructor takes exactly that
+  shape, and any OpenAI-compatible endpoint works through it.
+
+### Added
+
+- **Multi-provider AI configuration (A2).** `/admin`'s AI page now has
+  a providers table — up to eight OpenAI-compatible endpoints (NVIDIA
+  NIM, OpenRouter, Z.ai, Groq, OpenAI…), one write-only key each — and
+  five capability slots (`text`, `vision`, `image`, `imageEdit`,
+  `imageSearch`) that can each be pinned to a different provider +
+  model, so Magic Write can run on one vendor while image generation
+  runs on another. Per-slot precedence: providers table → legacy
+  single override → env vars → `.z-ai-config` → unconfigured.
+  `/api/ai/capabilities` probes per slot; keys are preserved on edit
+  (empty field = keep the stored credential); one click imports the
+  A1 single-provider override into the table. Storage is one more
+  `AppConfig` JSON row (`ai.providers`) — no schema change. Per-row
+  Test buttons probe a specific provider (`{ providerId }` body on
+  `/api/admin/config/ai-test`).
+- **Real-time traffic panel (A2).** `/admin`'s overview now leads with
+  a live panel fed by `GET /api/admin/realtime` (2 s polling,
+  self-excluded from its own counters): requests/errors per second
+  over the last 60 s, 5-minute request/error/active-visitor/AI-call
+  totals, p50/p95 latency and the window's top routes. Counters live
+  in `src/lib/admin/realtime.ts` — a zero-import, hard-capped,
+  in-memory module statically linked into the observability wrapper
+  (cannot repeat the v0.16.1 edge-bundle regression); visitors are
+  per-boot salted hashes, never raw IPs; `CANVIX_TRAFFIC=0` disables
+  live recording together with the durable counters. Process-local by
+  design — TrafficStat/AIUsage remain the durable record.
+
+### Changed
+
+- `withProvider()` handlers now receive one `{ zai, model }` context
+  instead of a bare client — a slot's provider and model can no longer
+  drift apart between resolution and the request.
+- MCP `generate_design` uses the text slot's provider + model (was:
+  SDK default on whatever `getZAI()` resolved).
+
 ## [0.16.1] — 2026-11-07
 
 ### Fixed

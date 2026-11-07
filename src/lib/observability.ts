@@ -94,11 +94,50 @@ function countTraffic(name: string, method: string, status: number): void {
     .catch(() => {})
 }
 
+// ── live traffic (v0.16.2 A2) ───────────────────────────
+//
+// src/lib/admin/realtime.ts is ZERO-import, db-free and edge-safe, so
+// unlike the DB counters above it can be linked statically without
+// dragging anything into the edge instrumentation bundle. It powers
+// GET /api/admin/realtime (the console's live panel): per-second
+// request/error buckets, per-route minutes, hashed visitors and a
+// latency ring — all in-memory, all bounded (see that module's header).
+import { recordLiveRequest } from '@/lib/admin/realtime'
+
+/** Per-boot salt for visitor hashing — resets each restart, keeps the
+ *  hash non-guessable across boots without storing anything. */
+const VISITOR_SALT = Math.random().toString(36).slice(2)
+
+/**
+ * Privacy-preserving visitor key for the live counters: the client IP
+ * (first x-forwarded-for hop) hashed with the per-boot salt — djb2 is
+ * not a privacy boundary, but the raw IP is never stored anywhere and
+ * the key only ever feeds a COUNT. No IP → 'local' (on-host proxy).
+ */
+export function liveVisitorKey(req: Pick<NextRequest, 'headers'>): string {
+  const ip =
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    req.headers.get('x-real-ip') ||
+    ''
+  if (!ip) return 'local'
+  let h = 5381
+  const mixed = VISITOR_SALT + ip
+  for (let i = 0; i < mixed.length; i++) h = ((h << 5) + h + mixed.charCodeAt(i)) >>> 0
+  return 'v' + h.toString(36)
+}
+
+/** The live panel's own poll — excluded from the live counters so the
+ *  dashboard's 2-second refresh never becomes the busiest "route". */
+function isRealtimeSelfPoll(name: string): boolean {
+  return name.includes('/api/admin/realtime')
+}
+
 /**
  * Wrap an API route handler with opt-in request logging AND always-on
  * aggregate traffic counters (v0.16 A1 — CANVIX_TRAFFIC=0 opts out;
- * counts only, never ids/IPs/query strings). The stdout log side stays
- * a zero-cost passthrough when CANVIX_LOG is unset (the default): the
+ * counts only, never ids/IPs/query strings) plus the live in-memory
+ * counters behind the console's real-time panel (v0.16.2 A2). The
+ * stdout log side stays a zero-cost passthrough when CANVIX_LOG is unset (the default): the
  * wrapper checks once per call and never touches the response otherwise.
  * Never mutates the response — the handler's headers, streams and
  * status codes pass through untouched (the SSE route included).
@@ -124,6 +163,9 @@ export function withLogging<A extends unknown[]>(
         })
       }
       countTraffic(name, req.method, res.status)
+      if (!isRealtimeSelfPoll(name)) {
+        recordLiveRequest(name, res.status, now() - start, liveVisitorKey(req))
+      }
       return res
     } catch (error) {
       if (requestLoggingEnabled()) {
@@ -135,6 +177,9 @@ export function withLogging<A extends unknown[]>(
         })
       }
       countTraffic(name, req.method, 500)
+      if (!isRealtimeSelfPoll(name)) {
+        recordLiveRequest(name, 500, now() - start, liveVisitorKey(req))
+      }
       throw error
     }
   }

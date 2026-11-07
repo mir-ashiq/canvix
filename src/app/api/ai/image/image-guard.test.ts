@@ -19,14 +19,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // This sandbox (and dev machines) can carry a real /etc/.z-ai-config, which
-// would make getZAI() hit the live gateway from unit tests. Mock the SDK
-// module itself so the route's full happy path runs hermetically.
+// would make the provider path hit the live gateway from unit tests. Mock
+// the SDK module itself so the route's full happy path runs hermetically.
+//
+// v0.16.2 (A2): the app constructs the SDK directly (new ZAI({ baseUrl,
+// apiKey }) — see makeClient in provider.ts), because ZAI.create() only
+// reads a .z-ai-config file and ignores env vars. The mock is therefore
+// a CLASS now, mirroring the real constructor surface.
 const generationsCreate = vi.fn(async () => ({ data: [{ base64: 'aGVsbG8=' }] }))
 vi.mock('z-ai-web-dev-sdk', () => ({
-  default: {
-    create: vi.fn(async () => ({
-      images: { generations: { create: generationsCreate } },
-    })),
+  default: class MockZAI {
+    images: { generations: { create: typeof generationsCreate } }
+    constructor(_config: { baseUrl?: string; apiKey?: string }) {
+      this.images = { generations: { create: generationsCreate } }
+    }
   },
 }))
 

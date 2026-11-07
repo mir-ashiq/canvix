@@ -5,18 +5,26 @@ import {
   getFeatures,
   getSettings,
   getProviderOverride,
+  getProviders,
   setProvider,
   clearProvider,
   setModels,
   setFeatures,
   setSettings,
+  setProviders,
+  clearProviders,
+  importLegacyProvider,
   validateProvider,
   validateModels,
   validateFeatures,
   validateSettings,
+  validateProviderList,
+  validateSlots,
   maskApiKey,
+  type StoredProviderEntry,
+  type AiSlot,
 } from '@/lib/admin/config'
-import { resolveProvider } from '@/lib/ai/provider'
+import { resolveProvider, resolveSlot, type ResolvedSlot } from '@/lib/ai/provider'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { withLogging } from '@/lib/observability'
 
@@ -25,20 +33,50 @@ export const dynamic = 'force-dynamic'
 
 // GET/PUT /api/admin/config — the console's configuration surface.
 //
-// GET is sanitized by construction: the stored API key only ever comes
-// back as a mask, env vars as presence booleans, and the effective base
-// URL (whatever layer it came from) — enough to operate on, never a
-// credential. PUT validates section by section and returns the same
+// GET is sanitized by construction: stored API keys only ever come
+// back as masks, env vars as presence booleans, and effective base
+// URLs (whatever layer they came from) — enough to operate on, never
+// a credential. PUT validates section by section and returns the same
 // sanitized shape back.
+//
+// v0.16.2 (A2) adds the multi-provider sections:
+//   providers          { list: […], slots: {…} } | null — full replace /
+//                      clear of the ai.providers table
+//   importLegacyProvider: true — fold the A1 single override into the
+//                      table and clear the legacy row
+
+const SLOT_ORDER: AiSlot[] = ['text', 'vision', 'image', 'imageEdit', 'imageSearch']
+
+function slotView(resolved: ResolvedSlot | null) {
+  if (!resolved) return null
+  return {
+    providerId: resolved.providerId ?? null,
+    label: resolved.label ?? null,
+    baseUrl: resolved.baseUrl,
+    model: resolved.model ?? null,
+    source: resolved.source,
+  }
+}
 
 async function sanitizedView() {
-  const [provider, stored, models, features, settings] = await Promise.all([
+  const [provider, stored, providers, models, features, settings] = await Promise.all([
     resolveProvider(),
     getProviderOverride(),
+    getProviders(),
     getModels(),
     getFeatures(),
     getSettings(),
   ])
+  // per-slot resolution (multi table → legacy chain) for the slots card
+  const resolved = {} as Record<AiSlot, ReturnType<typeof slotView>>
+  await Promise.all(
+    SLOT_ORDER.map(async (slot) => {
+      resolved[slot] = slotView(await resolveSlot(slot))
+    })
+  )
+  const list: { id: string; label: string; baseUrl: string; keyMasked: string }[] = (providers?.providers ?? []).map(
+    (p: StoredProviderEntry) => ({ id: p.id, label: p.label, baseUrl: p.baseUrl, keyMasked: maskApiKey(p.apiKey) })
+  )
   return {
     provider: {
       configured: provider !== null,
@@ -49,6 +87,13 @@ async function sanitizedView() {
         urlSet: Boolean(process.env.ZAI_BASE_URL?.trim()),
         keySet: Boolean(process.env.ZAI_API_KEY?.trim()),
       },
+    },
+    providers: {
+      // the multi-provider table — null when nothing is stored yet
+      set: providers !== null,
+      list,
+      slots: providers?.slots ?? {},
+      resolved,
     },
     models,
     features,
@@ -75,11 +120,12 @@ async function __canvix_put(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
 
-    // ── provider section ────────────────────────────────────────
+    // ── provider section (legacy single override, v0.16 A1) ────
     // null clears the override (fall back to env/file). An object sets
     // it: both fields together activate, both empty clears, half-empty
     // is a 400 — the operator always gets an explicit error instead of
-    // a silently half-configured provider.
+    // a silently half-configured provider. Superseded per-slot by the
+    // providers table below, kept for compat and env/file management.
     if (body.provider !== undefined) {
       if (body.provider === null) {
         await clearProvider()
@@ -102,6 +148,36 @@ async function __canvix_put(req: NextRequest) {
       } else {
         return NextResponse.json({ error: 'provider must be an object or null.' }, { status: 400 })
       }
+    }
+
+    // ── providers section (multi-provider table, v0.16.2 A2) ───
+    // Full replace: { list: [{id?, label, baseUrl, apiKey?}], slots:
+    // { slot: {providerId, model?} | null } }. Keys are write-only —
+    // an entry whose apiKey is empty keeps its stored key (matched by
+    // id). null clears the whole table (slots fall back to the legacy
+    // chain above).
+    if (body.providers !== undefined) {
+      if (body.providers === null) {
+        await clearProviders()
+      } else if (typeof body.providers === 'object' && body.providers !== null && !Array.isArray(body.providers)) {
+        const raw = body.providers as Record<string, unknown>
+        const current = await getProviders()
+        const existing = new Map<string, StoredProviderEntry>((current?.providers ?? []).map((p) => [p.id, p]))
+        const listCheck = validateProviderList(raw.list, { existing })
+        if (!listCheck.ok) return NextResponse.json({ error: listCheck.error }, { status: 400 })
+        const ids = new Set(listCheck.value.map((p) => p.id))
+        const slotsCheck = validateSlots(raw.slots, ids)
+        if (!slotsCheck.ok) return NextResponse.json({ error: slotsCheck.error }, { status: 400 })
+        await setProviders({ providers: listCheck.value, slots: slotsCheck.value })
+      } else {
+        return NextResponse.json({ error: 'providers must be an object ({ list, slots }) or null.' }, { status: 400 })
+      }
+    }
+
+    // ── importLegacyProvider (one-click migration, A2) ─────────
+    if (body.importLegacyProvider === true) {
+      const result = await importLegacyProvider()
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
     // ── models section (full replace) ───────────────────────────

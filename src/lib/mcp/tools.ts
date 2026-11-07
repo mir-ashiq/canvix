@@ -11,7 +11,7 @@ import { FONTS } from '@/lib/editor-utils'
 import { isImageFilterId } from '@/lib/image-filters'
 import { exportPageToSVG } from '@/lib/svg-export'
 import { magicAnimatePage, clearPageAnimations } from '@/lib/animations'
-import { hasProvider, getZAI, recordUsage, rateLimit } from '@/lib/ai/provider'
+import { hasProvider, getClientForSlot, recordUsage, rateLimit } from '@/lib/ai/provider'
 import {
   createTextElement,
   createShapeElement,
@@ -467,11 +467,11 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
     handler: async (args) => {
       const query = asString(args.query).slice(0, 2000)
       if (query.length < 4) return fail('Provide a design brief ("query"), e.g. "Instagram post for a coffee shop launch — warm palette".')
-      const zai = await getZAI()
-      if (!zai) {
+      const ctx = await getClientForSlot('text')
+      if (!ctx) {
         await recordUsage('assistant', 'local', false).catch(() => undefined)
         return fail(
-          'generate_design requires an AI provider configured on the server (set ZAI_API_KEY or a .z-ai-config file). ' +
+          'generate_design requires an AI provider configured on the server (add one in /admin, set ZAI_API_KEY, or ship a .z-ai-config file). ' +
             'Without a provider you can still create designs from templates: list_templates → create_design → add_text/add_shape.'
         )
       }
@@ -497,7 +497,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
       ].join('\n')
 
       try {
-        const raw = await completeGeneration(zai, system, `Design brief: ${query}\nPage size: ${width}x${height}px`)
+        const raw = await completeGeneration(ctx, system, `Design brief: ${query}\nPage size: ${width}x${height}px`)
         if (!raw) return fail('The AI reply was not parseable JSON after one retry. Try rephrasing the brief.')
         const parsed = raw as Record<string, unknown>
         const spec = normalizeGeneratedDesign(parsed, width, height)
@@ -1337,7 +1337,7 @@ function sanitizePatch(patch: Record<string, unknown>, el: AnyElement, pageW: nu
 
 /** Ask the model for the design JSON; repair common JSON flaws and retry once. */
 async function completeGeneration(
-  zai: NonNullable<Awaited<ReturnType<typeof getZAI>>>,
+  ctx: NonNullable<Awaited<ReturnType<typeof getClientForSlot>>>,
   system: string,
   user: string
 ): Promise<Record<string, unknown> | null> {
@@ -1348,14 +1348,16 @@ async function completeGeneration(
     ]
     // strict JSON mode (supported by the provider); fall back to plain text on error
     try {
-      const completion = await zai.chat.completions.create({
+      const completion = await ctx.zai.chat.completions.create({
+        ...(ctx.model ? { model: ctx.model } : {}),
         messages,
         thinking: { type: 'disabled' },
         response_format: { type: 'json_object' },
       } as never)
       return completion.choices[0]?.message?.content ?? ''
     } catch {
-      const completion = await zai.chat.completions.create({
+      const completion = await ctx.zai.chat.completions.create({
+        ...(ctx.model ? { model: ctx.model } : {}),
         messages,
         thinking: { type: 'disabled' },
       })

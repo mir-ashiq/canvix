@@ -1,4 +1,4 @@
-# Admin console (v0.16 A1)
+# Admin console (v0.16 A1 · v0.16.2 A2)
 
 > **TL;DR** — set `CANVIX_ADMIN_USERS="your-username"`, restart, sign in:
 > the shield icon on the dashboard opens `/admin`. Everything below is
@@ -69,7 +69,29 @@ is changed; the env always wins, and the badge says so.
 
 ### AI & models
 
-**Provider precedence** (highest wins):
+**Providers (the multi-provider table, v0.16.2 A2).** Add up to
+8 providers — any OpenAI-compatible endpoint works (NVIDIA NIM,
+OpenRouter, Z.ai, Groq, OpenAI…): a label, a base URL and a
+write-only API key each. Every capability **slot** can then be pinned
+to a different provider + model:
+
+| Slot | What answers through it |
+| --- | --- |
+| `text` | Magic Write · Translate · Assistant (chat completions) |
+| `vision` | Magic Layers (image understanding) |
+| `image` | text-to-image |
+| `imageEdit` | Magic Eraser / Enhance |
+| `imageSearch` | stock photo search |
+
+A slot left on “— fall back —” ignores the table and walks the legacy
+chain below. `/api/ai/capabilities` now probes **per slot**, so wiring
+text to NVIDIA and images to Z.ai reports exactly those features as
+available. Editing a provider (label/URL) never demands the key again:
+an empty key field keeps the stored credential (matched by id);
+deleting the row and re-adding needs it. One click imports the old
+single-provider override into the table and clears the legacy row.
+
+**Fallback chain** for unpinned slots (highest wins):
 
 1. the **console override** stored in `AppConfig` (`ai.provider`),
 2. `ZAI_BASE_URL` + `ZAI_API_KEY` environment variables,
@@ -78,15 +100,17 @@ is changed; the env always wins, and the badge says so.
 
 The override needs **both** fields; sending `provider: null` clears it
 and restores the env/file fallback. The page always shows which layer is
-currently answering (`console / environment / config file`) and the
-effective base URL — but **never the key**: it is stored once and echoed
-back only as a mask (`sk-1…wxyz`). Same posture as the env var it
-overrides.
+currently answering per slot (`providers table / legacy override /
+environment / config file`) and the effective base URLs — but **never a
+key**: keys are stored once and echoed back only as masks
+(`sk-1…wxyz`). Same posture as the env vars they override.
 
-**Models** — `text` (Magic Write, Translate, Assistant), `vision`
-(Magic Layers, default `glm-4.5v`) and `image` ids. Empty = the SDK
-default, exactly the pre-console behaviour. Ids are validated
-(`[A-Za-z0-9._:+-]{1,120}`) before they can reach the provider.
+**Models** — per-slot model ids in the providers table; the fallback
+chain still reads the legacy `text` / `vision` / `image` ids (`vision`
+defaults to `glm-4.5v`). Empty = the provider's default, exactly the
+pre-console behaviour. Ids are validated (`[A-Za-z0-9._:+/@-]{1,120}` — `/`
+for NVIDIA NIM namespaces, `@` for OpenRouter prefixes)
+before they can reach a provider.
 
 **Feature switches** — seven kill switches (Magic Write, image
 generation, image editing, Magic Layers, translation, Assistant, photo
@@ -100,7 +124,11 @@ search). A switched-off feature:
 
 **Test connection** — one minimal chat completion (thinking disabled,
 one-word reply, 15 s circuit breaker), rate-limited to one probe per
-10 s. It is the only console action that spends provider quota.
+10 s. It is the only console action that spends provider quota. Each
+provider row has its own Test button; the fallback card tests the
+resolved text slot. The probe goes through the SDK constructor with the
+resolved `{ baseUrl, apiKey }` — never `ZAI.create()`, whose file-only
+lookup ignored env vars and broke every test since A1 (see D3).
 
 ### Settings
 
@@ -114,6 +142,8 @@ one-word reply, 15 s circuit breaker), rate-limited to one probe per
   writes, not reads.
 
 ## 3. Traffic & activity recording — the model
+
+**Durable** (the charts):
 
 - One `TrafficStat` row per **(UTC day, route template, method,
   status)**, incremented fire-and-forget by the `withLogging` wrapper.
@@ -132,11 +162,29 @@ one-word reply, 15 s circuit breaker), rate-limited to one probe per
   target) is exact. Improving this needs `waitUntil` plumbing through
   every route — deliberately out of scope for A1.
 
-Config reads (feature switches, settings, provider) are cached
+Config reads (feature switches, settings, provider table) are cached
 in-process for **10 s** and invalidated on write — one tiny indexed
 `findMany` per window per instance. A failed config read falls back to
 defaults (= pre-A1 behaviour): these toggles are additive restrictions
 and a flapping read must not brick design autosave.
+
+**Live** (v0.16.2 A2, the “Live traffic” panel): an in-memory rolling
+window recorded by the same `withLogging` wrapper — per-second
+request/error buckets (last 60 s shown), per-route per-minute hits,
+hashed visitor keys and a latency ring, all capped and swept (see
+`src/lib/admin/realtime.ts`). Semantics worth knowing:
+
+- **process-local** — counters reset on restart; TrafficStat/AIUsage
+  remain the durable record,
+- **single process** — each Node process counts its own requests (the
+  self-hosted standalone deploy is one process),
+- the panel polls `GET /api/admin/realtime` every 2 s and **that poll
+  is excluded** from the live counters (the dashboard must not become
+  its own top route); it is still counted in the durable tables,
+- visitors are counted through a per-boot salted hash of the client IP
+  — a count key, not an identity; raw IPs are never stored anywhere,
+- `CANVIX_TRAFFIC=0` disables live recording together with the durable
+  counters.
 
 ## 4. API surface (for scripts)
 
@@ -145,16 +193,37 @@ All `/api/admin/*` routes re-check the session independently of the UI
 
 ```
 GET  /api/admin/overview                     — everything the Overview page shows
+GET  /api/admin/realtime                     — live counters (polled every 2 s)
 GET  /api/admin/users?q=&page=               — directory + per-user aggregates
 POST /api/admin/users/<id>/role              — { role: "admin" | "user" }
 POST /api/admin/users/<id>/sessions          — revoke all sessions of one user
-GET  /api/admin/config                       — sanitized config (masked key)
-PUT  /api/admin/config                       — { provider?|models?|features?|settings? }
+GET  /api/admin/config                       — sanitized config (masked keys)
+PUT  /api/admin/config                       — { provider? | providers? | models? | features? | settings? | importLegacyProvider? }
 POST /api/admin/config/ai-test               — live provider probe (1 / 10 s)
 ```
 
-`PUT` accepts any subset of the four sections; `features` and `settings`
-merge over current values, `models` replaces, `provider` follows §2.
+`PUT` accepts any subset of the sections; `features` and `settings`
+merge over current values, `models` replaces, `provider` follows §2,
+`providers` full-replaces the table:
+
+```jsonc
+{
+  "providers": {
+    "list": [
+      { "id": "pnvidia", "label": "NVIDIA NIM", "baseUrl": "https://integrate.api.nvidia.com/v1" },
+      { "label": "Z.ai", "baseUrl": "https://api.z.ai/v1", "apiKey": "sk-…" }
+    ],
+    "slots": { "text": { "providerId": "pnvidia", "model": "meta/llama-3.1-70b-instruct" }, "image": null }
+  }
+}
+```
+
+Ids are optional on input (generated server-side); an omitted `apiKey`
+keeps the stored key for that id; `providers: null` clears the table.
+`importLegacyProvider: true` folds the A1 single override into the table.
+
+`ai-test` body: `{}` probes the resolved text slot; `{ providerId }`
+probes that provider; `model` overrides the model for the probe.
 
 ## 5. Dependency & design decisions — on record
 
@@ -166,12 +235,16 @@ merge over current values, `models` replaces, `provider` follows §2.
 - **D2 — admin resolution is DB role OR env list.** Fail-closed both
   ways; no implicit first-user admin; the env list doubles as the
   lockout recovery path.
-- **D3 — provider injection via `process.env`.** `ZAI.create()` takes
-  no arguments and resolves its own config from env/file (verified
-  against the SDK typings). A console-set provider is therefore
-  injected into `process.env.ZAI_BASE_URL`/`ZAI_API_KEY` before
-  instantiation — server-side, in-memory, the exact variables the
-  documented env setup uses.
+- **D3 — provider clients are constructed directly (A2 correction).**
+  A1 injected console providers into `process.env.ZAI_*` before
+  `ZAI.create()`, believing the SDK resolved env vars. It does not —
+  `loadConfig()` only reads `.z-ai-config` files, so every
+  console/env-configured provider failed instantiation with
+  "Configuration file not found or invalid" (the root cause behind
+  every failed Test connection on canvix.app). The SDK class
+  constructor takes exactly `{ baseUrl, apiKey }`; `makeClient()`
+  (src/lib/ai/provider.ts) now constructs it directly with the resolved
+  config. The env-injection path is gone.
 - **D4 — API keys are write-only.** Stored in `AppConfig`, returned
   only as `maskApiKey()` output; GET responses never contain a full
   key (unit-tested).
@@ -192,6 +265,20 @@ merge over current values, `models` replaces, `provider` follows §2.
   other specs honor.
 - **D10 — self-role-change is refused** (`SELF_ROLE_CHANGE`), so the
   console cannot be used to lock out its only operator.
+- **D11 — per-slot provider resolution (A2).** The multi-provider
+  table lives in the existing `AppConfig` JSON store (`ai.providers`) —
+  **no schema change, no new migration**. Slots that reference a
+  deleted provider fall through to the legacy chain instead of failing
+  the feature (fail-open, the same stance as D6).
+- **D12 — real-time counters are a zero-import in-memory module (A2).**
+  `src/lib/admin/realtime.ts` imports nothing — so linking it statically
+  into the stdlib-only observability module cannot repeat the v0.16.1
+  edge-bundle regression — and every structure is hard-capped and
+  swept (bounded memory by construction).
+- **D13 — the live panel's own poll is not counted live (A2).** The
+  2-second `/api/admin/realtime` poll is excluded from the in-memory
+  counters so the dashboard's refresh never dominates the “top routes”
+  view; it is still recorded in the durable tables.
 
 ## 6. Database changes (migration `0009_admin_console`)
 
@@ -202,4 +289,6 @@ CREATE TABLE "TrafficStat"  (…  UNIQUE(day, route, method, status));
 CREATE TABLE "DailyActive"  (…  UNIQUE(day, actor));
 ```
 
-`npm run db:setup` applies it; nothing else changes.
+`npm run db:setup` applies it; nothing else changes. **A2 adds no
+migration** — the multi-provider table is one more `AppConfig` row
+(`ai.providers`), and live traffic keeps no database state at all.

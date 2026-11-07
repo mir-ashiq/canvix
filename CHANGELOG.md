@@ -3,6 +3,60 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.16.0] — 2026-11-07
+
+### Added
+
+- **Admin console, part 1 (A1).** `/admin` — the operator surface for
+  a self-hosted instance, with **zero new dependencies** (Prisma
+  models, hand-rolled SVG charts, the existing stack). Operator guide
+  and full decision record: `docs/ADMIN.md`. The highlights:
+  - **Fail-closed admin access.** Two paths only: the
+    `CANVIX_ADMIN_USERS` env bootstrap (set it, restart, sign in —
+    also the lockout recovery path) or a `User.role = 'admin'` granted
+    by another admin from the console. No first-user-is-admin, no
+    secret URL. The API re-checks every call independently of the UI
+    (401 unsigned / 403 non-admin); mutations are same-origin guarded;
+    self-role-change is refused.
+  - **Traffic analytics.** Every API request (all routes already pass
+    through the `withLogging` wrapper) increments a per-day aggregate:
+    route template, method, status, count — **never ids, IPs or query
+    strings**. The Overview page shows 14-day traffic, daily-active
+    users (userIds + hashed anon keys from dashboard/editor opens),
+    signups and AI calls (teal ok / red failed), plus top routes and
+    AI usage by feature. 90-day lazy retention; `CANVIX_TRAFFIC=0`
+    opts out; the workerd fire-and-forget caveat is documented.
+  - **User directory.** Searchable, paginated, with design counts,
+    active sessions and last activity per user; admin grant/revoke
+    with a two-step inline confirm; force sign-out (one bounded
+    DELETE on `Session`).
+  - **AI provider & model configuration.** A console override that
+    wins over `ZAI_BASE_URL`/`ZAI_API_KEY` (write-only key, masked
+    echo, half-configured states rejected), configurable
+    text/vision/image model ids validated before use, a live
+    connection test (1 per 10 s, 15 s circuit breaker), and seven
+    per-feature kill switches that gate the routes *and* the public
+    capabilities endpoint — a switched-off feature greys out in the
+    editor and answers 503 before any provider work.
+  - **Instance settings.** "Allow new sign-ups" answers
+    `503 SIGNUPS_CLOSED` — checked *before* the rate limiter so a
+    closed instance burns none of a visitor's attempt budget.
+    "Anonymous editing" gates anonymous design creation/saves only;
+    reading, sharing and exporting never break.
+  - **Honest e2e without registrations.** The acceptance spec seeds
+    its fixture users and sessions straight into Postgres (the `pg`
+    driver already in the tree) — the suite stays inside the 5/h/IP
+    register budget while proving the full path: gating, role
+    round-trip, switches reaching `/api/ai/capabilities`, counters
+    landing in the overview.
+
+### Changed
+
+- Prisma migration `0009_admin_console` (additive): `User.role`
+  default `'user'`, `AppConfig`, `TrafficStat`, `DailyActive`.
+- The Word Cloud plugin's `engines.canvix` range widened to
+  `>=0.13.4 <0.17.0` for this minor series.
+
 ## [0.15.5] — 2026-11-07
 
 ### Added

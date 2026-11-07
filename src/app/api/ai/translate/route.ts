@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withProvider } from '@/lib/ai/provider'
+import { withProvider, getTextModel } from '@/lib/ai/provider'
 import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
@@ -57,6 +57,7 @@ async function __canvix_post(req: NextRequest) {
 
   return withProvider('translate', req, { limit: 15, windowSec: 60 }, async (zai) => {
     const completion = await zai.chat.completions.create({
+      model: await getTextModel(),
       messages: [
         { role: 'assistant', content: system },
         { role: 'user', content: user },

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withProvider } from '@/lib/ai/provider'
+import { withProvider, getImageModel } from '@/lib/ai/provider'
 import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
@@ -27,6 +27,7 @@ async function __canvix_post(req: NextRequest) {
 
   return withProvider('image', req, { limit: 5, windowSec: 60 }, async (zai) => {
     const response = await zai.images.generations.create({
+      model: await getImageModel(),
       prompt,
       size,
     })

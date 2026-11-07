@@ -636,6 +636,30 @@ are the self-hoster's to read:
   timestamp. 5-second timeout, fire-and-forget — a broken webhook
   never takes the error path down with it.
 
+### 🛡 Admin console (v0.16 A1)
+
+Set `CANVIX_ADMIN_USERS="your-username"`, restart, sign in — a shield
+icon on the dashboard opens `/admin`:
+
+- **Overview** — users, designs, media, sessions and comments totals;
+  14-day API-traffic, daily-active, signup and AI-call charts (hand-
+  rolled SVG, zero new dependencies); top routes; AI usage by feature;
+  DB latency and provider status
+- **Users** — searchable directory with design counts, active sessions
+  and last activity; grant/revoke admin rights (two-step confirm,
+  self-change refused); force sign-out everywhere
+- **AI & models** — a provider override that wins over the env vars
+  (write-only API key, masked echo), configurable text/vision/image
+  model ids, seven per-feature kill switches that actually gate the
+  routes, and a live connection test
+- **Settings** — allow new sign-ups (503 before the rate limiter),
+  anonymous editing on/off (gates writes, never reads), instance facts
+
+Traffic counters are per-day aggregates — counts only, never ids, IPs
+or query strings; 90-day retention; `CANVIX_TRAFFIC=0` opts out. The
+operator guide and the full decision record live in
+[`docs/ADMIN.md`](docs/ADMIN.md).
+
 ## 🛠 Tech stack
 
 | Layer | Choice |
@@ -1132,6 +1156,16 @@ tool descriptions so agents pick the right format.
       into exports. Zero new dependencies; tested against recorded
       provider fixtures + a local mock-provider acceptance suite
       wired into CI. *(v0.15.5)*
+- [x] Admin console (v0.16 A1) — the operator surface: fail-closed
+      admin access (`CANVIX_ADMIN_USERS` env bootstrap + DB roles, no
+      first-user-is-admin), traffic analytics from per-day aggregate
+      counters (counts only — never ids, IPs or query strings; 90-day
+      retention, `CANVIX_TRAFFIC=0` opts out), a user directory with
+      role management and force sign-out, AI provider/model/feature
+      configuration (write-only keys, seven kill switches that gate
+      the routes *and* the capabilities endpoint), and instance
+      settings (sign-ups, anonymous editing). Zero new dependencies;
+      decisions on record in `docs/ADMIN.md`. *(v0.16.0)*
 - [ ] Mobile editor polish — touch-first selection handles, gesture
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)

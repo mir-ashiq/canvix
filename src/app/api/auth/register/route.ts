@@ -8,6 +8,7 @@ import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { withLogging } from '@/lib/observability'
 import { claimAnonMedia } from '@/lib/auth/claim-media'
 import { claimAnonFolders } from '@/lib/auth/claim-folders'
+import { getSettings } from '@/lib/admin/config'
 
 // POST /api/auth/register — create an account (username + password).
 // Free forever: no email, no verification, no external provider — a
@@ -15,6 +16,15 @@ import { claimAnonFolders } from '@/lib/auth/claim-folders'
 // v0.9.1: same-origin enforced (blocks cross-site forced sign-ups).
 async function __canvix_post(req: NextRequest) {
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
+  // v0.16 (A1): the admin console's "allow new sign-ups" switch. Checked
+  // BEFORE the rate limiter so a closed instance burns none of an honest
+  // visitor's 5/hour attempts on a doomed request.
+  if (!(await getSettings()).signupsOpen) {
+    return NextResponse.json(
+      { error: 'Sign-ups are currently closed on this instance.', code: 'SIGNUPS_CLOSED' },
+      { status: 503 }
+    )
+  }
   const rl = rateLimit('auth:register', req, 5, 3600)
   if (!rl.ok) {
     return NextResponse.json(

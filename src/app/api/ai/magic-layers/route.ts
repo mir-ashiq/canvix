@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withProvider, VISION_MODEL } from '@/lib/ai/provider'
+import { withProvider, getVisionModel } from '@/lib/ai/provider'
 import { validateAnalysis } from '@/lib/magic-layers/validate'
 import { withLogging } from '@/lib/observability'
 
@@ -56,7 +56,7 @@ async function __canvix_post(req: NextRequest) {
       '10. notes = one short sentence about what the reconstruction will approximate (e.g. "illustration left of title will become a cropped image region").'
 
     const completion = await zai.chat.completions.createVision({
-      model: VISION_MODEL,
+      model: await getVisionModel(),
       messages: [
         { role: 'system', content: system },
         {

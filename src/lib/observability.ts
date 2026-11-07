@@ -21,6 +21,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { NextRequest } from 'next/server'
+import { recordTraffic } from '@/lib/admin/traffic'
 
 /** The app version answering requests — from package.json at build time. */
 export const APP_VERSION = process.env.npm_package_version ?? 'unknown'
@@ -67,9 +68,11 @@ export function logApiRequest(entry: ApiRequestLog): void {
 }
 
 /**
- * Wrap an API route handler with opt-in request logging. Zero-cost
- * passthrough when CANVIX_LOG is unset (the default): the wrapper
- * checks once per call and never touches the response otherwise.
+ * Wrap an API route handler with opt-in request logging AND always-on
+ * aggregate traffic counters (v0.16 A1 — CANVIX_TRAFFIC=0 opts out;
+ * counts only, never ids/IPs/query strings). The stdout log side stays
+ * a zero-cost passthrough when CANVIX_LOG is unset (the default): the
+ * wrapper checks once per call and never touches the response otherwise.
  * Never mutates the response — the handler's headers, streams and
  * status codes pass through untouched (the SSE route included).
  */
@@ -78,24 +81,33 @@ export function withLogging<A extends unknown[]>(
   handler: (req: NextRequest, ...args: A) => Promise<Response>,
 ): (req: NextRequest, ...args: A) => Promise<Response> {
   return async (req, ...args) => {
-    if (!requestLoggingEnabled()) return handler(req, ...args)
+    // v0.16 (A1): aggregate traffic counters — independent of the stdout
+    // switch above. Fire-and-forget by contract (recordTraffic swallows
+    // its own errors); counting must never delay or break the response
+    // it counts.
     const start = now()
     try {
       const res = await handler(req, ...args)
-      logApiRequest({
-        method: req.method,
-        path: new URL(req.url).pathname,
-        status: res.status,
-        durationMs: now() - start,
-      })
+      if (requestLoggingEnabled()) {
+        logApiRequest({
+          method: req.method,
+          path: new URL(req.url).pathname,
+          status: res.status,
+          durationMs: now() - start,
+        })
+      }
+      void recordTraffic(name, req.method, res.status)
       return res
     } catch (error) {
-      logApiRequest({
-        method: req.method,
-        path: new URL(req.url).pathname,
-        status: 500,
-        durationMs: now() - start,
-      })
+      if (requestLoggingEnabled()) {
+        logApiRequest({
+          method: req.method,
+          path: new URL(req.url).pathname,
+          status: 500,
+          durationMs: now() - start,
+        })
+      }
+      void recordTraffic(name, req.method, 500)
       throw error
     }
   }

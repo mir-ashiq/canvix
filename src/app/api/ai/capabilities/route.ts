@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { hasProvider } from '@/lib/ai/provider'
+import { getFeatures } from '@/lib/admin/config'
 import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
@@ -12,17 +13,21 @@ export const dynamic = 'force-dynamic'
  * Only ever exposes which capabilities exist — never config, never keys.
  */
 async function __canvix_get() {
-  const configured = hasProvider()
+  // v0.16 (A1): a capability is available when a provider answers AND
+  // the admin console has not switched the feature off. Still booleans
+  // only — never config, never keys, never which layer answered.
+  const configured = await hasProvider()
+  const flags = await getFeatures()
   return NextResponse.json({
     configured,
     capabilities: {
-      magicWrite: configured,
-      imageGeneration: configured,
-      imageEditing: configured,
-      vision: configured,          // Magic Layers
-      translation: configured,
-      assistant: configured,
-      photoSearch: configured,
+      magicWrite: configured && flags.magicWrite,
+      imageGeneration: configured && flags.imageGeneration,
+      imageEditing: configured && flags.imageEditing,
+      vision: configured && flags.vision,          // Magic Layers
+      translation: configured && flags.translation,
+      assistant: configured && flags.assistant,
+      photoSearch: configured && flags.photoSearch,
       backgroundRemoval: true,     // local ONNX — always available
       colorPalette: true,          // local deterministic
       layoutSuggestions: true,     // local deterministic

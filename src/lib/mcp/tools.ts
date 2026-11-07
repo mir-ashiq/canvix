@@ -1178,7 +1178,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
       return ok({
         server: 'canvix',
         version: SERVER_VERSION,
-        aiProvider: hasProvider() ? 'available (generate_design works)' : 'not configured (generate_design unavailable; all other tools work)',
+        aiProvider: (await hasProvider()) ? 'available (generate_design works)' : 'not configured (generate_design unavailable; all other tools work)',
         transport: 'streamable-http (stateless)',
         auth: 'bearer token via CANVIX_MCP_TOKEN',
       })

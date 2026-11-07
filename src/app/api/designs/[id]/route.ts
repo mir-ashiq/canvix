@@ -7,6 +7,10 @@ import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 import { mergePages } from '@/lib/collab/merge'
 import type { PageData } from '@/lib/types'
 import { withLogging } from '@/lib/observability'
+import { getSessionUser } from '@/lib/auth/session'
+import { anonHashFrom } from '@/lib/auth/anon'
+import { recordActive } from '@/lib/admin/traffic'
+import { getSettings } from '@/lib/admin/config'
 
 // Normalise incoming pages payload (accepts object or legacy JSON string)
 // into a value suitable for the Postgres jsonb column.
@@ -34,6 +38,8 @@ async function __canvix_get(req: NextRequest, { params }: { params: Promise<{ id
     const access = await resolveDesignAccess(req, id)
     if (!access) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const design = access.design
+    // v0.16 (A1): opening the editor counts as daily activity
+    void recordActive((await getSessionUser(req))?.id ?? anonHashFrom(req))
     const maxEvent = await db.designEvent
       .aggregate({ where: { designId: id }, _max: { id: true } })
       .catch(() => null)
@@ -69,6 +75,17 @@ async function __canvix_put(req: NextRequest, { params }: { params: Promise<{ id
     const access = await resolveDesignAccess(req, id)
     if (!access) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     if (!access.canEdit) return NextResponse.json(NOT_YOUR_DESIGN, { status: 403 })
+
+    // v0.16 (A1): anonymous saves are refused when the console disables
+    // anonymous editing (the ownerless commons included). The session is
+    // only resolved on the disabled path — the default path costs one
+    // cached config read and nothing else.
+    if (!(await getSettings()).anonymousEditing && !(await getSessionUser(req))) {
+      return NextResponse.json(
+        { error: 'Anonymous editing is disabled on this instance. Sign in to save changes.', code: 'ANON_DISABLED' },
+        { status: 403 }
+      )
+    }
 
     const body = await req.json()
     const data: Record<string, unknown> = {}

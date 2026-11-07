@@ -18,6 +18,7 @@ import {
   Square,
   FileImage,
   Github,
+  Shield,
   LayoutGrid,
   LayoutTemplate,
   FolderOpen,
@@ -409,6 +410,16 @@ export function Dashboard() {
           </button>
         ))}
         <div className="mt-auto flex flex-col items-center gap-2">
+          {user?.admin && (
+            <a
+              href="/admin"
+              className="w-9 h-9 rounded-full text-white/50 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors"
+              aria-label="Admin console"
+              title="Admin console"
+            >
+              <Shield size={18} />
+            </a>
+          )}
           <a
             href="https://github.com/mir-ashiq/canvix"
             target="_blank"

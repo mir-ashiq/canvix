@@ -123,7 +123,10 @@ export async function probeSlot(slot: string, target: ProbeTarget): Promise<{ ve
           size: '1024x1024',
         })
       )
-      const has = Boolean((r as { data?: { base64?: string }[] }).data?.[0]?.base64)
+      // v0.16.3 (A3): OpenAI-compatible providers answer b64_json — the
+      // same fallback the image route applies.
+      const item = (r as { data?: { base64?: string; b64_json?: string }[] }).data?.[0]
+      const has = Boolean(item?.base64 ?? item?.b64_json)
       return {
         verdict: {
           ok: true,
@@ -132,7 +135,7 @@ export async function probeSlot(slot: string, target: ProbeTarget): Promise<{ ve
           httpStatus: 200,
           message: has
             ? 'Generated a test image end-to-end — the full path works.'
-            : 'The provider answered but returned no image data.',
+            : 'The provider answered but returned no image data — check the Logs view for its error (prompt filters reject benign probes now and then).',
         },
       }
     } catch (err) {

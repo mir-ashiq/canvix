@@ -79,6 +79,13 @@ describe('probeSlot (A3)', () => {
     expect(generationsCreate).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.any(String) }))
   })
 
+  it('accepts OpenAI-style b64_json responses as a successful generation', async () => {
+    generationsCreate.mockResolvedValueOnce({ data: [{ b64_json: 'aGk=' }] } as unknown as Awaited<ReturnType<typeof generationsCreate>>)
+    const out = await probeSlot('image', TARGET)
+    expect(out.verdict.ok).toBe(true)
+    expect(out.verdict.message).toContain('end-to-end')
+  })
+
   it('image 404 becomes a classified verdict, never a thrown error', async () => {
     generationsCreate.mockRejectedValueOnce(new Error('API request failed with status 404: 404 page not found'))
     const out = await probeSlot('image', TARGET)

@@ -22,6 +22,8 @@ export const SESSION_TTL_DAYS = 30
 export interface SessionUser {
   id: string
   username: string
+  /** v0.16 (A1): 'user' | 'admin' (effective admin also honours CANVIX_ADMIN_USERS). */
+  role: string
   createdAt: Date
 }
 
@@ -72,13 +74,16 @@ export async function destroySession(req: NextRequest, res: NextResponse): Promi
  * Resolve the signed-in user from the request cookie.
  * Returns null when absent, expired, or dangling (user deleted).
  */
-export async function getSessionUser(req: NextRequest): Promise<SessionUser | null> {
-  const token = req.cookies.get(SESSION_COOKIE)?.value
+/**
+ * Resolve the signed-in user from a raw session token — shared by the
+ * request-cookie path and the RSC cookies() path (the admin layout).
+ */
+export async function getSessionUserFromToken(token: string | null | undefined): Promise<SessionUser | null> {
   if (!token || token.length > 128) return null
   try {
     const row = await db.session.findUnique({
       where: { id: sessionIdFor(token) },
-      include: { user: { select: { id: true, username: true, createdAt: true } } },
+      include: { user: { select: { id: true, username: true, role: true, createdAt: true } } },
     })
     if (!row) return null
     if (row.expiresAt.getTime() < Date.now()) {
@@ -90,4 +95,9 @@ export async function getSessionUser(req: NextRequest): Promise<SessionUser | nu
     // DB unavailable — treat as signed out, never crash a route over auth
     return null
   }
+}
+
+/** Request-cookie wrapper — the usual API-route entry point. */
+export async function getSessionUser(req: NextRequest): Promise<SessionUser | null> {
+  return getSessionUserFromToken(req.cookies.get(SESSION_COOKIE)?.value)
 }

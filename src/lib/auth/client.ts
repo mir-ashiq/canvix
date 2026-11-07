@@ -12,6 +12,8 @@ export interface AuthUser {
   id: string
   username: string
   createdAt: string
+  /** v0.16 (A1): true when /api/auth/me resolved an admin (DB role or env bootstrap). */
+  admin?: boolean
 }
 
 export interface AuthState {

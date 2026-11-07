@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { existsSync, readFileSync } from 'fs'
 import { CSRF_REJECTED } from '@/lib/auth/csrf'
+import { getProviderOverride, aiFeatureEnabled, getModels, type AiFeature } from '@/lib/admin/config'
 
 /**
  * Canvix AI provider abstraction (v0.5).
@@ -26,8 +27,24 @@ export interface AIProviderConfig {
   apiKey: string
 }
 
-/** VISION_MODEL — the multimodal model used for Magic Layers analysis. */
-export const VISION_MODEL = 'glm-4.5v'
+/** Default multimodal model for Magic Layers analysis (v0.16 A1: overridable from /admin). */
+export const DEFAULT_VISION_MODEL = 'glm-4.5v'
+
+// ── v0.16 (A1): model selection from the admin console ──────────
+// Stored in AppConfig (ai.models), validated by src/lib/admin/config.ts.
+// Undefined = let the SDK pick its own default — the pre-A1 behaviour.
+
+export async function getTextModel(): Promise<string | undefined> {
+  return (await getModels()).text
+}
+
+export async function getVisionModel(): Promise<string> {
+  return (await getModels()).vision ?? DEFAULT_VISION_MODEL
+}
+
+export async function getImageModel(): Promise<string | undefined> {
+  return (await getModels()).image
+}
 
 /**
  * Resolve the provider configuration.
@@ -69,9 +86,27 @@ export function resolveProviderConfig(): AIProviderConfig | null {
   return null
 }
 
-/** Quick boolean probe used by /api/ai/capabilities and route guards. */
-export function hasProvider(): boolean {
-  return resolveProviderConfig() !== null
+/**
+ * Full resolution with provenance (v0.16 A1): console DB override → env
+ * vars → .z-ai-config file → null. The console-set override wins so an
+ * operator can point the instance at a different provider without a
+ * redeploy; `source` is surfaced in /admin (which layer answered —
+ * never the secret itself).
+ */
+export async function resolveProvider(): Promise<{ baseUrl: string; apiKey: string; source: 'db' | 'env' | 'file' } | null> {
+  const fromDb = await getProviderOverride()
+  if (fromDb) return { ...fromDb, source: 'db' }
+  const envUrl = process.env.ZAI_BASE_URL?.trim()
+  const envKey = process.env.ZAI_API_KEY?.trim()
+  if (envUrl && envKey) return { baseUrl: envUrl, apiKey: envKey, source: 'env' }
+  const fromFile = resolveProviderConfig()
+  if (fromFile) return { ...fromFile, source: 'file' }
+  return null
+}
+
+/** Async probe used by /api/ai/capabilities, MCP tools and route guards. */
+export async function hasProvider(): Promise<boolean> {
+  return (await resolveProvider()) !== null
 }
 
 /**
@@ -79,9 +114,20 @@ export function hasProvider(): boolean {
  * never lands in a client bundle. Returns null when unconfigured.
  */
 export async function getZAI(): Promise<import('z-ai-web-dev-sdk').default | null> {
-  const cfg = resolveProviderConfig()
+  const cfg = await resolveProvider()
   if (!cfg) return null
   try {
+    // The SDK's ZAI.create() takes no arguments and resolves its own
+    // config from ZAI_BASE_URL/ZAI_API_KEY env or the .z-ai-config file
+    // (verified against the SDK's typings). A console-set (DB) provider
+    // is therefore injected through process.env before instantiation —
+    // server-side, in-memory, and exactly the variable the documented
+    // env setup uses, so the SDK keeps one consistent config surface.
+    // Decision recorded in docs/ADMIN.md.
+    if (cfg.source === 'db') {
+      process.env.ZAI_BASE_URL = cfg.baseUrl
+      process.env.ZAI_API_KEY = cfg.apiKey
+    }
     const { default: ZAI } = await import('z-ai-web-dev-sdk')
     return await ZAI.create()
   } catch (err) {
@@ -184,12 +230,35 @@ function isFromApp(req: NextRequest): boolean {
   }
 }
 
+/** withProvider feature name → admin console flag (src/lib/admin/config.ts). */
+const FEATURE_FLAGS: Record<string, AiFeature> = {
+  write: 'magicWrite',
+  image: 'imageGeneration',
+  'image-edit': 'imageEditing',
+  'magic-layers': 'vision',
+  translate: 'translation',
+  assistant: 'assistant',
+  search: 'photoSearch',
+}
+
+export const FEATURE_DISABLED = {
+  error: 'This AI feature is disabled by the administrator.',
+  code: 'FEATURE_DISABLED',
+} as const
+
 export async function withProvider(
   feature: string,
   req: NextRequest,
   limits: { limit: number; windowSec: number },
   fn: (zai: NonNullable<Awaited<ReturnType<typeof getZAI>>>) => Promise<NextResponse>
 ): Promise<NextResponse> {
+  // v0.16 (A1): per-feature kill switch from the admin console. Checked
+  // before the abuse guard, rate limiting and any provider work — a
+  // disabled feature costs nothing and answers like an unconfigured one.
+  const flag = FEATURE_FLAGS[feature]
+  if (flag && !(await aiFeatureEnabled(flag))) {
+    return NextResponse.json(FEATURE_DISABLED, { status: 503 })
+  }
   // v0.9.2 abuse guard: every AI route is only ever called by the app's own
   // pages (same origin). Cross-origin or Origin-less POSTs — the signature
   // of a bot hitting the public endpoint directly — are rejected before any

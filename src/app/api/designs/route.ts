@@ -7,6 +7,8 @@ import { readAnonToken, newAnonToken, anonKeyHash, setAnonCookie, anonHashFrom }
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 import { withLogging } from '@/lib/observability'
+import { recordActive } from '@/lib/admin/traffic'
+import { getSettings } from '@/lib/admin/config'
 
 /** v0.14 (D6): resolve a ?folder= id / POST folderId to a folder the
  *  CALLER owns, or null. Foreign and absent ids are indistinguishable
@@ -75,6 +77,10 @@ async function __canvix_get(req: NextRequest) {
     const cursor = req.nextUrl.searchParams.get('cursor')
     const cursorId = req.nextUrl.searchParams.get('id')
     const user = await getSessionUser(req)
+
+    // v0.16 (A1): opening the dashboard counts as daily activity
+    // (userId for accounts, the pre-hashed anon cookie key otherwise)
+    void recordActive(user?.id ?? anonHashFrom(req))
 
     // v0.14 (D6): ?folder=<id> — one of the caller's own folders, or a
     // flat 404. Absent param = "All designs" (unchanged behaviour).
@@ -160,6 +166,20 @@ async function __canvix_post(req: NextRequest) {
   if (!limit.ok) return rateLimitResponse(limit)
   try {
     const user = await getSessionUser(req)
+
+    // v0.16 (A1): the console's "anonymous editing" switch — anonymous
+    // design CREATION is refused when off. Reading, sharing and exporting
+    // existing designs is untouched; the check is one cached config read.
+    if (!user) {
+      const settings = await getSettings()
+      if (!settings.anonymousEditing) {
+        return NextResponse.json(
+          { error: 'Anonymous editing is disabled on this instance. Sign in to create designs.', code: 'ANON_DISABLED' },
+          { status: 403 }
+        )
+      }
+    }
+
     const body = await req.json()
 
     // v0.14 (D6): optional folderId — a design can be born filed into

@@ -36,6 +36,11 @@ model User {
   // lowercase, 3–32 chars, [a-z0-9_-] (enforced in src/lib/auth/validate.ts)
   username     String    @unique
   passwordHash String
+  // v0.16 (A1): admin console access. "user" | "admin". Effective admin ALSO
+  // honours the CANVIX_ADMIN_USERS env bootstrap (src/lib/admin/guard.ts) so
+  // the first admin exists without CLI surgery; this column is what the
+  // console manages afterwards.
+  role         String    @default("user")
   createdAt    DateTime  @default(now())
   designs      Design[]  @relation("DesignOwner")
   folders      Folder[]  @relation("FolderOwner")
@@ -279,4 +284,48 @@ model PluginAsset {
   sha256    String
 
   @@unique([installId, path])
+}
+
+// ── v0.16 (A1): admin console ─────────────────────────────────────────────────
+
+// Instance-wide configuration, written from /admin (AI provider,
+// models, feature flags, app settings). Small key→JSON rows; reads go
+// through the typed accessor + short-TTL cache in src/lib/admin/config.ts.
+// Nothing user-scoped ever lives here — operator config only.
+model AppConfig {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// Per-day aggregate API traffic counters — the "see all the traffic"
+// side of the console. Written fire-and-forget by the withLogging wrapper
+// every API route already passes through (src/lib/observability.ts):
+// COUNTS ONLY — never ids, never IPs, never query strings. One row per
+// (UTC day, route, method, status); cardinality is bounded by the route
+// table × days × status codes. Rows older than 90 days are swept lazily.
+// CANVIX_TRAFFIC=0 opts an instance out entirely.
+model TrafficStat {
+  id        BigInt   @id @default(autoincrement())
+  day       DateTime // UTC midnight
+  route     String // logical route name, e.g. "GET /api/designs"
+  method    String
+  status    Int
+  hits      Int      @default(0)
+
+  @@unique([day, route, method, status])
+  @@index([day])
+}
+
+// Daily active actors for the DAU chart: one row per (UTC day, actor),
+// actor = userId for accounts or the already-hashed anonymous cookie key
+// for anonymous browsers. First-party, admin-visible only; recorded from
+// the two surfaces that mean "someone used Canvix today" (design list /
+// editor open), so it adds no extra auth resolution anywhere.
+model DailyActive {
+  id    BigInt  @id @default(autoincrement())
+  day   DateTime
+  actor  String
+
+  @@unique([day, actor])
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withProvider, getImageModel } from '@/lib/ai/provider'
+import { withProvider } from '@/lib/ai/provider'
 import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
@@ -71,15 +71,15 @@ async function __canvix_post(req: NextRequest) {
   const h = Number(body.naturalHeight) || 0
   const size: ImgSize = w && h ? bestSize(w, h) : '1024x1024'
 
-  return withProvider('image-edit', req, { limit: 5, windowSec: 60 }, async (zai) => {
+  return withProvider('image-edit', req, { limit: 5, windowSec: 60 }, async (ctx) => {
     // NOTE: the SDK's TS type declares `image`, but the backend API requires
     // `images: [{ url }]` (verified — API error 1210 "must provide images").
     // The SDK forwards the body verbatim, so we send the correct runtime shape.
-    const response = await zai.images.generations.edit({
+    const response = await ctx.zai.images.generations.edit({
       prompt,
       images: [{ url: image }],
       size,
-    } as unknown as Parameters<typeof zai.images.generations.edit>[0])
+    } as unknown as Parameters<typeof ctx.zai.images.generations.edit>[0])
 
     const base64 = response.data[0]?.base64
     if (!base64) {

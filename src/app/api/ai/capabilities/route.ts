@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { hasProvider } from '@/lib/ai/provider'
+import { hasProviderForSlot } from '@/lib/ai/provider'
 import { getFeatures } from '@/lib/admin/config'
 import { withLogging } from '@/lib/observability'
 
@@ -14,20 +14,30 @@ export const dynamic = 'force-dynamic'
  */
 async function __canvix_get() {
   // v0.16 (A1): a capability is available when a provider answers AND
-  // the admin console has not switched the feature off. Still booleans
+  // the admin console has not switched the feature off. v0.16.2 (A2):
+  // the provider check is per capability SLOT — with the multi-provider
+  // table you can wire text to one vendor and images to another, so
+  // "a provider exists" is no longer a single boolean. Still booleans
   // only — never config, never keys, never which layer answered.
-  const configured = await hasProvider()
+  const [text, vision, image, imageEdit, imageSearch] = await Promise.all([
+    hasProviderForSlot('text'),
+    hasProviderForSlot('vision'),
+    hasProviderForSlot('image'),
+    hasProviderForSlot('imageEdit'),
+    hasProviderForSlot('imageSearch'),
+  ])
+  const configured = text || vision || image || imageEdit || imageSearch
   const flags = await getFeatures()
   return NextResponse.json({
     configured,
     capabilities: {
-      magicWrite: configured && flags.magicWrite,
-      imageGeneration: configured && flags.imageGeneration,
-      imageEditing: configured && flags.imageEditing,
-      vision: configured && flags.vision,          // Magic Layers
-      translation: configured && flags.translation,
-      assistant: configured && flags.assistant,
-      photoSearch: configured && flags.photoSearch,
+      magicWrite: text && flags.magicWrite,
+      imageGeneration: image && flags.imageGeneration,
+      imageEditing: imageEdit && flags.imageEditing,
+      vision: vision && flags.vision,          // Magic Layers
+      translation: text && flags.translation,
+      assistant: text && flags.assistant,
+      photoSearch: imageSearch && flags.photoSearch,
       backgroundRemoval: true,     // local ONNX — always available
       colorPalette: true,          // local deterministic
       layoutSuggestions: true,     // local deterministic

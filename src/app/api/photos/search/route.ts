@@ -17,8 +17,8 @@ async function __canvix_post(req: NextRequest) {
   if (!query) return NextResponse.json({ error: 'A query is required.' }, { status: 400 })
   const count = Math.min(Math.max(Number(body.count) || 24, 1), 40)
 
-  return withProvider('search', req, { limit: 12, windowSec: 60 }, async (zai) => {
-    const response = await zai.images.search.create({ query, count })
+  return withProvider('search', req, { limit: 12, windowSec: 60 }, async (ctx) => {
+    const response = await ctx.zai.images.search.create({ query, count })
 
     const results = (response.results ?? []).map((r) => ({
       url: r.original_url,

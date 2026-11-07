@@ -1,18 +1,23 @@
 // ─────────────────────────────────────────────────────────────
-// Instance configuration (v0.16 A1) — the store behind /admin's
-// AI + settings pages.
+// Instance configuration (v0.16 A1, extended in v0.16.2 A2) —
+// the store behind /admin's AI + settings pages.
 //
-// Four small AppConfig rows (key → JSON):
-//   ai.provider  { baseUrl, apiKey }   — console-set provider, wins over env
-//   ai.models    { text?, vision?, image? } — model ids passed to the SDK
+// AppConfig rows (key → JSON):
+//   ai.provider  { baseUrl, apiKey }   — legacy single override (v0.16 A1)
+//   ai.providers { providers: […], slots: {…} } — multi-provider table (A2)
+//   ai.models    { text?, vision?, image? } — legacy model ids (A1)
 //   ai.features  { magicWrite, … }     — per-feature kill switches
 //   app.settings { signupsOpen, anonymousEditing }
 //
 // Design decisions (documented in docs/ADMIN.md):
-//   • Precedence for the provider: DB (console) → env → .z-ai-config
-//     file → unconfigured. The console never shows a stored API key
+//   • Precedence per capability slot: multi-provider table (ai.providers)
+//     → legacy single override (ai.provider) → env → .z-ai-config file
+//     → unconfigured. The console never shows a stored API key
 //     back — only a mask (write-only credential, same posture as the
 //     env vars it overrides).
+//   • Multi-provider keys are write-only too: saving a provider without
+//     re-entering its key keeps the stored one (matched by id), so
+//     editing a label or model never demands the credential again.
 //   • Reads are cached in-process for 10 s (config sits on every AI
 //     request path; one tiny indexed findMany per 10 s per instance is
 //     the whole cost). Writes invalidate immediately — the same server
@@ -32,6 +37,7 @@ import type { Prisma } from '@/generated/prisma/client'
 
 export const CONFIG_KEYS = {
   provider: 'ai.provider',
+  providers: 'ai.providers',
   models: 'ai.models',
   features: 'ai.features',
   settings: 'app.settings',
@@ -48,6 +54,10 @@ export const AI_FEATURES = [
 ] as const
 export type AiFeature = (typeof AI_FEATURES)[number]
 
+/** Capability slots (v0.16.2 A2) — what a provider can be assigned to. */
+export const AI_SLOTS = ['text', 'vision', 'image', 'imageEdit', 'imageSearch'] as const
+export type AiSlot = (typeof AI_SLOTS)[number]
+
 export interface StoredProvider {
   baseUrl: string
   apiKey: string
@@ -56,6 +66,24 @@ export interface StoredModels {
   text?: string
   vision?: string
   image?: string
+}
+/** One entry of the multi-provider table. */
+export interface StoredProviderEntry {
+  /** Stable client-visible id (`p` + alphanumerics) — slots reference it. */
+  id: string
+  label: string
+  baseUrl: string
+  apiKey: string
+}
+/** A capability slot pinned to one provider of the table. */
+export interface StoredSlot {
+  providerId: string
+  model?: string
+}
+/** The whole multi-provider table (AppConfig `ai.providers`). */
+export interface StoredProviders {
+  providers: StoredProviderEntry[]
+  slots: Partial<Record<AiSlot, StoredSlot>>
 }
 export type StoredFeatures = Record<AiFeature, boolean>
 export interface StoredSettings {
@@ -80,21 +108,27 @@ export const DEFAULT_SETTINGS: StoredSettings = {
 
 const BASEURL_MAX = 2048
 const APIKEY_MAX = 4096
-const MODEL_RE = /^[A-Za-z0-9._:+-]{1,120}$/
+// Model ids: letters, digits, ._:+- plus "/" (NVIDIA NIM + HuggingFace
+// namespaces: meta/llama-3.1-70b-instruct) and "@" (OpenRouter vendor
+// prefixes). No spaces, no path traversal (".." still passes the charset
+// but can only ever name a model id at the provider, never a file).
+const MODEL_RE = /^[A-Za-z0-9._:+/@-]{1,120}$/
+const PROVIDER_ID_RE = /^p[a-z0-9]{1,23}$/
+const LABEL_MAX = 60
+/** Hard cap on table size — eight providers is far beyond any sane setup. */
+const PROVIDERS_MAX = 8
+
+/** Random id for a new provider entry (`p` + 10 base36 chars). */
+function makeProviderId(): string {
+  return 'p' + Array.from({ length: 10 }, () => Math.floor(Math.random() * 36).toString(36)).join('')
+}
 
 // ── validation (pure, unit-tested) ────────────────────────────
 
 export type Check<T> = { ok: true; value: T } | { ok: false; error: string }
 
-/** A usable provider override: an http(s) base URL without credentials + a non-empty key. */
-export function validateProvider(input: unknown): Check<StoredProvider> {
-  if (typeof input !== 'object' || input === null) return { ok: false, error: 'provider must be an object.' }
-  const raw = input as Record<string, unknown>
-  if (typeof raw.baseUrl !== 'string' || !raw.baseUrl.trim()) return { ok: false, error: 'baseUrl is required.' }
-  if (typeof raw.apiKey !== 'string' || !raw.apiKey) return { ok: false, error: 'apiKey is required.' }
-  const baseUrl = raw.baseUrl.trim()
-  if (baseUrl.length > BASEURL_MAX) return { ok: false, error: `baseUrl must be at most ${BASEURL_MAX} characters.` }
-  if (raw.apiKey.length > APIKEY_MAX) return { ok: false, error: `apiKey must be at most ${APIKEY_MAX} characters.` }
+/** Shared base-URL validation — returns the normalized URL or why it failed. */
+function checkBaseUrl(baseUrl: string): Check<string> {
   let parsed: URL
   try {
     parsed = new URL(baseUrl)
@@ -107,7 +141,21 @@ export function validateProvider(input: unknown): Check<StoredProvider> {
   if (parsed.username || parsed.password) {
     return { ok: false, error: 'baseUrl must not embed credentials — put the key in the apiKey field.' }
   }
-  return { ok: true, value: { baseUrl: parsed.toString(), apiKey: raw.apiKey } }
+  return { ok: true, value: parsed.toString() }
+}
+
+/** A usable provider override: an http(s) base URL without credentials + a non-empty key. */
+export function validateProvider(input: unknown): Check<StoredProvider> {
+  if (typeof input !== 'object' || input === null) return { ok: false, error: 'provider must be an object.' }
+  const raw = input as Record<string, unknown>
+  if (typeof raw.baseUrl !== 'string' || !raw.baseUrl.trim()) return { ok: false, error: 'baseUrl is required.' }
+  if (typeof raw.apiKey !== 'string' || !raw.apiKey) return { ok: false, error: 'apiKey is required.' }
+  const baseUrl = raw.baseUrl.trim()
+  if (baseUrl.length > BASEURL_MAX) return { ok: false, error: `baseUrl must be at most ${BASEURL_MAX} characters.` }
+  if (raw.apiKey.length > APIKEY_MAX) return { ok: false, error: `apiKey must be at most ${APIKEY_MAX} characters.` }
+  const url = checkBaseUrl(baseUrl)
+  if (!url.ok) return url
+  return { ok: true, value: { baseUrl: url.value, apiKey: raw.apiKey } }
 }
 
 /** Optional model ids; unknown keys are dropped, each value must look like a model id. */
@@ -150,6 +198,118 @@ export function validateSettings(input: unknown): Check<Partial<StoredSettings>>
     if (v === undefined) continue
     if (typeof v !== 'boolean') return { ok: false, error: `settings.${key} must be true or false.` }
     out[key] = v
+  }
+  return { ok: true, value: out }
+}
+
+// ── multi-provider table validation (v0.16.2 A2) ─────────────
+
+/**
+ * Validate the provider LIST half of `ai.providers` (full replace).
+ *
+ * Input shape: [{ id?, label, baseUrl, apiKey? }]. Keys are write-only:
+ * an entry with an id whose apiKey is empty/missing keeps the stored key
+ * (matched against `existing`), so editing a label or URL never demands
+ * the credential again. New entries (no id, or an id not in `existing`)
+ * MUST carry a key. Ids are validated for shape + uniqueness and
+ * generated (via `makeId`, injectable for tests) when missing.
+ */
+export function validateProviderList(
+  input: unknown,
+  opts: { existing?: Map<string, StoredProviderEntry>; makeId?: () => string } = {}
+): Check<StoredProviderEntry[]> {
+  if (!Array.isArray(input)) return { ok: false, error: 'providers.list must be an array.' }
+  if (input.length > PROVIDERS_MAX) {
+    return { ok: false, error: `At most ${PROVIDERS_MAX} providers can be stored.` }
+  }
+  const existing = opts.existing ?? new Map()
+  const makeId = opts.makeId ?? makeProviderId
+  const seen = new Set<string>()
+  const out: StoredProviderEntry[] = []
+  for (let i = 0; i < input.length; i++) {
+    const raw = input[i]
+    if (typeof raw !== 'object' || raw === null) {
+      return { ok: false, error: `providers.list[${i}] must be an object.` }
+    }
+    const entry = raw as Record<string, unknown>
+    // label
+    const label = typeof entry.label === 'string' ? entry.label.trim() : ''
+    if (!label || label.length > LABEL_MAX) {
+      return { ok: false, error: `providers.list[${i}].label must be 1-${LABEL_MAX} characters.` }
+    }
+    // baseUrl (shared rules with the legacy override)
+    if (typeof entry.baseUrl !== 'string' || !entry.baseUrl.trim()) {
+      return { ok: false, error: `providers.list[${i}].baseUrl is required.` }
+    }
+    const baseUrl = entry.baseUrl.trim()
+    if (baseUrl.length > BASEURL_MAX) {
+      return { ok: false, error: `providers.list[${i}].baseUrl must be at most ${BASEURL_MAX} characters.` }
+    }
+    const url = checkBaseUrl(baseUrl)
+    if (!url.ok) return { ok: false, error: `providers.list[${i}]: ${url.error}` }
+    // id — validate or generate, always unique within the list
+    let id = typeof entry.id === 'string' && entry.id ? entry.id : ''
+    if (id) {
+      if (!PROVIDER_ID_RE.test(id)) {
+        return { ok: false, error: `providers.list[${i}].id must look like "p" + lowercase alphanumerics.` }
+      }
+    } else {
+      id = makeId()
+      while (!PROVIDER_ID_RE.test(id) || seen.has(id)) id = makeId()
+    }
+    if (seen.has(id)) return { ok: false, error: `Duplicate provider id "${id}".` }
+    seen.add(id)
+    // apiKey — write-only: keep the stored one when omitted
+    const stored = existing.get(id)
+    let apiKey = typeof entry.apiKey === 'string' ? entry.apiKey : ''
+    if (!apiKey && stored) apiKey = stored.apiKey
+    if (!apiKey) {
+      return {
+        ok: false,
+        error: `providers.list[${i}].apiKey is required for a new provider (leave it empty to keep a stored one).`,
+      }
+    }
+    if (apiKey.length > APIKEY_MAX) {
+      return { ok: false, error: `providers.list[${i}].apiKey must be at most ${APIKEY_MAX} characters.` }
+    }
+    out.push({ id, label, baseUrl: url.value, apiKey })
+  }
+  return { ok: true, value: out }
+}
+
+/**
+ * Validate the SLOTS half of `ai.providers`: slot → { providerId, model? }
+ * or null (clears the slot). providerId must reference a provider in the
+ * list being saved. Unknown slot keys are dropped; model ids follow the
+ * same MODEL_RE as the legacy models field (empty string = omit).
+ */
+export function validateSlots(input: unknown, providerIds: Set<string>): Check<Partial<Record<AiSlot, StoredSlot>>> {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    return { ok: false, error: 'providers.slots must be an object.' }
+  }
+  const raw = input as Record<string, unknown>
+  const out: Partial<Record<AiSlot, StoredSlot>> = {}
+  for (const slot of AI_SLOTS) {
+    const v = raw[slot]
+    if (v === undefined) continue
+    if (v === null) continue // explicit clear — omit the slot
+    if (typeof v !== 'object' || Array.isArray(v)) {
+      return { ok: false, error: `providers.slots.${slot} must be an object or null.` }
+    }
+    const entry = v as Record<string, unknown>
+    const providerId = typeof entry.providerId === 'string' ? entry.providerId : ''
+    if (!providerId || !providerIds.has(providerId)) {
+      return { ok: false, error: `providers.slots.${slot}.providerId must reference a provider in the list.` }
+    }
+    let model: string | undefined
+    const m = entry.model
+    if (m !== undefined && m !== null && m !== '') {
+      if (typeof m !== 'string' || !MODEL_RE.test(m)) {
+        return { ok: false, error: `providers.slots.${slot}.model must be a model id (letters, digits, . _ : + -).` }
+      }
+      model = m
+    }
+    out[slot] = model ? { providerId, model } : { providerId }
   }
   return { ok: true, value: out }
 }
@@ -218,6 +378,23 @@ export async function getProviderOverride(): Promise<StoredProvider | null> {
   return check.ok ? check.value : null
 }
 
+/**
+ * The multi-provider table (v0.16.2 A2). Null when absent — slots then
+ * fall back to the legacy chain (override → env → file). A table whose
+ * list half fails validation is treated as absent (fail-open to the
+ * legacy chain, the same stance as every other config read here).
+ */
+export async function getProviders(): Promise<StoredProviders | null> {
+  const rows = await readRows()
+  const raw = asRecord(rows.get(CONFIG_KEYS.providers))
+  const list = Array.isArray(raw.providers) ? raw.providers : []
+  const check = validateProviderList(list)
+  if (!check.ok || !check.value.length) return null
+  const ids = new Set(check.value.map((p) => p.id))
+  const slots = validateSlots(raw.slots, ids)
+  return { providers: check.value, slots: slots.ok ? slots.value : {} }
+}
+
 /** Model ids (empty strings omitted) — {} = SDK defaults. */
 export async function getModels(): Promise<StoredModels> {
   const rows = await readRows()
@@ -256,6 +433,51 @@ export async function setProvider(value: StoredProvider): Promise<void> {
 /** Clear the override — provider resolution falls back to env / config file. */
 export async function clearProvider(): Promise<void> {
   await writeRow(CONFIG_KEYS.provider, {})
+}
+
+/** Write the full multi-provider table (list + slots together). */
+export async function setProviders(value: StoredProviders): Promise<void> {
+  await writeRow(CONFIG_KEYS.providers, value as unknown as Prisma.InputJsonValue)
+}
+
+/** Clear the multi-provider table — slots fall back to the legacy chain. */
+export async function clearProviders(): Promise<void> {
+  await writeRow(CONFIG_KEYS.providers, {})
+}
+
+/**
+ * One-click migration (v0.16.2 A2): fold the legacy single-provider
+ * override into the multi-provider table and clear the legacy row.
+ *
+ *   • no legacy override stored → { ok: false } (the route answers 400)
+ *   • a provider with the same baseUrl already in the table → don't
+ *     duplicate, just clear the legacy row
+ *   • table has no slots yet → point all five at the imported provider
+ *     (preserves the A1 behaviour where the override answered everything)
+ */
+export async function importLegacyProvider(): Promise<
+  | { ok: false; error: string }
+  | { ok: true; value: { list: StoredProviderEntry[]; slots: Partial<Record<AiSlot, StoredSlot>>; added: boolean } }
+> {
+  const legacy = await getProviderOverride()
+  if (!legacy) return { ok: false, error: 'No single-provider override is stored — nothing to import.' }
+  const current = await getProviders()
+  const list = current?.providers ? [...current.providers] : []
+  const slots = current?.slots ? { ...current.slots } : {}
+  const duplicate = list.some((p) => p.baseUrl === legacy.baseUrl)
+  let added = false
+  if (!duplicate) {
+    let id = makeProviderId()
+    while (list.some((p) => p.id === id)) id = makeProviderId()
+    list.push({ id, label: 'Imported override', baseUrl: legacy.baseUrl, apiKey: legacy.apiKey })
+    if (!Object.keys(slots).length) {
+      for (const slot of AI_SLOTS) slots[slot] = { providerId: id }
+    }
+    added = true
+  }
+  await setProviders({ providers: list, slots })
+  await clearProvider()
+  return { ok: true, value: { list, slots, added } }
 }
 
 export async function setModels(value: StoredModels): Promise<void> {

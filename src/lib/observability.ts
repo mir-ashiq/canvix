@@ -21,7 +21,6 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { NextRequest } from 'next/server'
-import { recordTraffic } from '@/lib/admin/traffic'
 
 /** The app version answering requests — from package.json at build time. */
 export const APP_VERSION = process.env.npm_package_version ?? 'unknown'
@@ -67,6 +66,34 @@ export function logApiRequest(entry: ApiRequestLog): void {
   })
 }
 
+// ── traffic counters (v0.16.1) ───────────────────────────────
+//
+// v0.16 (A1) wired the aggregate counters into withLogging via a
+// static `import { recordTraffic }` — which, through src/lib/db.ts,
+// is the Prisma client. That silently broke this module's v0.12.5
+// contract ("stdlib-only, runs on every runtime"): Next also compiles
+// src/instrumentation.ts for the EDGE runtime, Turbopack followed the
+// new static import into Prisma's query-compiler wasm loader, and
+// `next build` failed on the self-hosted deployer ("The export default
+// was not found in module …raw.wasm") — the failed build wiped
+// .next/standalone under the running process and took canvix.app's
+// static assets down with it.
+//
+// The fix restores the contract: this module stays stdlib-only, and
+// the counter loads lazily behind the documented NEXT_RUNTIME define.
+// In the edge compilation context NEXT_RUNTIME is replaced with
+// "edge" at build time, so the guard folds to `return` and Prisma is
+// never traced into the edge instrumentation bundle. On the Node
+// server (and in vitest, where NEXT_RUNTIME is unset) the import
+// resolves on first request — same fire-and-forget, error-swallowing
+// contract A1 defined.
+function countTraffic(name: string, method: string, status: number): void {
+  if (process.env.NEXT_RUNTIME === 'edge') return
+  void import('@/lib/admin/traffic')
+    .then((m) => m.recordTraffic(name, method, status))
+    .catch(() => {})
+}
+
 /**
  * Wrap an API route handler with opt-in request logging AND always-on
  * aggregate traffic counters (v0.16 A1 — CANVIX_TRAFFIC=0 opts out;
@@ -82,7 +109,7 @@ export function withLogging<A extends unknown[]>(
 ): (req: NextRequest, ...args: A) => Promise<Response> {
   return async (req, ...args) => {
     // v0.16 (A1): aggregate traffic counters — independent of the stdout
-    // switch above. Fire-and-forget by contract (recordTraffic swallows
+    // switch above. Fire-and-forget by contract (countTraffic swallows
     // its own errors); counting must never delay or break the response
     // it counts.
     const start = now()
@@ -96,7 +123,7 @@ export function withLogging<A extends unknown[]>(
           durationMs: now() - start,
         })
       }
-      void recordTraffic(name, req.method, res.status)
+      countTraffic(name, req.method, res.status)
       return res
     } catch (error) {
       if (requestLoggingEnabled()) {
@@ -107,7 +134,7 @@ export function withLogging<A extends unknown[]>(
           durationMs: now() - start,
         })
       }
-      void recordTraffic(name, req.method, 500)
+      countTraffic(name, req.method, 500)
       throw error
     }
   }

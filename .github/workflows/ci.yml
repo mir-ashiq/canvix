@@ -34,7 +34,7 @@ jobs:
   lint-unit:
     name: lint-unit
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,6 +59,16 @@ jobs:
       # 316 unit tests — pure functions + mocked-route tests, no DB.
       - name: Unit tests
         run: npm test
+
+      # v0.16.1: the gate never ran `next build` — A1's edge-
+      # instrumentation regression (Prisma traced into the edge bundle
+      # via a static import) passed typecheck, lint, unit AND the
+      # dev-server e2e, and only failed on the self-hosted deployer.
+      # The production build is part of what this gate protects.
+      # No DB needed: route handlers are request-time, the landing
+      # page is static, and PrismaClient construction is lazy.
+      - name: Production build
+        run: npm run build
 
   # ── Browser suite: merges to main + manual dispatch ───────────────
   e2e:

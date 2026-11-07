@@ -3,6 +3,38 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.16.1] — 2026-11-07
+
+### Fixed
+
+- **Self-hosted `next build` regression (A1 follow-up).** A1 wired the
+  traffic counters into `withLogging` with a static import of
+  `@/lib/admin/traffic` — the Prisma client — which broke the
+  observability module's stdlib-only contract (v0.12.5) and with it
+  every self-hosted production build: Next also compiles
+  `src/instrumentation.ts` for the edge runtime, Turbopack followed the
+  new import into Prisma's query-compiler wasm loader, and `next build`
+  failed with "The export default was not found in module
+  …query_compiler_bg.postgresql.raw.wasm" (first seen on the canvix.app
+  VPS, where the failed build also wiped `.next/standalone` under the
+  running process — every static asset 500'd until a successful
+  rebuild). The counter now loads lazily behind the documented
+  `NEXT_RUNTIME` define — the edge compilation context folds the guard
+  to `return` at build time, so Prisma is never traced into the edge
+  instrumentation bundle — while runtime behaviour on Node is unchanged
+  (fire-and-forget, error-swallowing, `CANVIX_TRAFFIC=0` opt-out).
+- **CI never ran `next build`.** The lint-unit gate type-checked,
+  linted and unit-tested, and the e2e suite boots `npm run dev` — so
+  the edge-instrumentation breakage passed every check and only failed
+  on a real deployer. lint-unit now runs the production build too
+  (timeout raised to fit).
+
+### Changed
+
+- `package-lock.json` version fields re-synced with `package.json`
+  (the 0.16.0 bump missed them, so every `npm install` on a deploy
+  VPS dirtied the lockfile).
+
 ## [0.16.0] — 2026-11-07
 
 ### Added

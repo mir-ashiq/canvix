@@ -3,6 +3,49 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.16.3] — 2026-11-07
+
+### Added
+
+- **Admin Logs view (`/admin/logs`) — "why did the AI feature fail?"
+  finally answerable from the console.** Every AI request through
+  `withProvider` now writes a durable telemetry row (AIUsage, extended
+  by migration `0010_ai_request_log`): feature, provider, model,
+  outcome status, round-trip duration and a scrubbed failure reason —
+  every outcome recorded, not just successes: provider failures carry
+  the provider's HTTP status, and the guard exits are logged with
+  their codes (403 rejected · 429 rate-limited · 503 disabled or
+  unconfigured, slot named). The page leads with a slot-status strip
+  (what each of the five capability slots resolves to right now), then
+  the request log with live tail (5 s, pauses on hidden tabs), window /
+  feature / outcome filters and per-feature call/error counters. Rows
+  are swept after 90 days like TrafficStat.
+- **Per-slot "Test" buttons on the AI & models page.** The A2 test
+  connection only proved chat worked — a chat-only provider (NVIDIA NIM
+  et al.) passed every test while image generation 404'd in production,
+  which is exactly the incident that prompted this release. Each slot
+  is now probed through the endpoint it actually uses: text/vision via
+  a minimal chat completion, image via a real minimal generation,
+  imageEdit via a deliberately image-less probe (a 400-class "must
+  provide images" answer PROVES the endpoint exists, costlessly),
+  imageSearch via a one-result search. Verdicts explain themselves —
+  a 404 says "this provider does not serve image generation; pin those
+  slots to a provider that does". Every slot row also shows the
+  endpoint path it exercises.
+
+### Fixed
+
+- **AI failure responses now carry the reason.** The 502 body from AI
+  routes includes `code: "PROVIDER_ERROR"` and a scrubbed `detail`
+  ("404 page not found (HTTP 404)") — the same string the Logs view
+  shows, so end users and the admin see one truth. Credential-shaped
+  tokens (nvapi-/sk-/Bearer…) are masked before anything is logged or
+  returned.
+- **OpenAI-style `b64_json` image responses work.** The SDK passes
+  non-URL items through untouched, and the image/image-edit routes only
+  read `data[0].base64` — providers answering `b64_json` (the OpenAI
+  shape) returned "no image". Both routes now accept either field.
+
 ## [0.16.2] — 2026-11-07
 
 ### Fixed

@@ -241,13 +241,22 @@ model Media {
   @@index([ownerId, keepInLibrary])
 }
 
-// Provider accounting + abuse telemetry for AI routes.
+// Provider accounting + request telemetry for AI routes (v0.16.3 A3
+// extends it into the admin Logs view). One row per AI request through
+// withProvider, every outcome recorded — success, provider failure
+// (with the scrubbed reason), no-provider, feature-disabled, rate-
+// limited and rejected. `error` carries a short, key-scrubbed
+// provider message; credentials never reach this table.
 model AIUsage {
-  id        String   @id @default(cuid())
-  feature   String // write | image | image-edit | translate | assistant | magic-layers | search
-  provider  String // zai | local
-  ok        Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  feature    String // write | image | image-edit | translate | assistant | magic-layers | search
+  provider   String // multi-table label | db | env | file
+  ok         Boolean  @default(true)
+  model      String? // model id the slot requested (null = provider default)
+  status     Int? // outcome: 200-299 ok · 403/429/503 guard exits · provider HTTP code on failure
+  durationMs Int? // provider round-trip
+  error      String? // scrubbed, capped failure reason
+  createdAt  DateTime @default(now())
 
   @@index([createdAt])
 }

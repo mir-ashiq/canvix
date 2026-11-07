@@ -32,7 +32,10 @@ async function __canvix_post(req: NextRequest) {
       size,
     })
 
-    const base64 = response.data[0]?.base64
+    // v0.16.3 (A3): OpenAI-compatible providers return b64_json; the SDK
+    // passes such items through untouched (it only converts url items).
+    const item = response.data[0] as { base64?: string; b64_json?: string } | undefined
+    const base64 = item?.base64 ?? item?.b64_json
     if (!base64) {
       return NextResponse.json({ error: 'The image service returned no image. Try again.' }, { status: 502 })
     }

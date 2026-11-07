@@ -265,6 +265,9 @@ export interface ProviderContext {
   model?: string
   /** Which provider answered (multi table only) — for accounting labels. */
   label?: string
+  /** Which config layer answered (multi/db/env/file) — the Logs view's
+   * provider column when no table label applies (v0.16.3 A3). */
+  source?: SlotSource
 }
 
 /** Resolve a slot and construct its client. Null when unconfigured. */
@@ -273,7 +276,7 @@ export async function getClientForSlot(slot: AiSlot): Promise<ProviderContext | 
   if (!resolved) return null
   try {
     const zai = await makeClient(resolved.baseUrl, resolved.apiKey)
-    return { zai, model: resolved.model, label: resolved.label }
+    return { zai, model: resolved.model, label: resolved.label, source: resolved.source }
   } catch (err) {
     console.error(`[ai] provider initialization failed (${slot})`, err)
     return null
@@ -331,15 +334,76 @@ export function rateLimit(feature: string, req: Pick<NextRequest, 'headers'>, li
 
 // ── usage accounting (best-effort, never blocks a request) ──
 
-export async function recordUsage(feature: string, provider: 'zai' | 'local', ok: boolean): Promise<void> {
+/** Telemetry detail attached to one AI request row (v0.16.3 A3). */
+export interface UsageDetail {
+  model?: string
+  status?: number
+  durationMs?: number
+  error?: string
+}
+
+export async function recordUsage(
+  feature: string,
+  provider: string,
+  ok: boolean,
+  detail: UsageDetail = {}
+): Promise<void> {
   // live console counters first — pure in-memory, synchronous, cannot throw
   recordLiveAi(feature, ok)
   try {
     const { db } = await import('@/lib/db')
-    await db.aIUsage.create({ data: { feature, provider, ok } })
+    await db.aIUsage.create({
+      data: {
+        feature,
+        provider,
+        ok,
+        ...(detail.model !== undefined ? { model: detail.model } : {}),
+        ...(detail.status !== undefined ? { status: detail.status } : {}),
+        ...(detail.durationMs !== undefined ? { durationMs: detail.durationMs } : {}),
+        ...(detail.error !== undefined ? { error: detail.error } : {}),
+      },
+    })
   } catch {
     /* accounting must never break the request */
   }
+}
+
+// ── provider error normalization (v0.16.3 A3) ────────────────
+//
+// The SDK throws `Error("API request failed with status 404: 404 page
+// not found")` — the raw string ends up in server logs and nowhere
+// else, which is exactly why "why is image generation broken" needed
+// an SSH session to answer. These helpers turn any thrown value into
+// a short, scrubbed, admin-safe reason that flows into BOTH the
+// AIUsage log (→ /admin/logs) and the client's 502 body, so the
+// failure explains itself wherever it is seen.
+
+/** Never let a credential (or anything key-shaped) reach a log or client. */
+export function scrubErrorText(text: string): string {
+  return text
+    .replace(/(nvapi-|sk-|gsk_|pk-|rk-|ak-|xai-|hf_|Bearer\s+)[A-Za-z0-9_\-]{8,}/gi, '$1***')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .slice(0, 240)
+}
+
+export interface ProviderErrorInfo {
+  /** HTTP status the provider answered, when the error carries one. */
+  status: number | null
+  /** Short scrubbed human reason, safe for logs, admin UI and clients. */
+  message: string
+}
+
+/** Turn any thrown value into { status?, message } — scrubbed and capped. */
+export function describeProviderError(err: unknown): ProviderErrorInfo {
+  const raw = err instanceof Error ? err.message : String(err)
+  const m = raw.match(/status (\d{3})/i)
+  const status = m ? Number(m[1]) : null
+  // drop the SDK prefix — "API request failed with status 404: X" → "X (HTTP 404)"
+  const body = raw.replace(/^API request failed with status \d{3}:?\s*/i, '').trim()
+  const suffix = status ? ` (HTTP ${status})` : ''
+  return { status, message: scrubErrorText(body ? `${body}${suffix}` : raw) }
 }
 
 // ── shared error responses ──
@@ -423,16 +487,40 @@ export async function withProvider(
   const slot = FEATURE_SLOTS[feature] ?? 'text'
   const ctx = await getClientForSlot(slot)
   if (!ctx) {
-    await recordUsage(feature, 'zai', false)
+    await recordUsage(feature, `no-provider (${slot})`, false, {
+      status: 503,
+      error: `no provider configured for the ${slot} slot`,
+    })
     return providerUnavailable(NextResponse.json({}))
   }
   try {
+    const started = Date.now()
     const out = await fn(ctx)
-    void recordUsage(feature, 'zai', true)
+    void recordUsage(feature, ctx.label ?? ctx.source ?? slot, true, {
+      model: ctx.model,
+      status: out.status,
+      durationMs: Date.now() - started,
+    })
     return out
   } catch (err) {
     console.error(`[ai/${feature}]`, err)
-    void recordUsage(feature, 'zai', false)
-    return NextResponse.json({ error: 'The AI service is unavailable right now. Please try again.' }, { status: 502 })
+    const info = describeProviderError(err)
+    void recordUsage(feature, ctx.label ?? ctx.source ?? slot, false, {
+      model: ctx.model,
+      status: info.status ?? 502,
+      durationMs: undefined,
+      error: info.message,
+    })
+    // v0.16.3 (A3): the 502 body now carries the scrubbed reason — the
+    // admin Logs view shows the same string, and end users finally see
+    // "provider answered 404" instead of a generic unavailable.
+    return NextResponse.json(
+      {
+        error: 'The AI service is unavailable right now. Please try again.',
+        code: 'PROVIDER_ERROR',
+        ...(info.message ? { detail: info.message } : {}),
+      },
+      { status: 502 }
+    )
   }
 }

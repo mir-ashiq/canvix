@@ -25,7 +25,6 @@ export const SLOT_ENDPOINT: Record<string, string> = {
   vision: 'POST {base}/chat/completions',
   image: 'POST {base}/images/generations',
   imageEdit: 'POST {base}/images/generations/edit',
-  imageSearch: 'POST {base}/images/search',
 }
 
 export interface ProbeVerdict {
@@ -165,26 +164,9 @@ export async function probeSlot(slot: string, target: ProbeTarget): Promise<{ ve
       return { verdict: classifyProbeError(slot, err) }
     }
   }
-  if (slot === 'imageSearch') {
-    try {
-      const r = await withTimeout(zai.images.search.create({ query: 'red circle', count: 1 }))
-      const n = (r as { results?: unknown[] }).results?.length ?? 0
-      return {
-        verdict: {
-          ok: true,
-          slot,
-          endpoint: SLOT_ENDPOINT.imageSearch,
-          httpStatus: 200,
-          message: n
-            ? `Search answered with ${n} result${n === 1 ? '' : 's'} — the full path works.`
-            : 'Search answered but returned no results.',
-        },
-      }
-    } catch (err) {
-      return { verdict: classifyProbeError(slot, err) }
-    }
-  }
   // text / vision — the existing minimal chat completion
+  // (v0.16.4 A4: the imageSearch probe is gone with the slot — photo
+  // search runs on the stock-provider keys, probed by its own rail)
   const completion = await withTimeout(
     zai.chat.completions.create({
       ...(model ? { model } : {}),

@@ -34,7 +34,8 @@ export type AICapability =
   | 'image'       // image generation
   | 'imageEdit'   // Magic Eraser / Enhance
   | 'vision'      // image understanding — Magic Layers
-  | 'imageSearch' // Photo search
+// v0.16.4 (A4): imageSearch is retired — photo search runs on the
+// stock-provider keys (src/lib/stock-photo.ts), not an AI model slot
 
 export interface AIProviderConfig {
   baseUrl: string
@@ -180,7 +181,6 @@ const FEATURE_SLOTS: Record<string, AiSlot> = {
   image: 'image',
   'image-edit': 'imageEdit',
   'magic-layers': 'vision',
-  search: 'imageSearch',
 }
 
 /** Async probe — does THIS slot have a provider behind it? */
@@ -442,7 +442,6 @@ const FEATURE_FLAGS: Record<string, AiFeature> = {
   'magic-layers': 'vision',
   translate: 'translation',
   assistant: 'assistant',
-  search: 'photoSearch',
 }
 
 export const FEATURE_DISABLED = {

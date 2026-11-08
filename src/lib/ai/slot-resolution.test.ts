@@ -76,13 +76,15 @@ describe('pickSlot (v0.16.2 A2)', () => {
     expect(pickSlot('text', null, { baseUrl: 'https://x', apiKey: 'k' }, models, {}, null)?.model).toBe('gpt-x')
     expect(pickSlot('vision', null, { baseUrl: 'https://x', apiKey: 'k' }, models, {}, null)?.model).toBe('glm-4.5v')
     expect(pickSlot('image', null, { baseUrl: 'https://x', apiKey: 'k' }, models, {}, null)?.model).toBe('cogview-3')
-    // imageEdit / imageSearch never had legacy model ids — provider default
+    // imageEdit never had a legacy model id — provider default
+    // (v0.16.4 A4: imageSearch is retired — photo search runs on the
+    // stock-provider keys, not on an AI slot)
     expect(pickSlot('imageEdit', null, { baseUrl: 'https://x', apiKey: 'k' }, models, {}, null)?.model).toBeUndefined()
   })
 
   it('nothing configured anywhere → null (feature reports unavailable)', () => {
     expect(pickSlot('text', null, null, {}, {}, null)).toBeNull()
-    expect(pickSlot('imageSearch', table({}), null, {}, {}, null)).toBeNull()
+    expect(pickSlot('imageEdit', table({}), null, {}, {}, null)).toBeNull()
   })
 
   it('the multi table does NOT rescue other slots — only pinned ones', () => {

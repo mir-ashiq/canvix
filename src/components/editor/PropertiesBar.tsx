@@ -376,6 +376,20 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
               onCommit={() => update(ids, { opacity: image.opacity })}
               format={(v) => `${100 - v}% transparent`} />
           </ToolbarPopover>
+          {/* v0.16.4 (A4): durable stock-photo attribution — same pattern
+              as the R6 video credit. User uploads show nothing. */}
+          {image.credit ? (
+            <a
+              href={image.credit.url || undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[11px] font-semibold text-[#02C0CC] bg-[#02C0CC]/10 border border-[#02C0CC]/25 rounded-full px-2 py-0.5 shrink-0 max-w-[190px] truncate"
+              title={`${image.credit.license}${image.credit.url ? ` — ${image.credit.url}` : ''}`}
+              aria-label={`Stock photo by ${image.credit.author} on ${image.credit.provider}`}
+            >
+              {image.credit.provider} · {image.credit.author}
+            </a>
+          ) : null}
           <Divider />
           <PositionPopover ids={ids} count={1} element={first} />
         </>

@@ -1,9 +1,30 @@
 'use client'
 
+// ─────────────────────────────────────────────────────────────
+// PhotosPanel — the Photos rail (v0.16.4 A4 rework of the web
+// results section).
+//
+// Two content sources, honestly labelled:
+//   • STOCK SEARCH (typing ≥2 chars) — Pexels / Pixabay via
+//     /api/stock-photo/search, the R6 stock-video architecture:
+//     provider keys on the server, sanitized results, durable
+//     attribution on the inserted element. Until v0.16.4 this
+//     rode the AI provider table (the imageSearch slot) — an
+//     OpenAI-compatible images/search endpoint almost no vendor
+//     serves, which is why photo search 404'd in production.
+//   • THE BUNDLED LIBRARY — 42 AI-generated photos that ship
+//     with the app and work with zero configuration.
+//
+// The F2 lessons stay: leaving results mode clears BOTH the
+// results and any error; a category click exits search mode;
+// an unkeyed server says so instead of looking broken.
+// ─────────────────────────────────────────────────────────────
+
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, ImageDown, Loader2, Globe } from 'lucide-react'
+import { Plus, ImageDown, Loader2, Camera } from 'lucide-react'
 import { PanelShell } from './panel-shell'
-import { addImageFromSrc } from '../add-element'
+import { addImageFromSrc, addStockPhoto } from '../add-element'
+import { useStockPhoto } from '@/hooks/use-stock-photo'
 import { cn } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
 
@@ -14,18 +35,22 @@ interface StockPhoto {
   tags: string[]
 }
 
-/** web search result — real photos from the z-ai image search service */
-interface WebPhoto {
-  url: string
-  caption: string
-  source: string
+/** normalized stock-search result — the /api/stock-photo/search shape */
+interface StockPhotoTile {
+  id: string
+  provider: 'pexels' | 'pixabay'
   width: number
   height: number
+  preview: string
+  download: string
+  alternates: string[]
+  credit: { provider: string; author: string; license: string; url: string }
 }
 
-/** v0.11.6 (F2): why a web search came back empty — surfaced in the panel
- *  so an unconfigured server says so instead of looking "broken" */
-type WebError = { kind: 'no-provider' } | { kind: 'service'; message: string }
+/** why a search came back empty — 'no-provider' shows the operator
+ *  hint instead of looking broken (the F2 pattern; defense in depth
+ *  under a section that already renders its unkeyed state) */
+type SearchError = { kind: 'no-provider' } | { kind: 'service'; message: string }
 
 const CATEGORIES = [
   { id: 'all', label: 'All photos' },
@@ -55,69 +80,82 @@ for (const cat of Object.keys(TAGS)) {
   }
 }
 
+function providerLabel(p: string): string {
+  return p === 'pexels' ? 'Pexels' : p === 'pixabay' ? 'Pixabay' : p
+}
+
 export function PhotosPanel() {
+  const { available, providers, loaded } = useStockPhoto()
   const [cat, setCat] = useState('all')
   const [query, setQuery] = useState('')
   // resilient to not-yet-bundled photos: broken tiles hide themselves
   const [hidden, setHidden] = useState<Record<string, boolean>>({})
 
-  // v0.4: live web search (debounced)
-  const [webResults, setWebResults] = useState<WebPhoto[] | null>(null)
-  const [webBusy, setWebBusy] = useState(false)
-  // v0.11.6 (F2): last search's failure mode, if any — 'no-provider' gets
-  // a configuration hint, anything else keeps the plain empty message
-  const [webError, setWebError] = useState<WebError | null>(null)
+  // stock search (debounced) — only fires on a keyed instance
+  const [results, setResults] = useState<StockPhotoTile[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<SearchError | null>(null)
+  const [busyTile, setBusyTile] = useState<string | null>(null)
+  const [provider, setProvider] = useState('')
   const lastQuery = useRef('')
+
+  // default connector = the first configured one
+  const activeProvider = provider || providers[0] || ''
+  // a POSITIVE unkeyed answer (not "probe still in flight")
+  const noProvider = loaded && !available
 
   useEffect(() => {
     const q = query.trim()
     const run = async () => {
-      if (q.length < 2) {
-        // v0.11.6 (F2): leaving results mode must clear BOTH the results and
-        // any error — a stale hint next to the full library is exactly the
-        // sticky-state bug the QA pass reported
-        setWebResults(null)
-        setWebError(null)
-        return
-      }
-      setWebBusy(true)
-      setWebError(null)
+      // the guards live in the debounce wrapper (the race note below);
+      // run() only ever fires for a searcheable query on a keyed server
+      setBusy(true)
+      setError(null)
       try {
-        const res = await fetch('/api/photos/search', {
+        const res = await fetch('/api/stock-photo/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: q, count: 24 }),
+          body: JSON.stringify({ query: q, count: 24, provider: activeProvider || undefined }),
         })
         const data = (await res.json().catch(() => ({}))) as {
-          results?: WebPhoto[]
+          results?: StockPhotoTile[]
           error?: string
           code?: string
         }
-        // v0.11.6 (F2): 503 NO_PROVIDER means the server has no AI provider
-        // configured — say that, not "no photos matched"
+        // 503 NO_PROVIDER means the server lost its keys since the
+        // availability probe — say that, not "no photos matched"
         if (res.status === 503 && data.code === 'NO_PROVIDER') {
-          setWebError({ kind: 'no-provider' })
-          setWebResults([])
+          setError({ kind: 'no-provider' })
+          setResults([])
         } else if (!res.ok) {
-          setWebError(data.error ? { kind: 'service', message: data.error } : null)
-          setWebResults([])
+          setError(data.error ? { kind: 'service', message: data.error } : null)
+          setResults([])
         } else {
-          setWebResults(Array.isArray(data.results) ? data.results : [])
+          setResults(Array.isArray(data.results) ? data.results : [])
         }
       } catch {
-        setWebResults([])
+        setResults([])
       } finally {
-        setWebBusy(false)
+        setBusy(false)
       }
     }
     const t = setTimeout(() => {
-      if (q !== lastQuery.current) {
-        lastQuery.current = q
-        void run()
+      if (q === lastQuery.current) return
+      // RACE GUARD (caught by the acceptance e2e): while availability is
+      // still unresolved we must NOT consume the query — otherwise the
+      // user types, run() returns early on !available, and when the probe
+      // lands the effect re-runs but q === lastQuery forever. Only a real
+      // search (or the <2-char clear) may consume it.
+      if (q.length < 2 || !available) {
+        setResults(null)
+        setError(null)
+        return
       }
+      lastQuery.current = q
+      void run()
     }, 600)
     return () => clearTimeout(t)
-  }, [query])
+  }, [query, activeProvider, available])
 
   const photos = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -136,103 +174,155 @@ export function PhotosPanel() {
     toast({ title: 'Photo added' })
   }
 
-  const addWeb = (p: WebPhoto) => {
-    const w = p.width || 1200
-    const h = p.height || 800
-    addImageFromSrc(p.url, w, h)
-    toast({ title: 'Photo added', description: p.source ? `From ${p.source}` : undefined })
+  const addStock = async (tile: StockPhotoTile) => {
+    if (busyTile) return
+    setBusyTile(tile.id)
+    try {
+      await addStockPhoto(tile)
+      toast({
+        title: 'Photo added',
+        description: `${tile.credit.provider} · ${tile.credit.author} — ${tile.credit.license}`,
+      })
+    } catch (err) {
+      toast({
+        title: 'Could not add the photo',
+        description: err instanceof Error ? err.message : 'Try again — or pick another result.',
+      })
+    } finally {
+      setBusyTile(null)
+    }
   }
 
-  const showWeb = query.trim().length >= 2 && (webResults !== null || webBusy)
+  const typing = query.trim().length >= 2
+  const showWeb = typing && (results !== null || busy || noProvider)
 
   // v0.11.6 (F2): clicking a category tab EXITS results mode — clears the
-  // query (and with it the visible search box, now controlled), the web
+  // query (and with it the visible search box, now controlled), the stock
   // results and any error. Before, the query kept filtering the bundled
   // grid, so "All photos" showed the stale 6-photo result set instead of
   // the 42-photo library until the panel was closed and reopened.
-  const pickCategory = (id: string) => {
+  function pickCategory(id: string) {
     setCat(id)
     setQuery('')
-    setWebResults(null)
-    setWebError(null)
+    setResults(null)
+    setError(null)
   }
+
+  // in results mode the provider row replaces the category row
+  // (categories filter the bundled library; they mean nothing while
+  // browsing stock results). Browsing mode keeps the categories.
+  const belowSearch = showWeb && providers.length > 1 ? (
+    <div className="cv-tabscroll -mx-4 mt-2.5 flex gap-1.5 overflow-x-auto px-4">
+      {providers.map((p) => (
+        <button
+          key={p}
+          onClick={() => {
+            setProvider(p)
+            setResults(null)
+            setError(null)
+          }}
+          className={cn(
+            'h-7 shrink-0 whitespace-nowrap rounded-full px-3 text-[11.5px] font-semibold transition-colors border',
+            activeProvider === p
+              ? 'bg-white/[0.16] text-white border-white/25'
+              : 'bg-transparent text-white/65 border-white/10 hover:bg-white/[0.07] hover:text-white',
+          )}
+          aria-pressed={activeProvider === p}
+        >
+          {providerLabel(p)}
+        </button>
+      ))}
+    </div>
+  ) : !showWeb ? (
+    <div className="cv-tabscroll -mx-4 mt-2.5 flex gap-1.5 overflow-x-auto px-4">
+      {CATEGORIES.map((c) => (
+        <button
+          key={c.id}
+          onClick={() => pickCategory(c.id)}
+          className={cn(
+            'h-7 shrink-0 whitespace-nowrap rounded-full px-3 text-[11.5px] font-semibold transition-colors border',
+            cat === c.id
+              ? 'bg-white/[0.16] text-white border-white/25'
+              : 'bg-transparent text-white/65 border-white/10 hover:bg-white/[0.07] hover:text-white',
+          )}
+          aria-pressed={cat === c.id}
+        >
+          {c.label}
+        </button>
+      ))}
+    </div>
+  ) : undefined
 
   return (
     <PanelShell
       title="Photos"
-      subtitle="Search millions of photos or browse the free library"
+      subtitle="Search millions of stock photos or browse the free library"
       searchPlaceholder="Search photos (e.g. mountain, coffee, beach)"
       searchValue={query}
       onSearchValueChange={setQuery}
       onSearch={setQuery}
-      belowSearch={
-        <div className="cv-tabscroll -mx-4 mt-2.5 flex gap-1.5 overflow-x-auto px-4">
-          {CATEGORIES.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => pickCategory(c.id)}
-              className={cn(
-                'h-7 shrink-0 whitespace-nowrap rounded-full px-3 text-[11.5px] font-semibold transition-colors border',
-                cat === c.id
-                  ? 'bg-white/[0.16] text-white border-white/25'
-                  : 'bg-transparent text-white/65 border-white/10 hover:bg-white/[0.07] hover:text-white'
-              )}
-              aria-pressed={cat === c.id}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      }
+      belowSearch={belowSearch}
     >
-      {/* ── live web results (canva-style photo search) ── */}
+      {/* ── stock search results (the R6 architecture) ── */}
       {showWeb && (
         <div className="mb-4">
           <div className="flex items-center gap-1.5 mb-2">
-            <Globe size={12} className="text-[#02C0CC]" />
+            <Camera size={12} className="text-[#02C0CC]" />
             <span className="text-[10.5px] font-bold text-white/55 uppercase tracking-wide">
-              Web results {webResults ? `(${webResults.length})` : ''}
+              Stock photos {results ? `(${results.length})` : ''}
             </span>
-            {webBusy && <Loader2 size={11} className="animate-spin text-white/40 ml-1" />}
+            {busy && <Loader2 size={11} className="animate-spin text-white/40 ml-1" />}
           </div>
-          {webError?.kind === 'no-provider' ? (
+          {noProvider || error?.kind === 'no-provider' ? (
             <p className="text-[11.5px] text-white/40 py-2 leading-relaxed">
-              Web search needs an AI provider configured on the server — set
-              the <code className="text-white/55">ZAI_BASE_URL</code> and{' '}
-              <code className="text-white/55">ZAI_API_KEY</code> environment
-              variables. The free library below still works.
+              Photo search runs on free stock-provider keys — set{' '}
+              <code className="text-white/55">PEXELS_API_KEY</code> or{' '}
+              <code className="text-white/55">PIXABAY_API_KEY</code> on the server (the
+              same keys as the Videos rail; see{' '}
+              <code className="text-white/55">docs/STOCK-PHOTO.md</code>). The free
+              library below still works.
             </p>
-          ) : webError?.kind === 'service' ? (
-            <p className="text-[11.5px] text-white/40 py-2">{webError.message}</p>
-          ) : webResults && webResults.length === 0 && !webBusy ? (
-            <p className="text-[11.5px] text-white/40 py-2">No web photos matched — try other keywords.</p>
+          ) : error?.kind === 'service' ? (
+            <p className="text-[11.5px] text-white/40 py-2">{error.message}</p>
+          ) : results && results.length === 0 && !busy ? (
+            <p className="text-[11.5px] text-white/40 py-2">No stock photos matched — try other keywords.</p>
           ) : (
             <div className="grid grid-cols-2 gap-2.5">
-              {(webResults ?? []).map((p) => (
-                <button
-                  key={p.url}
-                  onClick={() => addWeb(p)}
-                  className="group relative aspect-[7/5] rounded-xl overflow-hidden border border-white/10 hover:border-[#7630D7] transition-colors bg-[#0F1015]"
-                  aria-label={`Add web photo ${p.caption || 'result'}`}
-                  title={p.caption}
-                >
-                  { }
-                  <img
-                    src={p.url}
-                    alt={p.caption || 'web photo'}
-                    loading="lazy"
-                    className="absolute inset-0 h-full w-full object-cover group-hover:scale-[1.04] transition-transform duration-300"
-                  />
-                  <span className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors" />
-                  <span className="absolute inset-0 hidden group-hover:flex items-center justify-center">
-                    <span className="h-8 px-3 rounded-full bg-[#7630D7] text-white text-[11.5px] font-bold flex items-center gap-1.5 shadow-lg">
-                      <Plus size={12} /> Add
+              {(results ?? []).map((t) => {
+                const isBusy = busyTile === t.id
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => void addStock(t)}
+                    disabled={busyTile !== null}
+                    className="group relative aspect-[7/5] rounded-xl overflow-hidden border border-white/10 hover:border-[#7630D7] transition-colors bg-[#0F1015] disabled:opacity-60"
+                    aria-label={`Add stock photo by ${t.credit.author}`}
+                    title={`${t.credit.provider} · ${t.credit.author} — ${t.credit.license}`}
+                  >
+                    <img
+                      src={t.preview}
+                      alt={`Stock photo by ${t.credit.author}`}
+                      loading="lazy"
+                      className="absolute inset-0 h-full w-full object-cover group-hover:scale-[1.04] transition-transform duration-300"
+                    />
+                    <span className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors" />
+
+                    {/* provider chip (attribution visibility — the R6 pattern) */}
+                    <span className="absolute top-1.5 left-1.5 h-5 px-1.5 rounded-md bg-black/60 backdrop-blur-sm text-[9.5px] font-bold text-white/90 flex items-center">
+                      {t.credit.provider}
                     </span>
-                  </span>
-                </button>
-              ))}
-              {webBusy && Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="aspect-[7/5] rounded-xl cv-skeleton" />
+
+                    <span className="absolute inset-0 hidden group-hover:flex items-center justify-center">
+                      <span className="h-8 px-3 rounded-full bg-[#7630D7] text-white text-[11.5px] font-bold flex items-center gap-1.5 shadow-lg">
+                        {isBusy ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                        {isBusy ? 'Adding…' : 'Add'}
+                      </span>
+                    </span>
+                  </button>
+                )
+              })}
+              {busy && Array.from({ length: 4 }).map((_, i) => (
+                <div key={`sk-${i}`} className="aspect-[7/5] rounded-xl cv-skeleton" />
               ))}
             </div>
           )}
@@ -279,8 +369,10 @@ export function PhotosPanel() {
       )}
 
       <p className="text-[10.5px] text-white/30 mt-3 leading-relaxed">
-        Web results come from a live image search; bundled photos are AI-generated for Canvix. Check
-        photo licenses before commercial use of web results.
+        Stock photos come from {providers.length > 0 ? providers.map(providerLabel).join(' and ') : 'the configured provider'} under
+        their free licenses (Pexels License / Pixabay Content License) — inserted photos are downloaded
+        into your media library and attribution stays on the element. Bundled photos are AI-generated
+        for Canvix.
       </p>
     </PanelShell>
   )

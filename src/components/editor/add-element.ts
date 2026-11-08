@@ -541,3 +541,70 @@ export async function addStockVideo(
   }
   throw firstError instanceof Error ? firstError : new Error('Could not add the stock video.')
 }
+
+/** v0.16.4 (A4): insert a stock PHOTO from the Photos panel's search
+ *  (Pexels/Pixabay). The addStockVideo pattern one class over: download
+ *  the preferred rendition in the browser (provider CDNs are CORS-open),
+ *  ride the existing chunked media store (quota, sha256 dedupe, size cap
+ *  all apply), probe the REAL dimensions from the bytes, and store the
+ *  durable credit on the element. The alternates ladder retries smaller
+ *  renditions when the store's cap rejects the primary. */
+export async function addStockPhoto(
+  stock: {
+    id: string
+    download: string
+    alternates: string[]
+    width: number
+    height: number
+    credit: { provider: string; author: string; license: string; url: string }
+  },
+  onProgress?: (ratio: number) => void,
+): Promise<void> {
+  const { uploadMediaFile, mediaSrc } = await import('@/lib/media/media-client')
+  const { createImageElement } = await import('@/lib/types')
+
+  let firstError: unknown = null
+  for (const url of [stock.download, ...stock.alternates]) {
+    try {
+      const blob = await fetch(url).then((r) => {
+        if (!r.ok) throw new Error(`Download failed (${r.status}).`)
+        return r.blob()
+      })
+      // real dimensions from the actual bytes — provider metadata is a
+      // hint, the blob is the truth (createImageBitmap, with a metadata
+      // fallback for engines without it)
+      let naturalW = stock.width || 1200
+      let naturalH = stock.height || 800
+      try {
+        const bmp = await createImageBitmap(blob)
+        naturalW = bmp.width || naturalW
+        naturalH = bmp.height || naturalH
+        bmp.close()
+      } catch {
+        /* keep the metadata dims */
+      }
+      const file = new File([blob], `${stock.id}.jpg`, { type: blob.type || 'image/jpeg' })
+      const handle = await uploadMediaFile(file, onProgress)
+
+      const store = useEditorStore.getState()
+      const maxW = store.width * 0.7
+      const maxH = store.height * 0.7
+      const scale = Math.min(maxW / naturalW, maxH / naturalH, 1)
+      const w = Math.round(naturalW * scale)
+      const h = Math.round(naturalH * scale)
+      const pos = placement(w, h, store.pages[store.currentPage].elements.length)
+      store.addElement(
+        createImageElement(mediaSrc(handle.id), naturalW, naturalH, {
+          ...pos,
+          width: w,
+          height: h,
+          credit: stock.credit,
+        })
+      )
+      return
+    } catch (err) {
+      firstError ??= err
+    }
+  }
+  throw firstError instanceof Error ? firstError : new Error('Could not add the stock photo.')
+}

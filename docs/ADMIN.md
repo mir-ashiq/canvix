@@ -1,4 +1,4 @@
-# Admin console (v0.16 A1 · v0.16.2 A2 · v0.16.3 A3)
+# Admin console (v0.16 A1 · v0.16.2 A2 · v0.16.3 A3 · v0.16.4 A4)
 
 > **TL;DR** — set `CANVIX_ADMIN_USERS="your-username"`, restart, sign in:
 > the shield icon on the dashboard opens `/admin`. Everything below is
@@ -81,7 +81,16 @@ to a different provider + model:
 | `vision` | Magic Layers (image understanding) |
 | `image` | text-to-image |
 | `imageEdit` | Magic Eraser / Enhance |
-| `imageSearch` | stock photo search |
+
+**Photo search is not a slot anymore (v0.16.4 A4).** It rode the AI
+table as `imageSearch` — an `images/search` endpoint almost no
+OpenAI-compatible vendor serves, the standing 404 behind the A3
+incident. It now runs on the free stock-provider keys
+(`PEXELS_API_KEY` / `PIXABAY_API_KEY`, the same keys as the Videos
+rail — see docs/STOCK-PHOTO.md); the AI & models page's banner
+states whether they are set. Stored tables that still carry an
+`imageSearch` slot are read fine — unknown slot keys are dropped on
+read and disappear on the next save. No migration.
 
 A slot left on “— fall back —” ignores the table and walks the legacy
 chain below. `/api/ai/capabilities` now probes **per slot**, so wiring
@@ -135,8 +144,10 @@ lookup ignored env vars and broke every test since A1 (see D3).
 `/admin/logs` (v0.16.3 A3) answers "why isn't the AI feature working"
 without an SSH session. Two surfaces:
 
-- **AI slot status** — what each of the five capability slots (`text`,
-  `vision`, `image`, `imageEdit`, `imageSearch`) resolves to right now:
+- **AI slot status** — what each of the four capability slots (`text`,
+  `vision`, `image`, `imageEdit`) resolves to right now (v0.16.4 A4:
+  `imageSearch` is retired — photo search runs on the stock keys,
+  not on an AI slot):
   provider label, base URL, model id and which config layer answered
   (providers table / legacy override / env / file). Never the key. A
   slot wired to a chat-only provider is the classic silent breakage —
@@ -153,10 +164,9 @@ without an SSH session. Two surfaces:
 The per-slot **Test** buttons on the AI & models page probe the real
 endpoint each slot uses (chat completion for text/vision, a real
 minimal generation for image, a deliberately image-less probe for
-imageEdit — a 400-class rejection proves the endpoint exists — and a
-one-result search for imageSearch). A 404 verdict states the fix:
-chat-only providers cannot run image slots; pin them to a provider
-that serves image endpoints.
+imageEdit — a 400-class rejection proves the endpoint exists). A 404
+verdict states the fix: chat-only providers cannot run image slots;
+pin them to a provider that serves image endpoints.
 
 ### Settings
 
@@ -320,6 +330,18 @@ probes that provider; `model` overrides the model for the probe.
   and caps at 240 chars. The same string flows to AIUsage (`error`),
   the client 502 body (`detail`) and the console — no place shows a
   raw provider body, and no place shows different truths.
+- **D17 (A4) — photo search LEFT the AI provider table.** The
+  `imageSearch` slot called an `images/search` route that almost no
+  OpenAI-compatible vendor serves — a category error: stock photo
+  retrieval is a library query with licensing, not a generative
+  capability. It now rides the R6 stock-connector architecture
+  (`src/lib/stock-photo.ts`, Pexels + Pixabay, the same two env keys
+  as the Videos rail), with the same durable-credit acceptance and
+  the same F2b gating. The admin table shrinks to four slots; stale
+  stored `imageSearch` slot entries are dropped by validation on
+  read (no migration); the `photoSearch` feature switch keeps its
+  semantics against the new route; historical `search` AIUsage rows
+  keep rendering in the Logs view. Recorded in docs/STOCK-PHOTO.md.
 - **D16 (A3) — slot tests probe real endpoints, classified by verdict.**
   A chat-only provider passing the old test while image generation
   404'd was the diagnostic gap; now a 404/405 verdict says "not
@@ -341,6 +363,8 @@ CREATE TABLE "DailyActive"  (…  UNIQUE(day, actor));
 `npm run db:setup` applies it; nothing else changes. **A2 adds no
 migration** — the multi-provider table is one more `AppConfig` row
 (`ai.providers`), and live traffic keeps no database state at all.
+**A4 adds no migration either** — retiring the `imageSearch` slot is
+pure code (stored slot entries are dropped by read-side validation).
 
 ### `0010_ai_request_log` (v0.16.3 A3)
 

@@ -1,6 +1,6 @@
 {
   "name": "canvix",
-  "version": "0.16.3",
+  "version": "0.16.4",
   "private": false,
   "description": "Canvix \u2014 free & open-source graphic design tool. A community-built Canva alternative.",
   "scripts": {

@@ -261,6 +261,16 @@ is right here.
   `docs/GIF-EXPORT.md`); rides the same deterministic frame renderer
   as video export. GIFs are silent — the dialog says so before you
   click
+- **Stock photos** *(v0.16.4 A4)* — the Photos panel's search runs on
+  the stock-provider keys (Pexels / Pixabay, the same free keys as the
+  Videos rail — no key = the bundled library keeps working and the
+  section says so). Until v0.16.4 this was an AI-model slot calling an
+  `images/search` endpoint almost no OpenAI-compatible vendor serves —
+  the standing 404 the admin Logs view was built to explain. Inserts
+  download in the browser into your media library and carry **durable
+  attribution** (creator, provider, license — shown at insert and on
+  selection). Zero new dependencies; operator guide in
+  `docs/STOCK-PHOTO.md`
 - **Stock videos** *(v0.15 R6)* — a provider-gated **Videos** rail:
   search Pexels and/or Pixabay with free self-hoster keys (no key =
   the tab hides itself, everything else works). Inserts download in
@@ -723,8 +733,10 @@ research/                   # architecture decision records & audits
 
 Canvix works fully **without** any AI provider — the editor, templates, exports,
 collaboration and comments need nothing but the database. AI features
-(Magic Layers, Assistant, Magic Write, image generation/editing, translate,
-photo search) activate when a provider is configured **on the server**:
+(Magic Layers, Assistant, Magic Write, image generation/editing, translate)
+activate when a provider is configured **on the server**. Stock photo
+search is separate by design (v0.16.4): it runs on free stock-provider
+keys, not on an AI provider — see `docs/STOCK-PHOTO.md`:
 
 Option A — environment variables (recommended for Vercel etc.):
 
@@ -759,7 +771,8 @@ limited per IP and logs usage into the `AIUsage` table.
 | Color palettes, layout balancing | ✅ local (deterministic) |
 | Magic Layers, AI Assistant, Magic Write | ⚙️ needs a server AI provider |
 | AI image generation / eraser / enhance | ⚙️ needs a server AI provider |
-| Translate, live photo search | ⚙️ needs a server AI provider |
+| Translate | ⚙️ needs a server AI provider |
+| Stock photo search | ⚙️ needs `PEXELS_API_KEY` or `PIXABAY_API_KEY` (free) |
 | Stock video search | ⚙️ needs `PEXELS_API_KEY` or `PIXABAY_API_KEY` (free) |
 | MCP server (agent tools) | ✅ with token set — `generate_design` additionally needs the AI provider |
 

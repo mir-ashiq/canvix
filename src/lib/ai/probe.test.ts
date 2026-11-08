@@ -101,12 +101,6 @@ describe('probeSlot (A3)', () => {
     expect(out.verdict.message).toContain('reachable')
   })
 
-  it('imageSearch reports the result count', async () => {
-    const out = await probeSlot('imageSearch', TARGET)
-    expect(out.verdict.ok).toBe(true)
-    expect(out.verdict.message).toContain('1 result')
-  })
-
   it('text slot goes through chat completions and returns the reply', async () => {
     const out = await probeSlot('text', TARGET)
     expect(out.verdict.ok).toBe(true)

@@ -43,6 +43,8 @@ export type RateLimitBucket =
   | 'plugins:install'
   | 'plugins:serve'
   | 'stockvideo:search'
+  | 'stockphoto:search'
+  | 'stockphoto:search'
 
 export interface RateLimitConfig {
   /** window length in milliseconds */
@@ -80,6 +82,10 @@ export const RATE_LIMITS: Record<RateLimitBucket, RateLimitConfig> = {
   // debounces at 600 ms and caches server-side for 24 h) while
   // stopping scripted drain of the self-hoster's key
   'stockvideo:search': { windowMs: 60_000, max: 20 },
+  // v0.16.4 (A4): stock-photo search spends the same PROVIDER quota
+  // — one shared bucket shape with the video rail (the panel also
+  // debounces at 600 ms and caches server-side for 24 h)
+  'stockphoto:search': { windowMs: 60_000, max: 20 },
 }
 
 export function rateLimitsDisabled(): boolean {

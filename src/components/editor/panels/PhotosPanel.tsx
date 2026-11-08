@@ -208,32 +208,11 @@ export function PhotosPanel() {
     setError(null)
   }
 
-  // in results mode the provider row replaces the category row
-  // (categories filter the bundled library; they mean nothing while
-  // browsing stock results). Browsing mode keeps the categories.
-  const belowSearch = showWeb && providers.length > 1 ? (
-    <div className="cv-tabscroll -mx-4 mt-2.5 flex gap-1.5 overflow-x-auto px-4">
-      {providers.map((p) => (
-        <button
-          key={p}
-          onClick={() => {
-            setProvider(p)
-            setResults(null)
-            setError(null)
-          }}
-          className={cn(
-            'h-7 shrink-0 whitespace-nowrap rounded-full px-3 text-[11.5px] font-semibold transition-colors border',
-            activeProvider === p
-              ? 'bg-white/[0.16] text-white border-white/25'
-              : 'bg-transparent text-white/65 border-white/10 hover:bg-white/[0.07] hover:text-white',
-          )}
-          aria-pressed={activeProvider === p}
-        >
-          {providerLabel(p)}
-        </button>
-      ))}
-    </div>
-  ) : !showWeb ? (
+  // the category row is ALWAYS rendered — it is the exit hatch from
+  // results mode (clicking a category returns to browsing; the F2
+  // contract). The provider selector lives INSIDE the results section,
+  // under its header, so the two never displace each other.
+  const belowSearch = (
     <div className="cv-tabscroll -mx-4 mt-2.5 flex gap-1.5 overflow-x-auto px-4">
       {CATEGORIES.map((c) => (
         <button
@@ -251,7 +230,7 @@ export function PhotosPanel() {
         </button>
       ))}
     </div>
-  ) : undefined
+  )
 
   return (
     <PanelShell
@@ -273,6 +252,29 @@ export function PhotosPanel() {
             </span>
             {busy && <Loader2 size={11} className="animate-spin text-white/40 ml-1" />}
           </div>
+          {providers.length > 1 && (
+            <div className="cv-tabscroll -mx-4 mb-2 flex gap-1.5 overflow-x-auto px-4">
+              {providers.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => {
+                    setProvider(p)
+                    setResults(null)
+                    setError(null)
+                  }}
+                  className={cn(
+                    'h-6 shrink-0 whitespace-nowrap rounded-full px-2.5 text-[11px] font-semibold transition-colors border',
+                    activeProvider === p
+                      ? 'bg-white/[0.16] text-white border-white/25'
+                      : 'bg-transparent text-white/65 border-white/10 hover:bg-white/[0.07] hover:text-white',
+                  )}
+                  aria-pressed={activeProvider === p}
+                >
+                  {providerLabel(p)}
+                </button>
+              ))}
+            </div>
+          )}
           {noProvider || error?.kind === 'no-provider' ? (
             <p className="text-[11.5px] text-white/40 py-2 leading-relaxed">
               Photo search runs on free stock-provider keys — set{' '}

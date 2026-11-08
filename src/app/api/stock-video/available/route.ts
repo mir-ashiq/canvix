@@ -14,9 +14,11 @@ export const dynamic = 'force-dynamic'
  * never the keys themselves.
  */
 async function __canvix_get() {
+  // A5: keys resolve console-first (stored → env), same as photos.
+  const providers = await stockVideoProviders()
   return NextResponse.json({
-    available: stockVideoProviders().length > 0,
-    providers: stockVideoProviders(),
+    available: providers.length > 0,
+    providers,
   })
 }
 

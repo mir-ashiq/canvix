@@ -8,6 +8,12 @@
 // NO_PROVIDER — everything else in the editor keeps working (the
 // F2b fail-closed pattern; research §5.4 R6).
 //
+// v0.16.5 (A5): the keys are console-manageable. They resolve
+// through src/lib/admin/config.ts — a key stored on the AI & models
+// page (stock.providers row) wins over the env var, so /admin can
+// activate or rotate the Videos rail without a redeploy; the env
+// var remains the zero-console fallback. Photos share the keys.
+//
 // Dependency decision (the house rule): ZERO new runtime
 // dependencies — both providers are JSON-over-GET with one auth
 // value; the whole connector is plain fetch. Recorded in
@@ -37,6 +43,8 @@
 //     plus a flag-on e2e against a local mock provider; the
 //     no-provider states are e2e-asserted on the default suite.
 // ─────────────────────────────────────────────────────────────
+
+import { effectiveStockKeys } from '@/lib/admin/config'
 
 export type StockVideoProvider = 'pexels' | 'pixabay'
 
@@ -70,16 +78,19 @@ export interface StockVideoResult {
 }
 
 // ── availability (secret-free — never expose the keys) ────────
+// Async since A5: the keys resolve console-first (stored key → env
+// var) through src/lib/admin/config.ts (cached 10 s in-process).
 
-export function stockVideoProviders(): StockVideoProvider[] {
+export async function stockVideoProviders(): Promise<StockVideoProvider[]> {
+  const keys = await effectiveStockKeys()
   const out: StockVideoProvider[] = []
-  if ((process.env.PEXELS_API_KEY ?? '').trim()) out.push('pexels')
-  if ((process.env.PIXABAY_API_KEY ?? '').trim()) out.push('pixabay')
+  if (keys.pexels) out.push('pexels')
+  if (keys.pixabay) out.push('pixabay')
   return out
 }
 
-export function stockVideoAvailable(): boolean {
-  return stockVideoProviders().length > 0
+export async function stockVideoAvailable(): Promise<boolean> {
+  return (await stockVideoProviders()).length > 0
 }
 
 // ── shared helpers ────────────────────────────────────────────
@@ -318,7 +329,10 @@ export async function searchStockVideos(
   count: number,
   opts: SearchStockVideosOptions = {},
 ): Promise<StockVideoResult[]> {
-  const providers = stockVideoProviders()
+  const keys = await effectiveStockKeys()
+  const providers: StockVideoProvider[] = []
+  if (keys.pexels) providers.push('pexels')
+  if (keys.pixabay) providers.push('pixabay')
   const provider = opts.provider && providers.includes(opts.provider) ? opts.provider : providers[0]
   if (!provider) throw new Error('NO_PROVIDER')
 
@@ -338,7 +352,7 @@ export async function searchStockVideos(
     const base = (process.env.PEXELS_API_BASE ?? 'https://api.pexels.com').replace(/\/+$/, '')
     const url = `${base}/videos/search?query=${encodeURIComponent(q)}&per_page=${n}&orientation=landscape`
     const res = await doFetch(url, {
-      headers: { Authorization: (process.env.PEXELS_API_KEY ?? '').trim() },
+      headers: { Authorization: keys.pexels },
       signal: AbortSignal.timeout(PROVIDER_FETCH_TIMEOUT_MS),
     })
     if (!res.ok) {
@@ -350,7 +364,7 @@ export async function searchStockVideos(
     body = await res.json()
   } else {
     const base = (process.env.PIXABAY_API_BASE ?? 'https://pixabay.com/api').replace(/\/+$/, '')
-    const key = encodeURIComponent((process.env.PIXABAY_API_KEY ?? '').trim())
+    const key = encodeURIComponent(keys.pixabay)
     const url = `${base}/videos/?key=${key}&q=${encodeURIComponent(q)}&per_page=${n}&safesearch=true`
     const res = await doFetch(url, {
       signal: AbortSignal.timeout(PROVIDER_FETCH_TIMEOUT_MS),

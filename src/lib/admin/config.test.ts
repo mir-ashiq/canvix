@@ -27,6 +27,10 @@ import {
   clearProvider,
   importLegacyProvider,
   invalidateAdminConfig,
+  validateStockKeys,
+  getStockKeys,
+  setStockKeys,
+  effectiveStockKeys,
   DEFAULT_FEATURES,
   type StoredProviderEntry,
 } from './config'
@@ -348,5 +352,51 @@ describe('importLegacyProvider (v0.16.2 A2)', () => {
     findMany.mockResolvedValue([])
     const out = await importLegacyProvider()
     expect(out.ok).toBe(false)
+  })
+})
+
+describe('stock keys (v0.16.5 A5)', () => {
+  it('validateStockKeys: set, clear, keep — unknown keys dropped', () => {
+    expect(validateStockKeys({ pexels: '  k1  ' })).toEqual({ ok: true, value: { pexels: 'k1' } })
+    expect(validateStockKeys({ pixabay: null })).toEqual({ ok: true, value: { pixabay: null } })
+    expect(validateStockKeys({ pexels: '   ' })).toEqual({ ok: true, value: {} }) // empty = keep
+    const mixed = validateStockKeys({ pexels: 'k', junk: 'x' })
+    expect(mixed.ok && mixed.value).toEqual({ pexels: 'k' })
+    expect(validateStockKeys({ pixabay: 'x'.repeat(4097) }).ok).toBe(false)
+    expect(validateStockKeys('nope').ok).toBe(false)
+    expect(validateStockKeys({ pexels: 42 }).ok).toBe(false)
+  })
+
+  it('getStockKeys reads only well-formed stored keys (corrupt entries skipped)', async () => {
+    findMany.mockResolvedValue([{ key: 'stock.providers', value: { pexels: ' db-key ', pixabay: 7, junk: 'x' } }])
+    expect(await getStockKeys()).toEqual({ pexels: 'db-key' })
+  })
+
+  it('setStockKeys merges the patch over the stored state — null clears', async () => {
+    findMany.mockResolvedValue([{ key: 'stock.providers', value: { pexels: 'old', pixabay: 'keep' } }])
+    upsert.mockResolvedValue({})
+    await setStockKeys({ pexels: 'new', pixabay: null })
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: 'stock.providers' },
+        create: { key: 'stock.providers', value: { pexels: 'new' } },
+      })
+    )
+  })
+
+  it('effectiveStockKeys: the console key wins, env fills the rest', async () => {
+    vi.stubEnv('PEXELS_API_KEY', 'env-pexels')
+    vi.stubEnv('PIXABAY_API_KEY', 'env-pixabay')
+    findMany.mockResolvedValue([{ key: 'stock.providers', value: { pexels: 'db-pexels' } }])
+    expect(await effectiveStockKeys()).toEqual({ pexels: 'db-pexels', pixabay: 'env-pixabay' })
+    vi.unstubAllEnvs()
+  })
+
+  it('effectiveStockKeys with nothing anywhere → empty strings, never a throw', async () => {
+    vi.stubEnv('PEXELS_API_KEY', '')
+    vi.stubEnv('PIXABAY_API_KEY', '  ')
+    findMany.mockResolvedValue([])
+    expect(await effectiveStockKeys()).toEqual({ pexels: '', pixabay: '' })
+    vi.unstubAllEnvs()
   })
 })

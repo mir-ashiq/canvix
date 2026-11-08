@@ -13,9 +13,12 @@ export const dynamic = 'force-dynamic'
  * Exposes WHICH connectors are keyed, never the keys themselves.
  */
 async function __canvix_get() {
+  // A5: keys resolve console-first (stored → env), so this reads the
+  // AppConfig cache — one findMany per 10 s per instance at most.
+  const providers = await stockPhotoProviders()
   return NextResponse.json({
-    available: stockPhotoProviders().length > 0,
-    providers: stockPhotoProviders(),
+    available: providers.length > 0,
+    providers,
   })
 }
 

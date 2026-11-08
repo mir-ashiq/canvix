@@ -39,21 +39,28 @@ next save. No migration.
 
 ## Providers
 
-| Provider | Env key | Where to get it | License |
-|---|---|---|---|
-| Pexels | `PEXELS_API_KEY` | https://www.pexels.com/api/ (free) | Pexels License |
-| Pixabay | `PIXABAY_API_KEY` | https://pixabay.com/api/docs/ (free) | Pixabay Content License |
+| Provider | Console card | Env fallback | Where to get it | License |
+|---|---|---|---|---|
+| Pexels | Stock media → Pexels | `PEXELS_API_KEY` | https://www.pexels.com/api/ (free) | Pexels License |
+| Pixabay | Stock media → Pixabay | `PIXABAY_API_KEY` | https://pixabay.com/api/docs/ (free) | Pixabay Content License |
 
-Optional base overrides exist for proxies and test rigs:
-`PEXELS_API_BASE` (default `https://api.pexels.com`) and
-`PIXABAY_API_BASE` (default `https://pixabay.com/api`) — the same
-overrides the Videos rail uses.
+**v0.16.5 (A5): the keys are managed in the admin console** — the
+AI & models page's **Stock media** card (Pexels & Pixabay), with
+write-only key fields, a per-provider Test button and a Clear
+button, exactly like the AI providers above it. A stored console
+key **wins over** the env var; clearing it falls back to the env
+key when one is set. Zero console work still works:
 
 ```bash
 # .env — either key activates photo search (and the Videos rail)
 PEXELS_API_KEY=your-free-key
 # PIXABAY_API_KEY=your-free-key
 ```
+
+Optional base overrides exist for proxies and test rigs:
+`PEXELS_API_BASE` (default `https://api.pexels.com`) and
+`PIXABAY_API_BASE` (default `https://pixabay.com/api`) — the same
+overrides the Videos rail uses.
 
 Both connectors are plain REST/JSON over `fetch`. **Zero new
 runtime dependencies** (the house rule).
@@ -103,10 +110,18 @@ can never become a credit link.
 
 ## Admin surface
 
+- **The Stock media card (v0.16.5 A5)** on the AI & models page
+  manages the two keys: write-only fields (stored keys echo as
+  masks only), a per-provider **Test** button — one minimal
+  one-result search through the provider's real endpoint, so a
+  pass there is a pass in the Photos panel — and a per-provider
+  Clear that restores the env fallback. Saving takes effect
+  immediately, no redeploy (the key store rides `AppConfig` with
+  the config module's 10 s in-process cache).
 - The **AI & models** page shows four slots and a banner stating
-  where photo search lives (the stock keys) and whether they are
-  set — the operator is never sent hunting for a slot that no
-  longer exists.
+  where photo search lives (the stock media card) and which keys
+  are active — the operator is never sent hunting for a slot that
+  no longer exists.
 - The **photoSearch feature switch** still works: switched off,
   `/api/stock-photo/search` answers `503 FEATURE_DISABLED` — same
   semantics as every AI feature.

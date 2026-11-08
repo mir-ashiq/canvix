@@ -85,12 +85,31 @@ to a different provider + model:
 **Photo search is not a slot anymore (v0.16.4 A4).** It rode the AI
 table as `imageSearch` — an `images/search` endpoint almost no
 OpenAI-compatible vendor serves, the standing 404 behind the A3
-incident. It now runs on the free stock-provider keys
-(`PEXELS_API_KEY` / `PIXABAY_API_KEY`, the same keys as the Videos
-rail — see docs/STOCK-PHOTO.md); the AI & models page's banner
-states whether they are set. Stored tables that still carry an
-`imageSearch` slot are read fine — unknown slot keys are dropped on
-read and disappear on the next save. No migration.
+incident. It now runs on the free stock-media keys — the same keys
+as the Videos rail (see docs/STOCK-PHOTO.md). Stored tables that
+still carry an `imageSearch` slot are read fine — unknown slot keys
+are dropped on read and disappear on the next save. No migration.
+
+**Stock media — the Pexels & Pixabay card (v0.16.5 A5).** Those
+two keys are managed on this page, "like the others": a fixed
+two-provider card below Model slots with write-only key fields
+(stored keys echo as masks only, `sk-1…wxyz`), a per-provider
+**Test** button and a per-provider **Clear**. The same two keys
+power the Photos **and** Videos search rails — they are library
+catalogs, not AI providers, which is exactly why they don't ride
+the provider table. Precedence mirrors every other credential
+here: a stored console key **wins over** `PEXELS_API_KEY` /
+`PIXABAY_API_KEY`; clearing the stored key restores the env
+fallback. Saving takes effect immediately — no redeploy — because
+the key store rides `AppConfig` behind the config module's 10 s
+in-process cache (the same cost profile as the feature switches,
+which already sit on every AI route). The Test button runs one
+minimal one-result search through the provider's real search
+endpoint with the *effective* key — the same call the Photos rail
+makes, so a pass there is a pass in the panel — rate-limited to
+one probe per 10 s, and its verdict never echoes the key, the
+request URL (Pixabay's key rides the query string) or the
+provider's body.
 
 A slot left on “— fall back —” ignores the table and walks the legacy
 chain below. `/api/ai/capabilities` now probes **per slot**, so wiring
@@ -133,11 +152,13 @@ search). A switched-off feature:
 
 **Test connection** — one minimal chat completion (thinking disabled,
 one-word reply, 15 s circuit breaker), rate-limited to one probe per
-10 s. It is the only console action that spends provider quota. Each
-provider row has its own Test button; the fallback card tests the
+10 s. It is one of the only console actions that spends provider quota.
+Each provider row has its own Test button; the fallback card tests the
 resolved text slot. The probe goes through the SDK constructor with the
 resolved `{ baseUrl, apiKey }` — never `ZAI.create()`, whose file-only
-lookup ignored env vars and broke every test since A1 (see D3).
+lookup ignored env vars and broke every test since A1 (see D3). The
+stock-media card's Test buttons spend stock-provider quota the same
+way (one one-result search each).
 
 ### Logs
 

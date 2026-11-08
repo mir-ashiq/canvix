@@ -1,4 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+// A5: availability resolves console-first through the admin config —
+// mock the db (empty AppConfig by default) so the env path is the
+// default and stock.providers rows can be injected per test.
+const findMany = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/db', () => ({ db: { appConfig: { findMany } } }))
+
 import {
   choosePhotoRenditions,
   resetStockPhotoCache,
@@ -7,6 +14,7 @@ import {
   stockPhotoProviders,
   type StockPhotoResult,
 } from './stock-photo'
+import { invalidateAdminConfig } from '@/lib/admin/config'
 
 // ── recorded provider response shapes ─────────────────────────
 // The Pexels Photo resource + the Pixabay photo hit, exactly as
@@ -92,6 +100,8 @@ function jsonRes(body: unknown, status = 200): Response {
 
 beforeEach(() => {
   resetStockPhotoCache()
+  findMany.mockResolvedValue([])
+  invalidateAdminConfig()
   vi.stubEnv('PEXELS_API_KEY', 'test-pexels-key')
   vi.stubEnv('PIXABAY_API_KEY', 'test-pixabay-key')
   delete process.env.PEXELS_API_BASE
@@ -101,23 +111,41 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs()
   vi.restoreAllMocks()
+  // a test may warm the config cache with injected rows — never leak it
+  invalidateAdminConfig()
 })
 
 describe('availability — self-hoster keys gate the feature', () => {
-  it('no keys → no providers, not available', () => {
+  it('no keys → no providers, not available', async () => {
     vi.stubEnv('PEXELS_API_KEY', '')
     vi.stubEnv('PIXABAY_API_KEY', '')
-    expect(stockPhotoProviders()).toEqual([])
-    expect(stockPhotoAvailable()).toBe(false)
+    await expect(stockPhotoProviders()).resolves.toEqual([])
+    await expect(stockPhotoAvailable()).resolves.toBe(false)
   })
 
-  it('either key enables its provider only', () => {
+  it('either key enables its provider only', async () => {
     vi.stubEnv('PIXABAY_API_KEY', '')
-    expect(stockPhotoProviders()).toEqual(['pexels'])
+    await expect(stockPhotoProviders()).resolves.toEqual(['pexels'])
     vi.stubEnv('PEXELS_API_KEY', '')
     vi.stubEnv('PIXABAY_API_KEY', 'k2')
-    expect(stockPhotoProviders()).toEqual(['pixabay'])
-    expect(stockPhotoAvailable()).toBe(true)
+    await expect(stockPhotoProviders()).resolves.toEqual(['pixabay'])
+    await expect(stockPhotoAvailable()).resolves.toBe(true)
+  })
+
+  it('A5: a console-stored key activates the rail with no env var', async () => {
+    vi.stubEnv('PEXELS_API_KEY', '')
+    vi.stubEnv('PIXABAY_API_KEY', '')
+    findMany.mockResolvedValue([{ key: 'stock.providers', value: { pixabay: 'db-key' } }])
+    await expect(stockPhotoProviders()).resolves.toEqual(['pixabay'])
+    await expect(stockPhotoAvailable()).resolves.toBe(true)
+  })
+
+  it('A5: a corrupt stock row is ignored, never fatal', async () => {
+    vi.stubEnv('PEXELS_API_KEY', '')
+    vi.stubEnv('PIXABAY_API_KEY', '')
+    findMany.mockResolvedValue([{ key: 'stock.providers', value: { pexels: 42, junk: 'x' } }])
+    await expect(stockPhotoProviders()).resolves.toEqual([])
+    await expect(stockPhotoAvailable()).resolves.toBe(false)
   })
 })
 
@@ -277,6 +305,15 @@ describe('gating + failure modes', () => {
     vi.stubEnv('PEXELS_API_KEY', '')
     vi.stubEnv('PIXABAY_API_KEY', '')
     await expect(searchStockPhotos('x', 10, { noCache: true })).rejects.toThrow('NO_PROVIDER')
+  })
+
+  it('A5: a stored console key wins over the env var (the request carries it)', async () => {
+    findMany.mockResolvedValue([{ key: 'stock.providers', value: { pexels: 'db-pexels-key' } }])
+    const fetchImpl = vi.fn().mockResolvedValue(jsonRes({ photos: [] }))
+    await searchStockPhotos('x', 5, { fetchImpl, noCache: true })
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit]
+    expect(url.startsWith('https://api.pexels.com/v1/search')).toBe(true)
+    expect((init.headers as Record<string, string>).Authorization).toBe('db-pexels-key')
   })
 
   it('provider error → sanitized message, never the request URL or body', async () => {

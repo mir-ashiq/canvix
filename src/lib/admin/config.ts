@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────
-// Instance configuration (v0.16 A1, extended in v0.16.2 A2) —
-// the store behind /admin's AI + settings pages.
+// Instance configuration (v0.16 A1, extended in v0.16.2 A2,
+// v0.16.5 A5) — the store behind /admin's AI + settings pages.
 //
 // AppConfig rows (key → JSON):
 //   ai.provider  { baseUrl, apiKey }   — legacy single override (v0.16 A1)
@@ -8,6 +8,7 @@
 //   ai.models    { text?, vision?, image? } — legacy model ids (A1)
 //   ai.features  { magicWrite, … }     — per-feature kill switches
 //   app.settings { signupsOpen, anonymousEditing }
+//   stock.providers { pexels?, pixabay? } — stock-media keys (A5)
 //
 // Design decisions (documented in docs/ADMIN.md):
 //   • Precedence per capability slot: multi-provider table (ai.providers)
@@ -41,6 +42,7 @@ export const CONFIG_KEYS = {
   models: 'ai.models',
   features: 'ai.features',
   settings: 'app.settings',
+  stock: 'stock.providers',
 } as const
 
 export const AI_FEATURES = [
@@ -112,6 +114,18 @@ export const DEFAULT_FEATURES: StoredFeatures = {
 export const DEFAULT_SETTINGS: StoredSettings = {
   signupsOpen: true,
   anonymousEditing: true,
+}
+
+// ── stock-media keys (v0.16.5 A5) ─────────────────────────────
+
+/** The two stock-media connectors — photos + videos share each key. */
+export type StockProviderName = 'pexels' | 'pixabay'
+/** Stored stock keys (AppConfig `stock.providers`) — write-only like every credential here. */
+export type StoredStockKeys = Partial<Record<StockProviderName, string>>
+/** The pre-A5 way to key stock search — still the fallback when nothing is stored. */
+export const STOCK_ENV_KEYS: Record<StockProviderName, string> = {
+  pexels: 'PEXELS_API_KEY',
+  pixabay: 'PIXABAY_API_KEY',
 }
 
 const BASEURL_MAX = 2048
@@ -206,6 +220,42 @@ export function validateSettings(input: unknown): Check<Partial<StoredSettings>>
     if (v === undefined) continue
     if (typeof v !== 'boolean') return { ok: false, error: `settings.${key} must be true or false.` }
     out[key] = v
+  }
+  return { ok: true, value: out }
+}
+
+/**
+ * Validate a stock-keys PATCH (v0.16.5 A5). Per connector:
+ *   a non-empty string (trimmed, ≤ APIKEY_MAX) sets the stored key,
+ *   null explicitly clears it (env fallback restored),
+ *   omitted OR an empty string leaves it untouched — the same
+ *   write-only posture as the providers table, applied to a fixed
+ *   two-provider set (editing one key never demands the other).
+ */
+export function validateStockKeys(
+  input: unknown,
+): Check<Partial<Record<StockProviderName, string | null>>> {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    return { ok: false, error: 'stock must be an object.' }
+  }
+  const raw = input as Record<string, unknown>
+  const out: Partial<Record<StockProviderName, string | null>> = {}
+  for (const name of ['pexels', 'pixabay'] as const) {
+    const v = raw[name]
+    if (v === undefined) continue
+    if (v === null) {
+      out[name] = null // explicit clear
+      continue
+    }
+    if (typeof v !== 'string') {
+      return { ok: false, error: `stock.${name} must be a key string or null (to clear).` }
+    }
+    const key = v.trim()
+    if (!key) continue // empty = keep the stored key (write-only editing)
+    if (key.length > APIKEY_MAX) {
+      return { ok: false, error: `stock.${name} must be at most ${APIKEY_MAX} characters.` }
+    }
+    out[name] = key
   }
   return { ok: true, value: out }
 }
@@ -498,4 +548,45 @@ export async function setFeatures(value: StoredFeatures): Promise<void> {
 
 export async function setSettings(value: StoredSettings): Promise<void> {
   await writeRow(CONFIG_KEYS.settings, value as unknown as Prisma.InputJsonValue)
+}
+
+// ── stock-media keys: read / merge-write / resolve (A5) ───────
+
+/** The console-stored stock keys only (no env) — corrupt entries are skipped, never fatal. */
+export async function getStockKeys(): Promise<StoredStockKeys> {
+  const rows = await readRows()
+  const raw = asRecord(rows.get(CONFIG_KEYS.stock))
+  const out: StoredStockKeys = {}
+  for (const name of ['pexels', 'pixabay'] as const) {
+    const v = raw[name]
+    if (typeof v === 'string' && v.trim()) out[name] = v.trim()
+  }
+  return out
+}
+
+/** Merge a validated patch over the stored keys and write the full state. */
+export async function setStockKeys(patch: Partial<Record<StockProviderName, string | null>>): Promise<void> {
+  const next: StoredStockKeys = { ...(await getStockKeys()) }
+  for (const name of ['pexels', 'pixabay'] as const) {
+    const v = patch[name]
+    if (v === null) delete next[name]
+    else if (typeof v === 'string' && v) next[name] = v
+  }
+  await writeRow(CONFIG_KEYS.stock, next as unknown as Prisma.InputJsonValue)
+}
+
+/**
+ * The keys the stock connectors actually use (A5): a stored console
+ * key wins, else the env var, else '' (unset) — the same precedence
+ * direction as every AI credential here: the console overrides the
+ * environment, it never loses to it. Clearing a stored key restores
+ * the env fallback.
+ */
+export async function effectiveStockKeys(): Promise<Record<StockProviderName, string>> {
+  const stored = await getStockKeys()
+  const out = { pexels: '', pixabay: '' }
+  for (const name of ['pexels', 'pixabay'] as const) {
+    out[name] = stored[name] ?? (process.env[STOCK_ENV_KEYS[name]] ?? '').trim()
+  }
+  return out
 }

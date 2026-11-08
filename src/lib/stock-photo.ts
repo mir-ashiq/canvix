@@ -9,8 +9,14 @@
 // images/search route — the standing 404 behind the A3 incident.
 // The slot is retired; photos now ride the SAME self-hoster-key
 // architecture as stock video (v0.15 R6): Pexels + Pixabay,
-// plain REST, one free key each — and the SAME two env keys
+// plain REST, one free key each — and the SAME two keys
 // (PEXELS_API_KEY / PIXABAY_API_KEY) activate both rails.
+//
+// v0.16.5 (A5): those keys are console-manageable. They resolve
+// through src/lib/admin/config.ts — a key stored on the AI & models
+// page (stock.providers row) wins over the env var, so /admin can
+// activate or rotate stock search without a redeploy; the env var
+// remains the zero-console fallback.
 //
 // No provider key configured ⇒ the Photos panel keeps its
 // bundled library, web results answer 503 NO_PROVIDER with the
@@ -49,6 +55,8 @@
 //     suite (tests/e2e/stock-photo-gated.spec.ts).
 // ─────────────────────────────────────────────────────────────
 
+import { effectiveStockKeys } from '@/lib/admin/config'
+
 export type StockPhotoProvider = 'pexels' | 'pixabay'
 
 /** Sanitized attribution block — also the shape stored on ImageElement.credit. */
@@ -78,16 +86,21 @@ export interface StockPhotoResult {
 }
 
 // ── availability (secret-free — never expose the keys) ────────
+// Async since A5: the keys resolve console-first (stored key → env
+// var), which means one AppConfig read (cached 10 s in-process by
+// the config module — the same cost profile as aiFeatureEnabled,
+// which already sits on this route).
 
-export function stockPhotoProviders(): StockPhotoProvider[] {
+export async function stockPhotoProviders(): Promise<StockPhotoProvider[]> {
+  const keys = await effectiveStockKeys()
   const out: StockPhotoProvider[] = []
-  if ((process.env.PEXELS_API_KEY ?? '').trim()) out.push('pexels')
-  if ((process.env.PIXABAY_API_KEY ?? '').trim()) out.push('pixabay')
+  if (keys.pexels) out.push('pexels')
+  if (keys.pixabay) out.push('pixabay')
   return out
 }
 
-export function stockPhotoAvailable(): boolean {
-  return stockPhotoProviders().length > 0
+export async function stockPhotoAvailable(): Promise<boolean> {
+  return (await stockPhotoProviders()).length > 0
 }
 
 // ── shared helpers ────────────────────────────────────────────
@@ -322,7 +335,10 @@ export async function searchStockPhotos(
   count: number,
   opts: SearchStockPhotosOptions = {},
 ): Promise<StockPhotoResult[]> {
-  const providers = stockPhotoProviders()
+  const keys = await effectiveStockKeys()
+  const providers: StockPhotoProvider[] = []
+  if (keys.pexels) providers.push('pexels')
+  if (keys.pixabay) providers.push('pixabay')
   const provider = opts.provider && providers.includes(opts.provider) ? opts.provider : providers[0]
   if (!provider) throw new Error('NO_PROVIDER')
 
@@ -342,7 +358,7 @@ export async function searchStockPhotos(
     const base = (process.env.PEXELS_API_BASE ?? 'https://api.pexels.com').replace(/\/+$/, '')
     const url = `${base}/v1/search?query=${encodeURIComponent(q)}&per_page=${n}&orientation=landscape`
     const res = await doFetch(url, {
-      headers: { Authorization: (process.env.PEXELS_API_KEY ?? '').trim() },
+      headers: { Authorization: keys.pexels },
       signal: AbortSignal.timeout(PROVIDER_FETCH_TIMEOUT_MS),
     })
     if (!res.ok) {
@@ -354,7 +370,7 @@ export async function searchStockPhotos(
     body = await res.json()
   } else {
     const base = (process.env.PIXABAY_API_BASE ?? 'https://pixabay.com/api').replace(/\/+$/, '')
-    const key = encodeURIComponent((process.env.PIXABAY_API_KEY ?? '').trim())
+    const key = encodeURIComponent(keys.pixabay)
     const url = `${base}/?key=${key}&q=${encodeURIComponent(q)}&image_type=photo&per_page=${n}&safesearch=true`
     const res = await doFetch(url, {
       signal: AbortSignal.timeout(PROVIDER_FETCH_TIMEOUT_MS),

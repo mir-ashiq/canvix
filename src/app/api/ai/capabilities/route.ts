@@ -27,7 +27,7 @@ async function __canvix_get() {
     hasProviderForSlot('vision'),
     hasProviderForSlot('image'),
     hasProviderForSlot('imageEdit'),
-    Promise.resolve(stockPhotoAvailable()),
+    stockPhotoAvailable(), // async since A5 — keys resolve console-first
   ])
   const configured = text || vision || image || imageEdit
   const flags = await getFeatures()

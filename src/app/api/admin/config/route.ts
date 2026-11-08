@@ -20,12 +20,17 @@ import {
   validateSettings,
   validateProviderList,
   validateSlots,
+  validateStockKeys,
+  setStockKeys,
+  getStockKeys,
+  effectiveStockKeys,
+  STOCK_ENV_KEYS,
   maskApiKey,
   type StoredProviderEntry,
   type AiSlot,
+  type StockProviderName,
 } from '@/lib/admin/config'
 import { resolveProvider, resolveSlot, type ResolvedSlot } from '@/lib/ai/provider'
-import { stockPhotoProviders } from '@/lib/stock-photo'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { withLogging } from '@/lib/observability'
 
@@ -48,6 +53,10 @@ export const dynamic = 'force-dynamic'
 
 // v0.16.4 (A4): imageSearch is retired — four model slots remain;
 // photo search runs on the stock-provider keys (surfaced below)
+//
+// v0.16.5 (A5) adds the stock section: { pexels?, pixabay? } keys
+// for the Photos AND Videos search rails — write-only, null clears,
+// env vars as fallback (the same precedence as every credential).
 const SLOT_ORDER: AiSlot[] = ['text', 'vision', 'image', 'imageEdit']
 
 function slotView(resolved: ResolvedSlot | null) {
@@ -61,14 +70,27 @@ function slotView(resolved: ResolvedSlot | null) {
   }
 }
 
+/** One connector's sanitized state: masked stored key, which layer
+ * answers, never the key itself (A5). */
+function stockProviderView(name: StockProviderName, stored: string | undefined) {
+  const envSet = Boolean((process.env[STOCK_ENV_KEYS[name]] ?? '').trim())
+  return {
+    set: Boolean(stored) || envSet,
+    source: stored ? ('db' as const) : envSet ? ('env' as const) : null,
+    keyMasked: stored ? maskApiKey(stored) : null,
+  }
+}
+
 async function sanitizedView() {
-  const [provider, stored, providers, models, features, settings] = await Promise.all([
+  const [provider, stored, providers, models, features, settings, stockKeys, stockEffective] = await Promise.all([
     resolveProvider(),
     getProviderOverride(),
     getProviders(),
     getModels(),
     getFeatures(),
     getSettings(),
+    getStockKeys(),
+    effectiveStockKeys(),
   ])
   // per-slot resolution (multi table → legacy chain) for the slots card
   const resolved = {} as Record<AiSlot, ReturnType<typeof slotView>>
@@ -101,12 +123,15 @@ async function sanitizedView() {
     models,
     features,
     settings,
-    // v0.16.4 (A4): photo search left the AI table — the console shows
-    // where it lives now (stock keys, shared with the Videos rail) and
-    // whether those keys are set. Secret-free: names only, never keys.
-    stockPhotos: {
-      available: stockPhotoProviders().length > 0,
-      providers: stockPhotoProviders(),
+    // v0.16.5 (A5): the stock-media card's data — per-connector mask
+    // + which layer answers (console key vs env var), plus whether the
+    // rails are live at all. Secret-free: masks and names only, never keys.
+    stock: {
+      available: Boolean(stockEffective.pexels || stockEffective.pixabay),
+      providers: {
+        pexels: stockProviderView('pexels', stockKeys.pexels),
+        pixabay: stockProviderView('pixabay', stockKeys.pixabay),
+      },
     },
   }
 }
@@ -209,6 +234,21 @@ async function __canvix_put(req: NextRequest) {
       const check = validateSettings(body.settings)
       if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 })
       await setSettings({ ...(await getSettings()), ...check.value })
+    }
+
+    // ── stock section (stock-media keys, v0.16.5 A5) ───────────
+    // Partial merge per connector: { pexels?: key | null, pixabay?:
+    // key | null } — a string sets the stored key (write-only, never
+    // displayed again), null clears it (env fallback restored),
+    // omitted/empty leaves it untouched. The SAME two keys power the
+    // Photos and Videos search rails.
+    if (body.stock !== undefined) {
+      if (typeof body.stock !== 'object' || body.stock === null || Array.isArray(body.stock)) {
+        return NextResponse.json({ error: 'stock must be an object ({ pexels?, pixabay? }).' }, { status: 400 })
+      }
+      const check = validateStockKeys(body.stock)
+      if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 })
+      await setStockKeys(check.value)
     }
 
     return NextResponse.json(await sanitizedView())

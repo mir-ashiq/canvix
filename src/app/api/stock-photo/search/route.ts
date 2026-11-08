@@ -39,13 +39,13 @@ async function __canvix_post(req: NextRequest) {
   const limit = checkRateLimit(req, 'stockphoto:search')
   if (!limit.ok) return rateLimitResponse(limit)
 
-  const providers = stockPhotoProviders()
+  const providers = await stockPhotoProviders()
   if (providers.length === 0) {
     return NextResponse.json(
       {
         error: 'Photo search needs a stock provider key on the server.',
         code: 'NO_PROVIDER',
-        hint: 'Set PEXELS_API_KEY or PIXABAY_API_KEY — free keys from each provider (docs/STOCK-PHOTO.md). The same keys also enable the Videos rail.',
+        hint: 'Store a Pexels or Pixabay key on the admin AI & models page (stock media card), or set PEXELS_API_KEY / PIXABAY_API_KEY — free keys from each provider (docs/STOCK-PHOTO.md). The same keys also enable the Videos rail.',
       },
       { status: 503 },
     )

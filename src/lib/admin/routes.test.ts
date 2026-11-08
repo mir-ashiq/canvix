@@ -311,3 +311,58 @@ describe('POST /api/auth/register × signups switch (v0.16 A1)', () => {
     expect(((await res.json()) as { code?: string }).code).toBeUndefined()
   })
 })
+
+describe('GET/PUT /api/admin/config × stock section (v0.16.5 A5)', () => {
+  it('GET shows per-connector masks, sources and availability — never keys', async () => {
+    dbMock.session.findUnique.mockResolvedValue(ADMIN_SESSION)
+    dbMock.appConfig.findMany.mockResolvedValue([{ key: 'stock.providers', value: { pexels: 'sk-pexels-secret-1234' } }])
+    const res = await configGet(req('http://localhost/api/admin/config'))
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      stock: { available: boolean; providers: Record<string, { set: boolean; source: string | null; keyMasked: string | null }> }
+    }
+    expect(body.stock.available).toBe(true)
+    expect(body.stock.providers.pexels).toEqual({ set: true, source: 'db', keyMasked: 'sk-p…1234' })
+    expect(JSON.stringify(body)).not.toContain('sk-pexels-secret-1234')
+  })
+
+  it('PUT stock saves write-only and keeps an untouched connector', async () => {
+    dbMock.session.findUnique.mockResolvedValue(ADMIN_SESSION)
+    // the mock db "persists": upserts land in the row store findMany
+    // reads, so the sanitized echo reflects the just-saved state
+    const rows = new Map<string, unknown>([['stock.providers', { pixabay: 'keep-me' }]])
+    dbMock.appConfig.findMany.mockImplementation(async () => [...rows.entries()].map(([key, value]) => ({ key, value })))
+    dbMock.appConfig.upsert.mockImplementation(async (args: { where: { key: string }; create: { value: unknown } }) => {
+      rows.set(args.where.key, args.create.value)
+      return {}
+    })
+    const res = await configPut(req('http://localhost/api/admin/config', { method: 'PUT', body: { stock: { pexels: 'new-pexels-key-1234' } } }))
+    expect(res.status).toBe(200)
+    expect(dbMock.appConfig.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { key: 'stock.providers' }, create: { key: 'stock.providers', value: { pexels: 'new-pexels-key-1234', pixabay: 'keep-me' } } })
+    )
+    const body = (await res.json()) as { stock: { providers: { pexels: { keyMasked: string } } } }
+    expect(body.stock.providers.pexels.keyMasked).toBe('new-…1234')
+  })
+
+  it('PUT stock null clears one connector (env fallback restored)', async () => {
+    dbMock.session.findUnique.mockResolvedValue(ADMIN_SESSION)
+    dbMock.appConfig.findMany.mockResolvedValue([{ key: 'stock.providers', value: { pexels: 'old', pixabay: 'keep' } }])
+    const res = await configPut(req('http://localhost/api/admin/config', { method: 'PUT', body: { stock: { pexels: null } } }))
+    expect(res.status).toBe(200)
+    expect(dbMock.appConfig.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: { key: 'stock.providers', value: { pixabay: 'keep' } } })
+    )
+  })
+
+  it('PUT stock rejects garbage (wrong types, oversize)', async () => {
+    dbMock.session.findUnique.mockResolvedValue(ADMIN_SESSION)
+    const bad1 = await configPut(req('http://localhost/api/admin/config', { method: 'PUT', body: { stock: { pexels: 42 } } }))
+    expect(bad1.status).toBe(400)
+    const bad2 = await configPut(req('http://localhost/api/admin/config', { method: 'PUT', body: { stock: 'nope' } }))
+    expect(bad2.status).toBe(400)
+    const bad3 = await configPut(req('http://localhost/api/admin/config', { method: 'PUT', body: { stock: { pixabay: 'x'.repeat(4097) } } }))
+    expect(bad3.status).toBe(400)
+    expect(dbMock.appConfig.upsert).not.toHaveBeenCalled()
+  })
+})

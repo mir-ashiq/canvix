@@ -3,6 +3,73 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.16.5] — 2026-11-08
+
+### Added
+
+- **Pexels & Pixabay keys in the admin console — the Stock media
+  card (A5).** The two free stock-media keys behind the Photos and
+  Videos search rails are now managed on the AI & models page like
+  the AI providers: write-only key fields (stored keys echo as
+  masks only), a per-provider Test button and a per-provider Clear,
+  in a fixed two-provider card below Model slots. They are library
+  catalogs, not AI providers — the A4 decision, now manageable
+  without editing `.env` and redeploying. Precedence mirrors every
+  other credential in the console: a stored key wins over
+  `PEXELS_API_KEY` / `PIXABAY_API_KEY`, clearing it restores the env
+  fallback, and saving takes effect immediately (the key store rides
+  `AppConfig` behind the config module's 10 s in-process cache —
+  the same cost profile as the feature switches already sitting on
+  every AI route). The Model-slots banner now points at the card
+  instead of telling the operator to go edit environment variables.
+- **Stock-key Test button** — one minimal one-result search through
+  the provider's real search endpoint (`/v1/search` for Pexels,
+  `/api/` for Pixabay) with the effective key: the same call the
+  Photos rail makes, so a pass there is a pass in the panel, and a
+  401 says "rejected the key" in plain words. Admin-only,
+  same-origin, rate-limited to one probe per 10 s — it is one of
+  the only console actions that spends real provider quota. The
+  verdict never echoes the key, the request URL (Pixabay's key
+  rides the query string) or the provider's response body.
+
+### Changed
+
+- `stockPhotoProviders` / `stockVideoProviders` /
+  `stockPhotoAvailable` are now **async** — key resolution reads the
+  console store first. Internal API only; the routes that consume
+  them await, and `/api/stock-photo/available` +
+  `/api/stock-video/available` + `/api/ai/capabilities` answer
+  exactly as before (booleans and provider names, never keys).
+
+## [0.16.4] — 2026-11-07
+
+### Added
+
+- **Stock photo search on Pexels/Pixabay keys — the `imageSearch`
+  AI slot is retired (A4, #44).** "Find me a photo of a coffee
+  shop" is a library query against licensed stock catalogs, not a
+  generative one, and almost no OpenAI-compatible vendor serves the
+  `images/search` endpoint the old slot demanded — the standing 404
+  behind the A3 incident. Photo search now rides the same
+  self-hoster-key architecture as the Videos rail (v0.15 R6):
+  Pexels + Pixabay, plain REST, one free key each, and the same two
+  env keys (`PEXELS_API_KEY` / `PIXABAY_API_KEY`) activate both
+  rails. Every result carries a sanitized, durable credit block
+  (provider, author, license, source page) stored on the inserted
+  element and shown at insert and on selection — never burned into
+  the canvas or exports. No key configured ⇒ the Photos panel keeps
+  its bundled library, search answers `503 NO_PROVIDER` with the
+  operator hint, everything else is untouched (the F2b pattern). No
+  migration — stored provider tables that still carry an
+  `imageSearch` slot are read fine and drop it on the next save.
+
+### Fixed
+
+- **Photos categories are the results-mode exit hatch — always
+  render (#45).** A category chip could disappear behind the
+  results header after a web search, leaving no way back to the
+  bundled library.
+
 ## [0.16.3] — 2026-11-07
 
 ### Added

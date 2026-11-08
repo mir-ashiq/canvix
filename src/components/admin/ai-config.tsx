@@ -1,18 +1,22 @@
 'use client'
 
-// AI configuration (v0.16 A1 → v0.16.2 A2 rework).
+// AI configuration (v0.16 A1 → v0.16.2 A2 rework → v0.16.5 A5).
 //
-// Four surfaces:
+// Five surfaces:
 //   1. Providers — the multi-provider table: add any OpenAI-compatible
 //      endpoint (NVIDIA NIM, OpenRouter, Z.ai, Groq, …), one key each,
 //      write-only credentials, per-provider Test button.
 //   2. Model slots — pin each capability (text / vision / image /
 //      imageEdit) to a provider + model id, so different features can
 //      run on different vendors. (v0.16.4 A4: imageSearch is retired —
-//      photo search runs on the stock-provider keys, see the banner.)
+//      photo search runs on the stock-media keys, see the banner.)
 //   3. Legacy fallback — the v0.16 A1 single-provider override and model
 //      ids, used only by slots that don't resolve through the table.
 //   4. Feature kill switches.
+//   5. Stock media (v0.16.5 A5) — the Pexels/Pixabay keys behind the
+//      Photos and Videos search rails: write-only, per-provider Test
+//      button, env vars as fallback. Not AI providers — library
+//      catalogs with free keys (the A4 decision, made manageable).
 
 import { useEffect, useState } from 'react'
 import { Zap, Plus, Trash2, Import } from 'lucide-react'
@@ -53,8 +57,11 @@ interface ConfigView {
   models: { text?: string; vision?: string; image?: string }
   features: Record<string, boolean>
   settings: { signupsOpen: boolean; anonymousEditing: boolean }
-  /** v0.16.4 (A4): where photo search lives now (stock keys) */
-  stockPhotos: { available: boolean; providers: string[] }
+  /** v0.16.5 (A5): the stock-media keys — masks + which layer answers */
+  stock: {
+    available: boolean
+    providers: Record<string, { set: boolean; source: 'db' | 'env' | null; keyMasked: string | null }>
+  }
 }
 
 /** Local editing state for one provider row. New rows get a client-generated
@@ -110,6 +117,14 @@ interface SlotTestState {
   busy?: boolean
 }
 
+/** Stock-key probe result (A5) — same verdict posture as the slot probe. */
+interface StockTestState {
+  provider: string
+  ok: boolean
+  message: string
+  busy?: boolean
+}
+
 /** The endpoint each slot exercises — shown next to the slot so the
  * provider-fit question ("can NVIDIA generate images?") answers itself. */
 const SLOT_ENDPOINT: Record<string, string> = {
@@ -118,6 +133,25 @@ const SLOT_ENDPOINT: Record<string, string> = {
   image: 'images/generations',
   imageEdit: 'images/generations/edit',
 }
+
+/** The stock-media connectors (A5) — a fixed set, one free key each,
+ * shared by the Photos and Videos search rails. */
+const STOCK_PROVIDERS = [
+  {
+    key: 'pexels',
+    label: 'Pexels',
+    hint: 'Photos + Videos search · free key at pexels.com/api',
+    env: 'PEXELS_API_KEY',
+    placeholder: 'free Pexels key',
+  },
+  {
+    key: 'pixabay',
+    label: 'Pixabay',
+    hint: 'Photos + Videos search · free key at pixabay.com/api/docs',
+    env: 'PIXABAY_API_KEY',
+    placeholder: 'free Pixabay key',
+  },
+] as const
 
 export function AdminAiConfig() {
   const [view, setView] = useState<ConfigView | null>(null)
@@ -156,6 +190,9 @@ export function AdminAiConfig() {
       image: data.models.image ?? '',
     })
     setFeatures(data.features)
+    // write-only credentials: never prefilled, cleared after every save
+    setStockPexels('')
+    setStockPixabay('')
   }
 
   async function put(body: unknown, message: string) {
@@ -216,6 +253,11 @@ export function AdminAiConfig() {
 
   const [slotTest, setSlotTest] = useState<SlotTestState | null>(null)
 
+  // ── stock media (A5): Pexels/Pixabay keys, write-only like providers ──
+  const [stockPexels, setStockPexels] = useState('')
+  const [stockPixabay, setStockPixabay] = useState('')
+  const [stockTest, setStockTest] = useState<StockTestState | null>(null)
+
   /** Probe the ENDPOINT the slot actually uses (A3) — a chat-only
    * provider passes the text test but cannot generate images. */
   async function testSlot(slot: string) {
@@ -233,6 +275,39 @@ export function AdminAiConfig() {
       })
     } else {
       setSlotTest({ slot, ok: false, message: res.data.message ?? res.data.error ?? `Test failed (${res.status})` })
+    }
+  }
+
+  /** Save the stock-media keys — only the fields the operator typed;
+   * empty keeps the stored credential (the write-only posture). */
+  async function saveStockKeys() {
+    const stock: Record<string, string> = {}
+    if (stockPexels.trim()) stock.pexels = stockPexels.trim()
+    if (stockPixabay.trim()) stock.pixabay = stockPixabay.trim()
+    await put({ stock }, 'Stock keys saved — the Photos and Videos rails pick them up immediately.')
+  }
+
+  /** Remove one stored key (explicit null) — env fallback restored. */
+  async function clearStockKey(name: 'pexels' | 'pixabay') {
+    await put({ stock: { [name]: null } }, `Stored ${name} key cleared.`)
+  }
+
+  /** Probe the provider's real search endpoint with the effective key. */
+  async function testStockKey(name: 'pexels' | 'pixabay') {
+    setStockTest({ provider: name, ok: true, busy: true, message: 'probing…' })
+    const res = await sendJson<{ ok: boolean; message?: string; error?: string }>(
+      '/api/admin/config/stock-test',
+      'POST',
+      { provider: name }
+    )
+    if (res.ok && res.data.ok) {
+      setStockTest({ provider: name, ok: true, message: res.data.message ?? 'Key valid.' })
+    } else {
+      setStockTest({
+        provider: name,
+        ok: false,
+        message: res.data.message ?? res.data.error ?? `Test failed (${res.status}).`,
+      })
     }
   }
 
@@ -261,6 +336,7 @@ export function AdminAiConfig() {
   const providerSectionReady = Boolean(baseUrl.trim()) === Boolean(apiKey.trim()) || (!baseUrl && !apiKey)
   const legacyStored = view.provider.stored !== null
   const tableEmpty = rows.length === 0
+  const stockKeyedCount = Object.values(view.stock.providers).filter((p) => p.set).length
 
   return (
     <>
@@ -408,20 +484,21 @@ export function AdminAiConfig() {
           every feature can run on a different vendor.
         </p>
         {/* v0.16.4 (A4): photo search LEFT the AI table — it runs on the
-            free stock-provider keys (same keys as the Videos rail), not on
-            a model slot. State where it lives and whether the keys are set,
-            so the operator is never sent hunting for a slot that no longer
-            exists. */}
+            free stock-media keys (same keys as the Videos rail), not on a
+            model slot. v0.16.5 (A5): those keys are managed in the Stock
+            media card below. State where they live so the operator is
+            never sent hunting for a slot that no longer exists. */}
         <div className="mb-4 rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-3 text-sm">
           <p>
-            Photo search is no longer a model slot — it runs on free stock-provider keys (Pexels / Pixabay), the same
-            keys as the Videos rail:{' '}
-            <code className="rounded bg-muted px-1">PEXELS_API_KEY</code> /{' '}
-            <code className="rounded bg-muted px-1">PIXABAY_API_KEY</code> (docs/STOCK-PHOTO.md).
+            Photo search is not a model slot — it runs on the free stock-media keys (Pexels / Pixabay) managed in the{' '}
+            <strong>Stock media</strong> card below, shared with the Videos rail (docs/STOCK-PHOTO.md).
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {view.stockPhotos.available
-              ? `Active — keyed: ${view.stockPhotos.providers.join(', ')}.`
+            {view.stock.available
+              ? `Active — keyed: ${Object.entries(view.stock.providers)
+                  .filter(([, p]) => p.set)
+                  .map(([n, p]) => `${n}${p.source === 'db' ? ' (console)' : ' (env)'}`)
+                  .join(' · ')}.`
               : 'No stock key set — the Photos panel keeps only its bundled library.'}
           </p>
         </div>
@@ -491,6 +568,107 @@ export function AdminAiConfig() {
         >
           Save providers & slots
         </button>
+      </Card>
+
+      {/* v0.16.5 (A5): the stock-media card — Pexels/Pixabay keys for the
+          Photos + Videos search rails, managed like the AI providers:
+          write-only credentials, masked placeholders, per-provider Test
+          (a real one-result search through the effective key) and Clear
+          (env fallback restored). NOT model slots — the A4 decision. */}
+      <Card
+        title="Stock media — Pexels & Pixabay"
+        right={<Chip tone={stockKeyedCount > 0 ? 'good' : 'neutral'}>{stockKeyedCount > 0 ? `${stockKeyedCount} keyed` : 'no keys'}</Chip>}
+      >
+        <p className="mb-4 text-sm text-muted-foreground">
+          The same two free keys power the Photos and Videos search rails — no AI provider involved. Get a free key at{' '}
+          <a href="https://www.pexels.com/api/" target="_blank" rel="noreferrer" className="underline">
+            pexels.com/api
+          </a>{' '}
+          and{' '}
+          <a href="https://pixabay.com/api/docs/" target="_blank" rel="noreferrer" className="underline">
+            pixabay.com/api/docs
+          </a>
+          . Keys are write-only — stored, never displayed again; leave a field empty to keep the stored one. A stored
+          key wins over the <code className="rounded bg-muted px-1">PEXELS_API_KEY</code> /{' '}
+          <code className="rounded bg-muted px-1">PIXABAY_API_KEY</code> environment variables; clearing a stored key
+          falls back to the env key when one is set.
+        </p>
+        <div className="space-y-3">
+          {STOCK_PROVIDERS.map((s) => {
+            const state = view.stock.providers[s.key]
+            const savedHere = state?.source === 'db'
+            const testHere = stockTest?.provider === s.key ? stockTest : null
+            return (
+              <div key={s.key} className="rounded-xl border p-3">
+                <div className="grid gap-2 sm:grid-cols-[1.1fr_1.6fr_auto]">
+                  <div>
+                    <p className="text-sm font-medium">{s.label}</p>
+                    <p className="text-xs text-muted-foreground">{s.hint}</p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {state?.set ? `active · ${savedHere ? 'console key' : `env ${s.env}`}` : 'not keyed'}
+                    </p>
+                  </div>
+                  <label className="text-xs">
+                    <span className="mb-1 block font-medium">API key</span>
+                    <input
+                      type="password"
+                      value={s.key === 'pexels' ? stockPexels : stockPixabay}
+                      onChange={(e) =>
+                        s.key === 'pexels' ? setStockPexels(e.target.value) : setStockPixabay(e.target.value)
+                      }
+                      placeholder={
+                        state?.keyMasked
+                          ? `stored: ${state.keyMasked}`
+                          : state?.source === 'env'
+                            ? 'env key active — store one to override'
+                            : s.placeholder
+                      }
+                      autoComplete="off"
+                      className="h-9 w-full rounded-lg border bg-background px-3 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </label>
+                  <div className="flex items-end gap-1.5">
+                    <button
+                      onClick={() => void testStockKey(s.key)}
+                      disabled={busy || stockTest?.busy === true || !state?.set}
+                      title={state?.set ? `One minimal real search through ${s.label}` : 'Save a key first, then test'}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
+                    >
+                      <Zap size={14} /> Test
+                    </button>
+                    <button
+                      onClick={() => void clearStockKey(s.key)}
+                      disabled={busy || !savedHere}
+                      title={savedHere ? 'Remove the stored key (env fallback restored)' : 'Nothing stored — env or unset'}
+                      className="inline-flex h-9 items-center rounded-lg border px-2.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+                {testHere && !testHere.busy && (
+                  <p className={`mt-2 text-sm ${testHere.ok ? 'text-emerald-600' : 'text-destructive'}`}>
+                    {testHere.message}
+                  </p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => void saveStockKeys()}
+            disabled={busy || (!stockPexels.trim() && !stockPixabay.trim())}
+            className="rounded-lg bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            Save stock keys
+          </button>
+          <span className="text-xs text-muted-foreground">
+            {view.stock.available
+              ? 'Search active — the Photos web-results section and the Videos rail answer now.'
+              : 'No stock key set — Photos keeps its bundled library and the Videos rail stays hidden.'}
+          </span>
+        </div>
       </Card>
 
       <Card

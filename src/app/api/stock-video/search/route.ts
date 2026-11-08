@@ -28,7 +28,7 @@ async function __canvix_post(req: NextRequest) {
   const limit = checkRateLimit(req, 'stockvideo:search')
   if (!limit.ok) return rateLimitResponse(limit)
 
-  const providers = stockVideoProviders()
+  const providers = await stockVideoProviders()
   if (providers.length === 0) {
     return NextResponse.json(
       {

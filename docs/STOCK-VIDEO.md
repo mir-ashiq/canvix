@@ -11,20 +11,28 @@ and everything else in the editor keeps working.
 
 ## Providers
 
-| Provider | Env key | Where to get it | License |
-|---|---|---|---|
-| Pexels | `PEXELS_API_KEY` | https://www.pexels.com/api/ (free) | Pexels License |
-| Pixabay | `PIXABAY_API_KEY` | https://pixabay.com/api/docs/ (free) | Pixabay Content License |
+| Provider | Console card | Env fallback | Where to get it | License |
+|---|---|---|---|---|
+| Pexels | Stock media → Pexels | `PEXELS_API_KEY` | https://www.pexels.com/api/ (free) | Pexels License |
+| Pixabay | Stock media → Pixabay | `PIXABAY_API_KEY` | https://pixabay.com/api/docs/ (free) | Pixabay Content License |
+
+**v0.16.5 (A5): the keys are managed in the admin console** — the
+AI & models page's **Stock media** card, shared with the Photos
+rail (the same two keys activate both). Write-only fields,
+per-provider Test (a real one-result search) and Clear (env
+fallback restored). A stored console key wins over the env var;
+saving takes effect immediately, no redeploy. Zero console work
+still works:
+
+```bash
+# .env — either key activates the Videos rail (and photo search)
+PEXELS_API_KEY=your-free-key
+# PIXABAY_API_KEY=your-free-key
+```
 
 Optional base overrides exist for proxies and test rigs:
 `PEXELS_API_BASE` (default `https://api.pexels.com`) and
 `PIXABAY_API_BASE` (default `https://pixabay.com/api`).
-
-```bash
-# .env — either key activates the Videos rail
-PEXELS_API_KEY=your-free-key
-# PIXABAY_API_KEY=your-free-key
-```
 
 Both connectors are plain REST/JSON over `fetch`.
 

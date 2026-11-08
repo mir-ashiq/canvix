@@ -14,6 +14,24 @@ interface EditResponse {
   width?: number
   height?: number
   error?: string
+  /** scrubbed provider reason (502 PROVIDER_ERROR bodies) — shown to the user */
+  detail?: string
+}
+
+/** Pull a human reason out of a provider `detail` string. The API layer
+ *  scrubs and forwards the provider's raw error text; when it is JSON
+ *  (OpenAI-style {"error":{"message":...}}) extract the message, else
+ *  pass the text through. Always capped for toast display. */
+function providerReason(detail?: string): string {
+  if (!detail) return ''
+  try {
+    const parsed = JSON.parse(detail.replace(/ \(HTTP \d+\)$/, ''))
+    const msg = parsed?.error?.message
+    if (typeof msg === 'string' && msg) return msg
+  } catch {
+    /* not JSON — use as-is */
+  }
+  return detail
 }
 
 /** Normalise an element src into something the AI service can consume:
@@ -52,7 +70,8 @@ async function runImageAI(
     })
     const data = (await res.json()) as EditResponse
     if (!res.ok || !data.dataUrl) {
-      onDone(data.error ?? 'The edit failed. Please try again.')
+      const reason = providerReason(data.detail)
+      onDone(reason ? `${data.error ?? 'The edit failed.'} — ${reason.slice(0, 220)}` : (data.error ?? 'The edit failed. Please try again.'))
       return false
     }
     const w = data.width || el.naturalWidth

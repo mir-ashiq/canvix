@@ -25,7 +25,9 @@ export const dynamic = 'force-dynamic'
 // says OK but the feature is broken": a chat-only provider (NVIDIA NIM
 // et al.) passes every text test yet cannot serve image generation,
 // because it simply has no POST /v1/images/generations route. Body:
-//   { slot: "image" | "imageEdit" | "imageSearch" | "text" | "vision" }
+//   { slot: "image" | "imageEdit" | "text" | "vision" }
+// (v0.16.4 A4: imageSearch is gone with the slot — photo search runs
+// on the stock-provider keys, not on an AI provider.)
 //
 //   text / vision → one minimal chat completion (the existing probe).
 //   image         → a REAL minimal generation — the only full proof;
@@ -35,7 +37,6 @@ export const dynamic = 'force-dynamic'
 //                   no input image — a 400-class "must provide images"
 //                   answer PROVES the endpoint exists (zero cost); 404
 //                   means the provider cannot run this slot.
-//   imageSearch   → one tiny search (count 1); 404 = not served.
 //
 // Verdicts classify the provider's answer so the console can say WHY,
 // not just "failed". The test always goes through the SDK constructor
@@ -125,9 +126,9 @@ async function __canvix_post(req: NextRequest) {
   const slotProbe = typeof body.slot === 'string' ? body.slot.trim() : null
   if (slotProbe) {
     if (!(slotProbe in SLOT_ENDPOINT)) {
-      return NextResponse.json({ ok: false, error: 'Unknown slot — use text, vision, image, imageEdit or imageSearch.' }, { status: 400 })
+      return NextResponse.json({ ok: false, error: 'Unknown slot — use text, vision, image or imageEdit.' }, { status: 400 })
     }
-    const resolved = await resolveSlot(slotProbe as 'text' | 'vision' | 'image' | 'imageEdit' | 'imageSearch')
+    const resolved = await resolveSlot(slotProbe as 'text' | 'vision' | 'image' | 'imageEdit')
     if (!resolved) {
       return NextResponse.json(
         { ok: false, error: `The ${slotProbe} slot has no provider — pin one on the AI & models page.` },

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { hasProviderForSlot } from '@/lib/ai/provider'
+import { stockPhotoAvailable } from '@/lib/stock-photo'
 import { getFeatures } from '@/lib/admin/config'
 import { withLogging } from '@/lib/observability'
 
@@ -19,14 +20,16 @@ async function __canvix_get() {
   // table you can wire text to one vendor and images to another, so
   // "a provider exists" is no longer a single boolean. Still booleans
   // only — never config, never keys, never which layer answered.
-  const [text, vision, image, imageEdit, imageSearch] = await Promise.all([
+  // v0.16.4 (A4): photoSearch left the AI table — it answers on the
+  // stock-provider keys (Pexels/Pixabay), like the Videos rail.
+  const [text, vision, image, imageEdit, stockPhotos] = await Promise.all([
     hasProviderForSlot('text'),
     hasProviderForSlot('vision'),
     hasProviderForSlot('image'),
     hasProviderForSlot('imageEdit'),
-    hasProviderForSlot('imageSearch'),
+    Promise.resolve(stockPhotoAvailable()),
   ])
-  const configured = text || vision || image || imageEdit || imageSearch
+  const configured = text || vision || image || imageEdit
   const flags = await getFeatures()
   return NextResponse.json({
     configured,
@@ -37,7 +40,7 @@ async function __canvix_get() {
       vision: vision && flags.vision,          // Magic Layers
       translation: text && flags.translation,
       assistant: text && flags.assistant,
-      photoSearch: imageSearch && flags.photoSearch,
+      photoSearch: stockPhotos && flags.photoSearch, // stock keys, not a model slot
       backgroundRemoval: true,     // local ONNX — always available
       colorPalette: true,          // local deterministic
       layoutSuggestions: true,     // local deterministic

@@ -54,8 +54,16 @@ export const AI_FEATURES = [
 ] as const
 export type AiFeature = (typeof AI_FEATURES)[number]
 
-/** Capability slots (v0.16.2 A2) — what a provider can be assigned to. */
-export const AI_SLOTS = ['text', 'vision', 'image', 'imageEdit', 'imageSearch'] as const
+/**
+ * Capability slots (v0.16.2 A2) — what a provider can be assigned to.
+ * v0.16.4 (A4): imageSearch is GONE — photo search is not a model
+ * capability; it runs on the stock-provider keys (Pexels/Pixabay,
+ * src/lib/stock-photo.ts), like the R6 stock-video rail. Stored
+ * tables that still carry an imageSearch slot are read fine:
+ * validateSlots only reads known slot keys, so the stale entry is
+ * dropped on the next read and disappears on the next save.
+ */
+export const AI_SLOTS = ['text', 'vision', 'image', 'imageEdit'] as const
 export type AiSlot = (typeof AI_SLOTS)[number]
 
 export interface StoredProvider {
@@ -452,7 +460,7 @@ export async function clearProviders(): Promise<void> {
  *   • no legacy override stored → { ok: false } (the route answers 400)
  *   • a provider with the same baseUrl already in the table → don't
  *     duplicate, just clear the legacy row
- *   • table has no slots yet → point all five at the imported provider
+ *   • table has no slots yet → point every slot at the imported provider
  *     (preserves the A1 behaviour where the override answered everything)
  */
 export async function importLegacyProvider(): Promise<

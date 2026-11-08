@@ -316,7 +316,7 @@ describe('importLegacyProvider (v0.16.2 A2)', () => {
       expect(out.value.list).toHaveLength(1)
       expect(out.value.list[0].baseUrl).toBe('https://legacy.example/v1')
       expect(out.value.list[0].apiKey).toBe('sk-leg')
-      expect(Object.keys(out.value.slots)).toHaveLength(5) // all slots wired
+      expect(Object.keys(out.value.slots)).toHaveLength(4) // all slots wired (imageSearch retired, v0.16.4 A4)
     }
     const calls = upsert.mock.calls.map((c) => c[0].where.key)
     expect(calls).toContain('ai.providers')

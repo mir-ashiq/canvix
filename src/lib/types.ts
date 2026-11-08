@@ -204,6 +204,12 @@ export interface ImageElement extends BaseElement {
   filter?: string
   /** preset strength 0..100 (default 100) */
   filterIntensity?: number
+  /** v0.16.4 (A4): durable stock-photo attribution (the R6 video
+   *  pattern) — set by the Photos panel's stock connectors, absent on
+   *  uploads and bundled photos. Rides autosave/versions/collab; shown
+   *  on selection, never burned into exports (neither provider license
+   *  demands on-content credit). */
+  credit?: { provider: string; author: string; license: string; url: string }
 }
 
 export interface StickerElement extends BaseElement {

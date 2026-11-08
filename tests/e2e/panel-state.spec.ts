@@ -7,11 +7,12 @@ import { test, expect, type Page } from '@playwright/test'
  * F2: the Photos panel kept filtering the bundled library by a search query
  *     after a category tab was clicked, so "All photos" showed the stale
  *     6-photo result set instead of the 42-photo library until the panel
- *     was closed and reopened; and a server with no AI provider configured
- *     answered web search with 503 NO_PROVIDER, which the panel rendered
- *     as "No web photos matched" — reading like broken search.
- *     Fix: a category click exits results mode (query, box text, web
- *     results and errors all clear), and the 503 gets a configuration hint.
+ *     was closed and reopened; and a server with no stock-provider keys
+ *     (v0.16.4 A4: photo search runs on Pexels/Pixabay, not an AI slot)
+ *     left web search hintless, which the panel rendered as "no results" —
+ *     reading like broken search.
+ *     Fix: a category click exits results mode (query, box text, stock
+ *     results and errors all clear), and an unkeyed server says so.
  *
  * F3: the top-bar "Editing mode" control (editingMode) and the Tools-panel
  *     Select/Draw toggle (tool) held separate state, so the panel could
@@ -59,9 +60,9 @@ test('F2: clicking a category tab exits Photos search mode and restores the libr
   await page.getByRole('button', { name: 'All photos' }).click()
   await expect(aside.locator('img')).toHaveCount(BUNDLED_TOTAL)
   await expect(search).toHaveValue('')
-  // the web-results section is gone entirely, not just emptied (the header
-  // counts — "Web results (N)"; the footnote "Web results come from…" stays)
-  await expect(aside.getByText(/^Web results \(/)).toBeHidden()
+  // the stock-results section is gone entirely, not just emptied (the
+  // header counts — "Stock photos (N)"; the licenses footnote stays)
+  await expect(aside.getByText(/^Stock photos \(/)).toBeHidden()
 
   // a specific category chip exits search mode too (was: same stale filter)
   await search.fill('mountain')
@@ -73,17 +74,14 @@ test('F2: clicking a category tab exits Photos search mode and restores the libr
   await expect(page.getByRole('button', { name: 'Textures' })).toHaveAttribute('aria-pressed', 'true')
 })
 
-test('F2: a server without an AI provider says so instead of "no photos matched"', async ({ page }) => {
-  // mock the provider-less server response — deterministic regardless of
-  // whether the machine running this spec has ZAI_* configured
-  await page.route('**/api/photos/search', (route) =>
+test('F2: a server without stock keys says so instead of "no photos matched"', async ({ page }) => {
+  // mock the unkeyed availability probe — deterministic regardless of
+  // whether the machine running this spec has stock keys configured
+  await page.route('**/api/stock-photo/available', (route) =>
     route.fulfill({
-      status: 503,
+      status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        error: 'This feature requires an AI provider configured on the server.',
-        code: 'NO_PROVIDER',
-      }),
+      body: JSON.stringify({ available: false, providers: [] }),
     }),
   )
   await openEditorPanel(page, 'Photos')
@@ -93,9 +91,9 @@ test('F2: a server without an AI provider says so instead of "no photos matched"
   await page.getByRole('button', { name: 'Search', exact: true }).click()
 
   // the configuration hint, not the misleading empty-result message
-  await expect(aside.getByText('Web search needs an AI provider configured on the server')).toBeVisible()
-  await expect(aside.getByText(/ZAI_BASE_URL/)).toBeVisible()
-  await expect(aside.getByText('No web photos matched')).toBeHidden()
+  await expect(aside.getByText('Photo search runs on free stock-provider keys')).toBeVisible()
+  await expect(aside.getByText(/PEXELS_API_KEY/)).toBeVisible()
+  await expect(aside.getByText('No stock photos matched')).toBeHidden()
 })
 
 // ── F3 ────────────────────────────────────────────────────────

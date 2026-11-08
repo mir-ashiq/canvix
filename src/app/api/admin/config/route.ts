@@ -25,6 +25,7 @@ import {
   type AiSlot,
 } from '@/lib/admin/config'
 import { resolveProvider, resolveSlot, type ResolvedSlot } from '@/lib/ai/provider'
+import { stockPhotoProviders } from '@/lib/stock-photo'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { withLogging } from '@/lib/observability'
 
@@ -45,7 +46,9 @@ export const dynamic = 'force-dynamic'
 //   importLegacyProvider: true — fold the A1 single override into the
 //                      table and clear the legacy row
 
-const SLOT_ORDER: AiSlot[] = ['text', 'vision', 'image', 'imageEdit', 'imageSearch']
+// v0.16.4 (A4): imageSearch is retired — four model slots remain;
+// photo search runs on the stock-provider keys (surfaced below)
+const SLOT_ORDER: AiSlot[] = ['text', 'vision', 'image', 'imageEdit']
 
 function slotView(resolved: ResolvedSlot | null) {
   if (!resolved) return null
@@ -98,6 +101,13 @@ async function sanitizedView() {
     models,
     features,
     settings,
+    // v0.16.4 (A4): photo search left the AI table — the console shows
+    // where it lives now (stock keys, shared with the Videos rail) and
+    // whether those keys are set. Secret-free: names only, never keys.
+    stockPhotos: {
+      available: stockPhotoProviders().length > 0,
+      providers: stockPhotoProviders(),
+    },
   }
 }
 

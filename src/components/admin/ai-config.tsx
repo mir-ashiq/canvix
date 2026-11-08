@@ -7,8 +7,9 @@
 //      endpoint (NVIDIA NIM, OpenRouter, Z.ai, Groq, …), one key each,
 //      write-only credentials, per-provider Test button.
 //   2. Model slots — pin each capability (text / vision / image /
-//      imageEdit / imageSearch) to a provider + model id, so different
-//      features can run on different vendors.
+//      imageEdit) to a provider + model id, so different features can
+//      run on different vendors. (v0.16.4 A4: imageSearch is retired —
+//      photo search runs on the stock-provider keys, see the banner.)
 //   3. Legacy fallback — the v0.16 A1 single-provider override and model
 //      ids, used only by slots that don't resolve through the table.
 //   4. Feature kill switches.
@@ -52,6 +53,8 @@ interface ConfigView {
   models: { text?: string; vision?: string; image?: string }
   features: Record<string, boolean>
   settings: { signupsOpen: boolean; anonymousEditing: boolean }
+  /** v0.16.4 (A4): where photo search lives now (stock keys) */
+  stockPhotos: { available: boolean; providers: string[] }
 }
 
 /** Local editing state for one provider row. New rows get a client-generated
@@ -74,7 +77,6 @@ const SLOT_INFO: { key: string; label: string; hint: string; placeholder: string
   { key: 'vision', label: 'Vision', hint: 'Magic Layers — image understanding', placeholder: 'e.g. meta/llama-3.2-90b-vision-instruct' },
   { key: 'image', label: 'Image generation', hint: 'Text-to-image in the Photos panel', placeholder: 'provider default' },
   { key: 'imageEdit', label: 'Image editing', hint: 'Magic Eraser / Enhance', placeholder: 'provider default' },
-  { key: 'imageSearch', label: 'Photo search', hint: 'Stock photo search', placeholder: 'provider default' },
 ]
 
 const FEATURE_INFO: { key: string; label: string; hint: string }[] = [
@@ -84,7 +86,7 @@ const FEATURE_INFO: { key: string; label: string; hint: string }[] = [
   { key: 'vision', label: 'Magic Layers', hint: 'Image understanding that rebuilds layered designs' },
   { key: 'translation', label: 'Translate', hint: 'Text translation in the text toolbar' },
   { key: 'assistant', label: 'Assistant', hint: 'The chat assistant that edits designs' },
-  { key: 'photoSearch', label: 'Photo search', hint: 'Stock photo search in the Photos panel' },
+  { key: 'photoSearch', label: 'Photo search', hint: 'Stock photo search in the Photos panel — Pexels/Pixabay keys, not an AI provider' },
 ]
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -115,7 +117,6 @@ const SLOT_ENDPOINT: Record<string, string> = {
   vision: 'chat/completions',
   image: 'images/generations',
   imageEdit: 'images/generations/edit',
-  imageSearch: 'images/search',
 }
 
 export function AdminAiConfig() {
@@ -398,7 +399,7 @@ export function AdminAiConfig() {
         title="Model slots"
         right={
           <Chip tone={Object.values(view.providers.resolved).some((r) => r !== null) ? 'good' : 'neutral'}>
-            {Object.values(view.providers.resolved).filter((r) => r !== null).length}/5 wired
+            {Object.values(view.providers.resolved).filter((r) => r !== null).length}/4 wired
           </Chip>
         }
       >
@@ -406,6 +407,24 @@ export function AdminAiConfig() {
           Pin each capability to a provider and model. A slot with no provider falls back to the legacy chain below —
           every feature can run on a different vendor.
         </p>
+        {/* v0.16.4 (A4): photo search LEFT the AI table — it runs on the
+            free stock-provider keys (same keys as the Videos rail), not on
+            a model slot. State where it lives and whether the keys are set,
+            so the operator is never sent hunting for a slot that no longer
+            exists. */}
+        <div className="mb-4 rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-3 text-sm">
+          <p>
+            Photo search is no longer a model slot — it runs on free stock-provider keys (Pexels / Pixabay), the same
+            keys as the Videos rail:{' '}
+            <code className="rounded bg-muted px-1">PEXELS_API_KEY</code> /{' '}
+            <code className="rounded bg-muted px-1">PIXABAY_API_KEY</code> (docs/STOCK-PHOTO.md).
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {view.stockPhotos.available
+              ? `Active — keyed: ${view.stockPhotos.providers.join(', ')}.`
+              : 'No stock key set — the Photos panel keeps only its bundled library.'}
+          </p>
+        </div>
         <div className="space-y-3">
           {SLOT_INFO.map((s) => {
             const resolved = view.providers.resolved[s.key]

@@ -18,6 +18,7 @@ import { Plus, Loader2, Clapperboard, VideoOff } from 'lucide-react'
 import { PanelShell } from './panel-shell'
 import { addStockVideo } from '../add-element'
 import { useStockVideo } from '@/hooks/use-stock-video'
+import { AIVideoCard } from './AIVideoCard'
 import { cn } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
 
@@ -254,13 +255,18 @@ export function VideosPanel() {
           )}
         </div>
       ) : (
-        <div className="py-12 text-center">
-          <Clapperboard size={26} className="mx-auto text-white/25 mb-3" />
-          <p className="text-[13px] text-white/50 font-medium">Search free stock videos</p>
-          <p className="text-[11.5px] text-white/35 mt-1 leading-relaxed max-w-[240px] mx-auto">
-            Type at least two letters. Every video carries its creator and license —
-            shown when you add it and saved with the design.
-          </p>
+        <div>
+          {/* v0.19 (Wave 4): AI text-to-video — hides itself when the
+              server has no videoGeneration capability */}
+          <AIVideoCard />
+          <div className="py-10 text-center">
+            <Clapperboard size={26} className="mx-auto text-white/25 mb-3" />
+            <p className="text-[13px] text-white/50 font-medium">Search free stock videos</p>
+            <p className="text-[11.5px] text-white/35 mt-1 leading-relaxed max-w-[240px] mx-auto">
+              Type at least two letters. Every video carries its creator and license —
+              shown when you add it and saved with the design.
+            </p>
+          </div>
         </div>
       )}
 

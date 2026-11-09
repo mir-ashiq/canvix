@@ -12,7 +12,6 @@ interface ImageBody {
   prompt?: string
   size?: string
 }
-
 /** POST /api/ai/image — AI image generation for the canvas. Returns a PNG dataURL. */
 async function __canvix_post(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as ImageBody
@@ -34,14 +33,25 @@ async function __canvix_post(req: NextRequest) {
 
     // v0.16.3 (A3): OpenAI-compatible providers return b64_json; the SDK
     // passes such items through untouched (it only converts url items).
-    const item = response.data[0] as { base64?: string; b64_json?: string } | undefined
+    // v0.19 (Wave 4): VibesAI-class providers also return image_ent_id —
+    // the durable handle for editing THIS image later. Forward it so the
+    // client can store it on the element (providers only edit images they
+    // generated, and the byte-hash match breaks on re-encode — the id is
+    // the robust link; see docs/AI-POWER-UP.md).
+    const item = response.data[0] as { base64?: string; b64_json?: string; image_ent_id?: string } | undefined
     const base64 = item?.base64 ?? item?.b64_json
     if (!base64) {
       return NextResponse.json({ error: 'The image service returned no image. Try again.' }, { status: 502 })
     }
 
     const [w, h] = size.split('x').map(Number)
-    return NextResponse.json({ dataUrl: `data:image/png;base64,${base64}`, width: w, height: h })
+    const entId = typeof item?.image_ent_id === 'string' ? item.image_ent_id.slice(0, 64) : undefined
+    return NextResponse.json({
+      dataUrl: `data:image/png;base64,${base64}`,
+      width: w,
+      height: h,
+      ...(entId ? { entId } : {}),
+    })
   })
 }
 

@@ -53,6 +53,12 @@ export const AI_FEATURES = [
   'translation',
   'assistant',
   'photoSearch',
+  // v0.19 (Wave 4 — AI Power-Up):
+  'agenticPlanning', // describe → AI multi-page plan → editable review gate
+  'notesGeneration', // speaker notes from page content
+  'themeGeneration', // AI palette/font theme, applied design-wide
+  'altText', // accessibility alt text for images (vision slot)
+  'videoGeneration', // text-to-video via the video slot
 ] as const
 export type AiFeature = (typeof AI_FEATURES)[number]
 
@@ -65,7 +71,7 @@ export type AiFeature = (typeof AI_FEATURES)[number]
  * validateSlots only reads known slot keys, so the stale entry is
  * dropped on the next read and disappears on the next save.
  */
-export const AI_SLOTS = ['text', 'vision', 'image', 'imageEdit'] as const
+export const AI_SLOTS = ['text', 'vision', 'image', 'imageEdit', 'video'] as const
 export type AiSlot = (typeof AI_SLOTS)[number]
 
 export interface StoredProvider {
@@ -109,6 +115,13 @@ export const DEFAULT_FEATURES: StoredFeatures = {
   translation: true,
   assistant: true,
   photoSearch: true,
+  // v0.19 (Wave 4) — default ON; stored tables that predate the flags
+  // merge over these defaults (getFeatures spreads DEFAULT first).
+  agenticPlanning: true,
+  notesGeneration: true,
+  themeGeneration: true,
+  altText: true,
+  videoGeneration: true,
 }
 
 export const DEFAULT_SETTINGS: StoredSettings = {

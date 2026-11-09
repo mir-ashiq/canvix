@@ -22,14 +22,18 @@ async function __canvix_get() {
   // only — never config, never keys, never which layer answered.
   // v0.16.4 (A4): photoSearch left the AI table — it answers on the
   // stock-provider keys (Pexels/Pixabay), like the Videos rail.
-  const [text, vision, image, imageEdit, stockPhotos] = await Promise.all([
+  // v0.19 (Wave 4): five AI Power-Up capabilities — the text-slot
+  // trio (plan/notes/theme), vision-slot alt text, the video slot,
+  // and the two LOCAL image tools that need no provider at all.
+  const [text, vision, image, imageEdit, video, stockPhotos] = await Promise.all([
     hasProviderForSlot('text'),
     hasProviderForSlot('vision'),
     hasProviderForSlot('image'),
     hasProviderForSlot('imageEdit'),
+    hasProviderForSlot('video'),
     stockPhotoAvailable(), // async since A5 — keys resolve console-first
   ])
-  const configured = text || vision || image || imageEdit
+  const configured = text || vision || image || imageEdit || video
   const flags = await getFeatures()
   return NextResponse.json({
     configured,
@@ -44,6 +48,14 @@ async function __canvix_get() {
       backgroundRemoval: true,     // local ONNX — always available
       colorPalette: true,          // local deterministic
       layoutSuggestions: true,     // local deterministic
+      // v0.19 (Wave 4 — AI Power-Up):
+      agenticPlanning: text && flags.agenticPlanning,   // plan → review gate → apply
+      notesGeneration: text && flags.notesGeneration,   // speaker notes
+      themeGeneration: text && flags.themeGeneration,   // palette + fonts
+      altText: vision && flags.altText,                 // image alt text
+      videoGeneration: video && flags.videoGeneration,  // text-to-video slot
+      upscale: true,              // local Lanczos — always available
+      brushEraser: true,          // local inpainting — always available
     },
   })
 }

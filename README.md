@@ -733,8 +733,9 @@ research/                   # architecture decision records & audits
 
 Canvix works fully **without** any AI provider — the editor, templates, exports,
 collaboration and comments need nothing but the database. AI features
-(Magic Layers, Assistant, Magic Write, image generation/editing, translate)
-activate when a provider is configured **on the server**. Stock photo
+(Magic Layers, Assistant, Magic Write, image generation/editing, translate,
+the v0.19 plan/notes/theme/alt-text/video features) activate when a provider
+is configured **on the server**. Stock photo
 search is separate by design (v0.16.4): it runs on free stock-provider
 keys, not on an AI provider — see `docs/STOCK-PHOTO.md`:
 
@@ -768,13 +769,20 @@ limited per IP and logs usage into the `AIUsage` table.
 | Exports — PNG / JPG / PDF / SVG / video | ✅ always local |
 | Collaboration, presence, comments | ✅ only needs the database |
 | Background remover | ✅ local (in-browser ONNX) |
+| **Upscaler (Lanczos 2×/4×)** | ✅ local — v0.19 Wave 4, any image |
+| **Brush magic eraser** | ✅ local (pyramid diffusion) — v0.19 Wave 4, any image |
 | Color palettes, layout balancing | ✅ local (deterministic) |
+| **AI design plan / notes / theme** | ⚙️ needs a server AI provider (text slot) — v0.19 Wave 4, always review-gated |
+| **Alt text generation** | ⚙️ needs a server AI provider (vision slot) — v0.19 Wave 4 |
 | Magic Layers, AI Assistant, Magic Write | ⚙️ needs a server AI provider |
-| AI image generation / eraser / enhance | ⚙️ needs a server AI provider |
+| AI image generation / eraser / enhance | ⚙️ needs a server AI provider (edits follow the provider's own rules — vibes-style providers only edit images they generated) |
+| **AI video generation** | ⚙️ needs a provider on the `video` slot (Sora-style async API) — v0.19 Wave 4 |
 | Translate | ⚙️ needs a server AI provider |
 | Stock photo search | ⚙️ needs `PEXELS_API_KEY` or `PIXABAY_API_KEY` (free) |
 | Stock video search | ⚙️ needs `PEXELS_API_KEY` or `PIXABAY_API_KEY` (free) |
-| MCP server (agent tools) | ✅ with token set — `generate_design` additionally needs the AI provider |
+| MCP server (agent tools) | ✅ with token set — `generate_design` needs the AI provider, `vision_ground` the vision slot |
+
+See `docs/AI-POWER-UP.md` for the full Wave 4 guide.
 
 ## 🤖 AI agents (MCP)
 

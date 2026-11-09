@@ -89,10 +89,19 @@ raster-strip approximation for v1. Acceptance: 1304 unit tests (+65), wave3 e2e 
 top-up (lib/templates/sync.ts — auto-deployed instances no longer serve a stale library).
 Stretch goals deferred with the roadmap; matrix re-score pending (Wave 4 kickoff).
 
-### Wave 4 — AI Power-Up
-Local upscaling (Real-ESRGAN/Lanczos) · brush magic eraser (LaMa) · agentic planning with editable
-review gate · canvas-screenshot vision grounding (MCP tool) · AI theme generation · speaker-notes
-generation · video-generation capability slot · alt-text generation.
+### Wave 4 — AI Power-Up ✅ SHIPPED (v0.19.0, 2026-11-09)
+Local upscaling (Lanczos-3, any image offline) · brush magic eraser (clean-room
+pyramid-diffusion inpainting — zero model download) · agentic planning with
+editable review gate (plan → toggle/edit → apply native pages) ·
+canvas-screenshot vision grounding (`vision_ground`, the 21st MCP tool) ·
+AI theme generation (role-tagged palette + fonts, WCAG contrast guards) ·
+speaker-notes generation (outline → draft → editable per page) ·
+video-generation capability slot (Sora-style async + same-origin MP4 proxy) ·
+alt-text generation (`ImageElement.alt`). Plus: AI-edit chains are id-based
+now (`aiEntId`/`sourceEntId`) and the vibes-style "only edits its own
+generations" refusal surfaces as a structured 422 pointing at the local
+tools. No migration. Guide: docs/AI-POWER-UP.md · acceptance: 1309 unit
+tests (+54), wave4 e2e suite (tests/e2e/wave4-ai-powerup.spec.ts).
 
 ### Wave 5 — Export & Sharing Professionalisation
 Share links with view/comment/edit roles + password + expiry · ZIP batch export · WebP · PPTX ·

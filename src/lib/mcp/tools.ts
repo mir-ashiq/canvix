@@ -26,6 +26,8 @@ import {
 } from '@/lib/types'
 import { isChartKind, sanitizeChartLabels, sanitizeChartSeries, clampChartHole, CHART_PALETTE } from '@/lib/chart-geometry'
 import { normalizeSpans } from '@/lib/rich-text'
+import { normalizeGrounding, visionGroundPrompt } from './vision-ground'
+import { DEFAULT_VISION_MODEL } from '@/lib/ai/provider'
 
 export const SERVER_VERSION = '0.6.1'
 
@@ -1161,6 +1163,86 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
 
   // ── misc ───────────────────────────────────────────────────
 
+  // v0.19 (Wave 4): canvas-screenshot vision grounding — the agent's
+  // eyes. Feed it a page screenshot (the editor's PNG export, or any
+  // capture) and get a grounded element inventory with pixel
+  // coordinates it can act on via update_element/add_*.
+  const visionGround: ToolDef = {
+    name: 'vision_ground',
+    description:
+      'Analyze a canvas/page SCREENSHOT with the vision provider and return a grounded element inventory: what is visible, ' +
+      'where (normalized 0..1 bounds AND page-pixel boxes), in what colors. Use it to reason about layout before acting with ' +
+      'update_element / add_text / add_shape, or to answer "what does this design look like". Requires the vision slot provider. ' +
+      'Input: image (dataURL) + optional width/height of the page the screenshot shows (for pixel mapping) + optional question (focus).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        image: { type: 'string', description: 'PNG/JPEG dataURL of the canvas screenshot' },
+        width: { type: 'number', minimum: 1, maximum: 8000, description: 'Page width in px (default 1080)' },
+        height: { type: 'number', minimum: 1, maximum: 8000, description: 'Page height in px (default 1080)' },
+        question: { type: 'string', description: 'Optional focus, e.g. "where is the headline?"' },
+      },
+      required: ['image'],
+    },
+    handler: async (args) => {
+      const image = asString(args.image)
+      if (!image || !/^data:image\/(png|jpeg|webp);base64,/.test(image)) {
+        return fail('Provide a PNG/JPEG/WebP dataURL screenshot in `image`.')
+      }
+      if (image.length > 8 * 1024 * 1024) return fail('Screenshot too large — max ~6 MB.')
+      const ctx = await getClientForSlot('vision')
+      if (!ctx) {
+        return fail(
+          'vision_ground requires a vision-slot provider configured on the server (add one in /admin). ' +
+            'Without vision you can still read design structure with get_design_content.',
+        )
+      }
+      const rl = rateLimit('mcp-vision', deps.req, 6, 60)
+      if (!rl.ok) return fail('Rate limit reached — try again in a minute.')
+      const width = clamp(asInt(args.width, 1080), 1, 8000)
+      const height = clamp(asInt(args.height, 1080), 1, 8000)
+      const question = asString(args.question).slice(0, 200)
+
+      try {
+        const completion = await ctx.zai.chat.completions.createVision({
+          model: ctx.model ?? DEFAULT_VISION_MODEL,
+          messages: [
+            { role: 'system', content: visionGroundPrompt(question) },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Ground this canvas screenshot now.' },
+                { type: 'image_url', image_url: { url: image } },
+              ],
+            },
+          ],
+          thinking: { type: 'disabled' },
+        })
+        const raw = completion.choices[0]?.message?.content ?? ''
+        const start = raw.indexOf('{')
+        const end = raw.lastIndexOf('}')
+        let parsed: unknown = null
+        if (start !== -1 && end > start) {
+          try {
+            parsed = JSON.parse(raw.slice(start, end + 1))
+          } catch {
+            parsed = null
+          }
+        }
+        if (!parsed) {
+          await recordUsage('vision_ground', ctx.label ?? ctx.source ?? 'vision', false).catch(() => undefined)
+          return fail('The vision reply was not parseable JSON. Try a cleaner screenshot.')
+        }
+        const grounding = normalizeGrounding(parsed, width, height)
+        await recordUsage('vision_ground', ctx.label ?? ctx.source ?? 'vision', true).catch(() => undefined)
+        return ok({ ...grounding, note: 'bounds are fractions; px boxes assume the width/height you supplied.' })
+      } catch (err) {
+        await recordUsage('vision_ground', ctx.label ?? ctx.source ?? 'vision', false).catch(() => undefined)
+        return fail(`Vision grounding failed: ${err instanceof Error ? err.message.slice(0, 200) : 'unknown error'}`)
+      }
+    },
+  }
+
   const listFonts: ToolDef = {
     name: 'list_fonts',
     description: 'List the font families available in the editor (use with add_text / update_element).',
@@ -1193,6 +1275,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
     getDesignContent,
     createDesign,
     generateDesign,
+    visionGround,
     addText,
     addShape,
     addImage,

@@ -181,6 +181,12 @@ const FEATURE_SLOTS: Record<string, AiSlot> = {
   image: 'image',
   'image-edit': 'imageEdit',
   'magic-layers': 'vision',
+  // v0.19 (Wave 4 — AI Power-Up):
+  plan: 'text', // agentic planning with review gate
+  notes: 'text', // speaker-notes generation
+  theme: 'text', // AI theme generation
+  'alt-text': 'vision', // image alt text (vision slot — image understanding)
+  video: 'video', // text-to-video generation
 }
 
 /** Async probe — does THIS slot have a provider behind it? */
@@ -449,6 +455,12 @@ const FEATURE_FLAGS: Record<string, AiFeature> = {
   'magic-layers': 'vision',
   translate: 'translation',
   assistant: 'assistant',
+  // v0.19 (Wave 4 — AI Power-Up):
+  plan: 'agenticPlanning',
+  notes: 'notesGeneration',
+  theme: 'themeGeneration',
+  'alt-text': 'altText',
+  video: 'videoGeneration',
 }
 
 export const FEATURE_DISABLED = {

@@ -77,10 +77,11 @@ to a different provider + model:
 
 | Slot | What answers through it |
 | --- | --- |
-| `text` | Magic Write · Translate · Assistant (chat completions) |
-| `vision` | Magic Layers (image understanding) |
+| `text` | Magic Write · Translate · Assistant · **AI design plan · speaker notes · AI theme** (chat completions) |
+| `vision` | Magic Layers · **alt-text generation** (image understanding) |
 | `image` | text-to-image |
 | `imageEdit` | Magic Eraser / Enhance |
+| `video` | **AI video generation** — Sora-style async (`videos/generations`), v0.19 Wave 4 |
 
 **Photo search is not a slot anymore (v0.16.4 A4).** It rode the AI
 table as `imageSearch` — an `images/search` endpoint almost no
@@ -165,10 +166,10 @@ way (one one-result search each).
 `/admin/logs` (v0.16.3 A3) answers "why isn't the AI feature working"
 without an SSH session. Two surfaces:
 
-- **AI slot status** — what each of the four capability slots (`text`,
-  `vision`, `image`, `imageEdit`) resolves to right now (v0.16.4 A4:
+- **AI slot status** — what each of the five capability slots (`text`,
+  `vision`, `image`, `imageEdit`, `video`) resolves to right now (v0.16.4 A4:
   `imageSearch` is retired — photo search runs on the stock keys,
-  not on an AI slot):
+  not on an AI slot; v0.19 Wave 4 added `video`):
   provider label, base URL, model id and which config layer answered
   (providers table / legacy override / env / file). Never the key. A
   slot wired to a chat-only provider is the classic silent breakage —

@@ -15,6 +15,11 @@ interface EditBody {
   eraseTarget?: string  // for mode=erase: what to remove
   naturalWidth?: number
   naturalHeight?: number
+  /** v0.19 (Wave 4): the provider-side handle of a previously generated/
+   *  edited image (ImageElement.aiEntId). VibesAI-class providers match
+   *  edits by exact bytes OR this id — the id survives re-encoding, so
+   *  AI-edit chains keep working after the canvas touches the src. */
+  sourceEntId?: string
 }
 
 /** Pick the SDK output size whose aspect ratio is closest to the source image. */
@@ -75,22 +80,56 @@ async function __canvix_post(req: NextRequest) {
     // NOTE: the SDK's TS type declares `image`, but the backend API requires
     // `images: [{ url }]` (verified — API error 1210 "must provide images").
     // The SDK forwards the body verbatim, so we send the correct runtime shape.
-    const response = await ctx.zai.images.generations.edit({
-      prompt,
-      images: [{ url: image }],
-      size,
-    } as unknown as Parameters<typeof ctx.zai.images.generations.edit>[0])
+    // v0.19 (Wave 4): source_image_ent_id rides the same verbatim body —
+    // the durable edit handle for images this provider generated.
+    const sourceEntId = typeof body.sourceEntId === 'string' ? body.sourceEntId.trim().slice(0, 64) : undefined
+    try {
+      const response = await ctx.zai.images.generations.edit({
+        prompt,
+        images: [{ url: image }],
+        size,
+        ...(sourceEntId ? { source_image_ent_id: sourceEntId } : {}),
+      } as unknown as Parameters<typeof ctx.zai.images.generations.edit>[0])
 
-    // v0.16.3 (A3): OpenAI-compatible providers return b64_json; the SDK
-    // passes such items through untouched (it only converts url items).
-    const item = response.data[0] as { base64?: string; b64_json?: string } | undefined
-    const base64 = item?.base64 ?? item?.b64_json
-    if (!base64) {
-      return NextResponse.json({ error: 'The image service returned no image. Try again.' }, { status: 502 })
+      // v0.16.3 (A3): OpenAI-compatible providers return b64_json; the SDK
+      // passes such items through untouched (it only converts url items).
+      // v0.19 (Wave 4): forward the result's image_ent_id so the client can
+      // refresh ImageElement.aiEntId — edit-of-edit chains stay robust.
+      const item = response.data[0] as { base64?: string; b64_json?: string; image_ent_id?: string } | undefined
+      const base64 = item?.base64 ?? item?.b64_json
+      if (!base64) {
+        return NextResponse.json({ error: 'The image service returned no image. Try again.' }, { status: 502 })
+      }
+
+      const [outW, outH] = size.split('x').map(Number)
+      const entId = typeof item?.image_ent_id === 'string' ? item.image_ent_id.slice(0, 64) : undefined
+      return NextResponse.json({
+        dataUrl: `data:image/png;base64,${base64}`,
+        width: outW,
+        height: outH,
+        ...(entId ? { entId } : {}),
+      })
+    } catch (err) {
+      // v0.19 (Wave 4): VibesAI-class providers refuse to edit images they
+      // did not generate (verified live: HTTP 422 source_image_not_editable
+      // for arbitrary uploads AND for their own images after re-encoding).
+      // Surface that as a structured, actionable 422 instead of the generic
+      // 502 — the client points users at the local tools that DO work on
+      // any image (BG remover, brush eraser, upscaler).
+      const msg = err instanceof Error ? err.message : String(err)
+      if (/source_image_not_editable|only edit images it generated/i.test(msg)) {
+        return NextResponse.json(
+          {
+            error:
+              'This AI provider can only edit images it generated itself. ' +
+              'For uploads and stock photos use the local tools — BG Remover, Brush eraser, Upscale — or generate the image with AI first.',
+            code: 'SOURCE_NOT_EDITABLE',
+          },
+          { status: 422 },
+        )
+      }
+      throw err
     }
-
-    const [outW, outH] = size.split('x').map(Number)
-    return NextResponse.json({ dataUrl: `data:image/png;base64,${base64}`, width: outW, height: outH })
   })
 }
 

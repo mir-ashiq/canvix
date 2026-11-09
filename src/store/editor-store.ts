@@ -186,6 +186,9 @@ interface EditorState {
   addPage: () => void
   deletePage: (index: number) => void
   duplicatePage: (index: number) => void
+  /** v0.19 (Wave 4): append fully-prepared pages (agentic plan apply).
+   *  Coarse pages:replace sync — same event undo rides. */
+  appendPages: (newPages: PageData[]) => void
   setCurrentPage: (index: number) => void
   setPageBackground: (bg: Background) => void
   applyTemplate: (t: TemplateDef) => void
@@ -783,6 +786,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const page: PageData = { id: uid('page'), background: { type: 'solid', color: '#FFFFFF' }, elements: [] }
     set({ pages: [...pages, page] })
     emit({ kind: 'page:add', page })
+  },
+
+  appendPages: (newPages) => {
+    if (!Array.isArray(newPages) || !newPages.length) return
+    get().pushHistory()
+    const { pages } = get()
+    const stamped = stampPages(newPages, nowHlc())
+    const next = [...pages, ...stamped]
+    set({ pages: next, currentPage: pages.length, selectedIds: [] })
+    emit({ kind: 'pages:replace', pages: next, width: get().width, height: get().height })
   },
 
   deletePage: (index) => {

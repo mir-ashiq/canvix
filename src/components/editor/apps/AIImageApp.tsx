@@ -35,6 +35,9 @@ interface Generated {
   width: number
   height: number
   prompt: string
+  /** v0.19 (Wave 4): provider handle (image_ent_id) — stored on the
+   *  element so AI-edit chains keep matching after re-encodes. */
+  entId?: string
 }
 
 export function AIImageApp({ onClose }: AppPanelProps) {
@@ -86,6 +89,8 @@ export function AIImageApp({ onClose }: AppPanelProps) {
         y: Math.max(0, (designH - h) / 2),
         width: w,
         height: h,
+        // v0.19 (Wave 4): keep the provider handle for later AI edits
+        ...(image.entId ? { aiEntId: image.entId } : {}),
       })
     )
     toast({ title: 'AI image added' })

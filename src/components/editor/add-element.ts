@@ -655,3 +655,36 @@ export async function addStockPhoto(
   }
   throw firstError instanceof Error ? firstError : new Error('Could not add the stock photo.')
 }
+
+/** v0.19 (Wave 4): insert an AI-GENERATED video (the /api/ai/video
+ *  proxy URL). Same pipeline as stock video: download the bytes in the
+ *  browser, ride the chunked media store (quota, dedupe, size cap),
+ *  probe the real dimensions + first-frame poster, place it. No credit
+ *  block — the element is the user's own generation. */
+export async function addGeneratedVideo(url: string, onProgress?: (ratio: number) => void): Promise<void> {
+  const { uploadMediaFile, mediaSrc } = await import('@/lib/media/media-client')
+  const { probeVideoFile } = await import('@/lib/media/decode')
+  const { createVideoElement } = await import('@/lib/types')
+
+  const blob = await fetch(url).then((r) => {
+    if (!r.ok) throw new Error(`Download failed (${r.status}).`)
+    return r.blob()
+  })
+  const file = new File([blob], `ai-video-${Date.now()}.mp4`, { type: blob.type || 'video/mp4' })
+  const [handle, probe] = await Promise.all([uploadMediaFile(file, onProgress), probeVideoFile(file)])
+
+  const store = useEditorStore.getState()
+  const naturalW = probe.naturalWidth || 1024
+  const naturalH = probe.naturalHeight || 576
+  const maxW = store.width * 0.7
+  const w = Math.round(Math.min(maxW, Math.max(200, naturalW)))
+  const h = Math.round((w * naturalH) / naturalW)
+  const pos = placement(w, h, store.pages[store.currentPage].elements.length)
+  store.addElement(
+    createVideoElement(mediaSrc(handle.id), probe.poster, probe.duration, naturalW, naturalH, {
+      ...pos,
+      width: w,
+      height: h,
+    }),
+  )
+}

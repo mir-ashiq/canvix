@@ -5,6 +5,22 @@ release is designed to upgrade with **one migration command**. This
 guide covers the routine path, jumping minors, and — the part most
 guides skip — how to roll back, with the honest database caveat.
 
+## v0.19.0 — Wave 4 (AI Power-Up)
+
+**No migration.** The two new element fields (`ImageElement.aiEntId`,
+`ImageElement.alt`) and the five new admin flags (plus the `video` slot) ride
+as additive, nullable data inside the existing document JSON and AppConfig
+rows — `npm run db:migrate:deploy` is a no-op and pre-v0.19 documents open
+byte-identically. Stored admin tables merge over the new feature defaults
+(all on). After deploying, restart as usual; nothing else to run.
+
+Operators with a vibes.ai-style `imageEdit` provider: the edit flow now
+forwards the provider's `image_ent_id` and surfaces the "only edits its own
+generations" refusal as a structured 422 — no configuration needed, but see
+`docs/AI-POWER-UP.md` for what changed and why. The new `video` slot is
+optional; the Videos panel's AI card hides itself until a provider is pinned
+to it.
+
 ## v0.18.0 — Wave 3 (editor depth parity)
 
 **No migration.** Everything rides additive, nullable fields (shape

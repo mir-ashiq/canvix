@@ -3,6 +3,110 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.19.0] — 2026-11-09
+
+Wave 4 of the consolidation programme — AI Power-Up (roadmap:
+`docs/COMPETITIVE-ANALYSIS.md`, guide: `docs/AI-POWER-UP.md`). Eight
+features on three gradients: **local** image tools that work on any
+image offline, **text-slot** features behind editable review gates, and
+the **video generation slot**. Scoped directly after a live
+verification that vibes.ai-class edit providers only edit images they
+generated themselves (422 `source_image_not_editable` on uploads and
+on re-encoded generations — byte-hash matched), so the universal path
+got local. **No migration this release** — `aiEntId`/`alt` ride as
+additive nullable element fields, slots/features ride the existing
+AppConfig JSON; pre-v0.19 documents open byte-identically.
+
+### Added
+
+- **Local upscaler (Lanczos-3).** "Upscale" on a selected image: 2×/4×
+  with a live target-size preview, output capped at 8192px per side
+  (factor auto-reduces). Separable Lanczos-3 with premultiplied alpha
+  in pure TypeScript (`lib/upscale.ts`) — cut-outs keep clean edges,
+  zero downloads, works offline on any image. Deterministic and
+  unit-pinned.
+- **Brush magic eraser — local pyramid diffusion.** Paint over
+  unwanted objects with an adjustable brush; the region is
+  reconstructed from its surroundings by a clean-room LaMa-style
+  pipeline (`lib/inpaint.ts`): pull-push pyramid over known pixels,
+  boundary-constrained Jacobi diffusion at full resolution, seam
+  feather. Zero model download; works on uploads and stock photos —
+  exactly the images provider-backed erasers refuse.
+- **Agentic planning with an editable review gate.** Apps → AI design
+  plan: describe the design, pick 1–6 pages, and the text-slot model
+  returns a structured plan that NOTHING applies yet. The gate renders
+  page cards with scaled wireframe previews — toggle any page or
+  element, rewrite any copy inline — and Apply builds real editor
+  elements (`lib/design-plan.ts` `planToPages`, the MCP
+  `generate_design` semantics) through one history push. Route
+  `POST /api/ai/plan`; hostile-input-safe normalization (clamped
+  geometry, validated fonts/colors, ≤6 pages × ≤30 elements).
+- **Speaker-notes generation.** "Generate with AI" in the notes
+  popover: the page outline (titles from the largest text, bullets,
+  media summaries — `lib/notes-outline.ts`; the model sees content,
+  never geometry) goes to `POST /api/ai/notes`, the reply renders as
+  one editable textarea per page, Apply writes each page's notes.
+  Route flag `notesGeneration`.
+- **AI theme generation.** Apps → AI theme: a mood prompt returns a
+  role-tagged palette (background/surface/ink/inkSoft/accent/
+  accentSoft) + font pairing from the installed catalog. Preview all
+  six roles, Apply maps them design-wide (`lib/theme.ts` `applyTheme`,
+  pure): backgrounds, text ink, shape accents, lines — images, charts
+  and stickers are never touched. Two WCAG contrast guards (normalize-
+  time ink swap, apply-time per-text flip). One Ctrl+Z reverts.
+  Route `POST /api/ai/theme`, flag `themeGeneration`.
+- **Alt-text generation.** The image toolbar's Alt button: editor +
+  Generate (one vision-slot call, `POST /api/ai/alt-text`) returning a
+  single plain sentence the user reviews/edits before Save stores
+  `ImageElement.alt` — riding autosave/versions/collab, feeding
+  screen-reader landmarks, never burned into exports. Flag `altText`.
+- **Video-generation capability slot.** The fifth slot (`video`),
+  speaking the OpenAI "Sora-style" async shape the VibesAI worker
+  exposes (POST `/videos/generations` → id; poll; `/content` MP4).
+  Videos panel gained a "Generate with AI" card (self-hiding without a
+  provider): prompt → progress-polled generation → preview → Add to
+  design downloads through a same-origin proxy, probes real
+  dimensions + first-frame poster, inserts via the chunked media
+  store. Route `POST|GET /api/ai/video`; starts (3/min) and polls
+  (60/min) rate-limited separately; flag `videoGeneration`; admin
+  console slot row + kill switch.
+- **MCP `vision_ground` (canvas-screenshot vision grounding).** The
+  21st tool: feed a canvas screenshot + page size, get a grounded
+  element inventory — labels, roles, normalized 0..1 bounds AND
+  page-pixel boxes, dominant colors, reading-order description — so
+  agents reason about layout before acting with `update_element` /
+  `add_text`. Pure normalizer in `lib/mcp/vision-ground.ts`;
+  no-provider path points at `get_design_content`.
+
+### Changed
+
+- **AI-edit chains are id-based now.** `/api/ai/image` and
+  `/api/ai/image-edit` forward the provider's `image_ent_id`; the
+  editor stores it on the element (`aiEntId`, additive) and sends it
+  back as `sourceEntId` — edit-of-edit chains survive re-encoding
+  (the byte-hash match does not, verified live). The provider's
+  "only edits its own generations" refusal surfaces as a structured
+  422 `SOURCE_NOT_EDITABLE` whose message points at the local tools
+  that work on any image.
+- **Capabilities surface.** `/api/ai/capabilities` reports
+  `agenticPlanning`, `notesGeneration`, `themeGeneration`, `altText`,
+  `videoGeneration` (provider-gated) and `upscale`, `brushEraser`
+  (local, always on).
+- **Admin console.** Model slots gained the Video generation row
+  (endpoint `videos/generations`); feature toggles gained the five
+  Wave 4 switches. Stored tables merge over the new defaults (on) —
+  the legacy import wires the video slot too.
+
+### Tested
+
+- 1309 unit tests (+54: upscale, inpaint, design-plan, notes-outline,
+  theme, vision-ground, video status normalization, config slot table).
+- `tests/e2e/wave4-ai-powerup.spec.ts`: plan gate (edit + toggle +
+  apply through the designs API), notes review, theme apply with
+  contrast assertions, the REAL local upscaler (8→16px verified in the
+  document), brush-eraser surface, alt-text round-trip, capabilities
+  shape. AI routes mocked at the network layer.
+
 ## [0.18.0] — 2026-11-09
 
 Wave 3 of the consolidation programme — editor depth parity (roadmap:

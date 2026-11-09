@@ -6,6 +6,7 @@ import { useEditorStore } from '@/store/editor-store'
 import { DesignPreview } from '@/components/design-preview'
 import { pageSize, PRESET_SIZES } from '@/lib/editor-utils'
 import { cn } from '@/lib/utils'
+import { NotesAIGenerator } from './NotesAIGenerator'
 
 const THUMB_H = 52
 
@@ -144,6 +145,10 @@ export function PageBar() {
               data-testid="notes-textarea"
               className="w-full h-28 resize-none rounded-lg bg-black/30 border border-white/10 px-2.5 py-2 text-[13px] text-white/85 placeholder:text-white/30 focus:outline-none focus:border-[#02C0CC]"
             />
+            {/* v0.19 (Wave 4): AI notes generation (review gate inside) */}
+            <div className="mt-1.5">
+              <NotesAIGenerator />
+            </div>
             <div className="text-[11px] text-white/40 mt-1.5">
               Shown in presenter view — never on the canvas or in exports.
             </div>

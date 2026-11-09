@@ -84,6 +84,8 @@ const SLOT_INFO: { key: string; label: string; hint: string; placeholder: string
   { key: 'vision', label: 'Vision', hint: 'Magic Layers — image understanding', placeholder: 'e.g. meta/llama-3.2-90b-vision-instruct' },
   { key: 'image', label: 'Image generation', hint: 'Text-to-image in the Photos panel', placeholder: 'provider default' },
   { key: 'imageEdit', label: 'Image editing', hint: 'Magic Eraser / Enhance', placeholder: 'provider default' },
+  // v0.19 (Wave 4): the video slot — Sora-style async generation
+  { key: 'video', label: 'Video generation', hint: 'AI video card in the Videos panel', placeholder: 'provider default' },
 ]
 
 const FEATURE_INFO: { key: string; label: string; hint: string }[] = [
@@ -94,6 +96,12 @@ const FEATURE_INFO: { key: string; label: string; hint: string }[] = [
   { key: 'translation', label: 'Translate', hint: 'Text translation in the text toolbar' },
   { key: 'assistant', label: 'Assistant', hint: 'The chat assistant that edits designs' },
   { key: 'photoSearch', label: 'Photo search', hint: 'Stock photo search in the Photos panel — Pexels/Pixabay keys, not an AI provider' },
+  // v0.19 (Wave 4 — AI Power-Up):
+  { key: 'agenticPlanning', label: 'AI design plan', hint: 'Describe → review the plan → apply editable pages' },
+  { key: 'notesGeneration', label: 'Speaker notes', hint: 'AI drafts presenter notes (reviewed before saving)' },
+  { key: 'themeGeneration', label: 'AI theme', hint: 'Palette + font pairing applied design-wide' },
+  { key: 'altText', label: 'Alt text', hint: 'AI alt-text suggestions for images (vision slot)' },
+  { key: 'videoGeneration', label: 'Video generation', hint: 'Text-to-video in the Videos panel (video slot)' },
 ]
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -132,6 +140,7 @@ const SLOT_ENDPOINT: Record<string, string> = {
   vision: 'chat/completions',
   image: 'images/generations',
   imageEdit: 'images/generations/edit',
+  video: 'videos/generations',
 }
 
 /** The stock-media connectors (A5) — a fixed set, one free key each,

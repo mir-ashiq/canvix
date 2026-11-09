@@ -238,6 +238,19 @@ export interface ImageElement extends BaseElement {
    *  on selection, never burned into exports (neither provider license
    *  demands on-content credit). */
   credit?: { provider: string; author: string; license: string; url: string }
+  /** v0.19 (Wave 4): the provider-side handle for AI-generated images —
+   *  the generation/edit response's image_ent_id. VibesAI-class edit
+   *  providers only edit images THEY generated (matched by exact bytes
+   *  or this id — re-encoding the src breaks the byte match, so the id
+   *  is the durable link). Stored on the element, forwarded as
+   *  sourceEntId by the AI edit calls, refreshed on every successful
+   *  edit. Absent on uploads, stock photos and bundled assets. */
+  aiEntId?: string
+  /** v0.19 (Wave 4): accessibility alt text — AI-generatable, always
+   *  user-editable. Rides autosave/versions/collab like any element
+   *  field; consumed by screen-reader landmarks and shown in the
+   *  properties bar. Never burned into visual exports. */
+  alt?: string
 }
 
 export interface StickerElement extends BaseElement {

@@ -98,6 +98,13 @@ jobs:
       # db:setup applies migrations + seeds the 110-template library;
       # playwright.config.ts boots `npm run dev` itself.
       DATABASE_URL: postgresql://canvix:canvix@localhost:5432/canvix
+      # The suite registers several accounts by design (one per spec
+      # module: d4 image-filters, clipboard, admin-console, uploads,
+      # wave3…). The 5/h/IP register cap exists for public hosts —
+      # on the single-localhost CI runner it only breaks later specs
+      # (first seen: wave3 at 429 after five earlier registrations).
+      # Same call scripts/verify-wave3.sh makes for the sandbox.
+      CANVIX_RATE_LIMITS: 'off'
 
     steps:
       - name: Checkout

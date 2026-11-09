@@ -6,6 +6,7 @@ import {
   type PageData,
 } from '../types'
 import { GRAPHICS } from '../editor-utils'
+import type { TemplateField } from './fields'
 
 export interface TemplateDef {
   slug: string
@@ -17,6 +18,10 @@ export interface TemplateDef {
   /** v0.7: premium library expansion — every template stays 100% free,
    *  the badge is a quality label only (never a paywall). */
   badge?: 'premium' | 'new'
+  /** v0.17 (Wave 2): smart-template fields — text elements carry
+   *  {{key}} markers, filled per-row by the editor dialog / CSV bulk
+   *  fill / REST fill API. Absent = plain template. */
+  fields?: TemplateField[]
   pages: PageData[]
 }
 

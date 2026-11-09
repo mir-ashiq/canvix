@@ -73,6 +73,14 @@ export default function CanvasStage() {
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 })
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [guides, setGuides] = useState<GuideLine[]>([])
+
+  // v0.17 (Wave 2): on-demand webfonts — Konva doesn't redraw when a
+  // webfont settles, so the loader broadcasts and we repaint the stage.
+  useEffect(() => {
+    const onFonts = () => stageRef.current?.batchDraw()
+    window.addEventListener('canvix:fonts-loaded', onFonts)
+    return () => window.removeEventListener('canvix:fonts-loaded', onFonts)
+  }, [])
   /** v0.7: mirror of `guides` for cheap equality checks during drag */
   const guidesRef = useRef<GuideLine[]>([])
   const [editingTextId, setEditingTextId] = useState<string | null>(null)

@@ -25,7 +25,7 @@ Free & open-source graphic design tool — a community-built [Canva](https://can
 
 Canvix is a browser-based design tool that lets anyone create social media posts,
 presentations, posters, logos and thumbnails — with a drag-and-drop editor, a
-110-template library and one-click export. It runs entirely on your own infrastructure, stores designs
+366-template library and one-click export. It runs entirely on your own infrastructure, stores designs
 in your own database, and exports files locally in your browser. Free accounts
 keep your designs yours; anonymous link-editing keeps working too. No
 watermarks, no paywalls.
@@ -37,7 +37,7 @@ Pro tier, no subscription, no trial countdown, no watermark ransom, no
 "premium" element you can drag but not drop. The whole point of this project
 is a design tool that never asks you for a credit card:
 
-- All **110 templates** — including the entire premium collection — are free
+- All **366 templates** — including the entire premium collection — are free
 - All **exports** (PNG, JPG, SVG, PDF, video, GIF) are free and unwatermarked
 - All **AI features** (magic edit, magic write, background removal, translate)
   run against your own API keys, so there is nothing for us to meter
@@ -151,7 +151,7 @@ is right here.
   - **`perfectDrawEnabled: false`** on element nodes — skips Konva's
     hit-canvas perfection pass during drag/transform for a big interactive win
   - **Lazy template thumbnails** — preview stages mount via
-    IntersectionObserver (300 px pre-roll), so scrolling the 110-template
+    IntersectionObserver (300 px pre-roll), so scrolling the 366-template
     library stays smooth; only visible cards own a canvas
   - Locked in by tests: `src/store/editor-store.test.ts` asserts the identity
     guarantees (untouched pages/elements keep references, history shares

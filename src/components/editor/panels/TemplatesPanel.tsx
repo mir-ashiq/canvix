@@ -1,12 +1,26 @@
 'use client'
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { Search, Sparkles, Clock, X, Check, Gem, BadgeCheck } from 'lucide-react'
+import { Search, Sparkles, Clock, X, Check, Gem, BadgeCheck, BookMarked, Trash2, Braces } from 'lucide-react'
 import { TEMPLATES, type TemplateDef } from '@/lib/templates'
+import { fillTemplateFields } from '@/lib/templates/fields'
 import { useEditorStore } from '@/store/editor-store'
 import { DesignPreview } from '@/components/design-preview'
+import { ensureDocumentFonts } from '@/lib/fonts/loader'
 import { cn } from '@/lib/utils'
-import { TEMPLATE_CATEGORIES } from '@/lib/types'
+import { TEMPLATE_CATEGORIES, type PageData } from '@/lib/types'
+
+/** v0.17 (Wave 2): the shape GET /api/templates/user returns */
+interface UserTemplateRecord {
+  id: string
+  name: string
+  category: string
+  width: number
+  height: number
+  accent: string
+  pages: PageData[]
+  createdAt: string
+}
 
 export function TemplatesPanel() {
   const applyTemplate = useEditorStore((s) => s.applyTemplate)
@@ -15,6 +29,17 @@ export function TemplatesPanel() {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [preview, setPreview] = useState<TemplateDef | null>(null)
+  // v0.17 (Wave 2): user-saved templates + smart-template fill dialog
+  const [userTemplates, setUserTemplates] = useState<UserTemplateRecord[]>([])
+  const [fillTarget, setFillTarget] = useState<TemplateDef | null>(null)
+  const [fillValues, setFillValues] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    fetch('/api/templates/user', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { templates: [] }))
+      .then((b: { templates?: UserTemplateRecord[] }) => setUserTemplates(b.templates ?? []))
+      .catch(() => setUserTemplates([]))
+  }, [])
 
   // brief skeleton on first open (canva templates load with skeletons)
   useEffect(() => {
@@ -39,9 +64,39 @@ export function TemplatesPanel() {
 
   const designHasContent = pages.some((p) => p.elements.length > 0)
 
+  /** apply with the smart-fill step when the template declares fields */
   const use = (t: TemplateDef) => {
+    if (t.fields?.length) {
+      setFillTarget(t)
+      setFillValues(Object.fromEntries(t.fields.map((f) => [f.key, f.example])))
+      setPreview(null)
+      return
+    }
     applyTemplate(t)
     setPreview(null)
+  }
+
+  const applyFilled = () => {
+    if (!fillTarget) return
+    applyTemplate({ ...fillTarget, pages: fillTemplateFields(fillTarget.pages, fillValues) })
+    setFillTarget(null)
+  }
+
+  const applyUserTemplate = (u: UserTemplateRecord) => {
+    applyTemplate({
+      slug: `user:${u.id}`,
+      name: u.name,
+      category: u.category,
+      width: u.width,
+      height: u.height,
+      accent: u.accent,
+      pages: u.pages,
+    })
+  }
+
+  const deleteUserTemplate = async (id: string) => {
+    const res = await fetch(`/api/templates/user?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+    if (res.ok) setUserTemplates((list) => list.filter((t) => t.id !== id))
   }
 
   return (
@@ -93,8 +148,41 @@ export function TemplatesPanel() {
               <div key={i} className="cv-skeleton aspect-[4/5] w-full" />
             ))}
           </div>
-        ) : hasPremiumSection ? (
+        ) : (
           <>
+            {/* v0.17 (Wave 2): user-saved templates first */}
+            {userTemplates.length > 0 && (
+              <>
+                <SectionLabel icon={<BookMarked size={11} />}>Your templates</SectionLabel>
+                <div className="grid grid-cols-2 gap-3 mb-5">
+                  {userTemplates.map((u) => (
+                    <div
+                      key={u.id}
+                      className="group relative text-left rounded-lg overflow-hidden border border-white/10 hover:border-[#7630D7] transition-all"
+                      aria-label={`Your template ${u.name}`}
+                    >
+                      <button className="block w-full" onClick={() => applyUserTemplate(u)} aria-label={`Apply ${u.name}`}>
+                        <div className="bg-[#0F1015]" style={{ aspectRatio: `${u.width} / ${u.height}` }}>
+                          <LazyPreview page={u.pages[0]} width={u.width} height={u.height} />
+                        </div>
+                      </button>
+                      <div className="px-2 py-1.5 text-[11px] font-medium truncate bg-[#16181D] text-white/80 flex items-center justify-between">
+                        <span className="truncate">{u.name}</span>
+                        <button
+                          onClick={() => void deleteUserTemplate(u.id)}
+                          className="opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400 shrink-0"
+                          aria-label={`Delete template ${u.name}`}
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {hasPremiumSection ? (
+              <>
             <SectionLabel icon={<Sparkles size={11} />}>Recommended for you</SectionLabel>
             <div className="grid grid-cols-2 gap-3 mb-5">
               {recommended.map((t) => (
@@ -129,7 +217,46 @@ export function TemplatesPanel() {
         ) : (
           <EmptyState label={`No templates match “${query}”`} />
         )}
+          </>
+        )}
       </div>
+
+      {/* v0.17 (Wave 2): smart-template fill dialog */}
+      {fillTarget && fillTarget.fields && (
+        <>
+          <div className="fixed inset-0 z-[75] bg-black/60 backdrop-blur-[2px]" onClick={() => setFillTarget(null)} />
+          <div className="fixed z-[76] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(440px,92vw)] max-h-[86vh] overflow-y-auto cv-scroll rounded-2xl bg-[#16181D] border border-white/12 shadow-2xl p-4">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-bold text-white truncate">{fillTarget.name}</span>
+              <button className="text-white/60 hover:text-white" onClick={() => setFillTarget(null)} aria-label="Close fill dialog">
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-[11px] text-white/50 mb-3">Fill in the fields — they flow into the design's marked slots.</p>
+            <div className="space-y-3">
+              {fillTarget.fields.map((f) => (
+                <div key={f.key}>
+                  <label className="text-[11px] font-semibold text-white/60" htmlFor={`fill-${f.key}`}>{f.label}</label>
+                  <input
+                    id={`fill-${f.key}`}
+                    value={fillValues[f.key] ?? ''}
+                    onChange={(e) => setFillValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                    maxLength={200}
+                    className="mt-1 w-full h-10 rounded-xl bg-white/[0.06] border border-white/10 px-3 text-[13px] text-white outline-none focus:border-[#7630D7] placeholder:text-white/30"
+                    placeholder={f.example}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between mt-4">
+              <span className="text-[10px] text-white/35">Tip: fill with CSV in bulk from the dashboard</span>
+              <button className="btn-cv h-9 px-4 text-[13px] flex items-center gap-1.5" onClick={applyFilled}>
+                <Check size={14} /> Use this template
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* full-size preview modal */}
       {preview && (
@@ -144,6 +271,11 @@ export function TemplatesPanel() {
                     <Gem size={10} /> Premium · Free
                   </span>
                 )}
+                {preview.fields?.length ? (
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-[#02C0CC] bg-[#02C0CC]/10 border border-[#02C0CC]/25 rounded-full px-2 py-0.5 shrink-0">
+                    <Braces size={10} /> {preview.fields.length} fields
+                  </span>
+                ) : null}
               </div>
               <button className="text-white/60 hover:text-white" onClick={() => setPreview(null)} aria-label="Close preview">
                 <X size={16} />
@@ -178,6 +310,12 @@ const LazyPreview = memo(function LazyPreview({ page, width, height }: { page: i
   const ref = useRef<HTMLDivElement>(null)
   // environments without IntersectionObserver (old browsers, tests) render eagerly
   const [visible, setVisible] = useState(() => typeof IntersectionObserver === 'undefined')
+
+  // v0.17 (Wave 2): cards use their own typefaces — load them on demand
+  // so thumbnails render true to the design (not in fallback serif)
+  useEffect(() => {
+    if (visible) ensureDocumentFonts([page])
+  }, [visible, page])
 
   useEffect(() => {
     const el = ref.current

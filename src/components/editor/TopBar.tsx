@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Home, MessageCircle, Play, Share2, ChevronDown, Undo2, Redo2, Download, Github, Cloud, Check, Loader2, Ruler, History, Languages, Wand2, Zap, MousePointer2, Brush, Eye } from 'lucide-react'
+import { Home, MessageCircle, Play, Share2, ChevronDown, Undo2, Redo2, Download, Github, Cloud, Check, Loader2, Ruler, History, Languages, Wand2, Zap, MousePointer2, Brush, Eye, BookMarked } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
 import { interactionMode } from '@/lib/editor-utils'
@@ -12,6 +12,7 @@ import { ExportDialog } from './ExportDialog'
 import { ResizeDialog } from './ResizeDialog'
 import { ShareDialog } from './ShareDialog'
 import { VersionHistoryDialog } from './VersionHistoryDialog'
+import { SaveAsTemplateDialog } from './SaveAsTemplateDialog'
 import { TranslateDialog } from './TranslateDialog'
 import { MagicLayersDialog } from './MagicLayersDialog'
 import { PresenceAvatars } from './PresenceAvatars'
@@ -55,6 +56,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
   const [shareOpen, setShareOpen] = useState(false)
   const [versionsOpen, setVersionsOpen] = useState(false)
   const [translateOpen, setTranslateOpen] = useState(false)
+  const [saveTplOpen, setSaveTplOpen] = useState(false)
   const [magicLayersOpen, setMagicLayersOpen] = useState(false)
 
   const item = 'h-10 px-3 rounded-xl text-white/95 hover:bg-white/15 transition-colors text-sm font-semibold flex items-center gap-1.5 select-none'
@@ -108,6 +110,10 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => setVersionsOpen(true)}>
             <History size={15} /> Version history
+          </DropdownMenuItem>
+          {/* v0.17 (Wave 2): save the open design as a reusable template */}
+          <DropdownMenuItem className="gap-2" onClick={() => setSaveTplOpen(true)}>
+            <BookMarked size={15} /> Save as template…
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-white/10" />
           <DropdownMenuItem className="gap-2" onClick={() => setExportOpen(true)}>
@@ -224,6 +230,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
       <ResizeDialog open={resizeOpen} onOpenChange={setResizeOpen} />
       <ShareDialog open={shareOpen} onOpenChange={setShareOpen} />
       <VersionHistoryDialog open={versionsOpen} onOpenChange={setVersionsOpen} />
+      <SaveAsTemplateDialog open={saveTplOpen} onOpenChange={setSaveTplOpen} />
       <TranslateDialog open={translateOpen} onOpenChange={setTranslateOpen} />
       <MagicLayersDialog open={magicLayersOpen} onOpenChange={setMagicLayersOpen} />
     </header>

@@ -543,6 +543,8 @@ export interface TemplateRecord extends DesignSnapshot {
   name: string
   category: string
   accent: string
+  /** v0.17 (Wave 2): smart-template fields (absent on plain templates) */
+  fields?: { key: string; label: string; example: string }[]
 }
 
 export const TEMPLATE_CATEGORIES = [

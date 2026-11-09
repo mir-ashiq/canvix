@@ -69,10 +69,13 @@ design modes, export options and team-grade collaboration.
 
 ## Consolidation roadmap
 
-### Wave 2 — Asset & Template Ecosystem
-Icon library (Iconify-style proxy + offline pack) · illustration packs · font catalog 63 → 250+ ·
-custom font upload · save-as-template · template fields + CSV bulk fill (+ REST fill API) ·
-server-side brand kits · preset catalog 8 → 60+ · template library 110 → 300+.
+### Wave 2 — Asset & Template Ecosystem ✅ SHIPPED (v0.17.0, 2026-11-09)
+Icon library (Iconify-style proxy + 562-icon offline pack) · 48-illustration packs ·
+font catalog 63 → 369 (on-demand loading) · custom font upload · save-as-template ·
+template fields + CSV bulk fill (+ REST fill API) · server-side brand kits ·
+preset catalog 8 → 60 · template library 110 → 366 (12 smart + 244 computed variants).
+Details: docs/ASSETS-AND-TEMPLATES.md · acceptance: 1187 unit tests, 11/11 e2e,
+migration 0011 upgrade-safe. Matrix re-score pending (Wave 3 kickoff).
 
 ### Wave 3 — Editor Depth Parity
 Image masks (10 shapes + custom) · text auto-fit · bullet/numbered lists · RTL & complex scripts ·

@@ -5,6 +5,21 @@ release is designed to upgrade with **one migration command**. This
 guide covers the routine path, jumping minors, and — the part most
 guides skip — how to roll back, with the honest database caveat.
 
+## v0.17.0 — Wave 2 (assets & templates)
+
+One migration (`0011_wave2_assets_templates`): two new tables
+(`UserTemplate`, `BrandKitRecord`) and a nullable `Template.fields`
+column. Nothing existing is touched — upgrade-safe from any v0.16.x
+database. After deploying:
+
+```bash
+npm run db:setup
+```
+
+`migrate deploy` applies 0011 and the seed refreshes the template
+library from 110 to 366 designs (122 originals + Aurora/Ink variants
++ 12 smart templates). See `docs/ASSETS-AND-TEMPLATES.md`.
+
 ## How releases work
 
 - Versions are semver-ish patch streams (`0.11.0 → 0.11.8 → 0.12.0 …`);

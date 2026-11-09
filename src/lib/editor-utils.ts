@@ -6,83 +6,13 @@ import type { AnyElement, GradientFill, PageData } from './types'
 
 // ── Fonts (loaded in layout via Google Fonts) ────────────────
 
-export interface FontOption {
-  family: string
-  label: string
-  weights: string
-  category: 'sans' | 'serif' | 'display' | 'handwriting' | 'mono'
-}
+// ── Fonts ────────────────────────────────────────────────────
+// v0.17 (Wave 2): the catalog moved to lib/fonts/catalog.ts (63 → 369
+// families, on-demand loading via lib/fonts/loader.ts). Re-exported
+// here so every historic import keeps working.
 
-export const FONTS: FontOption[] = [
-  // ── Sans (18) ──
-  { family: 'Inter', label: 'Inter', weights: '400,500,600,700,800', category: 'sans' },
-  { family: 'Poppins', label: 'Poppins', weights: '400,600,700,800', category: 'sans' },
-  { family: 'Montserrat', label: 'Montserrat', weights: '600,700,800,900', category: 'sans' },
-  { family: 'Space Grotesk', label: 'Space Grotesk', weights: '500,700', category: 'sans' },
-  { family: 'Oswald', label: 'Oswald', weights: '500,700', category: 'sans' },
-  { family: 'Raleway', label: 'Raleway', weights: '400,700', category: 'sans' },
-  { family: 'Lato', label: 'Lato', weights: '400,700', category: 'sans' },
-  { family: 'Open Sans', label: 'Open Sans', weights: '400,700', category: 'sans' },
-  { family: 'Nunito', label: 'Nunito', weights: '400,700', category: 'sans' },
-  { family: 'Quicksand', label: 'Quicksand', weights: '400,700', category: 'sans' },
-  { family: 'Rubik', label: 'Rubik', weights: '400,700', category: 'sans' },
-  { family: 'Work Sans', label: 'Work Sans', weights: '400,700', category: 'sans' },
-  { family: 'DM Sans', label: 'DM Sans', weights: '400,700', category: 'sans' },
-  { family: 'Josefin Sans', label: 'Josefin Sans', weights: '400,700', category: 'sans' },
-  { family: 'Barlow', label: 'Barlow', weights: '400,700', category: 'sans' },
-  { family: 'Manrope', label: 'Manrope', weights: '400,700', category: 'sans' },
-  { family: 'Outfit', label: 'Outfit', weights: '400,700', category: 'sans' },
-  { family: 'Figtree', label: 'Figtree', weights: '400,700', category: 'sans' },
-  // ── Serif (14) ──
-  { family: 'Playfair Display', label: 'Playfair Display', weights: '400,700,800', category: 'serif' },
-  { family: 'Abril Fatface', label: 'Abril Fatface', weights: '400', category: 'serif' },
-  { family: 'Roboto Slab', label: 'Roboto Slab', weights: '400,700', category: 'serif' },
-  { family: 'Lora', label: 'Lora', weights: '400,700', category: 'serif' },
-  { family: 'Merriweather', label: 'Merriweather', weights: '400,700', category: 'serif' },
-  { family: 'Libre Baskerville', label: 'Libre Baskerville', weights: '400,700', category: 'serif' },
-  { family: 'EB Garamond', label: 'EB Garamond', weights: '400,700', category: 'serif' },
-  { family: 'Cormorant Garamond', label: 'Cormorant Garamond', weights: '400,700', category: 'serif' },
-  { family: 'DM Serif Display', label: 'DM Serif Display', weights: '400', category: 'serif' },
-  { family: 'Prata', label: 'Prata', weights: '400', category: 'serif' },
-  { family: 'Bitter', label: 'Bitter', weights: '400,700', category: 'serif' },
-  { family: 'Fraunces', label: 'Fraunces', weights: '400,700', category: 'serif' },
-  { family: 'Bodoni Moda', label: 'Bodoni Moda', weights: '400,700', category: 'serif' },
-  { family: 'Cinzel', label: 'Cinzel', weights: '400,700', category: 'serif' },
-  // ── Display (14) ──
-  { family: 'Bebas Neue', label: 'Bebas Neue', weights: '400', category: 'display' },
-  { family: 'Anton', label: 'Anton', weights: '400', category: 'display' },
-  { family: 'Archivo Black', label: 'Archivo Black', weights: '400', category: 'display' },
-  { family: 'Lobster', label: 'Lobster', weights: '400', category: 'display' },
-  { family: 'Alfa Slab One', label: 'Alfa Slab One', weights: '400', category: 'display' },
-  { family: 'Bungee', label: 'Bungee', weights: '400', category: 'display' },
-  { family: 'Righteous', label: 'Righteous', weights: '400', category: 'display' },
-  { family: 'Ultra', label: 'Ultra', weights: '400', category: 'display' },
-  { family: 'Passion One', label: 'Passion One', weights: '400,700', category: 'display' },
-  { family: 'Monoton', label: 'Monoton', weights: '400', category: 'display' },
-  { family: 'Rye', label: 'Rye', weights: '400', category: 'display' },
-  { family: 'Titan One', label: 'Titan One', weights: '400', category: 'display' },
-  { family: 'Luckiest Guy', label: 'Luckiest Guy', weights: '400', category: 'display' },
-  { family: 'Permanent Marker', label: 'Permanent Marker', weights: '400', category: 'display' },
-  // ── Handwriting (14) ──
-  { family: 'Pacifico', label: 'Pacifico', weights: '400', category: 'handwriting' },
-  { family: 'Caveat', label: 'Caveat', weights: '400,700', category: 'handwriting' },
-  { family: 'Dancing Script', label: 'Dancing Script', weights: '400,700', category: 'handwriting' },
-  { family: 'Great Vibes', label: 'Great Vibes', weights: '400', category: 'handwriting' },
-  { family: 'Sacramento', label: 'Sacramento', weights: '400', category: 'handwriting' },
-  { family: 'Satisfy', label: 'Satisfy', weights: '400', category: 'handwriting' },
-  { family: 'Kaushan Script', label: 'Kaushan Script', weights: '400', category: 'handwriting' },
-  { family: 'Alex Brush', label: 'Alex Brush', weights: '400', category: 'handwriting' },
-  { family: 'Allura', label: 'Allura', weights: '400', category: 'handwriting' },
-  { family: 'Parisienne', label: 'Parisienne', weights: '400', category: 'handwriting' },
-  { family: 'Amatic SC', label: 'Amatic SC', weights: '400,700', category: 'handwriting' },
-  { family: 'Shadows Into Light', label: 'Shadows Into Light', weights: '400', category: 'handwriting' },
-  { family: 'Indie Flower', label: 'Indie Flower', weights: '400', category: 'handwriting' },
-  { family: 'Kalam', label: 'Kalam', weights: '400,700', category: 'handwriting' },
-  // ── Mono (3) ──
-  { family: 'DM Mono', label: 'DM Mono', weights: '400,500', category: 'mono' },
-  { family: 'JetBrains Mono', label: 'JetBrains Mono', weights: '400,700', category: 'mono' },
-  { family: 'Space Mono', label: 'Space Mono', weights: '400,700', category: 'mono' },
-]
+export type { FontOption } from './fonts/catalog'
+export { FONTS, PRELOADED_FONTS } from './fonts/catalog'
 
 // Curated "font pairings" shown in the Text panel (Canva-style)
 export const FONT_STYLES: {
@@ -419,6 +349,14 @@ export function elementGradientProps(
   }
 }
 
+export interface SizePreset {
+  name: string
+  width: number
+  height: number
+  hint: string
+}
+
+/** the eight historic quick-start cards (unchanged) */
 export const PRESET_SIZES = [
   { name: 'Instagram post', width: 1080, height: 1080, hint: '1080 × 1080 px' },
   { name: 'Instagram story', width: 1080, height: 1920, hint: '1080 × 1920 px' },
@@ -429,6 +367,102 @@ export const PRESET_SIZES = [
   { name: 'Facebook cover', width: 1640, height: 856, hint: '1640 × 856 px' },
   { name: 'Business card', width: 1050, height: 600, hint: '1.75 × 1 in' },
 ] as const
+
+// ── v0.17 (Wave 2): the full preset catalog — 60+ sizes across five
+// groups. The dashboard quick cards stay PRESET_SIZES; the grouped
+// browser behind "More sizes" renders PRESET_GROUPS.
+export const PRESET_GROUPS: { id: string; label: string; presets: SizePreset[] }[] = [
+  {
+    id: 'social',
+    label: 'Social media',
+    presets: [
+      { name: 'Instagram post', width: 1080, height: 1080, hint: '1080 × 1080 px' },
+      { name: 'Instagram portrait', width: 1080, height: 1350, hint: '1080 × 1350 px' },
+      { name: 'Instagram story', width: 1080, height: 1920, hint: '1080 × 1920 px' },
+      { name: 'Facebook post', width: 1200, height: 630, hint: '1200 × 630 px' },
+      { name: 'Facebook cover', width: 1640, height: 856, hint: '1640 × 856 px' },
+      { name: 'Facebook ad', width: 1200, height: 628, hint: '1200 × 628 px' },
+      { name: 'X post', width: 1600, height: 900, hint: '1600 × 900 px' },
+      { name: 'X header', width: 1500, height: 500, hint: '1500 × 500 px' },
+      { name: 'LinkedIn post', width: 1200, height: 1200, hint: '1200 × 1200 px' },
+      { name: 'LinkedIn banner', width: 1584, height: 396, hint: '1584 × 396 px' },
+      { name: 'Pinterest pin', width: 1000, height: 1500, hint: '1000 × 1500 px' },
+      { name: 'Pinterest long pin', width: 1000, height: 2100, hint: '1000 × 2100 px' },
+      { name: 'TikTok video', width: 1080, height: 1920, hint: '1080 × 1920 px' },
+      { name: 'Threads post', width: 1080, height: 1350, hint: '1080 × 1350 px' },
+      { name: 'WhatsApp status', width: 1080, height: 1920, hint: '1080 × 1920 px' },
+      { name: 'Twitch banner', width: 1920, height: 480, hint: '1920 × 480 px' },
+      { name: 'Discord banner', width: 960, height: 540, hint: '960 × 540 px' },
+    ],
+  },
+  {
+    id: 'video',
+    label: 'Video & thumbnails',
+    presets: [
+      { name: 'YouTube thumbnail', width: 1280, height: 720, hint: '1280 × 720 px' },
+      { name: 'YouTube banner', width: 2560, height: 1440, hint: '2560 × 1440 px' },
+      { name: 'YouTube end screen', width: 1920, height: 1080, hint: '1920 × 1080 px' },
+      { name: 'Video 16:9', width: 1920, height: 1080, hint: '1920 × 1080 px' },
+      { name: 'Video 9:16', width: 1080, height: 1920, hint: '1080 × 1920 px' },
+      { name: 'Video 1:1', width: 1080, height: 1080, hint: '1080 × 1080 px' },
+      { name: 'Video 4:5', width: 1080, height: 1350, hint: '1080 × 1350 px' },
+      { name: 'Podcast cover', width: 1400, height: 1400, hint: '1400 × 1400 px' },
+    ],
+  },
+  {
+    id: 'docs',
+    label: 'Presentations & docs',
+    presets: [
+      { name: 'Presentation 16:9', width: 1920, height: 1080, hint: '1920 × 1080 px' },
+      { name: 'Presentation 4:3', width: 1440, height: 1080, hint: '1440 × 1080 px' },
+      { name: 'A4 document', width: 1240, height: 1754, hint: 'A4 portrait' },
+      { name: 'A4 landscape', width: 1754, height: 1240, hint: 'A4 landscape' },
+      { name: 'US Letter doc', width: 1275, height: 1650, hint: '8.5 × 11 in' },
+      { name: 'Resume', width: 1240, height: 1754, hint: 'A4 one-pager' },
+      { name: 'Invoice', width: 1240, height: 1754, hint: 'A4 one-pager' },
+      { name: 'Certificate', width: 1754, height: 1240, hint: 'A4 landscape' },
+      { name: 'Ebook page', width: 1600, height: 2400, hint: '1600 × 2400 px' },
+    ],
+  },
+  {
+    id: 'print',
+    label: 'Print',
+    presets: [
+      { name: 'Poster A4', width: 1240, height: 1754, hint: 'A4 poster' },
+      { name: 'Poster A3', width: 1754, height: 2480, hint: 'A3 poster' },
+      { name: 'Poster 18 × 24 in', width: 1800, height: 2400, hint: '18 × 24 in' },
+      { name: 'Flyer', width: 1240, height: 1754, hint: 'A4 flyer' },
+      { name: 'Business card', width: 1050, height: 600, hint: '1.75 × 1 in' },
+      { name: 'Business card EU', width: 1004, height: 650, hint: '85 × 55 mm' },
+      { name: 'Postcard', width: 1800, height: 1200, hint: '6 × 4 in' },
+      { name: 'Menu', width: 1240, height: 1754, hint: 'A4 menu' },
+      { name: 'Ticket', width: 700, height: 350, hint: '700 × 350 px' },
+      { name: 'Invitation', width: 1050, height: 750, hint: '5 × 7 in at 150 DPI' },
+      { name: 'Book cover', width: 1600, height: 2400, hint: '1600 × 2400 px' },
+      { name: 'Album cover', width: 1400, height: 1400, hint: '1400 × 1400 px' },
+      { name: 'Sticker sheet', width: 1200, height: 1800, hint: 'A4 sheet' },
+    ],
+  },
+  {
+    id: 'web',
+    label: 'Web & marketing',
+    presets: [
+      { name: 'Web banner', width: 1920, height: 600, hint: '1920 × 600 px' },
+      { name: 'Hero header', width: 2560, height: 1440, hint: '2560 × 1440 px' },
+      { name: 'Leaderboard ad', width: 728, height: 90, hint: '728 × 90 px' },
+      { name: 'Square ad', width: 300, height: 250, hint: '300 × 250 px' },
+      { name: 'Skyscraper ad', width: 160, height: 600, hint: '160 × 600 px' },
+      { name: 'Email header', width: 1200, height: 400, hint: '1200 × 400 px' },
+      { name: 'Newsletter', width: 1200, height: 1600, hint: '1200 × 1600 px' },
+      { name: 'Infographic', width: 800, height: 2000, hint: '800 × 2000 px' },
+      { name: 'Favicon', width: 512, height: 512, hint: '512 × 512 px' },
+      { name: 'App icon', width: 1024, height: 1024, hint: '1024 × 1024 px' },
+      { name: 'Logo', width: 500, height: 500, hint: '500 × 500 px' },
+      { name: 'Desktop wallpaper', width: 1920, height: 1080, hint: '1920 × 1080 px' },
+      { name: 'Phone wallpaper', width: 1080, height: 1920, hint: '1080 × 1920 px' },
+    ],
+  },
+]
 
 // ── Interaction mode (v0.11.6 — QA finding F3) ──────────────
 

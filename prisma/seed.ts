@@ -10,6 +10,14 @@ const db = createScriptClient()
 const pagesOf = (t: (typeof TEMPLATES)[number]) =>
   t.pages as unknown as Prisma.InputJsonValue
 
+// v0.17 (Wave 2): field declarations use the same jsonb cast. Plain
+// templates store SQL NULL (DbNull), not the jsonb 'null' literal —
+// IS NULL filters and the fill route's fallback both rely on it.
+const fieldsOf = (t: (typeof TEMPLATES)[number]) =>
+  t.fields
+    ? (t.fields as unknown as Prisma.InputJsonValue)
+    : Prisma.DbNull
+
 async function main() {
   console.log(`Seeding ${TEMPLATES.length} templates…`)
   for (const t of TEMPLATES) {
@@ -22,6 +30,8 @@ async function main() {
         height: t.height,
         accent: t.accent,
         pages: pagesOf(t),
+        // v0.17 (Wave 2): smart-template field declarations
+        fields: fieldsOf(t),
       },
       create: {
         slug: t.slug,
@@ -31,6 +41,7 @@ async function main() {
         height: t.height,
         accent: t.accent,
         pages: pagesOf(t),
+        fields: fieldsOf(t),
       },
     })
     console.log(`  ✓ ${t.slug}`)

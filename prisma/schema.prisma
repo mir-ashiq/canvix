@@ -146,6 +146,9 @@ model Template {
   height    Int
   pages     Json // structured document — same shape as Design.pages
   accent    String   @default("#00C4CC") // card decoration
+  // v0.17 (Wave 2): smart-template field declarations (null = plain
+  // template). [{ key, label, example }] — see lib/templates/fields.ts
+  fields    Json?
   createdAt DateTime @default(now())
 }
 
@@ -337,4 +340,47 @@ model DailyActive {
   actor  String
 
   @@unique([day, actor])
+}
+
+// ── v0.17 (Wave 2): asset & template ecosystem ───────────────
+
+// User-saved templates ("Save as template" in the editor). Attribution
+// mirrors designs: owning account OR the anon cookie that created it —
+// adopt-all claims rows the same way designs do. Pages use the same
+// structured-document shape as Design.pages / Template.pages.
+model UserTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  category  String // social | presentation | print | logo | thumbnail | doc
+  width     Int
+  height    Int
+  pages     Json
+  accent    String   @default("#00C4CC")
+  ownerId   String?
+  anonKey   String?
+  createdAt DateTime @default(now())
+
+  @@index([ownerId])
+  @@index([anonKey])
+}
+
+// Server-side brand kits (v0.17 Wave 2): colours, palettes, fonts and
+// logos travel with the account (or anon attribution) instead of living
+// only in localStorage. One row per kit; the client keeps the active
+// kit id locally.
+model BrandKitRecord {
+  id          String   @id @default(cuid())
+  name        String   @default("My brand")
+  colors      Json // string[]
+  palettes    Json // string[][]
+  headingFont String   @default("Montserrat")
+  bodyFont    String   @default("Inter")
+  logos       Json // data URLs (small, ≤ 8 entries)
+  ownerId     String?
+  anonKey     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([anonKey])
 }

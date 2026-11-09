@@ -69,6 +69,42 @@ export function addGraphic(graphicId: string, fill?: string) {
   addCentered(createShapeElement('path', { width: 300, height: 300, pathData: def.path, ...(fill ? { fill } : {}) }))
 }
 
+/**
+ * v0.17 (Wave 2): insert an offline-pack icon as a stroke path element.
+ * Icon art is authored in the 100×100 box (see lib/assets/icon-pack.ts)
+ * — lucide stroke-weight 2 at 24px scales to ≈ 8.3 in that box, and the
+ * canvas renderer normalises strokeWidth by width/100, so the icon keeps
+ * its stroke at any size. Recolourable from the properties bar.
+ */
+export function addIconPath(d: string, stroke: string) {
+  addCentered(
+    createShapeElement('path', {
+      width: 240,
+      height: 240,
+      pathData: d,
+      fill: 'transparent',
+      stroke,
+      strokeWidth: 8.3,
+    })
+  )
+}
+
+/**
+ * v0.17 (Wave 2): insert an online Iconify icon (or any small SVG) as an
+ * image element from a data URL — full colour fidelity for multi-colour
+ * icon sets, same export path as brand logos.
+ */
+export function addSvgAsImage(svg: string) {
+  const url = `data:image/svg+xml;base64,${typeof btoa === 'function' ? btoa(unescape(encodeURIComponent(svg))) : Buffer.from(svg, 'utf8').toString('base64')}`
+  addCentered(createImageElement(url, 240, 240, {}))
+}
+
+/** v0.17 (Wave 2): insert an illustration-pack SVG on the canvas. */
+export function addIllustration(svg: string) {
+  const url = `data:image/svg+xml;base64,${typeof btoa === 'function' ? btoa(unescape(encodeURIComponent(svg))) : Buffer.from(svg, 'utf8').toString('base64')}`
+  addCentered(createImageElement(url, 420, 420, {}))
+}
+
 export function addLine(variant: 'solid' | 'dashed' | 'arrow' | 'arrowBoth') {
   const state = useEditorStore.getState()
   const width = Math.min(420, state.width * 0.6)

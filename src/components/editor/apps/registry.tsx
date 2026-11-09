@@ -27,6 +27,7 @@ export interface AppPanelProps {
 import { ChartsApp } from './ChartsApp'
 import { QRApp } from './QRApp'
 import { IconsApp } from './IconsApp'
+import { IllustrationsApp } from './IllustrationsApp'
 import { PaletteApp } from './PaletteApp'
 import { LoremApp } from './LoremApp'
 import { StickersApp } from './StickersApp'
@@ -41,7 +42,8 @@ export const CANVIX_APPS: CanvixApp[] = [
   { id: 'ai-image', name: 'AI image generator', desc: 'Turn a prompt into a design-ready image', icon: ImageIcon, color: '#02C0CC', content: AIImageApp },
   { id: 'charts', name: 'Charts', desc: 'Bar, line & donut charts as editable shapes', icon: BarChart3, color: '#7630D7', content: ChartsApp },
   { id: 'qr', name: 'QR generator', desc: 'Turn any link or text into a QR code', icon: QrCode, color: '#3B82F6', content: QRApp },
-  { id: 'icons', name: 'Icons', desc: 'Line & solid icon shapes for any design', icon: Shapes, color: '#02C0CC', content: IconsApp },
+  { id: 'icons', name: 'Icons', desc: '562 offline icons + the Iconify universe online', icon: Shapes, color: '#02C0CC', content: IconsApp },
+  { id: 'illustrations', name: 'Illustrations', desc: 'Original flat-art pieces in six packs', icon: ImageIcon, color: '#34C77B', content: IllustrationsApp },
   { id: 'palette', name: 'Colour palette', desc: 'Generate harmonious palettes on canvas', icon: Palette, color: '#FF5C8A', content: PaletteApp },
   { id: 'lorem', name: 'Placeholder text', desc: 'Lorem ipsum & real-feel filler copy', icon: Type, color: '#FFD166', content: LoremApp },
   { id: 'stickers', name: 'Stickers', desc: 'Emoji stickers & reactions', icon: Smile, color: '#F97316', content: StickersApp },

@@ -1,7 +1,7 @@
 'use client'
 
-import { useRef, useState } from 'react'
-import { BookMarked, Wand2, Check, Plus, Palette, ImagePlus, Trash2, Layers, Type } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { BookMarked, Wand2, Check, Plus, Palette, ImagePlus, Trash2, Layers, Type, CloudOff, Cloud } from 'lucide-react'
 import { useEditorStore, selectedElements } from '@/store/editor-store'
 import { PanelShell } from './panel-shell'
 import { DEFAULT_BRAND, type BrandKit, type AnyElement } from '@/lib/types'
@@ -11,6 +11,13 @@ import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 
 const BRAND_KEY = 'canvix:brandkit'
+
+/** v0.17 (Wave 2): a server-side kit row (GET /api/brand-kits) */
+interface ServerBrandKit extends BrandKit {
+  id: string
+  name: string
+  updatedAt?: string
+}
 
 /** colour distance for "apply brand to page" nearest-colour mapping */
 function colorDistance(a: string, b: string): number {
@@ -24,7 +31,10 @@ function colorDistance(a: string, b: string): number {
   return (r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2
 }
 
-/** Canva Brand panel — colors, palettes, fonts, logos + apply-brand-style, persisted to localStorage. */
+/** Canva Brand panel — colors, palettes, fonts, logos + apply-brand-style.
+ *  v0.17 (Wave 2): kits live SERVER-SIDE (account or anon attribution,
+ *  following the browser across devices); localStorage stays as the
+ *  offline fallback and write-behind cache. */
 export function BrandPanel() {
   const state = useEditorStore()
   const brand = state.brand
@@ -42,10 +52,81 @@ export function BrandPanel() {
     return brand ?? DEFAULT_BRAND
   })
 
+  // ── v0.17 (Wave 2): server-side kit state ──
+  const [kits, setKits] = useState<ServerBrandKit[]>([])
+  const [activeKitId, setActiveKitId] = useState<string | null>(null)
+  const [synced, setSynced] = useState(true)
+  const [loaded, setLoaded] = useState(false)
+
+  // load kits on mount — server wins when it has any
+  useEffect(() => {
+    fetch('/api/brand-kits', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { kits: [] }))
+      .then((b: { kits?: ServerBrandKit[] }) => {
+        const serverKits = b.kits ?? []
+        setKits(serverKits)
+        if (serverKits.length) {
+          const newest = serverKits[0]
+          setActiveKitId(newest.id)
+          const merged = { ...DEFAULT_BRAND, ...newest }
+          setLocal(merged)
+          useEditorStore.getState().setBrand(merged)
+        }
+      })
+      .catch(() => { /* offline — localStorage kit stays active */ })
+      .finally(() => setLoaded(true))
+  }, [])
+
+  // debounced server sync for the active kit
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pushToServer = useCallback((kit: BrandKit, id: string | null, name: string) => {
+    if (syncTimer.current) clearTimeout(syncTimer.current)
+    setSynced(false)
+    syncTimer.current = setTimeout(async () => {
+      try {
+        const payload = JSON.stringify({
+          name,
+          colors: kit.colors,
+          palettes: kit.palettes ?? [],
+          headingFont: kit.headingFont,
+          bodyFont: kit.bodyFont,
+          logos: kit.logos ?? [],
+        })
+        if (id) {
+          const res = await fetch(`/api/brand-kits?id=${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+          })
+          if (res.status === 404) {
+            // kit vanished (another device deleted it) — recreate
+            const made = await fetch('/api/brand-kits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload })
+            if (made.ok) {
+              const created = (await made.json()) as { id: string }
+              setActiveKitId(created.id)
+            }
+          }
+        } else {
+          const res = await fetch('/api/brand-kits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload })
+          if (res.ok) {
+            const created = (await res.json()) as { id: string; name: string }
+            setActiveKitId(created.id)
+            setKits((ks) => [{ ...kit, id: created.id, name: created.name }, ...ks])
+          }
+        }
+        setSynced(true)
+      } catch {
+        setSynced(false) // offline — cache stays in localStorage
+      }
+    }, 800)
+  }, [])
+
+  const activeKitName = kits.find((k) => k.id === activeKitId)?.name ?? 'My brand'
   const persist = (b: BrandKit) => {
     setLocal(b)
     setBrand(b)
     try { localStorage.setItem(BRAND_KEY, JSON.stringify(b)) } catch { /* ignore */ }
+    if (loaded) pushToServer(b, activeKitId, activeKitName)
   }
 
   const setColor = (i: number, c: string) => {
@@ -167,7 +248,88 @@ export function BrandPanel() {
 
   return (
     <PanelShell title="Brand" subtitle="Your colours, fonts, palettes & logos.">
-      <h4 className="mt-2 mb-2 text-xs font-semibold text-white/50 uppercase tracking-wide flex items-center gap-1.5">
+      {/* v0.17 (Wave 2): server-side kit selector + sync state */}
+      <div className="mt-2 flex items-center gap-2">
+        <select
+          value={activeKitId ?? ''}
+          onChange={(e) => {
+            const kit = kits.find((k) => k.id === e.target.value)
+            if (!kit) return
+            setActiveKitId(kit.id)
+            const merged = { ...DEFAULT_BRAND, ...kit }
+            setLocal(merged)
+            useEditorStore.getState().setBrand(merged)
+            try { localStorage.setItem(BRAND_KEY, JSON.stringify(merged)) } catch { /* ignore */ }
+          }}
+          className="flex-1 min-w-0 h-9 rounded-xl bg-white/[0.05] border border-white/10 text-white text-[12px] px-2 outline-none focus:border-[#7630D7] [color-scheme:dark]"
+          aria-label="Active brand kit"
+        >
+          <option value="">{activeKitId ? 'Choose a kit…' : 'My brand (unsaved)'}</option>
+          {kits.map((k) => (
+            <option key={k.id} value={k.id}>{k.name}</option>
+          ))}
+        </select>
+        <button
+          onClick={() => {
+            const name = prompt('Name the new brand kit', 'New brand kit')
+            if (!name) return
+            void (async () => {
+              const res = await fetch('/api/brand-kits', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name.slice(0, 60), colors: local.colors, palettes: local.palettes ?? [], headingFont: local.headingFont, bodyFont: local.bodyFont, logos: local.logos ?? [] }),
+              })
+              if (res.ok) {
+                const created = (await res.json()) as { id: string; name: string }
+                setKits((ks) => [{ ...local, id: created.id, name: created.name }, ...ks])
+                setActiveKitId(created.id)
+                toast({ title: `Brand kit “${created.name}” created` })
+              } else {
+                toast({ title: 'Could not create the kit', variant: 'destructive' })
+              }
+            })()
+          }}
+          className="h-9 px-2.5 rounded-xl border border-white/12 bg-white/[0.05] hover:bg-[#7630D7] hover:border-transparent text-white/80 text-[11px] font-semibold shrink-0"
+          aria-label="Create a new brand kit"
+          title="New brand kit"
+        >
+          <Plus size={13} />
+        </button>
+        {activeKitId && (
+          <button
+            onClick={() => {
+              void (async () => {
+                const res = await fetch(`/api/brand-kits?id=${encodeURIComponent(activeKitId)}`, { method: 'DELETE' })
+                if (res.ok) {
+                  const remaining = kits.filter((k) => k.id !== activeKitId)
+                  setKits(remaining)
+                  if (remaining.length) {
+                    setActiveKitId(remaining[0].id)
+                    setLocal({ ...DEFAULT_BRAND, ...remaining[0] })
+                  } else {
+                    setActiveKitId(null)
+                    setLocal(DEFAULT_BRAND)
+                    useEditorStore.getState().setBrand(DEFAULT_BRAND)
+                  }
+                  toast({ title: 'Brand kit deleted' })
+                }
+              })()
+            }}
+            className="h-9 px-2.5 rounded-xl border border-white/12 bg-white/[0.05] hover:bg-red-500/20 hover:border-red-400/40 text-white/80 shrink-0"
+            aria-label="Delete this brand kit"
+            title="Delete kit"
+          >
+            <Trash2 size={13} />
+          </button>
+        )}
+        <span
+          className={cn('shrink-0 flex items-center gap-1 text-[10px] font-semibold', synced ? 'text-white/35' : 'text-[#FFD166]')}
+          title={synced ? 'Synced to your account' : 'Saving…'}
+        >
+          {synced ? <Cloud size={12} /> : <CloudOff size={12} className="animate-pulse" />}
+        </span>
+      </div>
+      <h4 className="mt-4 mb-2 text-xs font-semibold text-white/50 uppercase tracking-wide flex items-center gap-1.5">
         <BookMarked size={13} /> Brand colours
       </h4>
       <div className="grid grid-cols-5 gap-2">

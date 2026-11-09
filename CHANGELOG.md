@@ -3,6 +3,86 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.17.0] — 2026-11-09
+
+The Wave 2 feature drop from the consolidation programme — the asset &
+template ecosystem (see `docs/COMPETITIVE-ANALYSIS.md` for the roadmap).
+Ten features in one release; re-scoring the Wave 1 matrix after this
+wave is the acceptance bar.
+
+### Added
+
+- **Icon library — 562 offline icons + the Iconify universe online.**
+  The Icons app grew from 12 shapes to a two-source library: a bundled
+  offline pack (extracted from the ISC-licensed lucide-react set at
+  build time by `scripts/gen-icon-pack.mjs`, flattened to editable
+  vector paths in the Canvix 100×100 box — recolour from the properties
+  bar, full export parity in PNG/SVG/vector-PDF) and an online toggle
+  proxying api.iconify.design (`GET /api/icons?q=` search and
+  `?svg=prefix:name` fetch — strictly validated, 30/min rate limit,
+  hard edge caching, inserts as image elements with full colour
+  fidelity). Works offline; the online half degrades gracefully.
+- **Illustration packs — 48 original flat-art pieces.** Six packs
+  (business, people, nature, tech, abstract, festive) authored
+  in-house from primitives (`scripts/gen-illustrations.mjs` — clean
+  room, nothing copied), bundled offline as standalone SVGs, inserted
+  as image elements with search and pack filters.
+- **Font catalog ×5.8 — 63 → 369 families with on-demand loading.**
+  The catalog moved to `lib/fonts/catalog.ts`; the historic 63 stay on
+  the preload link and every other family loads lazily via
+  `ensureFontLoaded` (font dropdown hover/select, document open scan,
+  template preview mounts). Konva stages repaint on font arrival
+  (`canvix:fonts-loaded` broadcast). The dropdown keeps Canva-style
+  search + category pills over the full 369.
+- **Custom font upload.** `POST /api/fonts/custom` (raw bytes,
+  .ttf/.otf/.woff/.woff2, 8 MB cap, session-or-anon attribution,
+  stored in the Media table) + client FontFace registration; the font
+  dropdown gained an "Upload a font" button, a `custom` category pill
+  and per-font delete.
+- **Save as template.** File → "Save as template…" persists the open
+  document as a private starter template (`UserTemplate` table,
+  design-style attribution, 50-kit quota, structural validation). The
+  editor Templates panel lists "Your templates" first, with apply and
+  delete.
+- **Smart templates — fields, CSV bulk fill and a REST fill API.**
+  Templates may declare fields; text elements carry `{{key}}` markers.
+  One substitution engine (`lib/templates/fields.ts` — pure, tested)
+  powers three surfaces: the editor's guided fill dialog (opens when
+  applying a fielded template), the dashboard CSV bulk flow (upload or
+  paste, column mapping preview, one design per row, `?persist=1`),
+  and `POST /api/templates/[slug]/fill` for agents and MCP (JSON
+  values/rows, raw CSV or multipart; render-only by default, persist
+  opt-in; agents without browser Origin headers pass CSRF by design).
+  12 new field-enabled templates ship (4 certificates, 3 business
+  cards, 2 quote posts, 2 event flyers, 1 invoice).
+- **Server-side brand kits.** `BrandKitRecord` + full CRUD at
+  `/api/brand-kits` (10 kits per attribution, validated colours/
+  palettes/fonts/logo data-URLs). The Brand panel syncs the active kit
+  debounced, keeps localStorage as offline fallback, and gained a kit
+  selector with create/delete and a live sync indicator.
+- **Preset catalog 8 → 60.** `PRESET_GROUPS` spans social, video,
+  docs, print and web/marketing sizes; the dashboard's 9th quick card
+  opens a searchable grouped browser ("More sizes") with custom-size
+  escape hatches.
+- **Template library 110 → 366.** Two deterministic computed variants
+  per design (Aurora colourway, Ink typography swap — pure transforms
+  in `lib/templates/variants.ts`, zero extra bundle bytes, stable
+  slugs, idempotent re-seeds) plus the 12 smart templates. Whites
+  survive colourways; field markers survive both transforms.
+- **Schema migration 0011** — `UserTemplate` + `BrandKitRecord` tables
+  and the nullable `Template.fields` column. Upgrade-safe from any
+  v0.16.5 database (new tables only; `npm run db:setup` applies and
+  re-seeds, refreshing the library to 366).
+
+### Changed
+
+- `FONTS` re-exported from `lib/fonts/catalog.ts` (same import path
+  via `lib/editor-utils`); layout preload unchanged for the original
+  63 families.
+- Dashboard template click on a smart template now substitutes EXAMPLE
+  values — raw `{{markers}}` never reach the canvas.
+
+## [0.16.5] — 2026-11-08
 ## [0.16.5] — 2026-11-08
 
 ### Added

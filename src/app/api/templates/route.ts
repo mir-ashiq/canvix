@@ -28,6 +28,8 @@ async function __canvix_get(_req: NextRequest) {
         height: t.height,
         accent: t.accent,
         pages: t.pages ?? [],
+        // v0.17 (Wave 2): smart-template fields (null on plain templates)
+        ...(t.fields ? { fields: t.fields } : {}),
       })),
       {
         headers: {

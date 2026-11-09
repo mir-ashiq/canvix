@@ -34,6 +34,11 @@ import {
   FolderPlus,
   FolderMinus,
   Check,
+  Maximize,
+  Smartphone,
+  Monitor,
+  FileSpreadsheet,
+  Loader2,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
@@ -46,7 +51,8 @@ import { AuthDialog } from '@/components/auth/AuthDialog'
 import { useAuth, adoptAllDesigns, adoptDesign } from '@/lib/auth/client'
 import { TEMPLATES } from '@/lib/templates'
 import { createPage, TEMPLATE_CATEGORIES, type TemplateRecord } from '@/lib/types'
-import { PRESET_SIZES } from '@/lib/editor-utils'
+import { PRESET_SIZES, PRESET_GROUPS, type SizePreset } from '@/lib/editor-utils'
+import { parseCsv, csvToFieldRows, fillTemplateFields } from '@/lib/templates/fields'
 import { cn } from '@/lib/utils'
 import {
   ApiError,
@@ -99,6 +105,15 @@ const CATEGORY_ICONS: Record<string, typeof Presentation> = {
 
 const PRESET_ICONS = [Instagram, Instagram, Presentation, Printer, BadgeCheck, Video, Square, FileImage]
 
+// v0.17 (Wave 2): icon per preset group in the “More sizes” browser
+const GROUP_ICONS: Record<string, typeof Instagram> = {
+  social: Smartphone,
+  video: Video,
+  docs: Presentation,
+  print: Printer,
+  web: Monitor,
+}
+
 function newBlankPages() {
   return [createPage()]
 }
@@ -150,6 +165,44 @@ export function Dashboard() {
   const [customW, setCustomW] = useState('1080')
   const [customH, setCustomH] = useState('1080')
   const [creating, setCreating] = useState(false)
+  // v0.17 (Wave 2): “More sizes” browser state
+  const [sizesOpen, setSizesOpen] = useState(false)
+  const [sizeQuery, setSizeQuery] = useState('')
+  // v0.17 (Wave 2): CSV bulk fill for smart templates
+  const [csvTarget, setCsvTarget] = useState<TemplateRecord | null>(null)
+  const [csvText, setCsvText] = useState('')
+  const [csvBusy, setCsvBusy] = useState(false)
+
+  const csvParsed = useMemo(() => {
+    if (!csvTarget?.fields?.length || !csvText.trim()) return null
+    try {
+      return csvToFieldRows(parseCsv(csvText), csvTarget.fields.map((f) => f.key))
+    } catch (err) {
+      return { rows: [], missing: [], error: err instanceof Error ? err.message : 'CSV parse failed' }
+    }
+  }, [csvTarget, csvText])
+
+  const generateCsvDesigns = async () => {
+    if (!csvTarget || !csvParsed?.rows.length) return
+    setCsvBusy(true)
+    try {
+      const res = await fetch(`/api/templates/${encodeURIComponent(csvTarget.slug)}/fill?persist=1`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: csvParsed.rows.slice(0, 100) }),
+      })
+      if (!res.ok) throw new Error('fill failed')
+      const body = (await res.json()) as { created?: { id: string }[] }
+      toast({ title: `Created ${body.created?.length ?? 0} design${(body.created?.length ?? 0) === 1 ? '' : 's'} from “${csvTarget.name}”` })
+      setCsvTarget(null)
+      setCsvText('')
+      await refresh()
+    } catch {
+      toast({ title: 'Bulk fill failed — try fewer rows', variant: 'destructive' })
+    } finally {
+      setCsvBusy(false)
+    }
+  }
   const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
@@ -207,6 +260,7 @@ export function Dashboard() {
         height: t.height,
         accent: t.accent,
         pages: t.pages,
+        ...(t.fields ? { fields: t.fields } : {}),
       })).filter((t) => category === 'all' || t.category === category),
     [category]
   )
@@ -248,11 +302,16 @@ export function Dashboard() {
   const startFromTemplate = async (t: TemplateRecord) => {
     setCreating(true)
     try {
+      // v0.17 (Wave 2): smart templates open with their EXAMPLE values —
+      // raw {{markers}} never reach the canvas from the dashboard (the
+      // editor panel offers the guided fill dialog, CSV does bulk).
+      const exampleValues = Object.fromEntries((t.fields ?? []).map((f) => [f.key, f.example]))
+      const pages = t.fields?.length ? fillTemplateFields(t.pages, exampleValues) : t.pages
       const record = await createDesign({
         name: t.name,
         width: t.width,
         height: t.height,
-        pages: t.pages,
+        pages,
         source: `template:${t.slug}`,
         folderId: activeFolder,
       })
@@ -590,7 +649,7 @@ export function Dashboard() {
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold">Start a new design</h2>
           </div>
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-3">
             {PRESET_SIZES.map((preset, i) => {
               const Icon = PRESET_ICONS[i % PRESET_ICONS.length]
               return (
@@ -609,6 +668,18 @@ export function Dashboard() {
                 </button>
               )
             })}
+            <button
+              onClick={() => { setSizesOpen(true); setSizeQuery('') }}
+              disabled={creating}
+              className="group flex flex-col items-center gap-2 rounded-2xl border border-dashed border-white/20 bg-transparent p-4 hover:border-[#7630D7]/60 hover:bg-[#1C1E28] transition-all disabled:opacity-50"
+              aria-label="Browse all design sizes"
+            >
+              <span className="h-10 w-10 rounded-xl bg-brand-gradient-soft text-[#A78BFA] flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Maximize size={19} />
+              </span>
+              <span className="text-[13px] font-semibold text-center leading-tight">More sizes</span>
+              <span className="text-[11px] text-white/40">60+ presets</span>
+            </button>
           </div>
         </section>
 
@@ -665,6 +736,19 @@ export function Dashboard() {
                   <span className="absolute top-2 right-2 h-6 w-6 rounded-full bg-[#7630D7] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <Plus size={14} />
                   </span>
+                  {/* v0.17 (Wave 2): smart templates offer CSV bulk fill */}
+                  {t.fields?.length ? (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => { e.stopPropagation(); setCsvTarget(t); setCsvText('') }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setCsvTarget(t); setCsvText('') } }}
+                      className="absolute top-2 left-2 h-7 px-2 rounded-full bg-[#02C0CC] text-[#083344] text-[10px] font-bold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                      title="Bulk-fill with CSV"
+                    >
+                      <FileSpreadsheet size={12} /> CSV
+                    </span>
+                  ) : null}
                 </div>
                 <div className="mt-2 text-sm font-medium truncate text-white/85 group-hover:text-[#A78BFA] transition-colors">{t.name}</div>
                 <div className="text-xs text-white/40">{t.width} × {t.height}</div>
@@ -1150,6 +1234,152 @@ export function Dashboard() {
               }}
             >
               Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── v0.17 (Wave 2): full preset browser ── */}
+      <Dialog open={sizesOpen} onOpenChange={setSizesOpen}>
+        <DialogContent className="rounded-[28px] sm:max-w-2xl bg-[#16181D] border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle>All design sizes</DialogTitle>
+            <DialogDescription className="text-white/55">
+              {PRESET_GROUPS.reduce((n, g) => n + g.presets.length, 0)} presets across five categories — or{' '}
+              <button className="text-[#A78BFA] underline" onClick={() => { setSizesOpen(false); setCustomOpen(true) }}>
+                create a custom size
+              </button>
+              .
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 h-10 rounded-xl bg-white/[0.06] border border-white/10 px-3">
+            <Search size={15} className="text-white/40 shrink-0" />
+            <input
+              value={sizeQuery}
+              onChange={(e) => setSizeQuery(e.target.value)}
+              className="bg-transparent outline-none text-sm text-white w-full placeholder:text-white/35"
+              placeholder="Search sizes — try “story”, “A4”, “logo”…"
+              aria-label="Search design sizes"
+            />
+          </div>
+          <div className="max-h-[52vh] overflow-y-auto cv-scroll pr-1 -mr-1">
+            {PRESET_GROUPS.map((group) => {
+              const q = sizeQuery.trim().toLowerCase()
+              const presets = q
+                ? group.presets.filter((p) => p.name.toLowerCase().includes(q) || p.hint.toLowerCase().includes(q))
+                : group.presets
+              if (!presets.length) return null
+              const Icon = GROUP_ICONS[group.id] ?? Square
+              return (
+                <div key={group.id} className="mb-4 last:mb-0">
+                  <h4 className="flex items-center gap-1.5 text-[11px] font-bold text-white/45 uppercase tracking-wide mb-2">
+                    <Icon size={12} /> {group.label}
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {presets.map((p: SizePreset) => (
+                      <button
+                        key={group.id + p.name}
+                        onClick={() => {
+                          setSizesOpen(false)
+                          void startBlank(p.width, p.height, p.name)
+                        }}
+                        disabled={creating}
+                        className="flex flex-col items-start gap-0.5 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 hover:border-[#7630D7]/60 hover:bg-[#7630D7]/10 transition-all text-left disabled:opacity-50"
+                        aria-label={`Create ${p.name} (${p.hint})`}
+                      >
+                        <span className="text-[12px] font-semibold text-white/90 truncate w-full">{p.name}</span>
+                        <span className="text-[10px] text-white/40">{p.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+            {sizeQuery.trim() && !PRESET_GROUPS.some((g) => g.presets.some((p) => p.name.toLowerCase().includes(sizeQuery.trim().toLowerCase()))) && (
+              <p className="text-center text-sm text-white/40 py-6">
+                No size matches “{sizeQuery}” —{' '}
+                <button className="text-[#A78BFA] underline" onClick={() => { setSizesOpen(false); setCustomOpen(true) }}>
+                  create a custom size
+                </button>
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── v0.17 (Wave 2): CSV bulk fill for smart templates ── */}
+      <Dialog open={!!csvTarget} onOpenChange={(open) => { if (!open) setCsvTarget(null) }}>
+        <DialogContent className="rounded-[28px] sm:max-w-md bg-[#16181D] border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet size={16} className="text-[#02C0CC]" /> Bulk-fill “{csvTarget?.name}”
+            </DialogTitle>
+            <DialogDescription className="text-white/55">
+              Upload a CSV whose header row names the fields — one design is created per data row (up to 100).
+            </DialogDescription>
+          </DialogHeader>
+
+          {csvTarget?.fields?.length ? (
+            <>
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <div className="text-[11px] font-bold text-white/45 uppercase tracking-wide mb-1.5">Expected columns</div>
+                <div className="flex gap-1.5 flex-wrap">
+                  {csvTarget.fields.map((f) => (
+                    <code key={f.key} className="text-[11px] px-2 py-0.5 rounded-md bg-[#02C0CC]/10 border border-[#02C0CC]/25 text-[#7DE9E1]">{f.key}</code>
+                  ))}
+                </div>
+                <button
+                  className="mt-2 text-[11px] text-[#A78BFA] hover:underline"
+                  onClick={() => {
+                    const header = csvTarget.fields!.map((f) => f.key).join(',')
+                    const sample = csvTarget.fields!.map((f) => f.example.replace(/[,"\n]/g, ' ')).join(',')
+                    setCsvText(`${header}\n${sample}\n`)
+                  }}
+                >
+                  Insert a sample CSV
+                </button>
+              </div>
+
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="block w-full text-sm text-white/70 file:mr-3 file:rounded-lg file:border-0 file:bg-[#7630D7] file:px-3 file:py-1.5 file:text-white file:text-xs file:font-semibold cursor-pointer"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  if (file) setCsvText(await file.text())
+                  e.target.value = ''
+                }}
+                aria-label="Upload CSV file"
+              />
+              <textarea
+                value={csvText}
+                onChange={(e) => setCsvText(e.target.value)}
+                rows={5}
+                className="w-full rounded-xl bg-white/[0.06] border border-white/10 px-3 py-2 text-[12px] font-mono text-white outline-none focus:border-[#7630D7] placeholder:text-white/30"
+                placeholder={'…or paste CSV here\nname,date\nAda,2026-03-14'}
+                aria-label="CSV content"
+              />
+
+              {csvParsed && 'error' in csvParsed && csvParsed.error ? (
+                <p className="text-[12px] text-red-300">{csvParsed.error}</p>
+              ) : csvParsed ? (
+                <p className="text-[12px] text-white/60">
+                  {csvParsed.rows.length} row{csvParsed.rows.length === 1 ? '' : 's'} detected
+                  {csvParsed.missing.length > 0 && (
+                    <span className="text-amber-300"> · missing columns: {csvParsed.missing.join(', ')}</span>
+                  )}
+                </p>
+              ) : null}
+            </>
+          ) : null}
+
+          <DialogFooter>
+            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setCsvTarget(null)}>
+              Cancel
+            </Button>
+            <Button className="btn-cv" disabled={!csvParsed?.rows.length || csvBusy} onClick={() => void generateCsvDesigns()}>
+              {csvBusy ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
+              Generate {Math.min(csvParsed?.rows.length ?? 0, 100)} design{Math.min(csvParsed?.rows.length ?? 0, 100) === 1 ? '' : 's'}
             </Button>
           </DialogFooter>
         </DialogContent>

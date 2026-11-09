@@ -22,10 +22,13 @@ import { COLLECTION_V08_PRINT } from './collection-v08-print'
 import { COLLECTION_V08_DOCS } from './collection-v08-docs'
 import { COLLECTION_V08_THUMBNAILS } from './collection-v08-thumbnails'
 import { COLLECTION_V08_LOGOS } from './collection-v08-logos'
+import { COLLECTION_V17_FIELDS } from './collection-v17-fields'
+import { templateVariants } from './variants'
 
 export type { TemplateDef } from './helpers'
 
-export const TEMPLATES: TemplateDef[] = [
+/** the hand-authored library (122 designs) */
+export const BASE_TEMPLATES: TemplateDef[] = [
   ...COLLECTION_V07,
   ...COLLECTION_V08_SOCIAL,
   ...COLLECTION_V08_DECKS,
@@ -33,7 +36,16 @@ export const TEMPLATES: TemplateDef[] = [
   ...COLLECTION_V08_DOCS,
   ...COLLECTION_V08_THUMBNAILS,
   ...COLLECTION_V08_LOGOS,
+  ...COLLECTION_V17_FIELDS,
 ]
+
+/**
+ * The full library: 122 originals + 244 computed variants (Aurora
+ * colourways + Ink typography swaps — see variants.ts) = 366 designs.
+ * Variants are derived at module load, so the shipped bytes stay at
+ * the originals' size; the DB seed materialises the same list.
+ */
+export const TEMPLATES: TemplateDef[] = [...BASE_TEMPLATES, ...templateVariants(BASE_TEMPLATES)]
 
 export function templatesAsRecords(): TemplateRecord[] {
   return TEMPLATES.map((t) => ({
@@ -45,6 +57,7 @@ export function templatesAsRecords(): TemplateRecord[] {
     height: t.height,
     accent: t.accent,
     pages: t.pages,
+    ...(t.fields ? { fields: t.fields } : {}),
   }))
 }
 

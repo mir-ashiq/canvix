@@ -44,7 +44,8 @@ export type RateLimitBucket =
   | 'plugins:serve'
   | 'stockvideo:search'
   | 'stockphoto:search'
-  | 'stockphoto:search'
+  | 'icons:search'
+  | 'templates:fill'
 
 export interface RateLimitConfig {
   /** window length in milliseconds */
@@ -86,6 +87,14 @@ export const RATE_LIMITS: Record<RateLimitBucket, RateLimitConfig> = {
   // — one shared bucket shape with the video rail (the panel also
   // debounces at 600 ms and caches server-side for 24 h)
   'stockphoto:search': { windowMs: 60_000, max: 20 },
+  // v0.17 (Wave 2): iconify search/svg proxy — free public API, no key,
+  // but every hit is outbound traffic from the Worker; the panel debounces
+  // at 500 ms and caches, so 30/min per IP is generous for humans
+  'icons:search': { windowMs: 60_000, max: 30 },
+  // v0.17 (Wave 2): template fill renders documents (CPU) and may create
+  // designs in persist mode — 30/min per IP covers CSV batches (≤ 100
+  // rows each) while blocking bulk-abuse
+  'templates:fill': { windowMs: 60_000, max: 30 },
 }
 
 export function rateLimitsDisabled(): boolean {

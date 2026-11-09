@@ -35,6 +35,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from '@/hooks/use-toast'
 import type { ImageElement, PageData } from '@/lib/types'
+import { ensureDocumentFonts } from '@/lib/fonts/loader'
 
 const CanvasStage = dynamic(() => import('./canvas/CanvasStage'), { ssr: false })
 
@@ -130,6 +131,14 @@ export default function Editor() {
       goDashboard()
     }
   }, [])
+
+  // ── v0.17 (Wave 2): on-demand webfonts ─────────────────────
+  // The catalog is 369 families but only the historic 63 preload with
+  // first paint. Scan the open document (and any later mutation —
+  // template applies, pastes) so every used family renders correctly.
+  useEffect(() => {
+    ensureDocumentFonts(cropPages)
+  }, [cropPages])
 
   // ── autosave ───────────────────────────────────────────────
   // v0.9: view-only designs (owned by another account) never autosave —

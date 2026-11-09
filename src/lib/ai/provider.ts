@@ -306,6 +306,13 @@ export interface RateLimitResult {
  * self-hosted design tool but stop runaway loops and abuse.
  */
 export function rateLimit(feature: string, req: Pick<NextRequest, 'headers'>, limit: number, windowSec: number): RateLimitResult {
+  // CANVIX_RATE_LIMITS=off is the documented kill switch ("Turn
+  // everything off" — README → Rate limiting), and "everything" must
+  // include the auth limits that predate lib/rate-limit.ts: the CI e2e
+  // suite registers one account per spec module on a single localhost
+  // and would otherwise burn the 5/h register cap halfway through.
+  // Opt-in, operator-controlled, same semantics as lib/rate-limit.ts.
+  if (process.env.CANVIX_RATE_LIMITS === 'off') return { ok: true, retryAfterSec: 0 }
   const ip =
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     req.headers.get('x-real-ip') ||

@@ -5,6 +5,24 @@ release is designed to upgrade with **one migration command**. This
 guide covers the routine path, jumping minors, and — the part most
 guides skip — how to roll back, with the honest database caveat.
 
+## v0.18.0 — Wave 3 (editor depth parity)
+
+**No migration.** Everything rides additive, nullable fields (shape
+`sides`/`numPoints`/`innerRatio`, image `maskShape`/`maskSides`/
+`maskInnerRatio`, text `autoFit`/`listStyle`/`direction`, per-page
+`width`/`height`/`notes`) — `npm run db:migrate:deploy` is a no-op and
+pre-v0.18 documents open unchanged. After deploying, restart as usual;
+nothing else to run.
+
+v0.18 also introduces the **boot-time template top-up**: on every
+start (Node runtime) the built-in template library reconciles itself
+into the database — new templates appear, nothing is deleted — so an
+instance that upgrades by `migrate deploy` alone (e.g. behind an
+auto-deployer) no longer serves a stale library. One `COUNT` query on
+a normal boot. Curate the library by hand instead? Set
+`CANVIX_TEMPLATE_SYNC=0` and use `npm run db:seed` when you want a
+refresh.
+
 ## v0.17.0 — Wave 2 (assets & templates)
 
 One migration (`0011_wave2_assets_templates`): two new tables

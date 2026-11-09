@@ -63,6 +63,17 @@ export function addShape(kind: 'rect' | 'rounded' | 'ellipse' | 'triangle' | 'st
   else addCentered(createShapeElement('star', { width: size, height: size }))
 }
 
+/** v0.18 (Wave 3): native parametric polygon — sides 3..12, editable
+ *  from the properties bar after insertion. */
+export function addPolygon(sides: number) {
+  addCentered(createShapeElement('polygon', { width: 320, height: 320, sides }))
+}
+
+/** v0.18 (Wave 3): star variant — points 3..16 + spike ratio. */
+export function addStarVariant(numPoints: number, innerRatio?: number) {
+  addCentered(createShapeElement('star', { width: 320, height: 320, numPoints, innerRatio }))
+}
+
 export function addGraphic(graphicId: string, fill?: string) {
   const def = GRAPHICS.find((g) => g.id === graphicId)
   if (!def) return

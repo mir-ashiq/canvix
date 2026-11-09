@@ -109,6 +109,14 @@ interface EditorState {
    *  disagreeing controls (QA finding F3). */
   editingMode: 'editing' | 'viewing'
   previewOpen: boolean
+  /** v0.18 (Wave 3): presenter view — fullscreen present + speaker notes */
+  presentOpen: boolean
+  /** v0.18 (Wave 3): grid overlay (editor preference — never document data) */
+  showGrid: boolean
+  /** v0.18 (Wave 3): grid cell size in page px (8..160) */
+  gridSize: number
+  /** v0.18 (Wave 3): snap element drags to the grid */
+  snapToGrid: boolean
   /** freehand draw tool — activating one also leaves viewing mode (F3) */
   tool: 'select' | 'draw'
   drawColor: string
@@ -195,6 +203,14 @@ interface EditorState {
   // canva-2026 chrome
   setEditingMode: (m: 'editing' | 'viewing') => void
   setPreviewOpen: (open: boolean) => void
+  setPresentOpen: (open: boolean) => void
+  setShowGrid: (on: boolean) => void
+  setGridSize: (n: number) => void
+  setSnapToGrid: (on: boolean) => void
+  /** v0.18 (Wave 3): resize ONE page (per-page size override) */
+  resizePage: (pageId: string, width: number, height: number) => void
+  /** v0.18 (Wave 3): speaker notes for one page */
+  setPageNotes: (pageId: string, notes: string) => void
   setTool: (t: 'select' | 'draw') => void
   setDrawColor: (c: string) => void
   setDrawSize: (n: number) => void
@@ -289,6 +305,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   editingMode: 'editing',
   previewOpen: false,
+  presentOpen: false,
+  showGrid: false,
+  gridSize: 40,
+  snapToGrid: false,
   tool: 'select',
   drawColor: '#FFFFFF',
   drawSize: 6,
@@ -829,6 +849,33 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setEditingMode: (m) => set({ editingMode: m }),
   setPreviewOpen: (open) => set({ previewOpen: open }),
+  setPresentOpen: (open) => set({ presentOpen: open }),
+  setShowGrid: (on) => set({ showGrid: on }),
+  setGridSize: (n) => set({ gridSize: Math.min(160, Math.max(8, Math.round(n))) }),
+  setSnapToGrid: (on) => set({ snapToGrid: on }),
+
+  // v0.18 (Wave 3): per-page size — history-stamped like every other page op.
+  // Values are clamped by pageSize() on read; here we just round + store.
+  resizePage: (pageId, width, height) => {
+    get().pushHistory()
+    const { pages, version } = get()
+    const h = nowHlc()
+    const next = pages.map((p) => (p.id !== pageId ? p : { ...p, width: Math.round(width), height: Math.round(height), _pm: h }))
+    set({ pages: next, dirty: true, version: version + 1 })
+    const replaced = next.find((p) => p.id === pageId)
+    if (replaced) emit({ kind: 'page:replace', pageId, page: replaced })
+  },
+
+  // v0.18 (Wave 3): speaker notes — debounced by the caller (typing);
+  // history only once per editing session (the notes panel commits on blur).
+  setPageNotes: (pageId, notes) => {
+    const { pages, version } = get()
+    const h = nowHlc()
+    const next = pages.map((p) => (p.id !== pageId ? p : { ...p, notes, _pm: h }))
+    set({ pages: next, dirty: true, version: version + 1 })
+    const replaced = next.find((p) => p.id === pageId)
+    if (replaced) emit({ kind: 'page:replace', pageId, page: replaced })
+  },
   // v0.11.6 (F3): activating a tool also leaves read-only viewing — the
   // Tools-panel toggle used to show "Draw" pressed while the canvas stayed
   // read-only, because editingMode and tool were set from separate controls

@@ -37,6 +37,7 @@ import type {
 } from '@/lib/types'
 import { chartPrimitives } from '@/lib/chart-geometry'
 import { embedLayout, frameClipPathD, hostOf, tableGeometry, youtubeThumbUrl } from '@/lib/v06-geometry'
+import { isMaskShape, maskPolygon, polygonPoints, starPointsEx, stretchPts, scalePts } from '@/lib/shapes'
 import { drawTextElement, type TextIo, PdfFontRegistry } from './text-ops'
 import type { PdfImageEmbedder } from './image-embed'
 import { pdfNum, pdfRgb, PdfWriter } from './pdf-writer'
@@ -367,17 +368,6 @@ function arcCmds(cx: number, cy: number, r: number, a0: number, a1: number, out:
   }
 }
 
-function starPoints(cx: number, cy: number, outer: number, inner: number): Array<[number, number]> {
-  const pts: Array<[number, number]> = []
-  for (let i = 0; i < 5; i++) {
-    const outerAngle = -Math.PI / 2 + (i * 2 * Math.PI) / 5
-    const innerAngle = outerAngle + Math.PI / 5
-    pts.push([cx + outer * Math.cos(outerAngle), cy + outer * Math.sin(outerAngle)])
-    pts.push([cx + inner * Math.cos(innerAngle), cy + inner * Math.sin(innerAngle)])
-  }
-  return pts
-}
-
 /** Rotation cm — SVG `rotate(deg ox oy)` (y-down) expressed in
  * page space. */
 export function rotationCm(deg: number, ox: number, oyDown: number, pageH: number): string {
@@ -547,6 +537,7 @@ export class VectorPageRenderer {
         case 'ellipse':
         case 'triangle':
         case 'star':
+        case 'polygon':
         case 'path':
           return await this.renderShape(el as ShapeElement)
         case 'line':
@@ -617,11 +608,24 @@ export class VectorPageRenderer {
         ])
         break
       case 'star': {
-        const cx = s.x + s.width / 2
-        const cy = s.y + s.height / 2
-        const outer = Math.min(s.width, s.height) / 2
-        cmds = polygonCmds(starPoints(cx, cy, outer, outer * 0.55))
-        origin = [cx, cy]
+        // v0.18 (Wave 3): parametric — stretchPts geometry identical to
+        // the canvas / SVG / video renderers (fills the element box)
+        cmds = polygonCmds(
+          stretchPts(starPointsEx(s.numPoints ?? 5, s.innerRatio), s.x, s.y, s.width, s.height).map(
+            ([x, y]) => [x, y] as [number, number],
+          ),
+        )
+        origin = [s.x + s.width / 2, s.y + s.height / 2]
+        break
+      }
+      case 'polygon': {
+        // v0.18 (Wave 3): regular polygon — centred geometry like the star
+        cmds = polygonCmds(
+          stretchPts(polygonPoints(s.sides ?? 6), s.x, s.y, s.width, s.height).map(
+            ([x, y]) => [x, y] as [number, number],
+          ),
+        )
+        origin = [s.x + s.width / 2, s.y + s.height / 2]
         break
       }
       case 'path': {
@@ -687,8 +691,18 @@ export class VectorPageRenderer {
     if (!img) return null
     const cxImg = im.x + im.width / 2
     const cyImg = im.y + im.height / 2
+    // v0.18 (Wave 3): validated shape mask — clip polygon from the
+    // shared geometry module (scalePts = the mask convention, same as
+    // the canvas clipShapeFunc and the SVG clipPath)
+    const maskPts =
+      isMaskShape(im.maskShape) && im.maskShape !== 'none'
+        ? scalePts(maskPolygon(im.maskShape, im.maskSides, im.maskInnerRatio)!, im.x, im.y, im.width, im.height)
+        : null
     let body: string
-    if (im.radius) {
+    if (maskPts) {
+      const clip = polygonCmds(maskPts.map(([x, y]) => [x, y] as [number, number]))
+      body = `q ${emitPath(clip, this.designH)} W n ${this.imagePaint(img.name, im.x, im.y, im.width, im.height, im.flipH, im.flipV)} Q`
+    } else if (im.radius) {
       const clip = roundRectCmds(im.x, im.y, im.width, im.height, im.radius)
       body = `q ${emitPath(clip, this.designH)} W n ${this.imagePaint(img.name, im.x, im.y, im.width, im.height, im.flipH, im.flipV)} Q`
     } else {

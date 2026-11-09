@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Home, MessageCircle, Play, Share2, ChevronDown, Undo2, Redo2, Download, Github, Cloud, Check, Loader2, Ruler, History, Languages, Wand2, Zap, MousePointer2, Brush, Eye, BookMarked } from 'lucide-react'
+import { Home, MessageCircle, Play, Presentation, Share2, ChevronDown, Undo2, Redo2, Download, Github, Cloud, Check, Loader2, Ruler, History, Languages, Wand2, Zap, MousePointer2, Brush, Eye, BookMarked } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
 import { interactionMode } from '@/lib/editor-utils'
@@ -217,6 +217,16 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
         </button>
         <button className={cn(item, 'hidden sm:flex')} onClick={() => setPreviewOpen(true)} aria-label="Preview design">
           <Play size={14} /> Preview
+        </button>
+        {/* v0.18 (Wave 3): present with speaker notes */}
+        <button
+          className={cn(item, 'hidden md:flex')}
+          onClick={() => useEditorStore.getState().setPresentOpen(true)}
+          aria-label="Present with speaker notes"
+          title="Present with speaker notes"
+          data-testid="present-notes-button"
+        >
+          <Presentation size={14} /> Present
         </button>
         <Button size="sm" className="btn-cv-white h-10 px-4 sm:px-5 gap-1.5 font-semibold" onClick={() => setShareOpen(true)}>
           <Share2 size={15} /> <span className="hidden sm:inline">Share</span>

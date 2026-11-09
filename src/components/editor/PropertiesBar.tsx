@@ -11,7 +11,7 @@ import {
   FlipHorizontal, FlipVertical, Sun, Contrast, Palette, RotateCcw, Replace, Lock, LockOpen,
   Layers, SquareDashed, Crop, Spline, Table2, Rows3, Columns3, Trash, Upload, ExternalLink,
   Music, Film, Play, Repeat, Volume2, VolumeX, SlidersHorizontal, Activity, Puzzle, LayoutGrid, Wand2,
-  BarChart3, LineChart, PieChart, ScatterChart,
+  BarChart3, LineChart, PieChart, ScatterChart, List, ListOrdered, Languages, Shrink, Hexagon, Shapes,
 } from 'lucide-react'
 import { useEditorStore, selectedElements, currentPageData } from '@/store/editor-store'
 import type { AudioElement, ChartElement, ChartSeries, EmbedElement, FrameElement, ImageElement, LineElement, PluginElement, ShapeElement, StickerElement, TableElement, TextElement, VideoElement, AnyElement, FrameShape, ChartKind } from '@/lib/types'
@@ -26,6 +26,7 @@ import { normalizeSpans } from '@/lib/rich-text'
 import { FontDropdown } from './toolbar/FontDropdown'
 import { ColorMenu } from './toolbar/ColorMenu'
 import { IMAGE_FILTER_PRESETS, applyPresetToImageData, isImageFilterId, clampFilterIntensity } from '@/lib/image-filters'
+import { MASK_SHAPES, MASK_SHAPE_LABELS, isMaskShape, maskPolygon } from '@/lib/shapes'
 import { useLoadedImage } from './canvas/use-loaded-image'
 import { ToolbarPopover, SliderRow, IconTile } from './toolbar/popover-kit'
 import { BgRemoverButton, MagicEraserPopover, EnhanceButton } from './ImageAI'
@@ -63,7 +64,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
   const first = sel[0]
   const isMulti = sel.length > 1
   const text = first.type === 'text' ? (first as TextElement) : null
-  const shape = ['rect', 'ellipse', 'triangle', 'star', 'path'].includes(first.type) ? (first as ShapeElement) : null
+  const shape = ['rect', 'ellipse', 'triangle', 'star', 'polygon', 'path'].includes(first.type) ? (first as ShapeElement) : null
   const line = first.type === 'line' ? (first as LineElement) : null
   const image = first.type === 'image' ? (first as ImageElement) : null
   const sticker = first.type === 'sticker' ? (first as StickerElement) : null
@@ -213,6 +214,47 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
             <SliderRow label="Line spacing" value={text.lineHeight} min={0.6} max={3} step={0.05} onChange={(v) => updateLive(ids, { lineHeight: v })} onCommit={() => update(ids, { lineHeight: text.lineHeight })} format={(v) => `${v.toFixed(2)}×`} />
           </ToolbarPopover>
 
+          {/* v0.18 (Wave 3): list + direction + auto-fit */}
+          <ToolbarPopover
+            width={228}
+            trigger={(open) => (
+              <button className="cv-tbtn" data-active={open || !!text.listStyle || !!text.autoFit} aria-label="List and fit options" title="List & auto-fit">
+                <List size={14} />
+              </button>
+            )}
+          >
+            <div className="text-[12px] font-bold text-white/90 mb-1.5">List style</div>
+            <div className="flex gap-1 mb-2.5">
+              <TBtn onClick={() => update(ids, { listStyle: 'none' })} dataActive={!text.listStyle || text.listStyle === 'none'} title="No list" ariaLabel="No list">
+                <List size={13} className="opacity-40 line-through" />
+              </TBtn>
+              <TBtn onClick={() => update(ids, { listStyle: 'bullet' })} dataActive={text.listStyle === 'bullet'} title="Bulleted list" ariaLabel="Bulleted list" data-testid="list-bullet">
+                <List size={13} />
+              </TBtn>
+              <TBtn onClick={() => update(ids, { listStyle: 'number' })} dataActive={text.listStyle === 'number'} title="Numbered list" ariaLabel="Numbered list" data-testid="list-number">
+                <ListOrdered size={13} />
+              </TBtn>
+            </div>
+            <div className="text-[12px] font-bold text-white/90 mb-1.5">Direction</div>
+            <div className="flex gap-1 mb-2.5">
+              <TBtn onClick={() => update(ids, { direction: 'ltr' })} dataActive={text.direction !== 'rtl'} title="Left to right" ariaLabel="Left to right">
+                <span className="text-[11px] font-semibold px-1">LTR</span>
+              </TBtn>
+              <TBtn onClick={() => update(ids, { direction: 'rtl' })} dataActive={text.direction === 'rtl'} title="Right to left (Arabic, Hebrew…)" ariaLabel="Right to left" data-testid="dir-rtl">
+                <Languages size={13} />
+              </TBtn>
+            </div>
+            <label className="flex items-center justify-between text-[12px] text-white/80 mb-1 cursor-pointer" data-testid="autofit-toggle">
+              <span className="flex items-center gap-1.5">
+                <Shrink size={13} /> Auto-fit
+              </span>
+              <input type="checkbox" checked={!!text.autoFit} onChange={(e) => update(ids, { autoFit: e.target.checked })} className="accent-[#7630D7]" />
+            </label>
+            <div className="text-[11px] text-white/40 leading-snug">
+              Shrinks the font so the text fits its box — never grows past the set size.
+            </div>
+          </ToolbarPopover>
+
           {/* v0.6: curved text (canva “Curve”) */}
           <ToolbarPopover
             width={228}
@@ -311,6 +353,44 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
                 <SliderRow label="Width" value={shape.strokeWidth} min={0} max={40} step={1} onChange={(v) => updateLive(ids, { strokeWidth: v })} onCommit={() => update(ids, { strokeWidth: shape.strokeWidth })} />
                 {shape.type === 'rect' && <SliderRow label="Corner radius" value={shape.cornerRadius} min={0} max={Math.round(shape.width / 2)} step={1} onChange={(v) => updateLive(ids, { cornerRadius: v })} onCommit={() => update(ids, { cornerRadius: shape.cornerRadius })} />}
               </ToolbarPopover>
+              {/* v0.18 (Wave 3): parametric polygon / star controls */}
+              {(shape.type === 'polygon' || shape.type === 'star') && (
+                <ToolbarPopover
+                  width={228}
+                  trigger={(open) => (
+                    <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Shape properties" title="Shape properties">
+                      {shape.type === 'polygon' ? <Hexagon size={14} /> : <Shapes size={14} />}
+                      <span className="text-[12px] hidden lg:inline">Shape</span>
+                    </button>
+                  )}
+                >
+                  <div className="text-[12px] font-bold text-white/90 mb-1.5">
+                    {shape.type === 'polygon' ? 'Polygon' : 'Star'}
+                  </div>
+                  <SliderRow
+                    label={shape.type === 'polygon' ? 'Sides' : 'Points'}
+                    value={shape.type === 'polygon' ? (shape.sides ?? 6) : (shape.numPoints ?? 5)}
+                    min={3}
+                    max={shape.type === 'polygon' ? 12 : 16}
+                    step={1}
+                    onChange={(v) => updateLive(ids, shape.type === 'polygon' ? { sides: Math.round(v) } : { numPoints: Math.round(v) })}
+                    onCommit={() => update(ids, shape.type === 'polygon' ? { sides: shape.sides ?? 6 } : { numPoints: shape.numPoints ?? 5 })}
+                    format={(v) => String(Math.round(v))}
+                  />
+                  {shape.type === 'star' && (
+                    <SliderRow
+                      label="Spike ratio"
+                      value={shape.innerRatio ?? 0.55}
+                      min={0.15}
+                      max={0.85}
+                      step={0.05}
+                      onChange={(v) => updateLive(ids, { innerRatio: v })}
+                      onCommit={() => update(ids, { innerRatio: shape.innerRatio ?? 0.55 })}
+                      format={(v) => v.toFixed(2)}
+                    />
+                  )}
+                </ToolbarPopover>
+              )}
             </>
           )}
           {line && (
@@ -359,6 +439,8 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           <TBtn onClick={() => state.openCrop(image.id)} title="Crop image" ariaLabel="Crop image">
             <Crop size={14} />
           </TBtn>
+          {/* v0.18 (Wave 3): shape masks */}
+          <MaskPopover el={image} ids={ids} />
           <ImageAdjustPopover el={image} ids={ids} />
           {/* v0.4 Canva AI image tools */}
           <BgRemoverButton el={image} />
@@ -838,7 +920,94 @@ function PositionPopover({ ids, count, element }: { ids: string[]; count: number
   )
 }
 
-/** image adjustments popover (canva "Edit image" lite) */
+/** v0.18 (Wave 3): one mask option's silhouette — the polygon scaled
+ *  into a 34×34 chip (pure SVG, same geometry as the canvas clip). */
+function MaskThumb({ shape, sides, innerRatio, active }: { shape: string; sides?: number; innerRatio?: number; active?: boolean }) {
+  const pts = isMaskShape(shape) && shape !== 'none' ? maskPolygon(shape, sides, innerRatio) : null
+  return (
+    <svg viewBox="0 0 100 100" className="w-full h-full" aria-hidden="true">
+      {pts ? (
+        <polygon
+          points={pts.map(([x, y]) => `${x},${y}`).join(' ')}
+          fill={active ? '#02C0CC33' : '#FFFFFF22'}
+          stroke={active ? '#02C0CC' : '#FFFFFF66'}
+          strokeWidth={4}
+        />
+      ) : (
+        <rect x={10} y={10} width={80} height={80} rx={10} fill="none" stroke={active ? '#02C0CC' : '#FFFFFF66'} strokeWidth={4} strokeDasharray="10 8" />
+      )}
+    </svg>
+  )
+}
+
+/** v0.18 (Wave 3): image shape-mask picker — 10 presets + parametric
+ *  polygon / starburst. Writes maskShape/maskSides/maskInnerRatio onto
+ *  the element (validated on render by isMaskShape — hostile pastes
+ *  degrade to 'none'). */
+function MaskPopover({ el, ids }: { el: ImageElement; ids: string[] }) {
+  const update = useEditorStore((s) => s.updateElements)
+  const updateLive = useEditorStore((s) => s.updateElementsLive)
+  const current = isMaskShape(el.maskShape) ? el.maskShape : 'none'
+  return (
+    <ToolbarPopover
+      width={244}
+      trigger={(open) => (
+        <button className="cv-tbtn gap-1 !px-2.5" data-active={open || (current !== 'none' && !!current)} aria-label="Image mask" title="Mask shape">
+          <Shapes size={14} /> <span className="text-[12px] hidden lg:inline">Mask</span>
+        </button>
+      )}
+    >
+      <div className="text-[12px] font-bold text-white/90 mb-1.5">Mask shape</div>
+      <div className="grid grid-cols-4 gap-1.5" data-testid="mask-grid">
+        {MASK_SHAPES.map((m) => (
+          <button
+            key={m}
+            onClick={() => update(ids, { maskShape: m })}
+            data-testid={`mask-${m}`}
+            title={MASK_SHAPE_LABELS[m]}
+            aria-label={MASK_SHAPE_LABELS[m]}
+            className={cn(
+              'h-[38px] rounded-lg border flex items-center justify-center p-1 transition-colors',
+              current === m ? 'border-[#02C0CC] bg-[#02C0CC]/10' : 'border-white/10 hover:border-white/30'
+            )}
+          >
+            <MaskThumb shape={m} sides={el.maskSides} innerRatio={el.maskInnerRatio} active={current === m} />
+          </button>
+        ))}
+      </div>
+      {(current === 'poly' || current === 'polyStar') && (
+        <div className="mt-2">
+          <SliderRow
+            label={current === 'poly' ? 'Sides' : 'Points'}
+            value={el.maskSides ?? 6}
+            min={3}
+            max={current === 'poly' ? 12 : 16}
+            step={1}
+            onChange={(v) => updateLive(ids, { maskSides: Math.round(v) })}
+            onCommit={() => update(ids, { maskSides: el.maskSides ?? 6 })}
+            format={(v) => String(Math.round(v))}
+          />
+          {current === 'polyStar' && (
+            <SliderRow
+              label="Spike ratio"
+              value={el.maskInnerRatio ?? 0.55}
+              min={0.15}
+              max={0.85}
+              step={0.05}
+              onChange={(v) => updateLive(ids, { maskInnerRatio: v })}
+              onCommit={() => update(ids, { maskInnerRatio: el.maskInnerRatio ?? 0.55 })}
+              format={(v) => v.toFixed(2)}
+            />
+          )}
+        </div>
+      )}
+      <div className="text-[11px] text-white/40 leading-snug mt-2">
+        Clips the image to the shape — corner radius is ignored while a mask is set.
+      </div>
+    </ToolbarPopover>
+  )
+}
+
 function ImageAdjustPopover({ el, ids }: { el: ImageElement; ids: string[] }) {
   const update = useEditorStore((s) => s.updateElements)
   const updateLive = useEditorStore((s) => s.updateElementsLive)
@@ -988,16 +1157,16 @@ function NumField({ label, value, onCommit, suffix }: { label: string; value: nu
   )
 }
 
-function TBtn({ children, onClick, title, ariaLabel, disabled, danger, className, dataActive }: {
+function TBtn({ children, onClick, title, ariaLabel, disabled, danger, className, dataActive, ...rest }: {
   children: React.ReactNode
   onClick?: () => void
   title?: string
-  ariaLabel: string
+  ariaLabel?: string
   disabled?: boolean
   danger?: boolean
   className?: string
   dataActive?: boolean
-}) {
+} & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'title' | 'className' | 'disabled'>) {
   return (
     <button
       onClick={onClick}
@@ -1006,6 +1175,7 @@ function TBtn({ children, onClick, title, ariaLabel, disabled, danger, className
       aria-label={ariaLabel}
       data-active={dataActive ? 'true' : undefined}
       className={cn('cv-tbtn', danger && 'hover:bg-[#ff5a5a]/15 hover:text-[#ff8080]', className)}
+      {...rest}
     >
       {children}
     </button>

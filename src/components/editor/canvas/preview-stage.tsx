@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import type Konva from 'konva'
 import { Layer, Rect, Stage } from 'react-konva'
 import type { AudioElement, PageData, VideoElement } from '@/lib/types'
-import { gradientProps } from '@/lib/editor-utils'
+import { gradientProps, pageSize } from '@/lib/editor-utils'
 import { animateElementAt, pageAnimationDuration } from '@/lib/animations'
 import { beatEnvelopeAt, beatSourceOf } from '@/lib/media/beat-detect'
 import { PreviewElements } from './element-node'
@@ -31,6 +31,9 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
   const layerRef = useRef<Konva.Layer | null>(null)
   const stageRef = useRef<Konva.Stage | null>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
+  // v0.18 (Wave 3): per-page size — derived once here so every caller
+  // (preview, presenter, thumbnails) gets page overrides for free
+  const { width: pw, height: ph } = pageSize(page, designWidth, designHeight)
 
   useEffect(() => {
     const el = containerRef.current
@@ -43,9 +46,9 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
     return () => ro.disconnect()
   }, [])
 
-  const scale = size.w > 0 && size.h > 0 ? Math.min(size.w / designWidth, size.h / designHeight) : 0
-  const offsetX = size.w > 0 ? (size.w - designWidth * scale) / 2 : 0
-  const offsetY = size.h > 0 ? (size.h - designHeight * scale) / 2 : 0
+  const scale = size.w > 0 && size.h > 0 ? Math.min(size.w / pw, size.h / ph) : 0
+  const offsetX = size.w > 0 ? (size.w - pw * scale) / 2 : 0
+  const offsetY = size.h > 0 ? (size.h - ph * scale) / 2 : 0
   // v0.11.1 fix: the Konva Stage only renders once the ResizeObserver has
   // measured the container (scale > 0), but both playback effects used to
   // bail on the first run (layerRef still null) and their deps never changed
@@ -57,7 +60,7 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
   const bg = page.background
   const bgProps =
     bg.type === 'gradient'
-      ? gradientProps(bg.from, bg.to, bg.angle, designWidth, designHeight)
+      ? gradientProps(bg.from, bg.to, bg.angle, pw, ph)
       : { fill: bg.color }
 
   // ── v0.5: element animation playback (rAF timeline over Konva nodes) ──
@@ -136,7 +139,7 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
       cancelAnimationFrame(raf)
       resetNodes(layer, page, bases)
     }
-  }, [page, hasAnimations, reduceMotion, playKey, designWidth, designHeight, stageReady])
+  }, [page, hasAnimations, reduceMotion, playKey, pw, ph, stageReady])
 
   // ── v0.11: media playback — audio elements, video frames, Beat Sync ──
   // Presentation/preview is where media plays (the editor canvas always
@@ -291,7 +294,7 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
       {scale > 0 && (
         <Stage ref={stageRef} width={size.w} height={size.h}>
           <Layer listening={false} x={offsetX} y={offsetY} scale={{ x: scale, y: scale }}>
-            <Rect width={designWidth} height={designHeight} {...bgProps} />
+            <Rect width={pw} height={ph} {...bgProps} />
           </Layer>
           <Layer
             ref={layerRef}
@@ -299,7 +302,7 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
             x={offsetX}
             y={offsetY}
             scale={{ x: scale, y: scale }}
-            clip={{ x: 0, y: 0, width: designWidth, height: designHeight }}
+            clip={{ x: 0, y: 0, width: pw, height: ph }}
           >
             <PreviewElements elements={page.elements} />
           </Layer>

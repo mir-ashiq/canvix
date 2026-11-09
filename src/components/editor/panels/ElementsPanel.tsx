@@ -1,9 +1,10 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Square, Circle, Triangle, Star, Minus, ArrowRight, MoveHorizontal, Search, Hexagon, Pentagon, Diamond, CircleDashed, Frame, Youtube, MapPin, Link2 } from 'lucide-react'
+import { Square, Circle, Triangle, Star, Minus, ArrowRight, MoveHorizontal, Search, Hexagon, Frame, Youtube, MapPin, Link2 } from 'lucide-react'
 import { GRAPHICS, STICKER_GROUPS } from '@/lib/editor-utils'
-import { addChart, addEmbed, addFrame, addGraphic, addLine, addShape, addSticker, addTable, type TableStyle } from '../add-element'
+import { polygonPoints, starPointsEx, ptsToSvg } from '@/lib/shapes'
+import { addChart, addEmbed, addFrame, addGraphic, addLine, addPolygon, addShape, addStarVariant, addSticker, addTable, type TableStyle } from '../add-element'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FRAME_SHAPES, type ChartKind } from '@/lib/types'
@@ -16,6 +17,25 @@ function GraphicIcon({ path }: { path: string }) {
   )
 }
 
+/** v0.18 (Wave 3): native polygon / star tiles — the SAME geometry the
+ *  canvas and the SVG exporter draw (lib/shapes.ts), so the palette
+ *  preview is always honest. */
+function PolygonMini({ sides }: { sides: number }) {
+  return (
+    <svg viewBox="0 0 100 100" className="h-[26px] w-[26px]" aria-hidden="true">
+      <polygon points={ptsToSvg(polygonPoints(sides))} fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth={5} />
+    </svg>
+  )
+}
+
+function StarMini({ points, ratio }: { points: number; ratio: number }) {
+  return (
+    <svg viewBox="0 0 100 100" className="h-[26px] w-[26px]" aria-hidden="true">
+      <polygon points={ptsToSvg(starPointsEx(points, ratio))} fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth={5} />
+    </svg>
+  )
+}
+
 const BASIC_SHAPES = [
   { id: 'rect', label: 'Square', icon: Square },
   { id: 'rounded', label: 'Rounded', icon: null },
@@ -24,13 +44,24 @@ const BASIC_SHAPES = [
   { id: 'star', label: 'Star', icon: Star },
 ] as const
 
-const POLY_SHAPES = [
-  { id: 'pentagon', label: 'Pentagon', icon: Pentagon },
-  { id: 'hexagon', label: 'Hexagon', icon: Hexagon },
-  { id: 'octagon', label: 'Octagon', icon: null },
-  { id: 'diamond', label: 'Diamond', icon: Diamond },
-  { id: 'semi-circle', label: 'Semicircle', icon: CircleDashed },
-] as const
+const POLY_TILES: { label: string; sides: number }[] = [
+  { label: 'Pentagon', sides: 5 },
+  { label: 'Hexagon', sides: 6 },
+  { label: 'Heptagon', sides: 7 },
+  { label: 'Octagon', sides: 8 },
+  { label: 'Nonagon', sides: 9 },
+  { label: 'Decagon', sides: 10 },
+]
+
+/** v0.18 (Wave 3): star variants — parametric, editable post-insert */
+const STAR_TILES: { label: string; points: number; ratio?: number }[] = [
+  { label: '6-point', points: 6 },
+  { label: '8-point', points: 8 },
+  { label: '12-point', points: 12, ratio: 0.72 },
+  { label: '16-point burst', points: 16, ratio: 0.8 },
+  { label: 'Thin spike', points: 5, ratio: 0.3 },
+  { label: 'Soft star', points: 5, ratio: 0.75 },
+]
 
 const GRAPHIC_GROUPS: { name: string; ids: string[] }[] = [
   { name: 'Decorative', ids: ['heart', 'blob', 'cloud', 'moon', 'sparkle', 'wave'] },
@@ -172,10 +203,18 @@ export function ElementsPanel() {
           ))}
         </div>
         <SectionTitle>Polygons</SectionTitle>
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          {POLY_TILES.map((s) => (
+            <ShapeTile key={s.label} label={s.label} onClick={() => addPolygon(s.sides)}>
+              <PolygonMini sides={s.sides} />
+            </ShapeTile>
+          ))}
+        </div>
+        <SectionTitle>Stars</SectionTitle>
         <div className="grid grid-cols-3 gap-2">
-          {POLY_SHAPES.map((s) => (
-            <ShapeTile key={s.id} label={s.label} onClick={() => addGraphic(s.id)}>
-              {s.icon ? <s.icon size={26} strokeWidth={1.6} className="text-white/80" /> : <GraphicIcon path={GRAPHICS.find((g) => g.id === 'octagon')?.path ?? ''} />}
+          {STAR_TILES.map((s) => (
+            <ShapeTile key={s.label} label={s.label} onClick={() => addStarVariant(s.points, s.ratio)}>
+              <StarMini points={s.points} ratio={s.ratio ?? 0.55} />
             </ShapeTile>
           ))}
         </div>

@@ -2,7 +2,7 @@
 
 import Konva from 'konva'
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
-import { Ellipse, Group, Image as KonvaImage, Line, Path, Rect, Star, Text } from 'react-konva'
+import { Ellipse, Group, Image as KonvaImage, Line, Path, Rect, Text } from 'react-konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import type {
   AnyElement,
@@ -31,6 +31,9 @@ import type { TextSpan } from '@/lib/types'
 import { CurvedTextNode, EmbedNode, FrameNode, TableNode, type TableCellRef } from './v06-nodes'
 import { PluginNode } from './PluginNode'
 import { ChartNode } from './chart-node'
+import { isMaskShape, maskPolygon, polygonPoints, starPointsEx, stretchPts, tracePts, type MaskShape } from '@/lib/shapes'
+import { fitFontSize } from '@/lib/text-fit'
+import { layoutListLines } from '@/lib/list-text'
 
 export interface ElementNodeProps {
   element: AnyElement
@@ -73,6 +76,34 @@ function shadowProps(el: AnyElement) {
 /** v0.15 (R1): the browser-side measure for rich text layout — canvas 2d
  *  with the codebase's graceful no-canvas fallback (svg-export pattern). */
 const richMeasure = createCanvasMeasure()
+
+/** v0.18 (Wave 3): the effective font size of a text element — the
+ *  authored size, or the auto-fit shrink when enabled. ONE definition
+ *  shared by the canvas, the SVG serializer and (through Konva) the
+ *  video exporter, so every surface agrees to the pixel. */
+export function effectiveFontSize(t: TextElement): number {
+  if (!t.autoFit) return t.fontSize
+  return fitFontSize(
+    {
+      text: t.uppercase ? t.text.toUpperCase() : t.text,
+      fontFamily: t.fontFamily,
+      bold: t.bold,
+      italic: t.italic,
+      letterSpacing: t.letterSpacing,
+      lineHeight: t.lineHeight,
+      fontSize: t.fontSize,
+    },
+    { width: t.width, height: t.height },
+    (text, style) => richMeasure(text, style)
+  )
+}
+
+/** v0.18 (Wave 3): a text element renders through the list layout when a
+ *  list style is set (flat path — rich spans and curved text keep their
+ *  own single-style renders, documented in docs/EDITOR-DEPTH.md). */
+function isListText(t: TextElement): boolean {
+  return !!t.listStyle && t.listStyle !== 'none' && (t.curve ?? 0) === 0 && t.effect !== 'splice'
+}
 
 /** shift a Konva gradient's anchor points so a per-run node maps the
  *  ELEMENT-box gradient continuously instead of restarting per run */
@@ -163,6 +194,91 @@ function RichTextNode({
   )
 }
 
+/** v0.18 (Wave 3): bullet / numbered list text — one Konva.Text per
+ *  pre-wrapped line plus a marker glyph at the hanging indent, all
+ *  positioned by the shared geometry module (lib/list-text.ts) so the
+ *  SVG serializer emits byte-identical positions. */
+function ListTextNode({
+  t,
+  common,
+  effect,
+}: {
+  t: TextElement
+  common: Record<string, unknown>
+  effect: Record<string, unknown>
+}) {
+  const size = effectiveFontSize(t)
+  const rtl = t.direction === 'rtl'
+  const rendered = t.uppercase ? t.text.toUpperCase() : t.text
+  const lines = useMemo(
+    () =>
+      layoutListLines(
+        {
+          text: rendered,
+          fontFamily: t.fontFamily,
+          bold: t.bold,
+          italic: t.italic,
+          letterSpacing: t.letterSpacing,
+          lineHeight: t.lineHeight,
+          fontSize: size,
+          width: t.width,
+          listStyle: t.listStyle ?? 'none',
+          direction: rtl ? 'rtl' : 'ltr',
+        },
+        (text, style) => richMeasure(text, style)
+      ),
+    [rendered, t.fontFamily, t.bold, t.italic, t.letterSpacing, t.lineHeight, size, t.width, t.listStyle, rtl]
+  )
+  const blockH = lines.length ? Math.max(...lines.map((l) => l.y)) + size * t.lineHeight : size * t.lineHeight
+  const fontStyle = `${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`
+  // rtl mirrors the default alignment (an explicit centre stays centred)
+  const align =
+    t.align === 'center' ? 'center' : t.align === 'justify' ? 'left' : rtl ? (t.align === 'left' ? 'right' : 'left') : t.align
+  return (
+    <Group {...common} height={blockH}>
+      {/* declared-box hit rect — mirrors RichTextNode */}
+      <Rect width={t.width} height={Math.max(t.height, blockH)} fill="transparent" perfectDrawEnabled={false} />
+      {t.effect === 'background' && (
+        <Rect width={t.width} height={Math.max(t.height, blockH)} fill={t.effectBackground ?? '#EFEFEF'} cornerRadius={Math.min(8, size * 0.2)} />
+      )}
+      {lines.map((line, i) => (
+        <Group key={i}>
+          {line.marker && (
+            <Text
+              x={line.markerX}
+              y={line.y}
+              text={line.marker}
+              fontSize={size}
+              fontFamily={t.fontFamily}
+              fontStyle={fontStyle}
+              fill={t.fill}
+              width={t.width}
+              align={rtl ? 'right' : 'left'}
+              perfectDrawEnabled={false}
+            />
+          )}
+          <Text
+            x={line.textX}
+            y={line.y}
+            text={line.text}
+            fontSize={size}
+            fontFamily={t.fontFamily}
+            fontStyle={fontStyle}
+            textDecoration={[t.underline ? 'underline' : '', t.strike ? 'line-through' : ''].filter(Boolean).join(' ')}
+            fill={t.fill}
+            align={align}
+            width={line.textWidth}
+            lineHeight={t.lineHeight}
+            letterSpacing={t.letterSpacing}
+            wrap="none"
+            perfectDrawEnabled={false}
+          />
+        </Group>
+      ))}
+    </Group>
+  )
+}
+
 function textEffectProps(t: TextElement): Record<string, string | number> {
   switch (t.effect) {
     case 'shadow':
@@ -186,7 +302,10 @@ function textEffectProps(t: TextElement): Record<string, string | number> {
   }
 }
 
-/** image with Konva filters (brightness / contrast / saturation) */
+/** image with Konva filters (brightness / contrast / saturation).
+ *  v0.18 (Wave 3): optional shape mask — the image clips to a polygon
+ *  (lib/shapes.ts) drawn into the Group's clipShapeFunc, so filters,
+ *  flips, adjustments and the Transformer all keep working unchanged. */
 function ImageNode({ el, common }: { el: ImageElement; common: Record<string, unknown> }) {
   const image = useLoadedImage(el.src)
   const nodeRef = useRef<Konva.Image | null>(null)
@@ -221,19 +340,37 @@ function ImageNode({ el, common }: { el: ImageElement; common: Record<string, un
     node.getLayer()?.batchDraw()
   }, [image, bright, contrast, sat, preset, intensity])
 
-  return (
+  // v0.18 (Wave 3): validated mask — hostile pastes can't smuggle junk in
+  const maskPts = useMemo(() => {
+    if (!isMaskShape(el.maskShape) || el.maskShape === 'none') return null
+    return maskPolygon(el.maskShape as MaskShape, el.maskSides, el.maskInnerRatio)
+  }, [el.maskShape, el.maskSides, el.maskInnerRatio])
+
+  const img = (
     <KonvaImage
-      {...common}
       ref={(n) => { nodeRef.current = n; (common.ref as (node: Konva.Node | null) => void | undefined)?.(n) }}
       image={image ?? undefined}
       width={el.width}
       height={el.height}
-      cornerRadius={el.radius}
+      cornerRadius={maskPts ? 0 : el.radius}
       scaleX={el.flipH ? -1 : 1}
       scaleY={el.flipV ? -1 : 1}
       offsetX={el.flipH ? el.width : 0}
       offsetY={el.flipV ? el.height : 0}
     />
+  )
+
+  if (!maskPts) {
+    return <Group {...common} clip={undefined}>{img}</Group>
+  }
+  return (
+    <Group
+      {...common}
+      clip={undefined}
+      clipShapeFunc={(ctx) => tracePts(ctx, maskPts, el.width, el.height)}
+    >
+      {img}
+    </Group>
   )
 }
 
@@ -411,7 +548,7 @@ function ElementNodeImpl({ element: el, interactive, hiding, hideCell, registerN
       })
       return
     }
-    if (el.type === 'ellipse' || el.type === 'star') {
+    if (el.type === 'ellipse' || el.type === 'star' || el.type === 'polygon') {
       store.updateElementsLive([el.id], { x: node.x() - el.width / 2, y: node.y() - el.height / 2 })
     } else {
       store.updateElementsLive([el.id], { x: node.x(), y: node.y() })
@@ -511,7 +648,7 @@ function ElementNodeImpl({ element: el, interactive, hiding, hideCell, registerN
       const newH = Math.max(4, el.height * sy)
       patch.width = newW
       patch.height = newH
-      if (el.type === 'ellipse' || el.type === 'star') {
+      if (el.type === 'ellipse' || el.type === 'star' || el.type === 'polygon') {
         patch.x = node.x() - newW / 2
         patch.y = node.y() - newH / 2
       } else {
@@ -569,6 +706,11 @@ function ElementNodeImpl({ element: el, interactive, hiding, hideCell, registerN
       const t = el as TextElement
       const effect = t.effect && t.effect !== 'none' ? textEffectProps(t) : {}
       const rendered = t.uppercase ? t.text.toUpperCase() : t.text
+      // v0.18 (Wave 3): list text renders through the shared list
+      // layout (flat — rich spans keep their own path, like curved text)
+      if (isListText(t)) {
+        return <ListTextNode t={t} common={common} effect={effect} />
+      }
       // v0.15 (R1): rich text — spans render through the shared layout;
       // curved text and the splice ghost-copies effect stay on the flat
       // path (single-style by design, documented in README · R1)
@@ -576,6 +718,13 @@ function ElementNodeImpl({ element: el, interactive, hiding, hideCell, registerN
       if (richSpans) {
         return <RichTextNode t={t} spans={richSpans} common={common} effect={effect} />
       }
+      // v0.18 (Wave 3): auto-fit — the effective size is derived at render
+      // (lib/text-fit.ts); the authored fontSize is never mutated
+      const effSize = effectiveFontSize(t)
+      // v0.18 (Wave 3): rtl mirrors the default alignment (centre stays)
+      const rtl = t.direction === 'rtl'
+      const alignAttr =
+        t.align === 'center' ? 'center' : t.align === 'justify' ? 'left' : rtl ? (t.align === 'left' ? 'right' : 'left') : t.align
       // gradient fill (skipped for effects that own the fill, e.g. Hollow)
       const textGrad: GradientFill | null | undefined = t.fillGradient
       const gradProps =
@@ -586,18 +735,18 @@ function ElementNodeImpl({ element: el, interactive, hiding, hideCell, registerN
       if (t.effect === 'background') {
         // canva "Background" effect: solid block behind the text
         const bg = t.effectBackground ?? '#EFEFEF'
-        const h = Math.max(t.height, t.fontSize * t.lineHeight + 8)
+        const h = Math.max(t.height, effSize * t.lineHeight + 8)
         return (
           <Group {...common}>
-            <Rect width={t.width} height={h} fill={bg} cornerRadius={Math.min(8, t.fontSize * 0.2)} />
+            <Rect width={t.width} height={h} fill={bg} cornerRadius={Math.min(8, effSize * 0.2)} />
             <Text
               text={rendered}
-              fontSize={t.fontSize}
+              fontSize={effSize}
               fontFamily={t.fontFamily}
               fontStyle={`${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`}
               textDecoration={[t.underline ? 'underline' : '', t.strike ? 'line-through' : ''].filter(Boolean).join(' ')}
               fill={t.fill}
-              align={t.align === 'justify' ? 'left' : t.align}
+              align={alignAttr}
               width={t.width}
               lineHeight={t.lineHeight}
               letterSpacing={t.letterSpacing}
@@ -613,9 +762,9 @@ function ElementNodeImpl({ element: el, interactive, hiding, hideCell, registerN
         // canva "Splice": sliced look — ghost copies above & below
         return (
           <Group {...common}>
-            <Text text={rendered} fontSize={t.fontSize} fontFamily={t.fontFamily} fontStyle={`${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`} fill={withAlpha(t.fill, 0.35)} align={t.align === 'justify' ? 'left' : t.align} width={t.width} lineHeight={t.lineHeight} letterSpacing={t.letterSpacing} wrap="word" y={-Math.max(3, t.fontSize * 0.09)} perfectDrawEnabled={false} />
-            <Text text={rendered} fontSize={t.fontSize} fontFamily={t.fontFamily} fontStyle={`${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`} fill={withAlpha(t.fill, 0.35)} align={t.align === 'justify' ? 'left' : t.align} width={t.width} lineHeight={t.lineHeight} letterSpacing={t.letterSpacing} wrap="word" y={Math.max(3, t.fontSize * 0.09)} perfectDrawEnabled={false} />
-            <Text text={rendered} fontSize={t.fontSize} fontFamily={t.fontFamily} fontStyle={`${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`} fill={t.fill} align={t.align === 'justify' ? 'left' : t.align} width={t.width} lineHeight={t.lineHeight} letterSpacing={t.letterSpacing} wrap="word" perfectDrawEnabled={false} />
+            <Text text={rendered} fontSize={effSize} fontFamily={t.fontFamily} fontStyle={`${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`} fill={withAlpha(t.fill, 0.35)} align={alignAttr} width={t.width} lineHeight={t.lineHeight} letterSpacing={t.letterSpacing} wrap="word" y={-Math.max(3, effSize * 0.09)} perfectDrawEnabled={false} />
+            <Text text={rendered} fontSize={effSize} fontFamily={t.fontFamily} fontStyle={`${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`} fill={withAlpha(t.fill, 0.35)} align={alignAttr} width={t.width} lineHeight={t.lineHeight} letterSpacing={t.letterSpacing} wrap="word" y={Math.max(3, effSize * 0.09)} perfectDrawEnabled={false} />
+            <Text text={rendered} fontSize={effSize} fontFamily={t.fontFamily} fontStyle={`${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`} fill={t.fill} align={alignAttr} width={t.width} lineHeight={t.lineHeight} letterSpacing={t.letterSpacing} wrap="word" perfectDrawEnabled={false} />
           </Group>
         )
       }
@@ -626,12 +775,12 @@ function ElementNodeImpl({ element: el, interactive, hiding, hideCell, registerN
           {...effect}
           {...gradProps}
           text={rendered}
-          fontSize={t.fontSize}
+          fontSize={effSize}
           fontFamily={t.fontFamily}
           fontStyle={`${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`}
           textDecoration={[t.underline ? 'underline' : '', t.strike ? 'line-through' : ''].filter(Boolean).join(' ')}
           fill={Object.keys(gradProps).length ? undefined : t.fill}
-          align={t.align === 'justify' ? 'left' : t.align}
+          align={alignAttr}
           width={t.width}
           lineHeight={t.lineHeight}
           letterSpacing={t.letterSpacing}
@@ -661,9 +810,46 @@ function ElementNodeImpl({ element: el, interactive, hiding, hideCell, registerN
 
     case 'star': {
       const s = el as ShapeElement
-      const outer = Math.min(s.width, s.height) / 2
+      // v0.18 (Wave 3): parametric — 3..16 points, adjustable spike ratio.
+      // stretchPts is THE shape mapping (fills the box, like ellipse/rect) —
+      // the SVG + PDF exports render the identical points.
       const grad = s.fillGradient ? elementGradientProps(s.fillGradient, s.width, s.height, 'center') : {}
-      return <Star {...common} x={s.x + s.width / 2} y={s.y + s.height / 2} numPoints={5} innerRadius={outer * 0.55} outerRadius={outer} {...grad} fill={s.fillGradient ? undefined : s.fill} stroke={s.stroke} strokeWidth={s.strokeWidth} />
+      // absolute points in the box, then re-based to the centre (the
+      // node sits at the centre so rotation turns around the shape)
+      const pts = stretchPts(starPointsEx(s.numPoints ?? 5, s.innerRatio), 0, 0, s.width, s.height)
+      return (
+        <Line
+          {...common}
+          x={s.x + s.width / 2}
+          y={s.y + s.height / 2}
+          points={pts.flatMap(([px, py]): number[] => [px - s.width / 2, py - s.height / 2])}
+          closed
+          {...grad}
+          fill={s.fillGradient ? undefined : s.fill}
+          stroke={s.stroke}
+          strokeWidth={s.strokeWidth}
+        />
+      )
+    }
+
+    case 'polygon': {
+      // v0.18 (Wave 3): regular polygon — centred geometry like the star
+      const s = el as ShapeElement
+      const grad = s.fillGradient ? elementGradientProps(s.fillGradient, s.width, s.height, 'center') : {}
+      const pts = stretchPts(polygonPoints(s.sides ?? 6), 0, 0, s.width, s.height)
+      return (
+        <Line
+          {...common}
+          x={s.x + s.width / 2}
+          y={s.y + s.height / 2}
+          points={pts.flatMap(([px, py]): number[] => [px - s.width / 2, py - s.height / 2])}
+          closed
+          {...grad}
+          fill={s.fillGradient ? undefined : s.fill}
+          stroke={s.stroke}
+          strokeWidth={s.strokeWidth}
+        />
+      )
     }
 
     case 'path': {

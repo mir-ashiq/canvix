@@ -35,6 +35,10 @@ import { arcForCurve, embedLayout, frameClipPathD, hostOf, tableGeometry, youtub
 import { layoutRichLines, normalizeSpans } from '@/lib/rich-text'
 import type { PluginElement } from '@/lib/types'
 import { getRenderEntry, renderKey } from '@/lib/plugins/renderer-cache'
+import { isMaskShape, maskPolygon, polygonPoints as shapePolygonPoints, starPointsEx, ptsToSvg, scalePts, stretchPts } from '@/lib/shapes'
+import { fitFontSize } from '@/lib/text-fit'
+import { layoutListLines } from '@/lib/list-text'
+import { pageSize } from '@/lib/editor-utils'
 
 // ── escaping ─────────────────────────────────────────────────
 
@@ -191,6 +195,35 @@ function measureText(text: string, fontFamily: string, fontSize: number, bold: b
   }
 }
 
+/** v0.18 (Wave 3): the svg-side measure for auto-fit + list layout —
+ *  adapts measureText to the shared signatures (letterSpacing/italic
+ *  are approximated away; both are rare on list/autofit text). */
+function svgMeasure(text: string, style: { fontFamily: string; bold: boolean; italic: boolean; letterSpacing: number; fontSize: number }): number {
+  const w = measureText(text, style.fontFamily, style.fontSize, style.bold)
+  return w + (style.letterSpacing ? style.letterSpacing * text.length : 0)
+}
+
+/** v0.18 (Wave 3): the svg-side effective font size — must match
+ *  element-node's effectiveFontSize() (both derive from fitFontSize).
+ *  letterSpacing is folded into the measure so the binary search sees
+ *  the same widths the canvas measure does. */
+function svgEffectiveFontSize(t: TextElement): number {
+  if (!t.autoFit) return t.fontSize
+  return fitFontSize(
+    {
+      text: t.uppercase ? t.text.toUpperCase() : t.text,
+      fontFamily: t.fontFamily,
+      bold: t.bold,
+      italic: t.italic,
+      letterSpacing: t.letterSpacing,
+      lineHeight: t.lineHeight,
+      fontSize: t.fontSize,
+    },
+    { width: t.width, height: t.height },
+    svgMeasure
+  )
+}
+
 // ── element serializers ──────────────────────────────────────
 
 interface SvgContext {
@@ -225,17 +258,6 @@ function shadowAttrs(el: { shadow?: { enabled: boolean; color: string; blur: num
   </filter>`
   )
   return ` filter="url(#${id})"`
-}
-
-function starPoints(cx: number, cy: number, outer: number, inner: number): string {
-  const pts: string[] = []
-  for (let i = 0; i < 5; i++) {
-    const outerAngle = (Math.PI / 2) * -1 + (i * 2 * Math.PI) / 5
-    const innerAngle = outerAngle + Math.PI / 5
-    pts.push(`${(cx + outer * Math.cos(outerAngle)).toFixed(2)},${(cy + outer * Math.sin(outerAngle)).toFixed(2)}`)
-    pts.push(`${(cx + inner * Math.cos(innerAngle)).toFixed(2)},${(cy + inner * Math.sin(innerAngle)).toFixed(2)}`)
-  }
-  return pts.join(' ')
 }
 
 // ── v0.13 (P4): plugin element embedding ────────────────────
@@ -324,6 +346,64 @@ function serializeElement(el: AnyElement, ctx: SvgContext): string {
       const t = el as TextElement
       const rendered = t.uppercase ? t.text.toUpperCase() : t.text
 
+      // v0.18 (Wave 3): list text — the shared layout (lib/list-text.ts)
+      // positions marker + line tspans; flat path, single style (like
+      // curved text — rich spans keep their own renderer)
+      if (t.listStyle && t.listStyle !== 'none' && (t.curve ?? 0) === 0 && t.effect !== 'splice') {
+        const size = svgEffectiveFontSize(t)
+        const rtl = t.direction === 'rtl'
+        const lines = layoutListLines(
+          {
+            text: rendered,
+            fontFamily: t.fontFamily,
+            bold: t.bold,
+            italic: t.italic,
+            letterSpacing: t.letterSpacing,
+            lineHeight: t.lineHeight,
+            fontSize: size,
+            width: t.width,
+            listStyle: t.listStyle,
+            direction: rtl ? 'rtl' : 'ltr',
+          },
+          svgMeasure
+        )
+        const fill = t.fillGradient ? gradientRefFor(t, ctx) : t.fill
+        const decor = [t.underline ? 'underline' : '', t.strike ? 'line-through' : ''].filter(Boolean).join(' ')
+        const attrs = [
+          `font-family="${esc(t.fontFamily)}"`,
+          `font-size="${size}"`,
+          `font-weight="${t.bold ? 700 : 400}"`,
+          `font-style="${t.italic ? 'italic' : 'normal'}"`,
+          decor ? `text-decoration="${decor}"` : '',
+          t.letterSpacing ? `letter-spacing="${t.letterSpacing}"` : '',
+          rtl ? `direction="rtl"` : '',
+          `fill="${fill}"`,
+          opacityAttr(t),
+          shadowAttrs(t, ctx),
+        ]
+          .filter(Boolean)
+          .join(' ')
+        const transform = t.rotation ? ` transform="rotate(${t.rotation} ${t.x} ${t.y})"` : ''
+        const body = lines
+          .map((line) => {
+            const y = (t.y + line.y + size * 0.8).toFixed(1)
+            const anchor = t.align === 'center' ? 'middle' : t.align === 'right' ? 'end' : 'start'
+            const anchorX = t.align === 'center' ? t.x + line.textX + line.textWidth / 2 : t.align === 'right' ? t.x + line.textX + line.textWidth : t.x + line.textX
+            let out = `<tspan x="${anchorX.toFixed(1)}" y="${y}"${line.textWidth ? ` textLength=""` : ''}>${esc(line.text)}</tspan>`
+            if (line.marker) {
+              const mAnchor = rtl ? 'end' : 'start'
+              const mX = rtl ? (t.x + line.markerX).toFixed(1) : (t.x + line.markerX).toFixed(1)
+              out += `<tspan x="${mX}" y="${y}" text-anchor="${mAnchor}">${esc(line.marker)}</tspan>`
+            }
+            return out
+          })
+          .join('')
+        return `  <text ${attrs}${transform} xml:space="preserve">${body}</text>`
+      }
+
+      // v0.18 (Wave 3): auto-fit — the derived size drives every attribute
+      const effSize = svgEffectiveFontSize(t)
+
       // v0.15 (R1): rich text — spans before the flat paths (curved text
       // stays flat: the arc path is single-style by design)
       if (t.curve === 0 || t.curve === undefined) {
@@ -355,24 +435,28 @@ function serializeElement(el: AnyElement, ctx: SvgContext): string {
         return `  <text ${attrs}${transform} xml:space="preserve"><textPath href="#${pathId}" xlink:href="#${pathId}">${esc(rendered)}</textPath></text>`
       }
 
-      const lines = wrapText(rendered, t.fontFamily, t.fontSize, t.bold, t.width)
-      const lineHeight = t.fontSize * t.lineHeight
+      const lines = wrapText(rendered, t.fontFamily, effSize, t.bold, t.width)
+      const lineHeight = effSize * t.lineHeight
       const fill = t.fillGradient ? gradientRefFor(t, ctx) : t.fill
-      const anchor = t.align === 'center' ? 'middle' : t.align === 'right' ? 'end' : 'start'
-      const anchorX = t.align === 'center' ? t.x + t.width / 2 : t.align === 'right' ? t.x + t.width : t.x
+      // v0.18 (Wave 3): rtl mirrors the alignment (centre stays)
+      const rtl = t.direction === 'rtl'
+      const effAlign = t.align === 'center' ? 'center' : t.align === 'justify' ? 'left' : rtl ? (t.align === 'left' ? 'right' : 'left') : t.align
+      const anchor = effAlign === 'center' ? 'middle' : effAlign === 'right' ? 'end' : 'start'
+      const anchorX = effAlign === 'center' ? t.x + t.width / 2 : effAlign === 'right' ? t.x + t.width : t.x
       // first baseline ≈ top + ascent (0.8 × fontSize approximates Konva's ascent)
-      const firstBaseline = t.y + t.fontSize * 0.8
+      const firstBaseline = t.y + effSize * 0.8
       const tspans = lines
         .map((line, i) => `<tspan x="${anchorX}" ${i === 0 ? `y="${firstBaseline.toFixed(1)}"` : `dy="${lineHeight.toFixed(1)}"`}>${esc(line)}</tspan>`)
         .join('')
       const decor = [t.underline ? 'underline' : '', t.strike ? 'line-through' : ''].filter(Boolean).join(' ')
       const attrs = [
         `font-family="${esc(t.fontFamily)}"`,
-        `font-size="${t.fontSize}"`,
+        `font-size="${effSize}"`,
         `font-weight="${t.bold ? 700 : 400}"`,
         `font-style="${t.italic ? 'italic' : 'normal'}"`,
         decor ? `text-decoration="${decor}"` : '',
         t.letterSpacing ? `letter-spacing="${t.letterSpacing}"` : '',
+        rtl ? `direction="rtl"` : '',
         `text-anchor="${anchor}"`,
         `fill="${fill}"`,
         opacityAttr(t),
@@ -408,12 +492,23 @@ function serializeElement(el: AnyElement, ctx: SvgContext): string {
     }
 
     case 'star': {
+      // v0.18 (Wave 3): parametric — points + spike ratio from the element
       const s = el as ShapeElement
       const cx = s.x + s.width / 2
       const cy = s.y + s.height / 2
-      const outer = Math.min(s.width, s.height) / 2
       const gradFill = s.fillGradient ? gradientRefFor(s, ctx) : s.fill
-      return `  <polygon points="${starPoints(cx, cy, outer, outer * 0.55)}"${s.stroke && s.stroke !== 'transparent' && s.strokeWidth ? ` stroke="${s.stroke}" stroke-width="${s.strokeWidth}" stroke-linejoin="round"` : ''} fill="${gradFill}"${opacityAttr(s)}${shadowAttrs(s, ctx)}${transformBase ? ` transform="rotate(${s.rotation} ${cx} ${cy})"` : ''} />`
+      const pts = stretchPts(starPointsEx(s.numPoints ?? 5, s.innerRatio), s.x, s.y, s.width, s.height)
+      return `  <polygon points="${ptsToSvg(pts)}"${s.stroke && s.stroke !== 'transparent' && s.strokeWidth ? ` stroke="${s.stroke}" stroke-width="${s.strokeWidth}" stroke-linejoin="round"` : ''} fill="${gradFill}"${opacityAttr(s)}${shadowAttrs(s, ctx)}${transformBase ? ` transform="rotate(${s.rotation} ${cx} ${cy})"` : ''} />`
+    }
+
+    case 'polygon': {
+      // v0.18 (Wave 3): regular polygon — same centred geometry as star
+      const s = el as ShapeElement
+      const cx = s.x + s.width / 2
+      const cy = s.y + s.height / 2
+      const gradFill = s.fillGradient ? gradientRefFor(s, ctx) : s.fill
+      const pts = stretchPts(shapePolygonPoints(s.sides ?? 6), s.x, s.y, s.width, s.height)
+      return `  <polygon points="${ptsToSvg(pts)}"${s.stroke && s.stroke !== 'transparent' && s.strokeWidth ? ` stroke="${s.stroke}" stroke-width="${s.strokeWidth}" stroke-linejoin="round"` : ''} fill="${gradFill}"${opacityAttr(s)}${shadowAttrs(s, ctx)}${transformBase ? ` transform="rotate(${s.rotation} ${cx} ${cy})"` : ''} />`
     }
 
     case 'path': {
@@ -457,8 +552,15 @@ function serializeElement(el: AnyElement, ctx: SvgContext): string {
       const im = el as ImageElement
       const href = safeHref(im.src)
       if (!href) return ''
-      const clipId = im.radius ? refId('clip') : null
-      if (im.radius) {
+      // v0.18 (Wave 3): shape mask wins over the corner-radius clip
+      const maskPts =
+        isMaskShape(im.maskShape) && im.maskShape !== 'none'
+          ? maskPolygon(im.maskShape, im.maskSides, im.maskInnerRatio)
+          : null
+      const clipId = maskPts || im.radius ? refId('clip') : null
+      if (maskPts) {
+        ctx.defs.push(`  <clipPath id="${clipId}"><polygon points="${ptsToSvg(scalePts(maskPts, im.x, im.y, im.width, im.height))}" /></clipPath>`)
+      } else if (im.radius) {
         ctx.defs.push(`  <clipPath id="${clipId}"><rect x="${im.x}" y="${im.y}" width="${im.width}" height="${im.height}" rx="${im.radius}" /></clipPath>`)
       }
       // flips mirror around the image center: x' = 2·cx − x
@@ -688,11 +790,14 @@ function sanitizePathData(d: string): string {
 export function exportPageToSVG(page: PageData, designWidth: number, designHeight: number): string {
   refCounter = 0
   const ctx: SvgContext = { defs: [] }
+  // v0.18 (Wave 3): per-page size override (falls back to the design size
+  // for every pre-v0.18 document — pageSize validates + clamps)
+  const { width: W, height: H } = pageSize(page, designWidth, designHeight)
 
   // background
   let bgOut = ''
   if (page.background.type === 'solid') {
-    bgOut = `  <rect width="${designWidth}" height="${designHeight}" fill="${esc(page.background.color)}" />`
+    bgOut = `  <rect width="${W}" height="${H}" fill="${esc(page.background.color)}" />`
   } else if (page.background.type === 'gradient') {
     const bgGrad: GradientFill = {
       type: 'linear',
@@ -700,8 +805,8 @@ export function exportPageToSVG(page: PageData, designWidth: number, designHeigh
       to: page.background.to,
       angle: page.background.angle,
     }
-    const fill = gradientRefFor({ fillGradient: bgGrad, width: designWidth, height: designHeight }, ctx)
-    bgOut = `  <rect width="${designWidth}" height="${designHeight}" fill="${fill}" />`
+    const fill = gradientRefFor({ fillGradient: bgGrad, width: W, height: H }, ctx)
+    bgOut = `  <rect width="${W}" height="${H}" fill="${fill}" />`
   }
 
   const elements = page.elements
@@ -712,7 +817,7 @@ export function exportPageToSVG(page: PageData, designWidth: number, designHeigh
   const defs = ctx.defs.length ? `<defs>\n${ctx.defs.join('\n')}\n</defs>\n` : ''
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${designWidth}" height="${designHeight}" viewBox="0 0 ${designWidth} ${designHeight}">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
 ${defs}${bgOut}
 ${elements}
 </svg>

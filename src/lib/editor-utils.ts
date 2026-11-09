@@ -292,6 +292,22 @@ export function pageElements(page: PageData): AnyElement[] {
   return page.elements.filter((e) => e.visible)
 }
 
+/** v0.18 (Wave 3): the ONE accessor for a page's render size.
+ * Per-page overrides (PageData.width/height) win when valid; anything
+ * absent, zero, sub-minimum or absurd falls back to the design size —
+ * so every pre-v0.18 document behaves exactly as before. */
+export function pageSize(
+  page: { width?: number; height?: number } | undefined | null,
+  designWidth: number,
+  designHeight: number
+): { width: number; height: number } {
+  const w = page?.width
+  const h = page?.height
+  const W = Number.isFinite(w) && (w as number) >= 32 && (w as number) <= 8000 ? (w as number) : designWidth
+  const H = Number.isFinite(h) && (h as number) >= 32 && (h as number) <= 8000 ? (h as number) : designHeight
+  return { width: W, height: H }
+}
+
 /** Konva linear gradient helper — returns props for a Rect fill. */
 export function gradientProps(from: string, to: string, angle: number, w: number, h: number) {
   const rad = (angle * Math.PI) / 180

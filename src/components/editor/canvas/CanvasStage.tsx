@@ -5,7 +5,7 @@ import type Konva from 'konva'
 import { Group, Layer, Line, Rect, Stage, Transformer } from 'react-konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import { useEditorStore, currentPageData } from '@/store/editor-store'
-import { gradientProps, computeSnap, clamp, type GuideLine } from '@/lib/editor-utils'
+import { gradientProps, computeSnap, clamp, pageSize, type GuideLine } from '@/lib/editor-utils'
 import { canvasBridge } from './canvas-bridge'
 import { ElementNode } from './element-node'
 import { Rulers } from './rulers'
@@ -126,6 +126,18 @@ export default function CanvasStage() {
   const pinchRef = useRef<{ dist: number; zoom: number; mid: { x: number; y: number }; pan: { x: number; y: number } } | null>(null)
 
   const page = currentPageData({ pages, currentPage })
+  // v0.18 (Wave 3): grid overlay prefs + per-page size override
+  const showGrid = useEditorStore((s) => s.showGrid)
+  const gridSize = useEditorStore((s) => s.gridSize)
+  const { width: pw, height: ph } = useMemo(() => pageSize(page, width, height), [page, width, height])
+  // v0.18 (Wave 3): the grid lines (page px) — memoised so typing doesn't rebuild
+  const gridLines = useMemo(() => {
+    if (!showGrid) return []
+    const lines: Array<{ x1: number; y1: number; x2: number; y2: number }> = []
+    for (let x = gridSize; x < pw; x += gridSize) lines.push({ x1: x, y1: 0, x2: x, y2: ph })
+    for (let y = gridSize; y < ph; y += gridSize) lines.push({ x1: 0, y1: y, x2: pw, y2: y })
+    return lines
+  }, [showGrid, gridSize, pw, ph])
 
   // ── container size ─────────────────────────────────────────
   useEffect(() => {
@@ -172,18 +184,18 @@ export default function CanvasStage() {
   const fitToScreen = useCallback(() => {
     if (containerSize.w < 50 || containerSize.h < 50) return
     const pad = showRulers ? 128 : 100
-    const z = Math.min((containerSize.w - pad) / width, (containerSize.h - pad) / height, 1.5)
+    const z = Math.min((containerSize.w - pad) / pw, (containerSize.h - pad) / ph, 1.5)
     const clamped = Math.max(0.05, z)
     setZoom(clamped)
     prevZoomRef.current = clamped
     const centered = {
-      x: (containerSize.w - width * clamped) / 2,
-      y: (containerSize.h - height * clamped) / 2,
+      x: (containerSize.w - pw * clamped) / 2,
+      y: (containerSize.h - ph * clamped) / 2,
     }
     prevPanRef.current = centered
     setPan(centered)
     userZoomedRef.current = false
-  }, [containerSize, width, height, setZoom, showRulers])
+  }, [containerSize, pw, ph, setZoom, showRulers])
 
   // fit on mount & on design size change & on resize (if user hasn't zoomed)
   useEffect(() => {
@@ -191,21 +203,21 @@ export default function CanvasStage() {
     if (userZoomedRef.current) return
     const raf = requestAnimationFrame(() => fitToScreen())
     return () => cancelAnimationFrame(raf)
-  }, [containerSize.w, containerSize.h, width, height, fitToScreen])
+  }, [containerSize.w, containerSize.h, pw, ph, fitToScreen])
 
   // ── bridge registration ────────────────────────────────────
   useEffect(() => {
     canvasBridge.stage = stageRef.current
     canvasBridge.layer = layerRef.current
-    canvasBridge.pageWidth = width
-    canvasBridge.pageHeight = height
+    canvasBridge.pageWidth = pw
+    canvasBridge.pageHeight = ph
     canvasBridge.fitToScreen = fitToScreen
     return () => {
       canvasBridge.stage = null
       canvasBridge.layer = null
       canvasBridge.fitToScreen = null
     }
-  }, [width, height, fitToScreen])
+  }, [pw, ph, fitToScreen])
 
   // keep bridge pan/zoom fresh
   useEffect(() => {
@@ -264,9 +276,22 @@ export default function CanvasStage() {
     const el = p.elements.find((e) => e.id === id)
     if (!el) return
     const rect =
-      el.type === 'ellipse' || el.type === 'star'
+      el.type === 'ellipse' || el.type === 'star' || el.type === 'polygon'
         ? { x: node.x() - el.width / 2, y: node.y() - el.height / 2, width: el.width, height: el.height, rotation: el.rotation }
         : { x: node.x(), y: node.y(), width: el.width, height: el.height, rotation: el.rotation }
+    // v0.18 (Wave 3): snap-to-grid — rounds the drag position to the grid
+    // BEFORE element snapping, so element alignment still wins on top
+    if (state.snapToGrid && state.gridSize >= 8) {
+      const gs = state.gridSize
+      const topLeft =
+        el.type === 'ellipse' || el.type === 'star' || el.type === 'polygon'
+          ? { x: node.x() - el.width / 2, y: node.y() - el.height / 2 }
+          : { x: node.x(), y: node.y() }
+      const snappedX = Math.round(topLeft.x / gs) * gs
+      const snappedY = Math.round(topLeft.y / gs) * gs
+      node.x(node.x() + (snappedX - topLeft.x))
+      node.y(node.y() + (snappedY - topLeft.y))
+    }
     const others = p.elements
       .filter((e) => e.id !== id && e.visible)
       .map((e) => ({ x: e.x, y: e.y, width: e.width, height: e.height, rotation: e.rotation }))
@@ -281,7 +306,8 @@ export default function CanvasStage() {
         )
       }
     }
-    const { dx, dy, guides: g } = computeSnap(rect, others, { width: state.width, height: state.height })
+    const { width: pageW, height: pageH } = pageSize(p, state.width, state.height)
+    const { dx, dy, guides: g } = computeSnap(rect, others, { width: pageW, height: pageH })
     if (dx !== 0 || dy !== 0) {
       node.x(node.x() + dx)
       node.y(node.y() + dy)
@@ -451,7 +477,7 @@ export default function CanvasStage() {
     }
     const onUp = () => {
       setDraftGuide(null)
-      const limit = axis === 'x' ? width : height
+      const limit = axis === 'x' ? pw : ph
       if (position > -30 && position < limit + 30) addManualGuide(axis, position)
     }
     const onKey = (e: KeyboardEvent) => {
@@ -465,7 +491,7 @@ export default function CanvasStage() {
       window.removeEventListener('mouseup', onUp)
       window.removeEventListener('keydown', onKey)
     }
-  }, [guideDragging, pan, zoom, width, height, addManualGuide])
+  }, [guideDragging, pan, zoom, pw, ph, addManualGuide])
 
   const beginGuideFromRuler = (axis: 'x' | 'y', pagePos: number) => {
     if (editingMode !== 'editing' || tool === 'draw') return
@@ -478,12 +504,12 @@ export default function CanvasStage() {
     if (g.axis === 'x') {
       const nx = node.x()
       node.x(g.position) // restore; state drives the final position
-      if (nx < -40 || nx > width + 40) removeManualGuide(g.id)
+      if (nx < -40 || nx > pw + 40) removeManualGuide(g.id)
       else moveManualGuide(g.id, nx)
     } else {
       const ny = node.y()
       node.y(g.position)
-      if (ny < -40 || ny > height + 40) removeManualGuide(g.id)
+      if (ny < -40 || ny > ph + 40) removeManualGuide(g.id)
       else moveManualGuide(g.id, ny)
     }
   }
@@ -723,7 +749,7 @@ export default function CanvasStage() {
   // ── render ─────────────────────────────────────────────────
   const bg = page.background
   const bgProps =
-    bg.type === 'gradient' ? gradientProps(bg.from, bg.to, bg.angle, width, height) : { fill: bg.color }
+    bg.type === 'gradient' ? gradientProps(bg.from, bg.to, bg.angle, pw, ph) : { fill: bg.color }
 
   const editingText = editingTextId ? (page.elements.find((e) => e.id === editingTextId) as TextElement | undefined) : undefined
 
@@ -791,6 +817,9 @@ export default function CanvasStage() {
         letterSpacing: `${editingText.letterSpacing * zoom}px`,
         color: editingText.fill,
         textAlign: editingText.align === 'justify' ? 'left' : editingText.align,
+        // v0.18 (Wave 3): bidi base direction — the browser applies the
+        // Unicode bidi algorithm per the textarea's dir while typing
+        direction: editingText.direction === 'rtl' ? 'rtl' : 'ltr',
       }
     : null
 
@@ -818,8 +847,12 @@ export default function CanvasStage() {
           onWheel={handleWheel}
         >
           <Layer ref={layerRef}>
-            <Rect x={pan.x} y={pan.y} width={width * zoom} height={height * zoom} {...bgProps} name="page-bg" />
+            <Rect x={pan.x} y={pan.y} width={pw * zoom} height={ph * zoom} {...bgProps} name="page-bg" />
             <Group x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom}>
+              {/* v0.18 (Wave 3): grid overlay — under the elements, never exported */}
+              {gridLines.map((l, i) => (
+                <Line key={i} points={[l.x1, l.y1, l.x2, l.y2]} stroke="#B3B6C4" strokeWidth={1 / zoom} listening={false} perfectDrawEnabled={false} />
+              ))}
               {page.elements.map((el) => (
                 <ElementNode
                   key={el.id}
@@ -865,9 +898,9 @@ export default function CanvasStage() {
               {/* snapping guides — canva #9954FF 2px */}
               {guides.map((g, i) =>
                 g.axis === 'x' ? (
-                  <Rect key={i} x={g.position} y={0} width={2 / zoom} height={height} fill={GUIDE_COLOR} listening={false} />
+                  <Rect key={i} x={g.position} y={0} width={2 / zoom} height={ph} fill={GUIDE_COLOR} listening={false} />
                 ) : (
-                  <Rect key={i} x={0} y={g.position} width={width} height={2 / zoom} fill={GUIDE_COLOR} listening={false} />
+                  <Rect key={i} x={0} y={g.position} width={pw} height={2 / zoom} fill={GUIDE_COLOR} listening={false} />
                 )
               )}
               {/* v0.3.1: manual ruler guides — draggable; double-click or drag off-page to delete */}
@@ -877,7 +910,7 @@ export default function CanvasStage() {
                     key={g.id}
                     x={g.position}
                     y={0}
-                    points={[0, -40, 0, height + 40]}
+                    points={[0, -40, 0, ph + 40]}
                     stroke={GUIDE_COLOR}
                     strokeWidth={1 / zoom}
                     hitStrokeWidth={10 / zoom}
@@ -892,7 +925,7 @@ export default function CanvasStage() {
                     key={g.id}
                     x={0}
                     y={g.position}
-                    points={[-40, 0, width + 40, 0]}
+                    points={[-40, 0, pw + 40, 0]}
                     stroke={GUIDE_COLOR}
                     strokeWidth={1 / zoom}
                     hitStrokeWidth={10 / zoom}
@@ -908,7 +941,7 @@ export default function CanvasStage() {
               {draftGuide &&
                 (draftGuide.axis === 'x' ? (
                   <Line
-                    points={[draftGuide.position, -40, draftGuide.position, height + 40]}
+                    points={[draftGuide.position, -40, draftGuide.position, ph + 40]}
                     stroke={GUIDE_COLOR}
                     strokeWidth={1 / zoom}
                     dash={[6 / zoom, 4 / zoom]}
@@ -917,7 +950,7 @@ export default function CanvasStage() {
                   />
                 ) : (
                   <Line
-                    points={[-40, draftGuide.position, width + 40, draftGuide.position]}
+                    points={[-40, draftGuide.position, pw + 40, draftGuide.position]}
                     stroke={GUIDE_COLOR}
                     strokeWidth={1 / zoom}
                     dash={[6 / zoom, 4 / zoom]}
@@ -967,8 +1000,8 @@ export default function CanvasStage() {
       {/* v0.3.1: rulers overlay (desktop) */}
       {showRulers && containerSize.w > 0 && (
         <Rulers
-          width={width}
-          height={height}
+          width={pw}
+          height={ph}
           zoom={zoom}
           pan={pan}
           containerW={containerSize.w}

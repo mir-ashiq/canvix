@@ -14,6 +14,7 @@
 
 import type { PageData } from '@/lib/types'
 import { collectImages } from '@/lib/video-export'
+import { pageSize } from '@/lib/editor-utils'
 import { PdfWriter, pdfTextString } from '@/lib/pdf/pdf-writer'
 import { PdfImageEmbedder } from '@/lib/pdf/image-embed'
 import type { FontLadderIo } from '@/lib/pdf/fonts'
@@ -55,25 +56,30 @@ export async function exportDesignToPdf(opts: PdfExportOptions): Promise<PdfExpo
   const images = await collectImages(opts.pages)
 
   const embedder = new PdfImageEmbedder(pdf)
-  const renderer = new VectorPageRenderer(
-    pdf,
-    fonts,
-    embedder,
-    { text: createBrowserTextIo(), images, pixelScale: opts.pixelScale ?? 2 },
-    opts.designWidth,
-    opts.designHeight,
-  )
 
-  // 3. pages (the tree object is reserved so pages can /Parent it)
+  // 3. pages (the tree object is reserved so pages can /Parent it).
+  // v0.18 (Wave 3): per-page size overrides — each page gets its own
+  // MediaBox and its own renderer y-flip origin (pageSize() falls back
+  // to the design size for pre-v0.18 documents, so nothing changes for
+  // them — byte-identical exports).
   const pagesTree = pdf.reserveObject()
   const pageObjects: number[] = []
   for (let i = 0; i < n; i++) {
     opts.onProgress?.(0.26 + (0.62 * i) / n, `Rendering page ${i + 1} of ${n}…`)
+    const { width: pw, height: ph } = pageSize(opts.pages[i], opts.designWidth, opts.designHeight)
+    const renderer = new VectorPageRenderer(
+      pdf,
+      fonts,
+      embedder,
+      { text: createBrowserTextIo(), images, pixelScale: opts.pixelScale ?? 2 },
+      pw,
+      ph,
+    )
     const { ops, resources } = await renderer.renderPage(opts.pages[i])
     const content = pdf.addStreamObject('', ops)
     pageObjects.push(
       pdf.addObject(
-        `<< /Type /Page /Parent ${pdf.ref(pagesTree)} /MediaBox [0 0 ${opts.designWidth} ${opts.designHeight}] /Resources ${resources} /Contents ${pdf.ref(content)} >>`,
+        `<< /Type /Page /Parent ${pdf.ref(pagesTree)} /MediaBox [0 0 ${pw} ${ph}] /Resources ${resources} /Contents ${pdf.ref(content)} >>`,
       ),
     )
   }

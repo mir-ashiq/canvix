@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ZoomIn, ZoomOut, Maximize, Check, ChevronsUpDown, Scan } from 'lucide-react'
+import { ZoomIn, ZoomOut, Maximize, Check, ChevronsUpDown, Scan, Grid3x3, Magnet } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { canvasBridge } from './canvas/canvas-bridge'
 import { cn } from '@/lib/utils'
@@ -15,6 +15,13 @@ export function ZoomControls() {
   const zoomOut = useEditorStore((s) => s.zoomOut)
   const setZoom = useEditorStore((s) => s.setZoom)
   const fitToScreen = useEditorStore((s) => s.fitToScreen)
+  // v0.18 (Wave 3): grid overlay + snap-to-grid
+  const showGrid = useEditorStore((s) => s.showGrid)
+  const setShowGrid = useEditorStore((s) => s.setShowGrid)
+  const snapToGrid = useEditorStore((s) => s.snapToGrid)
+  const setSnapToGrid = useEditorStore((s) => s.setSnapToGrid)
+  const gridSize = useEditorStore((s) => s.gridSize)
+  const setGridSize = useEditorStore((s) => s.setGridSize)
 
   const [open, setOpen] = useState(false)
   const percent = Math.round(zoom * 100)
@@ -68,6 +75,52 @@ export function ZoomControls() {
       >
         <Maximize size={16} />
       </button>
+      {/* v0.18 (Wave 3): grid overlay toggle */}
+      <button
+        className={cn(
+          'h-10 w-10 rounded-xl flex items-center justify-center hover:bg-white/10 hover:text-white',
+          showGrid ? 'text-[#02C0CC] bg-white/10' : 'text-white/75'
+        )}
+        onClick={() => setShowGrid(!showGrid)}
+        aria-label="Toggle grid"
+        aria-pressed={showGrid}
+        title="Grid overlay"
+        data-testid="grid-toggle"
+      >
+        <Grid3x3 size={16} />
+      </button>
+      {/* v0.18 (Wave 3): snap to grid (visible when grid is on) */}
+      {showGrid && (
+        <button
+          className={cn(
+            'h-10 w-10 rounded-xl flex items-center justify-center hover:bg-white/10 hover:text-white',
+            snapToGrid ? 'text-[#02C0CC] bg-white/10' : 'text-white/75'
+          )}
+          onClick={() => setSnapToGrid(!snapToGrid)}
+          aria-label="Snap to grid"
+          aria-pressed={snapToGrid}
+          title="Snap to grid"
+          data-testid="snap-toggle"
+        >
+          <Magnet size={15} />
+        </button>
+      )}
+      {showGrid && (
+        <select
+          value={gridSize}
+          onChange={(e) => setGridSize(Number(e.target.value))}
+          className="h-8 rounded-lg bg-black/30 border border-white/10 text-[12px] text-white/80 px-1.5 focus:outline-none focus:border-[#02C0CC]"
+          aria-label="Grid size"
+          title="Grid size"
+          data-testid="grid-size"
+        >
+          {[10, 20, 40, 80, 120].map((g) => (
+            <option key={g} value={g}>
+              {g}px
+            </option>
+          ))}
+        </select>
+      )}
 
       {open && (
         <>

@@ -24,6 +24,7 @@ import type { AnyElement, ChartElement, EmbedElement, TableElement, TextElement,
 import { chartPrimitives } from '@/lib/chart-geometry'
 import { hostOf } from '@/lib/v06-geometry'
 import { layoutRichLines, normalizeSpans, resolveSpanStyle, type MeasureText, type SpanMeasureStyle } from '@/lib/rich-text'
+import { fitFontSize } from '@/lib/text-fit'
 import { faceKey, resolveFontFace, type FontFaceRequest, type FontLadderIo, type Std14Base } from './fonts'
 import { subsetTtf, type SubsetResult } from './ttf'
 import { pdfNum, pdfRgb, PdfWriter } from './pdf-writer'
@@ -163,7 +164,13 @@ export function textElementIsRaster(el: TextElement): boolean {
   const curved = el.curve != null && Math.abs(el.curve) >= 2 && el.width >= 12
   const gradient = !!el.fillGradient
   const effect = !!el.effect && el.effect !== 'none' && el.effect !== 'background'
-  return curved || gradient || effect
+  // v0.18 (Wave 3): list markers + RTL direction ride the raster strip
+  // — the vector text path lays LTR plain runs only (documented
+  // approximation v1: pixel-perfect via the strip, no selectable text
+  // for these two styles yet; the canvas/SVG/video exports are exact)
+  const listed = !!el.listStyle && el.listStyle !== 'none'
+  const rtl = el.direction === 'rtl'
+  return curved || gradient || effect || listed || rtl
 }
 
 /** Lay a text element out (rich spans or flat — one span) into
@@ -537,15 +544,35 @@ export function drawTextElement(
   io: TextIo,
 ): string | null {
   if (textElementIsRaster(el)) return null
-  const runs = layoutTextElement(el, io)
+  // v0.18 (Wave 3): auto-fit — the effective size is derived here with
+  // the SAME binary search the canvas/SVG/video renderers run
+  // (lib/text-fit), laid out at that size. Rich spans keep the authored
+  // size (the flat-path feature, matching every other renderer).
+  const effSize = el.autoFit && !normalizeSpans(el.spans, el.text)
+    ? fitFontSize(
+        {
+          text: el.uppercase ? el.text.toUpperCase() : el.text,
+          fontFamily: el.fontFamily,
+          bold: el.bold,
+          italic: el.italic,
+          letterSpacing: el.letterSpacing,
+          lineHeight: el.lineHeight,
+          fontSize: el.fontSize,
+        },
+        { width: el.width, height: el.height },
+        (text, style) => io.measure(text, style),
+      )
+    : el.fontSize
+  const sized = effSize === el.fontSize ? el : ({ ...el, fontSize: effSize } as TextElement)
+  const runs = layoutTextElement(sized, io)
   const out: string[] = []
   // the background effect rides behind the runs (editor parity)
   if (el.effect === 'background') {
     const blockH = runs.length
-      ? Math.max(...runs.map((r) => r.lineTop)) + el.fontSize * el.lineHeight
-      : el.fontSize * el.lineHeight
-    const h = Math.max(el.height, blockH, el.fontSize * el.lineHeight + 8)
-    out.push(roundedRectOps(el.x, el.y, el.width, h, Math.min(8, el.fontSize * 0.2), el.effectBackground ?? '#EFEFEF', pageH))
+      ? Math.max(...runs.map((r) => r.lineTop)) + effSize * el.lineHeight
+      : effSize * el.lineHeight
+    const h = Math.max(el.height, blockH, effSize * el.lineHeight + 8)
+    out.push(roundedRectOps(el.x, el.y, el.width, h, Math.min(8, effSize * 0.2), el.effectBackground ?? '#EFEFEF', pageH))
   }
   for (const run of runs) {
     const entry = fonts.get({ family: el.fontFamily, bold: run.bold, italic: run.italic })
@@ -564,7 +591,7 @@ export function drawTextElement(
       pageH,
       text: run.text,
       fontFamily: el.fontFamily,
-      fontSize: el.fontSize,
+      fontSize: effSize,
       bold: run.bold,
       italic: run.italic,
       color: run.color,

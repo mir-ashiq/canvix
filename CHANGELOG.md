@@ -3,6 +3,96 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.18.0] — 2026-11-09
+
+Wave 3 of the consolidation programme — editor depth parity (roadmap:
+`docs/COMPETITIVE-ANALYSIS.md`). Eight features across shape geometry,
+text layout, canvas aids, document structure and presenting, with every
+renderer kept in lockstep. **No migration this release** — everything
+rides additive, nullable fields (`sides`, `numPoints`, `innerRatio`,
+`maskShape`, `maskSides`, `maskInnerRatio`, `autoFit`, `listStyle`,
+`direction`, per-page `width`/`height`/`notes`); pre-v0.18 documents
+open byte-identically.
+
+### Added
+
+- **Parametric polygons & stars.** The shape palette gained a Polygons
+  section (hexagon, pentagon, octagon, triangle, square, heptagon,
+  nonagon, decagon, 3–12 sides via the properties bar) and the star is
+  now parametric: 3–16 points with an adjustable spike ratio. One
+  geometry module (`lib/shapes.ts`) generates the vertices in a
+  100×100 authoring box and two documented mappings place them:
+  `stretchPts` for shapes (fills the element box, matching
+  rect/ellipse/triangle) and `scalePts` for masks (the 2 % inset).
+  The Konva canvas, SVG export, vector PDF export and video export all
+  render the identical point arrays.
+- **Image masks — 10 preset shapes + parametric polygon/starburst.**
+  Circle, rounded, arch, triangle, diamond, pentagon, hexagon, star,
+  heart and blob presets plus the two parametric modes, from a Mask
+  picker in the image properties bar with live silhouettes. The clip
+  polygon rides the element (`maskShape`/`maskSides`/`maskInnerRatio`
+  — validated on render, hostile pastes degrade to none), renders via
+  Konva `clipFunc` on the canvas, a `<clipPath>` polygon in SVG, a `W n`
+  vector clip in the PDF and the same clip group in video frames.
+- **Text auto-fit.** Canva-style: shrinks the font so the text fits its
+  box, never grows past the authored size, floor at 6 px. Derived at
+  render time through one binary search (`lib/text-fit.ts`) that every
+  renderer runs against its own measure — the canvas, SVG and PDF
+  agree to the pixel, and the authored `fontSize` is never mutated.
+- **Bullet & numbered lists.** Any text element becomes a list
+  (properties bar → List): every non-empty paragraph is an item with a
+  hanging indent, widest-marker column, Canva-style wrapped
+  continuation lines. Shared layout (`lib/list-text.ts`) drives the
+  canvas, SVG and video renderers; the vector PDF takes the documented
+  raster-strip approximation for v1 (pixel-perfect, not selectable).
+- **RTL & complex scripts.** A direction toggle (LTR/RTL) mirrors the
+  list marker to the right edge and flips the default alignment
+  (explicit centre stays); within-line reordering is the platform text
+  stack's job, as it always was for Arabic/Hebrew content.
+- **Grid overlay + snap to grid.** A zoom-bar toggle draws the grid on
+  the stage (8–160 px cells, page-space so it zooms with the design)
+  with an optional snap that rounds drags to the grid before element
+  alignment. Editor preference only — never document data, never
+  rendered in exports.
+- **Per-page sizes.** Every page can override the design size
+  (properties from the page bar); `pageSize()` in `lib/editor-utils.ts`
+  is the one accessor every consumer goes through — canvas, preview,
+  presenter, thumbnails, SVG, PDF MediaBoxes and video frames each
+  fit-and-centre per page. Absent or absurd values fall back to the
+  design size exactly as before.
+- **Presenter view with speaker notes.** Present with notes from the
+  top bar: the current page large, the next as a thumbnail, live
+  editable speaker notes per page (PageData.notes — never rendered on
+  the canvas or in exports), keyboard navigation and an elapsed timer.
+  The notes panel also lives in the page bar for authoring.
+
+### Changed
+
+- **Boot-time template top-up (operators).** "The template library
+  ships as code" now reconciles itself: on every boot (Node runtime)
+  built-in templates are upserted when the database holds fewer than
+  the library (`src/instrumentation.ts` → `lib/templates/sync.ts`,
+  the same code `npm run db:seed` runs). One COUNT query on a normal
+  boot; new templates appear and nothing is ever deleted. Opt out with
+  `CANVIX_TEMPLATE_SYNC=0`. This also closes the gap where an
+  auto-deploying instance upgraded by `migrate deploy` alone would
+  serve the stale template library (the exact canvix.app v0.17.0
+  rollout: 110 of 366 templates until the next boot).
+- The wordcloud plugin's engine ceiling moved to `<0.19.0`.
+
+### Export parity notes
+
+- **Vector PDF**: polygons, parametric stars, image masks, auto-fit and
+  per-page MediaBoxes are first-class vector paths; list and RTL text
+  ride the existing raster-strip fallback (documented approximation,
+  v1). Auto-fit in the PDF uses the same measure-based binary search as
+  the other renderers.
+- **SVG**: full parity for every Wave 3 feature (clip-path masks, list
+  tspans, `direction="rtl"`, per-page viewBox, derived auto-fit size).
+- **Video**: pages fit-and-centre per page; lists, auto-fit, RTL
+  mirroring, masks and parametric shapes render identically to the
+  canvas.
+
 ## [0.17.0] — 2026-11-09
 
 The Wave 2 feature drop from the consolidation programme — the asset &

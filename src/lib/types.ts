@@ -8,6 +8,7 @@ export type ElementType =
   | 'ellipse'
   | 'triangle'
   | 'star'
+  | 'polygon'
   | 'line'
   | 'path'
   | 'stroke'
@@ -163,10 +164,22 @@ export interface TextElement extends BaseElement {
   effectBackground?: string
   /** canva-style effect preset */
   effect?: TextEffect
+  /** v0.18 (Wave 3) auto-fit — shrink the font (never grow) so the
+   *  text fits the element box. Derived at render time; the authored
+   *  `fontSize` is preserved. See lib/text-fit.ts. */
+  autoFit?: boolean
+  /** v0.18 (Wave 3) list style — every non-empty paragraph becomes a
+   *  list item with a hanging indent. See lib/list-text.ts. */
+  listStyle?: 'none' | 'bullet' | 'number'
+  /** v0.18 (Wave 3) base direction for bidi scripts (Arabic, Hebrew…).
+   *  'rtl' mirrors the list marker side and the default alignment;
+   *  within-line reordering is applied by the platform text stack
+   *  (canvas fillText runs the Unicode bidi algorithm). */
+  direction?: 'ltr' | 'rtl'
 }
 
 export interface ShapeElement extends BaseElement {
-  type: 'rect' | 'ellipse' | 'triangle' | 'star' | 'path'
+  type: 'rect' | 'ellipse' | 'triangle' | 'star' | 'polygon' | 'path'
   fill: string
   /** gradient fill — when set, renders instead of the solid fill */
   fillGradient?: GradientFill | null
@@ -174,6 +187,12 @@ export interface ShapeElement extends BaseElement {
   strokeWidth: number
   cornerRadius: number // rect only
   pathData?: string // path only — authored in a 100×100 box
+  /** v0.18 (Wave 3) polygon — 3..12 sides (lib/shapes.ts) */
+  sides?: number
+  /** v0.18 (Wave 3) star — 3..16 points (was hardcoded 5 pre-v0.18) */
+  numPoints?: number
+  /** v0.18 (Wave 3) star — inner/outer radius ratio 0.15..0.85 (default 0.55) */
+  innerRatio?: number
 }
 
 export interface LineElement extends BaseElement {
@@ -204,6 +223,15 @@ export interface ImageElement extends BaseElement {
   filter?: string
   /** preset strength 0..100 (default 100) */
   filterIntensity?: number
+  /** v0.18 (Wave 3): shape mask — the image clips to the polygon
+   *  (lib/shapes.ts maskPolygon). 'none'/undefined = untouched.
+   *  Rides autosave/versions/collab like any element field; older
+   *  replicas ignore the unknown field (fail-safe). */
+  maskShape?: string
+  /** parametric mask: polygon sides (3..12) / star points (3..16) */
+  maskSides?: number
+  /** parametric star mask: inner/outer ratio 0.15..0.85 */
+  maskInnerRatio?: number
   /** v0.16.4 (A4): durable stock-photo attribution (the R6 video
    *  pattern) — set by the Photos panel's stock connectors, absent on
    *  uploads and bundled photos. Rides autosave/versions/collab; shown
@@ -496,6 +524,14 @@ export interface PageData {
    * ride the saved document so deletes merge deterministically against
    * concurrent edits (delete wins only while it is the newer write). */
   tombstones?: Record<string, string>
+  /** v0.18 (Wave 3): per-page size override. Absent/zero = use the
+   *  design-level width/height (the only mode pre-v0.18 documents
+   *  have). Every consumer goes through pageSize() — see editor-utils. */
+  width?: number
+  height?: number
+  /** v0.18 (Wave 3): speaker notes — plain text shown in presenter
+   *  view; never rendered on the canvas or in exports. */
+  notes?: string
 }
 
 /** user-placed ruler guide (position in page px; scoped to a page) */
@@ -618,7 +654,7 @@ export function createTextElement(init: BaseInit & Partial<TextElement> = {}): T
 }
 
 export function createShapeElement(
-  type: 'rect' | 'ellipse' | 'triangle' | 'star' | 'path',
+  type: 'rect' | 'ellipse' | 'triangle' | 'star' | 'polygon' | 'path',
   init: BaseInit & Partial<ShapeElement> = {}
 ): ShapeElement {
   return {
@@ -629,8 +665,20 @@ export function createShapeElement(
     strokeWidth: 0,
     cornerRadius: type === 'rect' ? 24 : 0,
     pathData: init.pathData,
+    ...(type === 'polygon' ? { sides: clampSides(init.sides ?? 6) } : {}),
+    ...(type === 'star' ? { numPoints: clampStarPoints(init.numPoints ?? 5), innerRatio: init.innerRatio ?? 0.55 } : {}),
     ...init,
   }
+}
+
+/** v0.18 (Wave 3) — 3..12 (the Elements panel picker range). */
+function clampSides(n: number): number {
+  return Math.min(12, Math.max(3, Math.round(n)))
+}
+
+/** v0.18 (Wave 3) — 3..16. */
+function clampStarPoints(n: number): number {
+  return Math.min(16, Math.max(3, Math.round(n)))
 }
 
 export function createLineElement(init: BaseInit & Partial<LineElement> = {}): LineElement {

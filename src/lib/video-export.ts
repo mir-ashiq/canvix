@@ -18,7 +18,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import Konva from 'konva'
-import type { AnyElement, AudioElement, ChartElement, EmbedElement, FrameElement, ImageElement, PageData, PluginElement, TableElement, VideoElement } from '@/lib/types'
+import type { AnyElement, AudioElement, ChartElement, EmbedElement, FrameElement, ImageElement, PageData, PluginElement, TableElement, TextElement, VideoElement } from '@/lib/types'
 import { imageHasFilters, renderFilteredCanvas } from '@/lib/image-filters'
 import { chartPrimitives } from '@/lib/chart-geometry'
 import { embedLayout, hexPoints, hostOf, tableGeometry, youtubeThumbUrl } from '@/lib/v06-geometry'
@@ -26,6 +26,10 @@ import { createCanvasMeasure, layoutRichLines, normalizeSpans } from '@/lib/rich
 import { animateElementAt, pageHoldDuration } from '@/lib/animations'
 import { beatEnvelopeAt, beatSourceOf } from '@/lib/media/beat-detect'
 import { awaitRender, renderKey } from '@/lib/plugins/renderer-cache'
+import { pageSize } from '@/lib/editor-utils'
+import { isMaskShape, maskPolygon, polygonPoints, starPointsEx, stretchPts, tracePts } from '@/lib/shapes'
+import { fitFontSize } from '@/lib/text-fit'
+import { layoutListLines } from '@/lib/list-text'
 import { WebMMuxer } from '@/lib/webm-muxer'
 
 export interface VideoExportOptions {
@@ -301,6 +305,27 @@ function frameClipFunc(fr: FrameElement): (ctx: Konva.Context) => void {
  *  the geometry module, the D7 charts pattern). */
 const videoRichMeasure = createCanvasMeasure()
 
+/** v0.18 (Wave 3): the video-side effective font size — the same
+ *  derivation the editor canvas and the SVG export use (lib/text-fit
+ *  fitFontSize over the shared canvas measure), so all three
+ *  renderers agree to the pixel. */
+function videoEffectiveFontSize(t: TextElement): number {
+  if (!t.autoFit) return t.fontSize
+  return fitFontSize(
+    {
+      text: t.uppercase ? t.text.toUpperCase() : t.text,
+      fontFamily: t.fontFamily,
+      bold: t.bold,
+      italic: t.italic,
+      letterSpacing: t.letterSpacing,
+      lineHeight: t.lineHeight,
+      fontSize: t.fontSize,
+    },
+    { width: t.width, height: t.height },
+    (text, style) => videoRichMeasure(text, style),
+  )
+}
+
 export function buildKonvaNode(
   el: AnyElement,
   images: Map<string, HTMLImageElement>,
@@ -309,6 +334,70 @@ export function buildKonvaNode(
   switch (el.type) {
     case 'text': {
       const t = el
+      // v0.18 (Wave 3): list text renders through the shared list layout
+      // (flat — rich spans and curved text keep their own paths, exactly
+      // like the editor canvas and the SVG export)
+      const isList = !!t.listStyle && t.listStyle !== 'none' && (t.curve ?? 0) === 0 && t.effect !== 'splice'
+      const rtl = t.direction === 'rtl'
+      if (isList) {
+        const size = videoEffectiveFontSize(t)
+        const lines = layoutListLines(
+          {
+            text: t.uppercase ? t.text.toUpperCase() : t.text,
+            fontFamily: t.fontFamily,
+            bold: t.bold,
+            italic: t.italic,
+            letterSpacing: t.letterSpacing,
+            lineHeight: t.lineHeight,
+            fontSize: size,
+            width: t.width,
+            listStyle: t.listStyle ?? 'none',
+            direction: rtl ? 'rtl' : 'ltr',
+          },
+          (text, style) => videoRichMeasure(text, style),
+        )
+        const blockH = lines.length ? Math.max(...lines.map((l) => l.y)) + size * t.lineHeight : size * t.lineHeight
+        const fontStyle = `${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`
+        const group = new Konva.Group({ id: t.id, x: t.x, y: t.y })
+        group.height(blockH)
+        for (const line of lines) {
+          if (line.marker) {
+            group.add(
+              new Konva.Text({
+                x: line.markerX,
+                y: line.y,
+                text: line.marker,
+                fontSize: size,
+                fontFamily: t.fontFamily,
+                fontStyle,
+                fill: t.fill,
+                width: t.width,
+                align: rtl ? 'right' : 'left',
+                lineHeight: t.lineHeight,
+                wrap: 'none',
+              }),
+            )
+          }
+          if (line.text) {
+            group.add(
+              new Konva.Text({
+                x: line.textX,
+                y: line.y,
+                text: line.text,
+                fontSize: size,
+                fontFamily: t.fontFamily,
+                fontStyle,
+                fill: t.fill,
+                width: line.textWidth,
+                align: rtl ? 'right' : 'left',
+                lineHeight: t.lineHeight,
+                wrap: 'none',
+              }),
+            )
+          }
+        }
+        return group
+      }
       // v0.15 (R1): rich text — one Text node per positioned run from the
       // shared layout module (curved text stays flat, single-style by design)
       if ((t.curve ?? 0) === 0) {
@@ -334,18 +423,23 @@ export function buildKonvaNode(
           return group
         }
       }
+      // v0.18 (Wave 3): auto-fit derives the size (never mutates it) and
+      // rtl mirrors the default alignment (centre stays) — both flat-path
+      const effSize = videoEffectiveFontSize(t)
+      const alignAttr =
+        t.align === 'center' ? 'center' : t.align === 'justify' ? 'left' : rtl ? (t.align === 'left' ? 'right' : 'left') : t.align
       return new Konva.Text({
         id: t.id,
         x: t.x,
         y: t.y,
         width: t.width,
         text: t.uppercase ? t.text.toUpperCase() : t.text,
-        fontSize: t.fontSize,
+        fontSize: effSize,
         fontFamily: t.fontFamily,
         fontStyle: `${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`,
         textDecoration: [t.underline ? 'underline' : '', t.strike ? 'line-through' : ''].filter(Boolean).join(' '),
         fill: t.fill,
-        align: t.align === 'justify' ? 'left' : t.align,
+        align: alignAttr,
         lineHeight: t.lineHeight,
         letterSpacing: t.letterSpacing,
         wrap: 'word',
@@ -399,14 +493,32 @@ export function buildKonvaNode(
     }
     case 'star': {
       const s = el
-      const outer = Math.min(s.width, s.height) / 2
-      const node = new Konva.Star({
+      // v0.18 (Wave 3): parametric — same stretchPts geometry as the
+      // editor canvas + SVG/PDF exports (fills the element box)
+      const pts = stretchPts(starPointsEx(s.numPoints ?? 5, s.innerRatio), 0, 0, s.width, s.height)
+      const node = new Konva.Line({
         id: s.id,
         x: s.x + s.width / 2,
         y: s.y + s.height / 2,
-        numPoints: 5,
-        innerRadius: outer * 0.55,
-        outerRadius: outer,
+        points: pts.flatMap(([px, py]) => [px - s.width / 2, py - s.height / 2]),
+        closed: true,
+        fill: s.fillGradient ? undefined : s.fill,
+        stroke: s.stroke,
+        strokeWidth: s.strokeWidth,
+      })
+      applyGradient(node, s)
+      return node
+    }
+    case 'polygon': {
+      const s = el
+      // v0.18 (Wave 3): regular polygon — centred geometry like the star
+      const pts = stretchPts(polygonPoints(s.sides ?? 6), 0, 0, s.width, s.height)
+      const node = new Konva.Line({
+        id: s.id,
+        x: s.x + s.width / 2,
+        y: s.y + s.height / 2,
+        points: pts.flatMap(([px, py]) => [px - s.width / 2, py - s.height / 2]),
+        closed: true,
         fill: s.fillGradient ? undefined : s.fill,
         stroke: s.stroke,
         strokeWidth: s.strokeWidth,
@@ -482,21 +594,31 @@ export function buildKonvaNode(
       // while here, flips/rotation finally export too (parity fix)
       const img = images.get(im.src)
       const bitmap = img && imageHasFilters(im) ? renderFilteredCanvas(im, img, im.width, im.height) : img
-      const node = new Konva.Image({
-        id: im.id,
-        x: im.x,
-        y: im.y,
+      // v0.18 (Wave 3): validated mask — the clip polygon from the shared
+      // geometry module (identical to the editor's ImageNode)
+      const maskPts =
+        isMaskShape(im.maskShape) && im.maskShape !== 'none'
+          ? maskPolygon(im.maskShape, im.maskSides, im.maskInnerRatio)
+          : null
+      const image = new Konva.Image({
+        id: maskPts ? undefined : im.id,
+        x: maskPts ? 0 : im.x,
+        y: maskPts ? 0 : im.y,
         width: im.width,
         height: im.height,
         image: bitmap ?? undefined,
-        cornerRadius: im.radius,
+        cornerRadius: maskPts ? 0 : im.radius,
         scaleX: im.flipH ? -1 : 1,
         scaleY: im.flipV ? -1 : 1,
         offsetX: im.flipH ? im.width : 0,
         offsetY: im.flipV ? im.height : 0,
-        rotation: im.rotation ?? 0,
+        rotation: maskPts ? 0 : im.rotation ?? 0,
       })
-      return node
+      if (!maskPts) return image
+      const group = new Konva.Group({ id: im.id, x: im.x, y: im.y, rotation: im.rotation ?? 0 })
+      group.clipFunc((ctx) => tracePts(ctx, maskPts, im.width, im.height))
+      group.add(image)
+      return group
     }
     case 'plugin': {
       // v0.13 (P4): the renderer's sanitized output as an Image; no
@@ -1098,31 +1220,39 @@ export async function createRenderSession(
     let nodes = nodesForPage.get(index)
     if (nodes) return nodes
     const page = segments[index].page
-    const pageScale = width / opts.designWidth
+    // v0.18 (Wave 3): per-page size — each page fits + centres in the
+    // output frame (identical to the old uniform scale when the page
+    // keeps the design size)
+    const { width: pw, height: pgh } = pageSize(page, opts.designWidth, opts.designHeight)
+    const pageScale = Math.min(width / pw, height / pgh)
+    const pageOffX = (width - pw * pageScale) / 2
+    const pageOffY = (height - pgh * pageScale) / 2
     const stage = new Konva.Stage({ container: host, width, height })
 
-    const bgLayer = new Konva.Layer({ listening: false, scale: { x: pageScale, y: pageScale } })
+    const bgLayer = new Konva.Layer({ listening: false, x: pageOffX, y: pageOffY, scale: { x: pageScale, y: pageScale } })
     const bg = page.background
     const bgRect =
       bg.type === 'gradient'
         ? new Konva.Rect({
-            width: opts.designWidth,
-            height: opts.designHeight,
+            width: pw,
+            height: pgh,
             fillLinearGradientStartPoint: { x: 0, y: 0 },
             fillLinearGradientEndPoint: {
-              x: Math.cos((bg.angle * Math.PI) / 180) * opts.designWidth,
-              y: Math.sin((bg.angle * Math.PI) / 180) * opts.designHeight,
+              x: Math.cos((bg.angle * Math.PI) / 180) * pw,
+              y: Math.sin((bg.angle * Math.PI) / 180) * pgh,
             },
             fillLinearGradientColorStops: [0, bg.from, 1, bg.to],
           })
-        : new Konva.Rect({ width: opts.designWidth, height: opts.designHeight, fill: bg.color })
+        : new Konva.Rect({ width: pw, height: pgh, fill: bg.color })
     bgLayer.add(bgRect)
     stage.add(bgLayer)
 
     const layer = new Konva.Layer({
       listening: false,
+      x: pageOffX,
+      y: pageOffY,
       scale: { x: pageScale, y: pageScale },
-      clip: { x: 0, y: 0, width: opts.designWidth, height: opts.designHeight },
+      clip: { x: 0, y: 0, width: pw, height: pgh },
     })
     stage.add(layer)
 

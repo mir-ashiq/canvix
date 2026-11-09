@@ -77,10 +77,17 @@ preset catalog 8 → 60 · template library 110 → 366 (12 smart + 244 computed
 Details: docs/ASSETS-AND-TEMPLATES.md · acceptance: 1187 unit tests, 11/11 e2e,
 migration 0011 upgrade-safe. Matrix re-score pending (Wave 3 kickoff).
 
-### Wave 3 — Editor Depth Parity
+### Wave 3 — Editor Depth Parity ✅ SHIPPED (v0.18.0, 2026-11-09)
 Image masks (10 shapes + custom) · text auto-fit · bullet/numbered lists · RTL & complex scripts ·
 parametric polygons/stars · grid overlay · per-page sizes · presenter view with speaker notes ·
 (bezier pen, boolean ops as stretch goals).
+No migration (additive nullable fields only; pre-v0.18 documents unchanged). One shared
+geometry/layout module per concern (lib/shapes.ts, lib/text-fit.ts, lib/list-text.ts) drives the
+canvas, SVG, vector-PDF and video renderers in lockstep; PDF list/RTL text rides the documented
+raster-strip approximation for v1. Acceptance: 1304 unit tests (+65), wave3 e2e suite
+(tests/e2e/wave3-editor-depth.spec.ts), scripts/verify-wave3.sh. Also shipped: boot-time template
+top-up (lib/templates/sync.ts — auto-deployed instances no longer serve a stale library).
+Stretch goals deferred with the roadmap; matrix re-score pending (Wave 4 kickoff).
 
 ### Wave 4 — AI Power-Up
 Local upscaling (Real-ESRGAN/Lanczos) · brush magic eraser (LaMa) · agentic planning with editable

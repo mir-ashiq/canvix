@@ -12,6 +12,7 @@ import { ContextToolbar } from './PropertiesBar'
 import { PageBar } from './PageBar'
 import { ZoomControls } from './ZoomControls'
 import { PreviewOverlay } from './PreviewOverlay'
+import { PresenterOverlay } from './PresenterOverlay'
 import { TemplatesPanel } from './panels/TemplatesPanel'
 import { ElementsPanel } from './panels/ElementsPanel'
 import { TextPanel } from './panels/TextPanel'
@@ -580,6 +581,8 @@ export default function Editor() {
       )}
 
       <PreviewOverlay />
+      {/* v0.18 (Wave 3): present with speaker notes */}
+      <PresenterOverlay />
 
       {/* v0.3.1: image crop dialog */}
       {cropElement && (

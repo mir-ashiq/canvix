@@ -51,4 +51,50 @@ describe('normalizeVideoStatus', () => {
     )
     expect(s.videos).toHaveLength(4)
   })
+
+  // ── v0.22: the z-ai async-result dialect ────────────────────
+
+  it('maps the z-ai PROCESSING envelope to in_progress with zero videos', () => {
+    const s = normalizeVideoStatus(
+      { id: 'abc', model: 'cogvideox-3', task_status: 'PROCESSING' },
+      'z:abc',
+    )
+    expect(s.status).toBe('in_progress')
+    expect(s.progress).toBe(50)
+    expect(s.videos).toEqual([])
+  })
+
+  it('maps the z-ai SUCCESS envelope to completed with proxy URLs (prefix preserved)', () => {
+    const s = normalizeVideoStatus(
+      {
+        task_status: 'SUCCESS',
+        video_result: [
+          { url: 'https://cdn.example/a.mp4', cover_image_url: 'https://cdn.example/a.png' },
+        ],
+      },
+      'z:abc123',
+    )
+    expect(s.status).toBe('completed')
+    expect(s.progress).toBe(100)
+    // the "z:" prefix rides along — the next poll and the video element
+    // src keep routing to the z-ai dialect
+    expect(s.videos).toEqual([{ index: 0, url: '/api/ai/video?id=z%3Aabc123&content=1&index=0' }])
+  })
+
+  it('maps z-ai FAIL statuses to failed and caps video_result at 4', () => {
+    const s = normalizeVideoStatus({ task_status: 'FAIL' }, 'z:x')
+    expect(s.status).toBe('failed')
+    expect(s.progress).toBe(0)
+    const many = normalizeVideoStatus(
+      { task_status: 'SUCCESS', video_result: Array.from({ length: 7 }, (_, i) => ({ url: `u${i}` })) },
+      'z:y',
+    )
+    expect(many.videos).toHaveLength(4)
+    expect(many.videos.map((v) => v.index)).toEqual([0, 1, 2, 3])
+  })
+
+  it('z-ai error strings ride the error field (200-char cap)', () => {
+    const s = normalizeVideoStatus({ task_status: 'FAIL', error: 'x'.repeat(400) }, 'z:e')
+    expect(s.error).toHaveLength(200)
+  })
 })

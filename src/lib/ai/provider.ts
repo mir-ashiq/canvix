@@ -40,6 +40,10 @@ export type AICapability =
 export interface AIProviderConfig {
   baseUrl: string
   apiKey: string
+  /** v0.22: extra auth headers the provider's API demands beyond the
+   *  Bearer key (the z-ai internal API's X-Token / X-User-Id /
+   *  X-Chat-Id, read from the same config layers). Absent = none. */
+  headers?: Record<string, string>
 }
 
 /** Default multimodal model for Magic Layers analysis (v0.16 A1: overridable from /admin). */
@@ -70,7 +74,20 @@ export async function getImageModel(): Promise<string | undefined> {
 export function resolveProviderConfig(): AIProviderConfig | null {
   const envUrl = process.env.ZAI_BASE_URL?.trim()
   const envKey = process.env.ZAI_API_KEY?.trim()
-  if (envUrl && envKey) return { baseUrl: envUrl, apiKey: envKey }
+  if (envUrl && envKey) {
+    // v0.22: the internal API's companion headers ride the same env
+    // layer — ZAI_TOKEN / ZAI_USER_ID / ZAI_CHAT_ID (all optional)
+    const headers = providerHeadersFrom({
+      token: process.env.ZAI_TOKEN,
+      userId: process.env.ZAI_USER_ID,
+      chatId: process.env.ZAI_CHAT_ID,
+    })
+    return {
+      baseUrl: envUrl,
+      apiKey: envKey,
+      ...(headers ? { headers } : {}),
+    }
+  }
   try {
     // the SDK resolves the config file itself; mirror its lookup here
     //
@@ -93,13 +110,35 @@ export function resolveProviderConfig(): AIProviderConfig | null {
       // configuration is env vars (ZAI_BASE_URL / ZAI_API_KEY); the file
       // fallback is a local-development convenience only.
       if (!p || !existsSync(/*turbopackIgnore: true*/ p)) continue
-      const raw = JSON.parse(readFileSync(/*turbopackIgnore: true*/ p, 'utf8')) as { baseUrl?: string; apiKey?: string }
-      if (raw.baseUrl && raw.apiKey) return { baseUrl: raw.baseUrl, apiKey: raw.apiKey }
+      const raw = JSON.parse(readFileSync(/*turbopackIgnore: true*/ p, 'utf8')) as {
+        baseUrl?: string
+        apiKey?: string
+        token?: string
+        userId?: string
+        chatId?: string
+      }
+      if (raw.baseUrl && raw.apiKey) {
+        const headers = providerHeadersFrom(raw)
+        return {
+          baseUrl: raw.baseUrl,
+          apiKey: raw.apiKey,
+          ...(headers ? { headers } : {}),
+        }
+      }
     }
   } catch {
     /* unreadable config — treat as absent */
   }
   return null
+}
+
+/** The companion headers the z-ai internal API expects (all optional). */
+function providerHeadersFrom(cfg: { token?: string; userId?: string; chatId?: string }): Record<string, string> | undefined {
+  const headers: Record<string, string> = {}
+  if (cfg.token?.trim()) headers['X-Token'] = cfg.token.trim()
+  if (cfg.userId?.trim()) headers['X-User-Id'] = cfg.userId.trim()
+  if (cfg.chatId?.trim()) headers['X-Chat-Id'] = cfg.chatId.trim()
+  return Object.keys(headers).length ? headers : undefined
 }
 
 // ── per-slot resolution (v0.16.2 A2) ─────────────────────────
@@ -117,6 +156,10 @@ export interface ResolvedSlot {
   /** Human label of the answering provider (multi only). */
   label?: string
   source: SlotSource
+  /** v0.22: companion auth headers (the z-ai internal API's
+   *  X-Token / X-User-Id / X-Chat-Id) — env/file layers only; the
+   *  multi-provider table and legacy DB override stay key-only. */
+  headers?: Record<string, string>
 }
 
 /**
@@ -129,7 +172,7 @@ export function pickSlot(
   multi: StoredProviders | null,
   legacy: StoredProvider | null,
   models: StoredModels,
-  env: { baseUrl?: string; apiKey?: string },
+  env: { baseUrl?: string; apiKey?: string; headers?: Record<string, string> },
   file: StoredProvider | null
 ): ResolvedSlot | null {
   const tableSlot = multi?.slots[slot]
@@ -154,23 +197,33 @@ export function pickSlot(
     slot === 'text' ? models.text : slot === 'vision' ? models.vision : slot === 'image' ? models.image : undefined
   if (legacy) return { baseUrl: legacy.baseUrl, apiKey: legacy.apiKey, model: legacyModel, source: 'db' }
   if (env.baseUrl && env.apiKey) {
-    return { baseUrl: env.baseUrl, apiKey: env.apiKey, model: legacyModel, source: 'env' }
+    return {
+      baseUrl: env.baseUrl,
+      apiKey: env.apiKey,
+      model: legacyModel,
+      source: 'env',
+      ...(env.headers ? { headers: env.headers } : {}),
+    }
   }
-  if (file) return { baseUrl: file.baseUrl, apiKey: file.apiKey, model: legacyModel, source: 'file' }
+  if (file) return { baseUrl: file.baseUrl, apiKey: file.apiKey, model: legacyModel, source: 'file', ...(file.headers ? { headers: file.headers } : {}) }
   return null
 }
 
 /** Resolve one capability slot through every config layer. */
 export async function resolveSlot(slot: AiSlot): Promise<ResolvedSlot | null> {
   const [multi, legacy, models] = await Promise.all([getProviders(), getProviderOverride(), getModels()])
-  return pickSlot(
-    slot,
-    multi,
-    legacy,
-    models,
-    { baseUrl: process.env.ZAI_BASE_URL?.trim(), apiKey: process.env.ZAI_API_KEY?.trim() },
-    resolveProviderConfig()
-  )
+  const envLayer: { baseUrl?: string; apiKey?: string; headers?: Record<string, string> } = {
+    baseUrl: process.env.ZAI_BASE_URL?.trim(),
+    apiKey: process.env.ZAI_API_KEY?.trim(),
+  }
+  // v0.22: companion headers ride the env layer (ZAI_TOKEN / ZAI_USER_ID / ZAI_CHAT_ID)
+  const envHeaders = providerHeadersFrom({
+    token: process.env.ZAI_TOKEN,
+    userId: process.env.ZAI_USER_ID,
+    chatId: process.env.ZAI_CHAT_ID,
+  })
+  if (envHeaders) envLayer.headers = envHeaders
+  return pickSlot(slot, multi, legacy, models, envLayer, resolveProviderConfig())
 }
 
 /** Feature name (withProvider's first arg) → capability slot. */

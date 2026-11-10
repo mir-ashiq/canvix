@@ -80,6 +80,10 @@ export type AiSlot = (typeof AI_SLOTS)[number]
 export interface StoredProvider {
   baseUrl: string
   apiKey: string
+  /** v0.22: optional companion auth headers (the z-ai internal API's
+   *  X-Token / X-User-Id / X-Chat-Id) — populated by the file/env
+   *  resolution layers, ignored by the DB-backed layers. */
+  headers?: Record<string, string>
 }
 export interface StoredModels {
   text?: string

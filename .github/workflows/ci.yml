@@ -76,7 +76,13 @@ jobs:
     needs: lint-unit
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The suite's own test time is ~15-17 min (95 specs, workers:1) on top
+    # of npm ci + browser + ffmpeg + dev-server boot. The former 20-min cap
+    # was right at the boundary and cancelled two consecutive main runs
+    # (42812723870, 42821994414) on slow runners — 35 min gives honest
+    # headroom without masking real hangs (each spec still has its own
+    # 60 s timeout + the webServer's 180 s boot budget).
+    timeout-minutes: 35
 
     services:
       postgres:
@@ -95,7 +101,7 @@ jobs:
 
     env:
       # Plain local URL — db-url.ts leaves localhost alone (no SSL).
-      # db:setup applies migrations + seeds the 110-template library;
+      # db:setup applies migrations + seeds the 366-template library;
       # playwright.config.ts boots `npm run dev` itself.
       DATABASE_URL: postgresql://canvix:canvix@localhost:5432/canvix
       # The suite registers several accounts by design (one per spec

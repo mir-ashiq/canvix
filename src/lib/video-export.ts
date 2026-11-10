@@ -32,6 +32,7 @@ import { stickerDataUrl } from '@/lib/sticker-image'
 import { fitFontSize } from '@/lib/text-fit'
 import { layoutListLines } from '@/lib/list-text'
 import { WebMMuxer } from '@/lib/webm-muxer'
+import { isSfxId, sfxUrl } from '@/lib/assets/sfx-pack'
 
 export interface VideoExportOptions {
   designWidth: number
@@ -107,7 +108,15 @@ export function estimateVideoDuration(pages: PageData[]): number {
 
 function loadImage(src: string): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
-    const img = new Image()
+    // v0.22 robustness: node (SSR pass / unit tests) has no Image —
+    // a missing bitmap degrades to the placeholder paths instead of
+    // crashing the whole export (the loadStickerImage posture)
+    const Ctor = (globalThis as { Image?: typeof Image }).Image
+    if (typeof Ctor !== 'function') {
+      resolve(null)
+      return
+    }
+    const img = new Ctor()
     img.crossOrigin = 'anonymous'
     img.onload = () => resolve(img)
     img.onerror = () => resolve(null)
@@ -1049,6 +1058,78 @@ export function pagesHaveAutoplayAudio(pages: PageData[]): boolean {
   )
 }
 
+// ── v0.22: SFX on the export timeline ─────────────────────────
+
+/** One scheduled pack sound. Mirrors the present-mode triggers
+ *  (preview-stage): the incoming page's transition SFX at 0.7, an
+ *  element's animation SFX at 0.8 when the page-local clock
+ *  crosses its delay. */
+export interface SfxCue {
+  /** pack catalogue id */
+  id: string
+  /** timeline time (seconds) the sound fires */
+  t: number
+  volume: number
+  kind: 'transition' | 'element'
+}
+
+/** Build the SFX cue sheet for the export timeline — pure, so the
+ *  engine decision and the tests can reason about it without a
+ *  browser. Semantics (the preview-stage mirror):
+ *  - page i's ELEMENT sfx fire at `start_i + delay` — the page's
+ *    animation clock runs from its segment start (during the
+ *    transition into it the incoming page is drawn frozen at
+ *    local 0, so nothing fires early)
+ *  - the TRANSITION sfx (stored on the incoming page) fires when
+ *    that page mounts: page 0 at t=0, page i at the moment the
+ *    transition into it begins (`start_{i-1} + hold_{i-1}`)
+ *  - same-id retriggers within 60 ms collapse to the first — the
+ *    player's retrigger guard, kept so the sheet is faithful
+ *  - a cue past the page's whole visible window is dropped: its
+ *    trigger never arrives on screen */
+export function buildSfxCues(segments: TimelineSegment[]): SfxCue[] {
+  const starts: number[] = []
+  let acc = 0
+  for (const s of segments) {
+    starts.push(acc)
+    acc += s.hold + s.transition
+  }
+  const cues: SfxCue[] = []
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]
+    const start = starts[i]
+    const end = start + seg.hold + seg.transition
+    const tr = seg.page.transition
+    if (tr && tr.kind !== 'none' && isSfxId(tr.sfxId)) {
+      cues.push({ id: tr.sfxId, t: i === 0 ? 0 : starts[i - 1] + segments[i - 1].hold, volume: 0.7, kind: 'transition' })
+    }
+    for (const el of seg.page.elements) {
+      const a = el.animation
+      if (!el.visible || !a || a.kind === 'none' || !isSfxId(a.sfxId)) continue
+      const t = start + Math.max(0, a.delay || 0)
+      if (t < end) cues.push({ id: a.sfxId, t, volume: 0.8, kind: 'element' })
+    }
+  }
+  cues.sort((a, b) => a.t - b.t)
+  const last: Record<string, number> = {}
+  return cues.filter((c) => {
+    if (last[c.id] !== undefined && c.t - last[c.id] < 0.06) return false
+    last[c.id] = c.t
+    return true
+  })
+}
+
+/** Does any page carry a triggerable pack sound? (The dialog's
+ *  mirror of what buildSfxCues would schedule — the same facts the
+ *  engine decision needs, before a timeline is built.) */
+export function pagesHaveSfxCues(pages: PageData[]): boolean {
+  return pages.some(
+    (p) =>
+      (p.transition?.kind !== 'none' && isSfxId(p.transition?.sfxId)) ||
+      p.elements.some((el) => el.visible && el.animation && el.animation.kind !== 'none' && isSfxId(el.animation.sfxId)),
+  )
+}
+
 // ── v0.15 (R3): moving video in exports ──────────────────────
 
 /** Hard cap on simultaneously decoded export videos — each is a live
@@ -1146,6 +1227,11 @@ export interface VideoEngineInputs {
   /** the recorder candidate can mux audio (mp4a/opus in its mime) */
   mediaRecorderAudio: boolean
   hasPageAudio: boolean
+  /** v0.22: the design carries triggerable pack sounds (transition
+   *  SFX / element animation SFX) — these also need the audio-muxing
+   *  recorder, exactly like page audio. Optional: pre-v0.22 callers
+   *  and tests that only know about page audio keep compiling. */
+  hasSfxCues?: boolean
 }
 
 export type VideoExportEngineDecision =
@@ -1154,17 +1240,19 @@ export type VideoExportEngineDecision =
   | { engine: null; reason: string }
 
 /** The engine matrix, as one pure function (unit-tested):
- *   - page audio + a recorder that can mux it → MediaRecorder
- *     (the WebCodecs path is silent; Opus-in-WebM via AudioEncoder
- *     is a documented post-R3 evaluation)
+ *   - timeline audio (page audio OR v0.22 SFX cues) + a recorder
+ *     that can mux it → MediaRecorder (the WebCodecs path is
+ *     silent; Opus-in-WebM via AudioEncoder is a documented
+ *     post-R3 evaluation)
  *   - WebCodecs available otherwise → WebCodecs (frame-exact)
  *   - neither → null (exportVideo throws, as before) */
 export function chooseVideoExportEngine(inputs: VideoEngineInputs): VideoExportEngineDecision {
-  if (inputs.hasPageAudio && inputs.mediaRecorder && inputs.mediaRecorderAudio) {
-    return { engine: 'mediarecorder', reason: 'page audio — MediaRecorder muxes it (the WebCodecs path is video-only for now)' }
+  const hasTimelineAudio = inputs.hasPageAudio || (inputs.hasSfxCues ?? false)
+  if (hasTimelineAudio && inputs.mediaRecorder && inputs.mediaRecorderAudio) {
+    return { engine: 'mediarecorder', reason: 'page audio or SFX — MediaRecorder muxes it (the WebCodecs path is video-only for now)' }
   }
   if (inputs.webcodecs) {
-    if (inputs.hasPageAudio) {
+    if (hasTimelineAudio) {
       return {
         engine: 'webcodecs',
         reason: inputs.mediaRecorder
@@ -1507,6 +1595,9 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
     mediaRecorder: mr !== null,
     mediaRecorderAudio: mr?.audio ?? false,
     hasPageAudio: pagesHaveAutoplayAudio(opts.pages),
+    // v0.22: pack sounds (transition/element SFX) are timeline audio
+    // too — they ride the same MediaRecorder mux the page audio does
+    hasSfxCues: pagesHaveSfxCues(opts.pages),
   })
   if (decision.engine === 'webcodecs' && wc.codecId && wc.codecString) {
     return exportViaWebCodecs(opts, wc, { fps, width, height, segments, total, totalFrames })
@@ -1675,7 +1766,14 @@ async function exportViaMediaRecorder(
   )
   let audioCtx: AudioContext | null = null
   let audioDest: MediaStreamAudioDestinationNode | null = null
-  if (format.audio && segmentAudio.some((els) => els.length)) {
+  // v0.22: the SFX cue sheet — present-mode triggers (the incoming
+  // page's transition sound, element sounds at their animation
+  // delays) mapped onto the recorder's timeline. Pure schedule;
+  // the bytes decode below through the SAME context the page audio
+  // uses, so both flow one audio track.
+  const sfxCues = format.audio ? buildSfxCues(segments) : []
+  const sfxBuffers = new Map<string, AudioBuffer>()
+  if (format.audio && (segmentAudio.some((els) => els.length) || sfxCues.length > 0)) {
     try {
       const Ctx: typeof AudioContext =
         window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
@@ -1692,6 +1790,28 @@ async function exportViaMediaRecorder(
       audioDest = audioCtx.createMediaStreamDestination()
       for (const els of segmentAudio) {
         for (const a of els) audioCtx.createMediaElementSource(a).connect(audioDest)
+      }
+      // v0.22: decode each distinct SFX id ONCE (the media-bag
+      // posture). Individually guarded — a failed fetch or decode
+      // drops that one sound, never the export; bounded like the
+      // element-buffer wait so a dead network still exports.
+      if (sfxCues.length) {
+        const actx: AudioContext = audioCtx
+        await Promise.race([
+          Promise.all(
+            [...new Set(sfxCues.map((c) => c.id))].map(async (id) => {
+              try {
+                const res = await fetch(sfxUrl(id), { signal: AbortSignal.timeout(8000) })
+                if (!res.ok) return
+                const buf = await actx.decodeAudioData(await res.arrayBuffer())
+                sfxBuffers.set(id, buf)
+              } catch {
+                /* that sound stays silent */
+              }
+            }),
+          ),
+          new Promise<void>((r) => setTimeout(r, 4000)),
+        ])
       }
     } catch {
       audioCtx = null
@@ -1772,6 +1892,33 @@ async function exportViaMediaRecorder(
       })
 
     const startWall = performance.now()
+    // v0.22: schedule the SFX cue sheet on the audio clock. t0 pairs
+    // with startWall — captured back-to-back, so the residual gap is
+    // far below audibility — and every cue fires as a one-shot
+    // BufferSource at its timeline second. Sounds whose id failed to
+    // decode simply never schedule (the honest-silence posture).
+    if (audioCtx && audioDest && sfxCues.length) {
+      const actx: AudioContext = audioCtx
+      const dest: MediaStreamAudioDestinationNode = audioDest
+      const t0 = actx.currentTime
+      for (const cue of sfxCues) {
+        const buf = sfxBuffers.get(cue.id)
+        if (!buf) continue
+        const when = t0 + Math.max(0, cue.t)
+        if (when <= actx.currentTime) continue // the moment passed (late decode) — never fire late
+        try {
+          const src = actx.createBufferSource()
+          src.buffer = buf
+          const gain = actx.createGain()
+          gain.gain.value = cue.volume
+          src.connect(gain)
+          gain.connect(dest)
+          src.start(when)
+        } catch {
+          /* one bad schedule never kills the export */
+        }
+      }
+    }
     const deadline = startWall + total * 1000 + 15_000 // hard safety cap
     let frame = 0
     let activeSeg = -1

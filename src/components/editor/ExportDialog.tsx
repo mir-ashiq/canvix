@@ -16,6 +16,7 @@ import {
   estimateVideoDuration,
   exportVideo,
   pagesHaveAutoplayAudio,
+  pagesHaveSfxCues,
   pagesHaveAutoplayVideo,
   type VideoExportEngineDecision,
 } from '@/lib/video-export'
@@ -119,6 +120,9 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         mediaRecorder: mr !== null,
         mediaRecorderAudio: mr?.audio ?? false,
         hasPageAudio: pagesHaveAutoplayAudio(pages),
+        // v0.22: transition/element SFX are timeline audio too — the
+        // dialog's engine note must match what exportVideo will do
+        hasSfxCues: pagesHaveSfxCues(pages),
       })
       if (live) setEngine(decision)
     })()

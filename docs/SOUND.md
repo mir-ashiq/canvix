@@ -91,11 +91,23 @@ nullable, no migration) name one of the 16 pack sounds:
   validate the id against the pack catalogue — hostile or stale
   input can only pick from the bundled files, and unknown ids are
   dropped, never stored.
-- **Video export does not fire sfxId triggers in v1** (the export
-  muxer mixes page audio elements, not per-animation triggers —
-  recorded here so nobody has to rediscover it). The panel says the
-  workaround inline: insert the sound from the Audio panel as an
-  autoplay audio element and it rides the existing export path.
+- **Video export fires the triggers (v0.22)**: `buildSfxCues` maps
+  the present-mode semantics onto the recorder's timeline — the
+  incoming page's transition SFX when the transition into it
+  begins (page 0 at t=0), element SFX when the page-local
+  animation clock crosses each delay, same-id retriggers within
+  60 ms collapsed (the player's guard). The sounds decode once per
+  id through the export's own AudioContext and schedule as
+  one-shot `AudioBufferSource`s on the audio clock, paired with
+  the frame loop's wall clock. Every step is guarded — a failed
+  fetch or decode drops that one sound, never the export. SFX
+  count as timeline audio for the engine choice: a design with
+  cues but no page audio rides the audio-muxing MediaRecorder
+  instead of the silent WebCodecs path (and if no audio-capable
+  recorder exists, the export is honestly silent, as before).
+  Formats without an audio track (GIF, and WebCodecs WebM) still
+  carry no sound; the Audio-panel workaround (insert as an
+  autoplay audio element) still applies there.
 
 ## API surface
 

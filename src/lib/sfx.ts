@@ -13,10 +13,11 @@
 //
 // Used by the preview/presenter playback engines (element
 // animation SFX at their delay, page-transition SFX on page
-// change) and by the Audio panel's audition buttons. Video export
-// does NOT play sfxId triggers in v1 — documented in
-// docs/SOUND.md; inserted pack sounds as AUDIO ELEMENTS ride the
-// existing export path.
+// change) and by the Audio panel's audition buttons. Since v0.22
+// the video export fires the same triggers onto its recorded audio
+// track (buildSfxCues in video-export.ts — this player stays
+// UI-only; the export schedules decoded buffers on the recorder's
+// audio clock instead of pooling <audio> elements).
 // ─────────────────────────────────────────────────────────────
 
 import { isSfxId, sfxUrl } from '@/lib/assets/sfx-pack'

@@ -18,12 +18,14 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  buildSfxCues,
   chooseVideoExportEngine,
   computeExportSize,
   isPlayableExportVideo,
   MAX_EXPORT_VIDEOS,
   pagesHaveAutoplayAudio,
   pagesHaveAutoplayVideo,
+  pagesHaveSfxCues,
   windowedSourceTime,
 } from './video-export'
 import type { PageData } from './types'
@@ -226,5 +228,177 @@ describe('isPlayableExportVideo / pagesHaveAutoplayVideo — the R3 gate', () =>
 
   it('MAX_EXPORT_VIDEOS pins the decode cap', () => {
     expect(MAX_EXPORT_VIDEOS).toBe(12)
+  })
+})
+
+// ── v0.22: SFX on the export timeline ─────────────────────────
+
+describe('buildSfxCues — the present-mode triggers on the recorder timeline', () => {
+  const seg = (elements: unknown[], hold: number, transition: number, extra: Record<string, unknown> = {}) => ({
+    page: { ...page(elements), ...extra } as PageData,
+    hold,
+    transition,
+  })
+
+  it('fires the incoming page transition sfx at mount: page 0 at t=0, page i when the transition into it begins', () => {
+    const cues = buildSfxCues([
+      seg([], 3, 0.5, { transition: { kind: 'fade', duration: 0.5, sfxId: 'whoosh-soft' } }),
+      seg([], 2, 0.8, { transition: { kind: 'slide', duration: 0.8, direction: 'left', sfxId: 'chime' } }),
+      seg([], 2, 0),
+    ])
+    // page 0 mounts at 0; page 1 mounts when seg0's hold ends (3.0);
+    // page 2 has no transition sfx
+    expect(cues).toEqual([
+      { id: 'whoosh-soft', t: 0, volume: 0.7, kind: 'transition' },
+      { id: 'chime', t: 3, volume: 0.7, kind: 'transition' },
+    ])
+  })
+
+  it('fires element sfx at the page-local clock crossing each delay (segment start + delay)', () => {
+    const cues = buildSfxCues([
+      seg(
+        [
+          { type: 'rect', visible: true, animation: { kind: 'fade', duration: 0.5, delay: 1.2, easing: 'easeOut', sfxId: 'pop' } },
+          { type: 'rect', visible: true, animation: { kind: 'pan', duration: 0.5, delay: 2.4, easing: 'easeOut', direction: 'left', sfxId: 'thud' } },
+        ],
+        3,
+        0.5,
+      ),
+      seg([], 2, 0),
+    ])
+    expect(cues).toEqual([
+      { id: 'pop', t: 1.2, volume: 0.8, kind: 'element' },
+      { id: 'thud', t: 2.4, volume: 0.8, kind: 'element' },
+    ])
+  })
+
+  it('drops what never plays: hidden elements, kind none, unknown ids, cues past the page window', () => {
+    const cues = buildSfxCues([
+      seg(
+        [
+          // hidden → never drawn, never animated
+          { type: 'rect', visible: false, animation: { kind: 'fade', duration: 0.5, delay: 0, easing: 'easeOut', sfxId: 'pop' } },
+          // animation kind 'none' → no trigger
+          { type: 'rect', visible: true, animation: { kind: 'none', duration: 0.5, delay: 0, easing: 'easeOut', sfxId: 'pop' } },
+          // unknown pack id → sanitize-equivalent drop
+          { type: 'rect', visible: true, animation: { kind: 'fade', duration: 0.5, delay: 0, easing: 'easeOut', sfxId: 'not-a-pack-sound' } },
+          // delay lands past the page's whole visible window (start 0 + 10 ≥ hold 3 + transition 0.5)
+          { type: 'rect', visible: true, animation: { kind: 'fade', duration: 0.5, delay: 10, easing: 'easeOut', sfxId: 'thud' } },
+        ],
+        3,
+        0.5,
+        { transition: { kind: 'none', duration: 0.5, sfxId: 'chime' } }, // kind none → no transition sound either
+      ),
+      seg([], 2, 0),
+    ])
+    expect(cues).toEqual([])
+  })
+
+  it('collapses same-id retriggers within 60 ms (the player guard), keeps genuinely separate fires', () => {
+    const cues = buildSfxCues([
+      seg(
+        [
+          { type: 'rect', visible: true, animation: { kind: 'fade', duration: 0.5, delay: 1.0, easing: 'easeOut', sfxId: 'pop' } },
+          // 30 ms after the first pop — machine-gun, collapsed
+          { type: 'rect', visible: true, animation: { kind: 'fade', duration: 0.5, delay: 1.03, easing: 'easeOut', sfxId: 'pop' } },
+          // a full second later — a real second hit
+          { type: 'rect', visible: true, animation: { kind: 'fade', duration: 0.5, delay: 2.0, easing: 'easeOut', sfxId: 'pop' } },
+        ],
+        3,
+        0,
+      ),
+      seg([], 2, 0),
+    ])
+    expect(cues.map((c) => c.t)).toEqual([1.0, 2.0])
+  })
+
+  it('returns the sheet sorted by fire time regardless of construction order', () => {
+    const cues = buildSfxCues([
+      seg(
+        [
+          { type: 'rect', visible: true, animation: { kind: 'fade', duration: 0.5, delay: 2.0, easing: 'easeOut', sfxId: 'thud' } },
+        ],
+        3,
+        0.5,
+        { transition: { kind: 'fade', duration: 0.5, sfxId: 'whoosh-soft' } },
+      ),
+      seg(
+        [
+          { type: 'rect', visible: true, animation: { kind: 'fade', duration: 0.5, delay: 0.5, easing: 'easeOut', sfxId: 'pop' } },
+        ],
+        2,
+        0,
+      ),
+    ])
+    // page1 starts at 3.5; its element fires at 4.0 — still after page0's
+    expect(cues.map((c) => c.t)).toEqual([0, 2.0, 4.0])
+  })
+})
+
+describe('pagesHaveSfxCues — the dialog/engine mirror of buildSfxCues', () => {
+  it('a valid transition sfx on a non-none transition counts', () => {
+    expect(
+      pagesHaveSfxCues([{ ...page([]), transition: { kind: 'fade', duration: 0.5, sfxId: 'whoosh-soft' } }]),
+    ).toBe(true)
+  })
+
+  it('a none-kind transition never counts, whatever the id', () => {
+    expect(
+      pagesHaveSfxCues([{ ...page([]), transition: { kind: 'none', duration: 0.5, sfxId: 'whoosh-soft' } }]),
+    ).toBe(false)
+  })
+
+  it('a visible animated element with a pack sound counts; hidden or unknown-id ones do not', () => {
+    expect(
+      pagesHaveSfxCues([
+        page([{ type: 'rect', visible: true, animation: { kind: 'fade', duration: 0.5, delay: 0, easing: 'easeOut', sfxId: 'pop' } }]),
+      ]),
+    ).toBe(true)
+    expect(
+      pagesHaveSfxCues([
+        page([{ type: 'rect', visible: false, animation: { kind: 'fade', duration: 0.5, delay: 0, easing: 'easeOut', sfxId: 'pop' } }]),
+      ]),
+    ).toBe(false)
+    expect(
+      pagesHaveSfxCues([
+        page([{ type: 'rect', visible: true, animation: { kind: 'fade', duration: 0.5, delay: 0, easing: 'easeOut', sfxId: 'nope' } }]),
+      ]),
+    ).toBe(false)
+  })
+
+  it('a design with nothing triggerable stays false', () => {
+    expect(pagesHaveSfxCues([page([]), page([{ type: 'rect', visible: true }])])).toBe(false)
+  })
+})
+
+describe('chooseVideoExportEngine — v0.22 SFX cues are timeline audio', () => {
+  it('SFX cues alone + an audio-muxing recorder rides MediaRecorder', () => {
+    const d = chooseVideoExportEngine({
+      webcodecs: true,
+      mediaRecorder: true,
+      mediaRecorderAudio: true,
+      hasPageAudio: false,
+      hasSfxCues: true,
+    })
+    expect(d.engine).toBe('mediarecorder')
+    expect(d.reason).toContain('SFX')
+  })
+
+  it('SFX cues + WebCodecs but NO audio-capable recorder → WebCodecs, honestly silent', () => {
+    const d = chooseVideoExportEngine({
+      webcodecs: true,
+      mediaRecorder: true,
+      mediaRecorderAudio: false,
+      hasPageAudio: false,
+      hasSfxCues: true,
+    })
+    expect(d.engine).toBe('webcodecs')
+    expect(d.reason).toContain('silent')
+  })
+
+  it('hasSfxCues omitted (pre-v0.22 callers) keeps the old silent-design behaviour', () => {
+    const d = chooseVideoExportEngine({ webcodecs: true, mediaRecorder: true, mediaRecorderAudio: true, hasPageAudio: false })
+    expect(d.engine).toBe('webcodecs')
+    expect(d.reason).toContain('frame-exact')
   })
 })

@@ -61,9 +61,102 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - e2e: the wave-4 local-tools spec now also pins that the engine toggle
   exists, defaults to Provider, and that the no-provider fallback really
   enlarges (8→16px through the designs API) with its honest toast.
+- **AI video goes live — the z-ai dialect beside the Sora one** (user
+  request; `videoGeneration:false` was pure config, but the configured
+  provider speaks a different contract than the Sora-style one the
+  route implemented). `src/app/api/ai/video/route.ts` now speaks both:
+  - Sora: `POST /videos/generations` → `GET …/:id` → `GET …/:id/content`.
+    z-ai: `POST /video/generation` → `GET /async-result?id=…` (MP4 at a
+    plain CDN url inside `video_result`). Dialect choice happens at
+    create time — Sora first (deployed providers unchanged), z-ai when
+    that path 404s — remembered statelessly by prefixing the task id
+    with `z:`; every later poll and the content proxy routes on it. No
+    server memory, no sticky sessions. The z-ai content proxy re-polls
+    the async result and streams the CDN url through our origin
+    (same-origin MP4, no CORS, no expiring links).
+  - The provider stack learns companion auth headers (`slot.headers`,
+    `providerHeaders(slot)` merged into every direct fetch) — the z-ai
+    async-result endpoint demands `X-Token` (401 without it).
+    `normalizeVideoStatus` understands both envelopes; the `z:` prefix
+    is preserved on proxy URLs so the video element src keeps routing.
+  - Verified LIVE end-to-end (`scripts/verify-video-live.ts`, dev
+    provider): capabilities `videoGeneration:true` → POST → z:-prefixed
+    task → 28 polls → 4.68 MB MP4 through the same-origin proxy
+    (ftypisom magic), 145 s total. +4 unit tests (z-ai envelope
+    mapping).
+- **The PPTX limits wave — fonts embed, animations/transitions/SFX
+  carry, re-wrap safety** (user request; closes the three honest
+  limits `docs/PPTX-EXPORT.md` carried):
+  - **Text re-wrap safety**: every text body now carries a bare
+    `<a:normAutofit/>` — when PowerPoint's line engine wraps
+    differently and overflows the shape, it shrinks the text instead
+    of spilling it out; when our engine already auto-fit, the measured
+    `fontScale` rides along.
+  - **Font embedding**: document text faces resolve through the SAME
+    collector + font ladder the PDF exporter uses
+    (`collectTextFaces` → `resolveFontFaces`), ride as
+    `ppt/fonts/fontN.fntdata` + `embeddedFontLst`, wired through
+    `ppt/_rels/presentation.xml.rels` (font rel ids can't collide with
+    slide/master ids). Failure degrades to the pre-v0.22 behaviour —
+    typefaces referenced by family, viewer substitutes — and
+    `fontsEmbedded: 0` in the export result is the honest signal.
+  - **Transitions**: fade native (`p:fade`), slide directional
+    (`p:push dir`), morph → fade (the documented nearest-universal —
+    PowerPoint's own Morph needs object-matching extensions), speeds
+    mapped from durations.
+  - **Entrance animations** ride the `p:timing` tree as ONE click
+    group (our present-mode semantics: one advance, then the sequence
+    plays itself): first element `clickEffect`, the rest `withEffect`
+    at their delays. fade/rise → Fade entrance; pan/wipe → Wipe
+    (directional filter); zoom/pop → Fade (the documented
+    approximation — hand-built Zoom trees repair-prompt); rotate/
+    breathe (emphasis/loops) are dropped, documented, never silently
+    mangled. `+ transitions, sounds, animated, fontsEmbedded` in the
+    result toast's data.
+  - **Page SFX** embed as `media/sfxN.wav` (fetched once per id, the
+    media-bag posture) and wire into the transition sound slot
+    (`p:sndAc`/`p:stSnd`) through an audio relationship on the slide.
+  - Tested: 12 new unit tests (autofit presence, transition XML +
+    schema position, the timing tree — click group, delays, wipe
+    filters, rotate dropped honestly — SFX embedding, media
+    placement); a v0.22 e2e case asserts the whole package
+    (transition + timing + `embeddedFontLst` + fntdata + media
+    placement) and does the LibreOffice round-trip; a node
+    round-trip script exercises the full feature set through
+    `soffice --convert-to pdf` with pixel checks.
+- **SFX fire in video export** (closes the last documented Sound-wave
+  gap — "video export does not fire sfxId triggers in v1"):
+  `buildSfxCues` (new, pure) maps the present-mode triggers onto the
+  recorder's timeline — the incoming page's transition SFX when the
+  transition into it begins (page 0 at t=0), element SFX when the
+  page-local animation clock crosses each delay, same-id retriggers
+  within 60 ms collapsed (the player's guard). Sounds decode once per
+  id through the export's own AudioContext and schedule as one-shot
+  `AudioBufferSource`s on the audio clock, paired with the frame
+  loop's wall clock. SFX count as timeline audio for the engine
+  choice (`hasSfxCues` in `VideoEngineInputs`, the dialog mirrors
+  it): a design with cues but no page audio rides the audio-muxing
+  MediaRecorder instead of the silent WebCodecs path. Every step
+  guarded — a failed fetch/decode drops that one sound, never the
+  export; formats without an audio track (GIF, WebCodecs WebM) still
+  carry no sound (documented in `docs/SOUND.md`). +12 unit tests
+  (cue semantics, retrigger collapse, engine matrix).
 
 ### Fixed
 
+- **PPTX media parts landed at the package root** — the slide rels
+  say `../media/imageN.png` (relative to `ppt/slides/_rels/`), which
+  resolves to `ppt/media/…`, but the writer placed parts at the zip
+  root: every image AND sound in an exported PPTX was a broken
+  reference. Parts now land under `ppt/media/` (asserted by unit +
+  e2e + the round-trip script).
+- **`collectTextFaces` crashed on pre-series-chart documents** —
+  documents saved before the series/labels chart shape (and hostile
+  hand-built ones) have neither field; the face walk now skips them
+  instead of throwing during PDF/PPTX export.
+- **`loadImage` crashed the export in node** (SSR pass / unit tests
+  have no `Image` constructor): a missing bitmap now degrades to the
+  placeholder paths instead of rejecting the whole export.
 - **Landing-page counts told the v0.1.0 story** — the stats strip still
   advertised "15 fonts bundled / 11 starter templates" and the typography
   card "15 hand-picked Google Fonts" while the shipped library is 369

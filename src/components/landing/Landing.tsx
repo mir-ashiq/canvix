@@ -92,12 +92,12 @@ const FEATURES = [
   {
     icon: Type,
     title: 'Beautiful typography',
-    text: '15 hand-picked Google Fonts, styles and pairings. Bold, italic, spacing, alignment and colors at your fingertips.',
+    text: '369 hand-picked Google Fonts with on-demand loading, styles and pairings. Bold, italic, spacing, alignment and colors at your fingertips.',
   },
   {
     icon: Palette,
     title: 'Templates for everything',
-    text: 'Instagram posts, stories, pitch decks, posters, logos and thumbnails. Start from a template, make it yours.',
+    text: 'All 366 templates are free — Instagram posts, stories, pitch decks, posters, logos and thumbnails. Start from a template, make it yours.',
   },
   {
     icon: Layers,
@@ -210,9 +210,9 @@ export function Landing() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
             {[
               ['MIT', 'license'],
-              ['15', 'fonts bundled'],
-              ['11', 'starter templates'],
-              ['0', 'watermarks'],
+              ['369', 'fonts'],
+              ['366', 'templates'],
+              ['562+', 'icons'],
             ].map(([num, label]) => (
               <div key={label}>
                 <div className="text-3xl sm:text-4xl font-extrabold text-brand-gradient">{num}</div>

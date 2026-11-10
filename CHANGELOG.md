@@ -3,6 +3,22 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Landing-page counts told the v0.1.0 story** — the stats strip still
+  advertised "15 fonts bundled / 11 starter templates" and the typography
+  card "15 hand-picked Google Fonts" while the shipped library is 369
+  fonts, 366 templates, 562 offline icons (+ the Iconify proxy) and 48
+  illustrations. The strip now reads 369 fonts · 366 templates · 562+
+  icons (the "0 watermarks" promise moved out of the strip — it already
+  lives in the hero badge and the open-source card), and the two feature
+  cards carry the real numbers. `docs/UPGRADING.md`'s "seeds the 110
+  templates" corrected to the 366-template library the same way.
+  `docs/COMPETITIVE-ANALYSIS.md` gains the five-cluster reanalysis table
+  (post-v0.21.0) that this audit produced.
+
 ## [0.21.0] — 2026-11-10
 
 Wave 5, first slice — **PPTX export** (roadmap: "Export & Sharing

@@ -106,7 +106,7 @@ Same six steps — nothing extra. Things worth knowing:
   limit, crossing that version changes your artifact size for the
   better).
 - **`npm run db:setup` is for fresh databases** (migrate + seed the
-  110 templates). On an existing database use `db:migrate:deploy` —
+  366-template library). On an existing database use `db:migrate:deploy` —
   setup would also re-seed templates that already exist (harmless but
   noisy).
 - The template library ships as code; upgrading may add new templates

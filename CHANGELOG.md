@@ -3,6 +3,68 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.21.0] — 2026-11-10
+
+Wave 5, first slice — **PPTX export** (roadmap: "Export & Sharing
+Professionalisation"). The presentation story that speaker notes and
+presenter view started in v0.18/v0.19 now reaches the file format
+itself: a design exports as a real PowerPoint package, native
+editable objects and speaker notes included, written entirely in the
+browser with **zero new dependencies** (guide:
+`docs/PPTX-EXPORT.md`). No migration — pure client-side export.
+
+### Added
+
+- **The PPTX writer** (`src/lib/pptx/`): a hand-rolled OPC/ZIP
+  writer (CRC-32, stored + raw-deflated entries through the
+  platform `CompressionStream` — the same primitive the PDF image
+  embedder uses), the OOXML skeleton builders (presentation, master,
+  layout, compact theme, notes master/slides, doc props), and the
+  slide mapper.
+- **Native element mapping**: text (paragraphs, rich-text spans,
+  bullet/numbered lists, RTL, align, line height, letter spacing,
+  auto-fit shrink), rect/roundRect/ellipse/triangle presets,
+  star/polygon as `custGeom` from the SAME `lib/shapes.ts` geometry
+  the canvas/SVG/PDF/video renderers use, lines with dashes and
+  arrowheads, images (PNG embed, JPEG byte-passthrough, corner
+  radius, flips, opacity), emoji stickers, solid + gradient fills,
+  strokes, element opacity, soft shadows, page backgrounds.
+- **Rotation-origin re-base**: Canvix rotates most element types
+  around the box top-left (Konva semantics) while OOXML rotates
+  around the centre — the mapper computes the post-rotation centre
+  and places shapes pixel-identically (ellipse/star/polygon map
+  directly). Unit-tested numerically.
+- **Speaker notes export**: pages with notes get native notes
+  slides + the notes master — the deck presents from PowerPoint
+  with the notes in the presenter view.
+- **Per-page size overrides letterbox** onto the deck size (the
+  video export's fit-and-centre treatment; fonts/strokes/radii/
+  shadows scale to match).
+- **Raster fallback** (the PDF rasterStrip pattern) for charts,
+  tables, embeds, frames, plugin elements, audio/video cards,
+  freehand strokes, curved/effect text and masked/filtered images —
+  at the dialog's detail level.
+- **The Export dialog**: a PPTX format card (editable-slides hint),
+  all-pages toggle parity with PDF, progress + an honest result
+  toast (editable elements · snapshots · notes pages).
+
+### Tested
+
+- 11 new unit tests: CRC-32 known vectors; an INDEPENDENT zip
+  reader (EOCD → central directory → local entries →
+  DecompressionStream) round-trips stored + deflated archives; the
+  package test asserts the full part list, content-type coverage,
+  rels resolution, EMU sizes, hostile-text escaping, the
+  rotation-origin re-base, per-page letterboxing, node-mode raster
+  skipping and the no-pages refusal.
+- Conversion proof: the suite writes a real smoke deck;
+  `scripts/verify-pptx.sh` converts it with headless LibreOffice
+  (the strictest widely-available OOXML parser) and pixel-checks
+  the render (background, ellipse, custGeom star, text, slide 2).
+- `tests/e2e/pptx-export.spec.ts`: export through the dialog,
+  download assertions, the zip cracked open with Python's zipfile —
+  skeleton + heading as a native text run.
+
 ## [0.20.0] — 2026-11-10
 
 The Sound wave — closing the audit's Sound gap cluster in full

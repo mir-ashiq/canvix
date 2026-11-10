@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Download, Loader2, FileImage, FileType2, FileCode2, Film, ImagePlay } from 'lucide-react'
+import { Download, Loader2, FileImage, FileType2, FileCode2, Film, ImagePlay, Presentation } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { captureStage, canvasBridge } from './canvas/canvas-bridge'
 import { exportDesignToSVGs, downloadSVG } from '@/lib/svg-export'
@@ -56,6 +56,7 @@ const FORMATS = [
   { id: 'png', label: 'PNG', hint: 'Lossless · transparency', icon: FileImage },
   { id: 'jpg', label: 'JPG', hint: 'Smaller file', icon: FileImage },
   { id: 'pdf', label: 'PDF', hint: 'Vector text · all pages', icon: FileType2 },
+  { id: 'pptx', label: 'PPTX', hint: 'PowerPoint · editable slides', icon: Presentation },
   { id: 'svg', label: 'SVG', hint: 'Vector · editable', icon: FileCode2 },
   { id: 'mp4', label: 'Video', hint: 'MP4 / WebM · animated', icon: Film },
   { id: 'gif', label: 'GIF', hint: 'Animated · loops', icon: ImagePlay },
@@ -205,6 +206,35 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         onOpenChange(false)
         return
       }
+      if (format === 'pptx') {
+        // Wave 5: PowerPoint export — native editable shapes, text
+        // and images; speaker notes ride along as notes slides;
+        // charts/tables/embeds/plugins fall back to PNG snapshots.
+        // Pages render from DATA (the PDF posture — no stage flips).
+        const pagesToExport = allPages ? pages : [pages[currentPage]]
+        await primePluginRenders(collectPluginElements(pagesToExport), 'export')
+        const { inlineMediaImages } = await import('@/lib/svg-export')
+        const inlined = await inlineMediaImages(pagesToExport)
+        const { exportDesignToPptx, downloadPptx } = await import('@/lib/pptx-export')
+        const result = await exportDesignToPptx({
+          designWidth: canvasBridge.pageWidth || 1080,
+          designHeight: canvasBridge.pageHeight || 1080,
+          pages: inlined,
+          pixelScale: scale,
+          title: name,
+          onProgress: (ratio, label) => {
+            setProgress(Math.round(ratio * 100))
+            setProgressLabel(label)
+          },
+        })
+        downloadPptx(result, `${base}.pptx`)
+        toast({
+          title: `PPTX downloaded (${result.pages} slide${result.pages > 1 ? 's' : ''})`,
+          description: `${result.natives} editable elements · ${result.rasters} snapshot${result.rasters === 1 ? '' : 's'}${result.notes ? ` · ${result.notes} notes page${result.notes === 1 ? '' : 's'}` : ''} — opens in PowerPoint, Keynote and Google Slides.`,
+        })
+        onOpenChange(false)
+        return
+      }
       if (format === 'svg') {
         // true vector export — no rasterization of vector elements.
         // v0.13 (P4): plugin renders are awaited FIRST (bounded by
@@ -330,6 +360,11 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               <p className="text-[11px] text-muted-foreground py-3">
                 Vector text with embedded fonts — selectable & searchable, print-ready.
                 The detail level sets the resolution of photos, stickers and other raster content.
+              </p>
+            ) : format === 'pptx' ? (
+              <p className="text-[11px] text-muted-foreground py-3">
+                Editable PowerPoint — text, shapes and images stay native objects, speaker notes
+                ride along. The detail level sets the resolution of chart/table/plugin snapshots.
               </p>
             ) : format === 'gif' ? (
               <div className="text-[11px] text-muted-foreground space-y-3 py-1">
@@ -481,8 +516,8 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           {pages.length > 1 && format !== 'mp4' && format !== 'gif' && (
             <label className="flex items-center justify-between rounded-xl border border-black/10 px-4 py-3 cursor-pointer">
               <span className="text-sm font-medium">
-                {format === 'pdf' ? 'Include all pages' : 'Download all pages'}
-                <span className="block text-[11px] text-muted-foreground font-normal">{format === 'pdf' ? `${pages.length} pages in one PDF file` : `${pages.length} files, one per page`}</span>
+                {format === 'pdf' || format === 'pptx' ? 'Include all pages' : 'Download all pages'}
+                <span className="block text-[11px] text-muted-foreground font-normal">{format === 'pdf' || format === 'pptx' ? `${pages.length} pages in one ${format.toUpperCase()} file` : `${pages.length} files, one per page`}</span>
               </span>
               <input type="checkbox" checked={allPages} onChange={(e) => setAllPages(e.target.checked)} className="accent-[#00C4CC] h-4 w-4" />
             </label>

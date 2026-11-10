@@ -114,6 +114,17 @@ media store, full beat analysis) · animation + page-transition SFX
 source. No migration. Guide + licence manifest: docs/SOUND.md · acceptance:
 1330 unit tests (+21), tests/e2e/sound-gated.spec.ts.
 
+### Wave 5 — Export & Sharing Professionalisation 🚧 first slice SHIPPED (v0.21.0, 2026-11-10)
+**PPTX export** — native editable slides (text/shapes/images/lines/
+stickers), speaker notes as notes slides, custGeom from the shared
+geometry, rotation-origin re-base, per-page-size letterboxing, raster
+fallback for charts/tables/embeds/plugins. Zero dependencies;
+LibreOffice-conversion verified (docs/PPTX-EXPORT.md). Remaining
+Wave 5 scope: share links with roles/password/expiry · ZIP batch
+export · WebP · print production marks (bleed/crop/300 DPI) ·
+server-side rendering · portable `.canvix` project file · optional
+public gallery.
+
 ### Wave 5 — Export & Sharing Professionalisation
 Share links with view/comment/edit roles + password + expiry · ZIP batch export · WebP · PPTX ·
 print production marks (bleed/crop/300 DPI) · server-side rendering · portable `.canvix` project

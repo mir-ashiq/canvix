@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Nothing yet.
+
+## [0.22.0] — 2026-11-11
+
+### Added
+
 - **The real sticker library — 126 authored vector stickers in 11 packs**
   (user request; the starter set was 40 emoji). `src/lib/stickers/`
   ships hand-authored SVG packs — Faces (12), Hands (10), Hearts (12),

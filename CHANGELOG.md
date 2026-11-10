@@ -7,6 +7,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **The real sticker library — 126 authored vector stickers in 11 packs**
+  (user request; the starter set was 40 emoji). `src/lib/stickers/`
+  ships hand-authored SVG packs — Faces (12), Hands (10), Hearts (12),
+  Stars & Sparkles (12), Celebrate (12), Business (12), Arrows & Marks
+  (12), Nature (12), Food & Drink (12), Frames & Badges (10), Travel
+  (10) — one house style (ink `#2D2A32`, round joins, the eight-colour
+  palette, one glossy highlight), each a self-contained `viewBox 0 0
+  120 120` document with no external refs.
+  - New `StickerElement.svg`/`stickerId`/`alt` fields: vector stickers
+    are native sticker elements; emoji stickers are unchanged (text
+    path, PPTX-native runs, back-compat with every saved document).
+  - Render paths, all verified: canvas draws the SVG as a Konva.Image
+    via the shared data-URL image cache (`lib/sticker-image.ts`);
+    video/GIF/PNG exports go through `collectImages` →
+    `buildKonvaNode` (the preload cap rose 60 → 150 for sticker-heavy
+    decks); SVG export nests the authored markup inline (vector out,
+    the plugin-SVG pattern); PDF rides its existing raster strip;
+    PPTX raster-embeds through the charts/tables fallback — emoji stay
+    editable text.
+  - The Stickers app is rebuilt: pack chips, whole-library search
+    (names + keywords, AND semantics), per-pack grids, the emoji quick
+    set preserved, and an honest footer count. The Elements panel's
+    Stickers tab gains a featured-per-pack teaser row and a launcher
+    into the full library. Landing stats strip: new "160+ stickers".
+  - Inserted stickers seed `alt` with the library name (Wave 4
+    accessibility parity) and carry `stickerId` provenance.
+  - Tests: 16 new unit tests (library contract — valid self-contained
+    SVG, unique ids, palette discipline, <4 KB each, search behaviour,
+    data-URL encoding) and a 3-spec e2e suite (`sticker-packs.spec.ts`)
+    whose pixel proof exports a PNG of a red-heart sticker page and
+    asserts saturated red inside the sticker box and white outside.
+    1362 unit tests (+16).
 - **Image-tools engine preference — provider by default, this device as
   the option** (user request). The BG remover and Upscale popovers now
   carry an engine toggle, persisted per browser

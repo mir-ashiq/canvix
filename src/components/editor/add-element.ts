@@ -134,6 +134,23 @@ export function addSticker(char: string) {
   addCentered(createStickerElement(char, { width: 200, height: 200, fontSize: 150 }))
 }
 
+/** v0.22 sticker packs: add an authored vector sticker. The element
+ *  keeps the emoji type (every renderer/serializer/export already
+ *  handles it) with `svg` set — the vector render path. */
+export function addPackSticker(sticker: { id: string; name: string; svg: string }) {
+  const el = createStickerElement(sticker.name, {
+    width: 200,
+    height: 200,
+    fontSize: 150,
+    svg: sticker.svg,
+    stickerId: sticker.id,
+  })
+  // accessibility: seed the Wave 4 alt field with the library name
+  el.name = sticker.name
+  el.alt = sticker.name
+  addCentered(el)
+}
+
 // ── v0.6: tables, frames, embeds ───────────────────────────
 
 export type TableStyle = 'classic' | 'minimal' | 'bold' | 'soft'

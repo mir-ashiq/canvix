@@ -51,7 +51,7 @@ export const CANVIX_APPS: CanvixApp[] = [
   { id: 'illustrations', name: 'Illustrations', desc: 'Original flat-art pieces in six packs', icon: ImageIcon, color: '#34C77B', content: IllustrationsApp },
   { id: 'palette', name: 'Colour palette', desc: 'Generate harmonious palettes on canvas', icon: Palette, color: '#FF5C8A', content: PaletteApp },
   { id: 'lorem', name: 'Placeholder text', desc: 'Lorem ipsum & real-feel filler copy', icon: Type, color: '#FFD166', content: LoremApp },
-  { id: 'stickers', name: 'Stickers', desc: 'Emoji stickers & reactions', icon: Smile, color: '#F97316', content: StickersApp },
+  { id: 'stickers', name: 'Stickers', desc: '160+ stickers — 11 vector packs + emoji', icon: Smile, color: '#F97316', content: StickersApp },
 ]
 
 /** shared small header shown inside an open app */

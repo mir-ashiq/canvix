@@ -28,6 +28,7 @@ import { beatEnvelopeAt, beatSourceOf } from '@/lib/media/beat-detect'
 import { awaitRender, renderKey } from '@/lib/plugins/renderer-cache'
 import { pageSize } from '@/lib/editor-utils'
 import { isMaskShape, maskPolygon, polygonPoints, starPointsEx, stretchPts, tracePts } from '@/lib/shapes'
+import { stickerDataUrl } from '@/lib/sticker-image'
 import { fitFontSize } from '@/lib/text-fit'
 import { layoutListLines } from '@/lib/list-text'
 import { WebMMuxer } from '@/lib/webm-muxer'
@@ -127,11 +128,16 @@ export async function collectImages(pages: PageData[]): Promise<Map<string, HTML
         // a blocked thumb degrades to the tinted band (same as SVG export)
         const t = el.kind === 'youtube' ? youtubeThumbUrl(el.url) : null
         if (t) sources.push(t)
+      } else if (el.type === 'sticker' && el.svg) {
+        // v0.22 sticker packs: the authored SVG rides the same loader
+        sources.push(stickerDataUrl(el.svg))
       } else if (el.type === 'group') walk(el.children)
     }
   }
   for (const p of pages) walk(p.elements)
-  const unique = [...new Set(sources)].slice(0, 60)
+  // v0.22: 60 → 150 — sticker-heavy decks stack many small SVG
+  // data-URLs (each decodes to a ~120px bitmap, cheap next to photos)
+  const unique = [...new Set(sources)].slice(0, 150)
   await Promise.all(
     unique.map(async (src) => {
       const img = await loadImage(src)
@@ -575,6 +581,20 @@ export function buildKonvaNode(
     }
     case 'sticker': {
       const sk = el
+      // v0.22 sticker packs: authored vector stickers draw as the
+      // preloaded data-URL bitmap (collectImages); emoji stay on text
+      if (sk.svg) {
+        const img = images.get(stickerDataUrl(sk.svg))
+        return new Konva.Image({
+          id: sk.id,
+          x: sk.x,
+          y: sk.y,
+          width: sk.width,
+          height: sk.height,
+          image: img,
+          rotation: sk.rotation ?? 0,
+        })
+      }
       return new Konva.Text({
         id: sk.id,
         x: sk.x,

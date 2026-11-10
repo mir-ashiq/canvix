@@ -139,14 +139,14 @@ light/dark themes · PWA/mobile groundwork · REST API + scoped API keys · (tea
 spreadsheet mode, live-audience presenting. These are HyCanvas-scale product surfaces; Canvix
 would already lead the set on coverage without them.
 
-## Five-cluster reanalysis (2026-11-10, post-v0.21.0)
+## Five-cluster reanalysis (2026-11-11, post-sticker-library)
 
-A code-level re-audit of the audit's original five gap clusters, at `85b26c9`
-plus the landing-count honesty fix:
+A code-level re-audit of the audit's original five gap clusters, at HEAD
+plus the image-tools engine toggle and the sticker-library wave:
 
 | Cluster | Verdict | Evidence |
 |---|---|---|
-| Content libraries | **~95% closed** | Icons 562 offline + Iconify proxy (v0.17) · 48 illustrations · fonts 369 · templates 366 · server-side brand kits. Remaining: **stickers are still the 40-emoji starter set** — the original "84 emoji" gap re-scoped, now an enhancement (real sticker packs / larger categorised set), not a blocker. |
+| Content libraries | **~98% closed** | Icons 562 offline + Iconify proxy (v0.17) · 48 illustrations · fonts 369 · templates 366 · server-side brand kits · **the real sticker library (v0.22): 126 authored vector stickers in 11 packs + the 40-emoji quick set — every export path verified, incl. a PNG pixel proof**. Remaining: pack recolour/swap tooling (enhancement, not a gap). |
 | Presentation story | **~90% closed** | Speaker notes (v0.18/v0.19) · presenter view (v0.18) · **PPTX export with editable shapes + notes slides (v0.21.0)**. No core gap left; Wave 5 remainder is sharing/export polish. |
 | Sound | **Closed (v0.20.0)** | 16-sound offline CC0 library · Freesound connector (fourth stock connector; `soundSearch` capability flag — false only when no key is configured) · voiceover recording · animation + transition SFX. |
 | Enterprise wall | **~25% closed** | Brand kits server-side (v0.17) only. Workspaces/teams, 2FA, OIDC SSO, email + password reset, scoped API keys all unstarted → the Wave 6 scope, unchanged. |

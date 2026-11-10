@@ -3,8 +3,10 @@
 import { useMemo, useState } from 'react'
 import { Square, Circle, Triangle, Star, Minus, ArrowRight, MoveHorizontal, Search, Hexagon, Frame, Youtube, MapPin, Link2 } from 'lucide-react'
 import { GRAPHICS, STICKER_GROUPS } from '@/lib/editor-utils'
+import { EMOJI_STICKERS, STICKER_PACKS, VECTOR_STICKER_COUNT } from '@/lib/stickers'
 import { polygonPoints, starPointsEx, ptsToSvg } from '@/lib/shapes'
-import { addChart, addEmbed, addFrame, addGraphic, addLine, addPolygon, addShape, addStarVariant, addSticker, addTable, type TableStyle } from '../add-element'
+import { addChart, addEmbed, addFrame, addGraphic, addLine, addPolygon, addShape, addStarVariant, addSticker, addPackSticker, addTable, type TableStyle } from '../add-element'
+import { useEditorStore } from '@/store/editor-store'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FRAME_SHAPES, type ChartKind } from '@/lib/types'
@@ -16,6 +18,12 @@ function GraphicIcon({ path }: { path: string }) {
     </svg>
   )
 }
+
+/** v0.22: one hero sticker per pack for the Elements-panel teaser row */
+const FEATURED_STICKERS = STICKER_PACKS.map((p) => {
+  const s = p.stickers[0]
+  return { ...s, packName: p.name }
+}).filter((s) => !!s.svg)
 
 /** v0.18 (Wave 3): native polygon / star tiles — the SAME geometry the
  *  canvas and the SVG exporter draw (lib/shapes.ts), so the palette
@@ -269,6 +277,32 @@ export function ElementsPanel() {
       </TabsContent>
 
       <TabsContent value="stickers" className="flex-1 overflow-y-auto cv-scroll-dark p-4 mt-0">
+        {/* v0.22: the vector pack library — featured row + full-library launcher */}
+        <h4 className="text-xs font-semibold text-white/50 mb-2">Sticker packs</h4>
+        <div className="grid grid-cols-4 gap-1.5 mb-3">
+          {FEATURED_STICKERS.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => addPackSticker(s)}
+              className="aspect-square rounded-xl bg-white/[0.04] hover:bg-[#7630D7]/25 border border-white/10 hover:border-[#7630D7] hover:scale-105 transition-all flex items-center justify-center p-1"
+              aria-label={`Add sticker ${s.name}`}
+              title={`${s.name} — from the ${s.packName} pack`}
+            >
+              <span
+                className="w-full h-full flex items-center justify-center [&>svg]:max-w-full [&>svg]:max-h-full"
+                dangerouslySetInnerHTML={{ __html: s.svg }}
+                aria-hidden="true"
+              />
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => useEditorStore.getState().setPanel('apps')}
+          className="w-full mb-5 h-9 rounded-lg border border-[#7630D7]/50 text-[12px] font-semibold text-white/85 hover:bg-[#7630D7]/25 transition-colors"
+        >
+          Browse all {VECTOR_STICKER_COUNT + EMOJI_STICKERS.length} stickers in apps →
+        </button>
+
         {STICKER_GROUPS.map((group) => (
           <div key={group.name} className="mb-5">
             <h4 className="text-xs font-semibold text-white/50 mb-2">{group.name}</h4>

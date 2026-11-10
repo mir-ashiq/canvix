@@ -263,8 +263,22 @@ export interface ImageElement extends BaseElement {
 
 export interface StickerElement extends BaseElement {
   type: 'sticker'
-  char: string // emoji glyph
+  char: string // emoji glyph (text stickers) or the pack sticker's name (vector stickers)
   fontSize: number
+  /** v0.22: the authored SVG markup of a library sticker (vector
+   *  path). Empty for emoji text stickers — those render as text
+   *  runs (PPTX-native) exactly as before. When present, every
+   *  renderer draws the SVG: canvas + video via the preloaded
+   *  data-URL bitmap, SVG export nests it inline, PPTX/PDF embed
+   *  the raster. The markup is authored in-repo (src/lib/stickers)
+   *  — never user input. */
+  svg?: string
+  /** the library id (e.g. 'hearts-red') — provenance for future
+   *  pack tooling (swap pack, recolour). Absent on emoji stickers. */
+  stickerId?: string
+  /** accessibility alt text (Wave 4 parity with images) — seeded
+   *  with the library name on insert, user-editable after. */
+  alt?: string
 }
 
 /** A group nests child elements at their original page coordinates.

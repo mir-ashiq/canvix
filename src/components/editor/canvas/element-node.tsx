@@ -32,6 +32,7 @@ import { CurvedTextNode, EmbedNode, FrameNode, TableNode, type TableCellRef } fr
 import { PluginNode } from './PluginNode'
 import { ChartNode } from './chart-node'
 import { isMaskShape, maskPolygon, polygonPoints, starPointsEx, stretchPts, tracePts, type MaskShape } from '@/lib/shapes'
+import { stickerDataUrl } from '@/lib/sticker-image'
 import { fitFontSize } from '@/lib/text-fit'
 import { layoutListLines } from '@/lib/list-text'
 
@@ -300,6 +301,15 @@ function textEffectProps(t: TextElement): Record<string, string | number> {
     default:
       return {}
   }
+}
+
+/** v0.22 sticker packs: an authored vector sticker drawn as a cached
+ *  bitmap. The SVG rides the same data-URL image cache photos use
+ *  (decode once per markup string, app-wide); until decode finishes
+ *  Konva paints nothing — a blank frame at most on first add. */
+function StickerVectorNode({ el, common }: { el: StickerElement; common: Record<string, unknown> }) {
+  const image = useLoadedImage(el.svg ? stickerDataUrl(el.svg) : undefined)
+  return <KonvaImage {...common} image={image ?? undefined} width={el.width} height={el.height} />
 }
 
 /** image with Konva filters (brightness / contrast / saturation).
@@ -956,6 +966,10 @@ function ElementNodeImpl({ element: el, interactive, hiding, hideCell, registerN
 
     case 'sticker': {
       const sk = el as StickerElement
+      // v0.22: authored vector stickers draw as a cached bitmap
+      // (data-URL SVG → useLoadedImage — the photo pipeline); emoji
+      // stickers stay on the text path below
+      if (sk.svg) return <StickerVectorNode el={sk} common={common} />
       return <Text {...common} text={sk.char} fontSize={sk.fontSize} fontFamily="'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif" width={sk.width} height={sk.height} align="center" />
     }
 

@@ -207,11 +207,12 @@ export function Landing() {
 
         {/* ── Stats strip ── */}
         <section className="border-y border-black/5 bg-[#FAFAFC]">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 grid grid-cols-2 sm:grid-cols-5 gap-6 text-center">
             {[
               ['MIT', 'license'],
               ['369', 'fonts'],
               ['366', 'templates'],
+              ['160+', 'stickers'],
               ['562+', 'icons'],
             ].map(([num, label]) => (
               <div key={label}>

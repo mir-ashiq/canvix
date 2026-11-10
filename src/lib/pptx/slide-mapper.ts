@@ -555,7 +555,12 @@ export async function mapSlide(
       } else if (el.type === 'line') {
         xml = lineXml(el as LineElement, id)
       } else if (el.type === 'sticker') {
-        xml = stickerXml(el as StickerElement, id)
+        // v0.22: emoji stickers stay native text runs; authored vector
+        // stickers ride the raster path (buildKonvaNode draws the
+        // preloaded SVG bitmap — same as charts/tables fallbacks)
+        const sk = el as StickerElement
+        if (sk.svg) native = false
+        else xml = stickerXml(sk, id)
       } else if (el.type === 'image') {
         xml = await imageXml(el as ImageElement, id, ctx, imageRels)
       } else if (el.type === 'group') {

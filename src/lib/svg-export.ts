@@ -590,6 +590,19 @@ ${filt.overlay}` : image
       const sk = el as StickerElement
       const cx = sk.x + sk.width / 2
       const cy = sk.y + sk.height / 2
+      // v0.22 sticker packs: authored vector stickers nest inline —
+      // the exported file stays vector (same approach as plugin SVGs)
+      if (sk.svg) {
+        const open = /^<svg[^>]*>/.exec(sk.svg)
+        const end = sk.svg.lastIndexOf('</svg>')
+        if (open && end > open[0].length) {
+          const inner = sk.svg.slice(open[0].length, end)
+          const attrs = open[0]
+            .slice(4, -1)
+            .replace(/\s(?:x|y|width|height)\s*=\s*(?:"[^"]*"|'[^']*')/g, '')
+          return `  <svg${attrs} x="${sk.x}" y="${sk.y}" width="${sk.width}" height="${sk.height}"${opacityAttr(sk)}${transformBase ? ` transform="rotate(${sk.rotation} ${cx} ${cy})"` : ''}>${inner}</svg>`
+        }
+      }
       return `  <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${sk.fontSize}" font-family="'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif"${opacityAttr(sk)}${transformBase ? ` transform="rotate(${sk.rotation} ${cx} ${cy})"` : ''}>${esc(sk.char)}</text>`
     }
 

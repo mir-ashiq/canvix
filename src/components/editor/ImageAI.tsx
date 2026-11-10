@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Eraser, Wand2, Loader2, Sparkles, Brush, Maximize2, Accessibility } from 'lucide-react'
+import { Eraser, Wand2, Loader2, Sparkles, Brush, Maximize2, Accessibility, Cloud, Cpu } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import type { ImageElement } from '@/lib/types'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/hooks/use-toast'
+import { getImageToolsEngine, setImageToolsEngine, IMAGE_TOOL_ENGINES, type ImageToolsEngine } from '@/lib/image-tools-engine'
 
 interface EditResponse {
   dataUrl?: string
@@ -57,16 +58,18 @@ async function toSendableImage(src: string): Promise<string> {
 }
 
 /**
- * Shared AI image-edit runner — calls /api/ai/image-edit and swaps the
- * element's image in place, preserving the on-canvas width and adapting
- * the height to the new aspect ratio.
+ * POST /api/ai/image-edit WITHOUT touching the element — the shared
+ * transport under runImageAI and the provider engine of the one-click
+ * tools (BG remover, Upscale). Returns either the provider's image or
+ * the structured failure the caller decides how to present.
  */
-async function runImageAI(
+async function editViaProvider(
   el: ImageElement,
   payload: Record<string, unknown>,
-  onDone: (msg: string) => void
-): Promise<boolean> {
-  const update = useEditorStore.getState().updateElements
+): Promise<
+  | { ok: true; dataUrl: string; width?: number; height?: number; entId?: string }
+  | { ok: false; error?: string; code?: string; detail?: string }
+> {
   try {
     const image = await toSendableImage(el.src)
     const res = await fetch('/api/ai/image-edit', {
@@ -84,31 +87,87 @@ async function runImageAI(
     })
     const data = (await res.json()) as EditResponse
     if (!res.ok || !data.dataUrl) {
-      // SOURCE_NOT_EDITABLE (422): the provider only edits its own
-      // generations — the route's message already points at the local
-      // tools that work on any image.
-      const reason = data.code === 'SOURCE_NOT_EDITABLE' ? '' : providerReason(data.detail)
-      onDone(reason ? `${data.error ?? 'The edit failed.'} — ${reason.slice(0, 220)}` : (data.error ?? 'The edit failed. Please try again.'))
-      return false
+      return { ok: false, error: data.error, code: data.code, detail: data.detail }
     }
-    const w = data.width || el.naturalWidth
-    const h = data.height || el.naturalHeight
-    // keep on-canvas width; adapt height to the new aspect ratio
-    const newHeight = Math.max(4, Math.round(el.width * (h / Math.max(1, w))))
-    update([el.id], {
-      src: data.dataUrl,
-      naturalWidth: w,
-      naturalHeight: h,
-      height: newHeight,
-      // refresh the provider handle — the edit result is the new
-      // editable image (cleared when the provider returns none)
-      aiEntId: data.entId,
-    })
-    return true
+    return { ok: true, dataUrl: data.dataUrl, width: data.width, height: data.height, entId: data.entId }
   } catch {
-    onDone('AI image editing is unavailable right now.')
+    return { ok: false, error: 'AI image editing is unavailable right now.' }
+  }
+}
+
+/**
+ * Shared AI image-edit runner — calls /api/ai/image-edit and swaps the
+ * element's image in place, preserving the on-canvas width and adapting
+ * the height to the new aspect ratio.
+ */
+async function runImageAI(
+  el: ImageElement,
+  payload: Record<string, unknown>,
+  onDone: (msg: string) => void
+): Promise<boolean> {
+  const update = useEditorStore.getState().updateElements
+  const r = await editViaProvider(el, payload)
+  if (!r.ok) {
+    // SOURCE_NOT_EDITABLE (422): the provider only edits its own
+    // generations — the route's message already points at the local
+    // tools that work on any image.
+    const reason = r.code === 'SOURCE_NOT_EDITABLE' ? '' : providerReason(r.detail)
+    onDone(
+      reason
+        ? `${r.error ?? 'The edit failed.'} — ${reason.slice(0, 220)}`
+        : (r.error ?? 'The edit failed. Please try again.'),
+    )
     return false
   }
+  const w = r.width || el.naturalWidth
+  const h = r.height || el.naturalHeight
+  // keep on-canvas width; adapt height to the new aspect ratio
+  const newHeight = Math.max(4, Math.round(el.width * (h / Math.max(1, w))))
+  update([el.id], {
+    src: r.dataUrl,
+    naturalWidth: w,
+    naturalHeight: h,
+    height: newHeight,
+    // refresh the provider handle — the edit result is the new
+    // editable image (cleared when the provider returns none)
+    aiEntId: r.entId,
+  })
+  return true
+}
+
+/** v0.22: engine selector for the one-click image tools — Provider
+ *  (default: the configured AI provider does the work server-side) or
+ *  This device (the local paths: ONNX cut-out / Lanczos resampling).
+ *  One shared per-browser preference, persisted across both tools. */
+function EngineToggle({ engine, onChange }: { engine: ImageToolsEngine; onChange: (e: ImageToolsEngine) => void }) {
+  return (
+    <div>
+      <div className="flex gap-1 p-0.5 rounded-lg bg-white/[0.06] border border-white/10" role="group" aria-label="Engine — provider or this device">
+        {IMAGE_TOOL_ENGINES.map((e) => (
+          <button
+            key={e.id}
+            onClick={() => {
+              setImageToolsEngine(e.id)
+              onChange(e.id)
+            }}
+            className={`flex-1 h-7 rounded-md text-[11px] font-semibold inline-flex items-center justify-center gap-1 transition-colors ${
+              engine === e.id ? 'bg-[#02C0CC] text-black' : 'text-white/65 hover:text-white'
+            }`}
+            aria-pressed={engine === e.id}
+            data-testid={`engine-${e.id}`}
+          >
+            {e.id === 'provider' ? <Cloud size={11} /> : <Cpu size={11} />}
+            {e.label}
+          </button>
+        ))}
+      </div>
+      <p className="text-[10px] text-white/40 mt-1 leading-snug">
+        {engine === 'provider'
+          ? 'Provider (default) — the configured AI provider does the work server-side.'
+          : 'This device — runs locally in your browser, works offline on any image.'}
+      </p>
+    </div>
+  )
 }
 
 const btnBase =
@@ -135,37 +194,97 @@ function imageSize(dataUrl: string): Promise<{ w: number; h: number }> {
 }
 
 /** Canva "BG Remover" — one-click background removal on the selected image.
- *  Runs a local ONNX segmentation model in the browser (true alpha cut-out);
- *  the first use downloads the model (~40 MB) once, then it is cached. */
-export function BgRemoverButton({ el }: { el: ImageElement }) {
+ *  v0.22: two engines, user-selectable, provider by default —
+ *  · Provider: the configured image-edit AI does the cut-out server-side
+ *    (no local compute; refuses on VibesAI-class providers that only
+ *    edit their own generations — the popover says so)
+ *  · This device: a local ONNX segmentation model (true alpha cut-out);
+ *    the first use downloads the model (~40 MB) once, then it is cached
+ */
+export function BgRemoverPopover({ el }: { el: ImageElement }) {
+  const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [phase, setPhase] = useState<'idle' | 'model' | 'removing'>('idle')
+  const [phase, setPhase] = useState<'idle' | 'model' | 'removing' | 'provider'>('idle')
+  const [engine, setEngine] = useState<ImageToolsEngine>('provider')
+  const [error, setError] = useState('')
+
+  // re-sync the shared per-browser preference whenever the popover opens
+  // (render-time adjust — the React-docs pattern, not an effect)
+  const [lastOpen, setLastOpen] = useState(false)
+  if (open !== lastOpen) {
+    setLastOpen(open)
+    if (open) {
+      setEngine(getImageToolsEngine())
+      setError('')
+    }
+  }
+
+  /** The on-device path — ONNX segmentation cut-out. */
+  const runDevice = async () => {
+    const update = useEditorStore.getState().updateElements
+    setPhase('model')
+    const { removeBackground } = await import('@imgly/background-removal')
+    const sendable = await toSendableImage(el.src)
+    const blob = await (await fetch(sendable)).blob()
+    setPhase('removing')
+    const result = await removeBackground(blob, {
+      output: { format: 'image/png' },
+      progress: (key) => {
+        if (key === 'fetch:network' || key.startsWith('fetch:')) setPhase('model')
+      },
+    })
+    const dataUrl = await blobToDataURL(result)
+    const dims = await imageSize(dataUrl)
+    const newHeight = Math.max(4, Math.round(el.width * (dims.h / Math.max(1, dims.w))))
+    update([el.id], {
+      src: dataUrl,
+      naturalWidth: dims.w,
+      naturalHeight: dims.h,
+      height: newHeight,
+    })
+    return dims
+  }
+
   const run = async () => {
     if (busy) return
     setBusy(true)
-    setPhase('model')
+    setError('')
     const update = useEditorStore.getState().updateElements
     try {
-      const { removeBackground } = await import('@imgly/background-removal')
-      const sendable = await toSendableImage(el.src)
-      const blob = await (await fetch(sendable)).blob()
-      setPhase('removing')
-      const result = await removeBackground(blob, {
-        output: { format: 'image/png' },
-        progress: (key) => {
-          if (key === 'fetch:network' || key.startsWith('fetch:')) setPhase('model')
-        },
-      })
-      const dataUrl = await blobToDataURL(result)
-      const dims = await imageSize(dataUrl)
-      const newHeight = Math.max(4, Math.round(el.width * (dims.h / Math.max(1, dims.w))))
-      update([el.id], {
-        src: dataUrl,
-        naturalWidth: dims.w,
-        naturalHeight: dims.h,
-        height: newHeight,
-      })
-      toast({ title: 'Background removed', description: 'The cut-out replaced your image. Ctrl+Z to undo.' })
+      if (engine === 'provider') {
+        setPhase('provider')
+        const r = await editViaProvider(el, { mode: 'bg-remove' })
+        if (r.ok) {
+          const dims = await imageSize(r.dataUrl)
+          const w = r.width || dims.w
+          const h = r.height || dims.h
+          const newHeight = Math.max(4, Math.round(el.width * (h / Math.max(1, w))))
+          update([el.id], {
+            src: r.dataUrl,
+            naturalWidth: w,
+            naturalHeight: h,
+            height: newHeight,
+            aiEntId: r.entId,
+          })
+          toast({ title: 'Background removed', description: 'Provider cut-out swapped in. Ctrl+Z to undo.' })
+          setOpen(false)
+        } else if (r.code === 'SOURCE_NOT_EDITABLE') {
+          setError(
+            'This provider only edits images it generated itself. Switch the engine to This device — the local cut-out works on any image.',
+          )
+        } else if (r.code === 'NO_PROVIDER' || r.code === 'FEATURE_DISABLED') {
+          setError(
+            'No AI provider is configured on this server. Switch the engine to This device — the local model works offline (first use downloads ~40 MB).',
+          )
+        } else {
+          const reason = providerReason(r.detail)
+          setError(reason ? `${r.error ?? 'The edit failed.'} — ${reason.slice(0, 220)}` : (r.error ?? 'The edit failed. Please try again.'))
+        }
+      } else {
+        await runDevice()
+        toast({ title: 'Background removed', description: 'On-device cut-out replaced your image. Ctrl+Z to undo.' })
+        setOpen(false)
+      }
     } catch (e) {
       toast({
         title: 'Background remover',
@@ -177,12 +296,42 @@ export function BgRemoverButton({ el }: { el: ImageElement }) {
       setPhase('idle')
     }
   }
-  const label = busy ? (phase === 'model' ? 'Loading model…' : 'Removing…') : 'BG Remover'
+
+  const label = busy
+    ? phase === 'provider'
+      ? 'Removing…'
+      : phase === 'model'
+        ? 'Loading model…'
+        : 'Removing…'
+    : 'BG Remover'
   return (
-    <button className={btnBase} onClick={() => void run()} disabled={busy} title="BG Remover — remove the image background" aria-label="Remove background">
-      {busy ? <Loader2 size={14} className="animate-spin" /> : <Eraser size={14} />}
-      <span className="text-[12px] hidden lg:inline">{label}</span>
-    </button>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className={btnBase} data-active={open} disabled={busy} title="BG Remover — remove the image background" aria-label="Remove background">
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <Eraser size={14} />}
+          <span className="text-[12px] hidden lg:inline">{label}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="center" side="bottom" className="w-[300px] rounded-2xl bg-[#1A1C22] border-white/10 text-white p-3.5">
+        <div className="text-[13px] font-bold mb-1 flex items-center gap-1.5">
+          <Eraser size={13} className="text-[#02C0CC]" /> BG Remover
+        </div>
+        <p className="text-[11px] text-white/55 mb-2.5 leading-snug">
+          One click — the background disappears, the subject stays. Choose who does the work:
+        </p>
+        <div className="mb-2.5">
+          <EngineToggle engine={engine} onChange={setEngine} />
+        </div>
+        {error && (
+          <p className="text-[11px] text-[#FF8A8A] mb-2 leading-snug" data-testid="bg-remover-error" role="alert">
+            {error}
+          </p>
+        )}
+        <Button className="btn-cv w-full h-9 text-[12px]" onClick={() => void run()} disabled={busy}>
+          {busy ? <Loader2 size={13} className="animate-spin" /> : 'Remove background'}
+        </Button>
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -285,18 +434,64 @@ function toImageData(data: Uint8ClampedArray, w: number, h: number): ImageData {
   return new ImageData(copy, w, h)
 }
 
-/** Canva-style "Upscale" — Lanczos-3 2x/4x with alpha discipline. */
+/**
+ * Deterministic Lanczos resize of a dataURL image to exact target
+ * dimensions (both engines' final sizing step — v0.22).
+ */
+async function lanczosTo(dataUrl: string, targetW: number, targetH: number): Promise<{ dataUrl: string; width: number; height: number }> {
+  const { lanczosResize } = await import('@/lib/upscale')
+  const img = await loadImage(dataUrl)
+  const w = img.naturalWidth
+  const h = img.naturalHeight
+  if (w === targetW && h === targetH) return { dataUrl, width: w, height: h }
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) throw new Error('Canvas is unavailable')
+  ctx.drawImage(img, 0, 0)
+  const inData = ctx.getImageData(0, 0, w, h)
+  const out = lanczosResize({ data: inData.data, width: w, height: h }, targetW, targetH)
+  canvas.width = out.width
+  canvas.height = out.height
+  ctx.putImageData(toImageData(out.data, out.width, out.height), 0, 0)
+  return { dataUrl: canvas.toDataURL('image/png'), width: out.width, height: out.height }
+}
+
+/**
+ * Canva-style "Upscale" — 2×/4× enlargement with alpha discipline.
+ * v0.22: two engines, user-selectable, provider by default —
+ * · Provider: the image-edit AI re-renders the image with restored
+ *   detail at its supported sizes (only attempted when it adds pixels),
+ *   then the deterministic Lanczos pass finishes to the advertised
+ *   target. When no provider is configured the local pass runs alone.
+ * · This device: the Lanczos-3 pass only, exactly as before.
+ */
 export function UpscaleButton({ el }: { el: ImageElement }) {
   const [busy, setBusy] = useState(false)
   const [factor, setFactor] = useState<2 | 4>(2)
   const [open, setOpen] = useState(false)
+  const [engine, setEngine] = useState<ImageToolsEngine>('provider')
+  const [error, setError] = useState('')
+
+  // re-sync the shared per-browser preference whenever the popover opens
+  // (render-time adjust — the React-docs pattern, not an effect)
+  const [lastOpen, setLastOpen] = useState(false)
+  if (open !== lastOpen) {
+    setLastOpen(open)
+    if (open) {
+      setEngine(getImageToolsEngine())
+      setError('')
+    }
+  }
 
   const run = async () => {
     if (busy) return
     setBusy(true)
+    setError('')
     const update = useEditorStore.getState().updateElements
     try {
-      const { lanczosUpscale, factorFor } = await import('@/lib/upscale')
+      const { factorFor } = await import('@/lib/upscale')
       const sendable = await toSendableImage(el.src)
       const img = await loadImage(sendable)
       const src = { width: img.naturalWidth, height: img.naturalHeight }
@@ -308,31 +503,70 @@ export function UpscaleButton({ el }: { el: ImageElement }) {
         })
         return
       }
-      const canvas = document.createElement('canvas')
-      canvas.width = src.width
-      canvas.height = src.height
-      const ctx = canvas.getContext('2d', { willReadFrequently: true })
-      if (!ctx) throw new Error('Canvas is unavailable')
-      ctx.drawImage(img, 0, 0)
-      const inData = ctx.getImageData(0, 0, src.width, src.height)
-      const out = lanczosUpscale(
-        { data: inData.data, width: src.width, height: src.height },
-        f,
-      )
-      canvas.width = out.width
-      canvas.height = out.height
-      ctx.putImageData(toImageData(out.data, out.width, out.height), 0, 0)
-      const dataUrl = canvas.toDataURL('image/png')
+      const origTarget = {
+        width: Math.min(8192, src.width * f),
+        height: Math.min(8192, src.height * f),
+      }
+
+      // base the enlargement starts from — the original unless the
+      // provider engine contributes a higher-detail re-render
+      let base = { dataUrl: sendable, width: src.width, height: src.height }
+      let usedProvider = false
+      let fellBackNote = ''
+      let providerEntId: string | undefined
+
+      if (engine === 'provider') {
+        // The provider re-renders at ~1 MP — only worth the call when it
+        // actually adds pixels over the source. Above that, Lanczos alone
+        // is the honest enlargement (and the toast says so).
+        if (src.width * src.height < 1_000_000) {
+          const r = await editViaProvider(el, { mode: 'upscale' })
+          if (r.ok) {
+            const dims = await imageSize(r.dataUrl)
+            if (dims.w * dims.h > src.width * src.height) {
+              base = { dataUrl: r.dataUrl, width: dims.w, height: dims.h }
+              usedProvider = true
+              providerEntId = r.entId
+            }
+          } else if (r.code === 'NO_PROVIDER' || r.code === 'FEATURE_DISABLED') {
+            // nothing configured server-side — the deterministic pass IS
+            // the tool; say so instead of failing
+            fellBackNote = ' No AI provider configured — enlarged on this device.'
+          } else if (r.code === 'SOURCE_NOT_EDITABLE') {
+            setError(
+              'This provider only edits images it generated itself. Switch the engine to This device — Lanczos enlarges any image.',
+            )
+            return
+          } else {
+            const reason = providerReason(r.detail)
+            setError(reason ? `${r.error ?? 'The edit failed.'} — ${reason.slice(0, 220)}` : (r.error ?? 'The edit failed. Please try again.'))
+            return
+          }
+        } else {
+          fellBackNote = ' Already above the provider re-render size — enlarged on this device.'
+        }
+      }
+
+      // deterministic finish — land on the advertised multiple of the base
+      const target = usedProvider
+        ? { width: Math.min(8192, base.width * f), height: Math.min(8192, base.height * f) }
+        : origTarget
+      const out = await lanczosTo(base.dataUrl, target.width, target.height)
       const newHeight = Math.max(4, Math.round(el.width * (out.height / Math.max(1, out.width))))
       update([el.id], {
-        src: dataUrl,
+        src: out.dataUrl,
         naturalWidth: out.width,
         naturalHeight: out.height,
         height: newHeight,
+        // refresh the provider handle when the provider re-rendered the
+        // image — the result is the new provider-owned editable
+        ...(providerEntId ? { aiEntId: providerEntId } : {}),
       })
       toast({
         title: `Upscaled ${f}×`,
-        description: `${src.width}×${src.height} → ${out.width}×${out.height}px. Ctrl+Z to undo.`,
+        description:
+          `${base.width}×${base.height} → ${out.width}×${out.height}px` +
+          `${usedProvider ? ' (provider re-render + Lanczos finish)' : ''}.${fellBackNote} Ctrl+Z to undo.`,
       })
       setOpen(false)
     } catch (e) {
@@ -350,19 +584,26 @@ export function UpscaleButton({ el }: { el: ImageElement }) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button className={btnBase} data-active={open} title="Upscale — enlarge this image locally (Lanczos)" aria-label="Upscale image">
+        <button className={btnBase} data-active={open} title="Upscale — enlarge this image (provider or on-device)" aria-label="Upscale image">
           <Maximize2 size={14} />
           <span className="text-[12px] hidden lg:inline">Upscale</span>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="center" side="bottom" className="w-[280px] rounded-2xl bg-[#1A1C22] border-white/10 text-white p-3.5">
+      <PopoverContent align="center" side="bottom" className="w-[300px] rounded-2xl bg-[#1A1C22] border-white/10 text-white p-3.5">
         <div className="text-[13px] font-bold mb-1 flex items-center gap-1.5">
           <Maximize2 size={13} className="text-[#02C0CC]" /> Upscale
         </div>
         <p className="text-[11px] text-white/55 mb-2.5 leading-snug">
-          Enlarge with high-quality Lanczos resampling — runs locally, works on any image, keeps transparency.
-          Now {el.naturalWidth}×{el.naturalHeight}px.
+          Enlarge to {target}px with alpha discipline. Now {el.naturalWidth}×{el.naturalHeight}px.
         </p>
+        <div className="mb-2.5">
+          <EngineToggle engine={engine} onChange={setEngine} />
+        </div>
+        {error && (
+          <p className="text-[11px] text-[#FF8A8A] mb-2 leading-snug" data-testid="upscale-error" role="alert">
+            {error}
+          </p>
+        )}
         <div className="flex gap-1.5 mb-2.5">
           {([2, 4] as const).map((f) => (
             <button

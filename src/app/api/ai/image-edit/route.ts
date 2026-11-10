@@ -11,7 +11,7 @@ type ImgSize = (typeof SUPPORTED_SIZES)[number]
 interface EditBody {
   image?: string        // dataURL or remote URL
   prompt?: string       // edit instruction
-  mode?: 'edit' | 'bg-remove' | 'erase' | 'enhance'
+  mode?: 'edit' | 'bg-remove' | 'erase' | 'enhance' | 'upscale'
   eraseTarget?: string  // for mode=erase: what to remove
   naturalWidth?: number
   naturalHeight?: number
@@ -49,6 +49,14 @@ const MODE_PROMPTS: Record<string, string> = {
   enhance:
     'Enhance this photo: increase sharpness and clarity, improve lighting and color balance, reduce noise. ' +
     'Keep the composition, subject and framing exactly the same. Natural, professional result.',
+  // v0.22: the provider engine of the Upscale tool — an AI re-render that
+  // restores detail at the provider's output size. The client then (or
+  // instead) runs the deterministic Lanczos-3 pass to reach the exact
+  // requested pixel size; see src/components/editor/ImageAI.tsx.
+  upscale:
+    'Re-render this exact image at a higher resolution. Keep the composition, subject, colors and ' +
+    'framing pixel-faithful — this is an upscale, not a reinterpretation. Restore fine detail and crisp ' +
+    'edges; do not add, remove or restyle anything. Output a PNG. No text or watermarks.',
 }
 
 /** POST /api/ai/image-edit — Canva-style AI image tools (BG remover, Magic eraser, enhance). */

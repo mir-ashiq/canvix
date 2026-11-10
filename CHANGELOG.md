@@ -5,6 +5,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Image-tools engine preference — provider by default, this device as
+  the option** (user request). The BG remover and Upscale popovers now
+  carry an engine toggle, persisted per browser
+  (`canvix.image-tools.engine`, new `lib/image-tools-engine.ts`):
+  - **Provider (default)** — the configured image-edit AI does the work
+    server-side. BG remover posts `mode:'bg-remove'` (the server prompt
+    existed since v0.4 but the button never used it — the tool was
+    hardwired to the local ONNX model); Upscale posts a new
+    `mode:'upscale'` (AI re-render with restored detail at the
+    provider's supported sizes, only attempted when it adds pixels) and
+    then finishes to the advertised 2×/4× target with the deterministic
+    Lanczos pass (`lanczosResize()`, new in `lib/upscale.ts`).
+  - **This device** — the previous behaviour: ONNX segmentation cut-out
+    (~40 MB model, first use) and pure Lanczos-3.
+  - Honest failure handling: `NO_PROVIDER`/`FEATURE_DISABLED` makes
+    Upscale fall back to the deterministic pass with a toast note, while
+    BG remover explains and asks you to flip the toggle (no surprise
+    40 MB downloads); `SOURCE_NOT_EDITABLE` points at the This-device
+    engine; every other provider error shows its reason inline.
+- e2e: the wave-4 local-tools spec now also pins that the engine toggle
+  exists, defaults to Provider, and that the no-provider fallback really
+  enlarges (8→16px through the designs API) with its honest toast.
+
 ### Fixed
 
 - **Landing-page counts told the v0.1.0 story** — the stats strip still

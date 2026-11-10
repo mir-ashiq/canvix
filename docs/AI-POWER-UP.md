@@ -29,19 +29,46 @@ response is a first-class contract now:
 - Generation/edit responses forward `image_ent_id`; the editor stores it on
   the element (`ImageElement.aiEntId`) and sends it back as `sourceEntId`, so
   AI-edit chains survive re-encoding (the byte hash does not).
-- The two heavy image tools that users need on **uploads and stock photos** —
-  upscaling and object removal — run **locally**. No provider can gate them.
+
+## Engine preference — provider or this device (v0.22)
+
+The one-click image tools — **BG remover** and **Upscale** — carry a small
+engine toggle in their popovers, persisted per browser
+(`canvix.image-tools.engine`, `lib/image-tools-engine.ts`):
+
+| Engine | BG remover | Upscale |
+| --- | --- | --- |
+| **Provider** (default) | the configured image-edit provider cuts the background out server-side — no local compute, no model download | the provider re-renders the image with restored detail at its supported sizes (only attempted when it adds pixels), then the deterministic Lanczos pass finishes to the advertised target |
+| **This device** | the local ONNX segmentation model (first use downloads ~40 MB, then cached) | pure Lanczos-3, exactly as before |
+
+Failure behaviour is honest and structured:
+
+- **No provider configured / feature disabled** (`NO_PROVIDER`,
+  `FEATURE_DISABLED`) — Upscale silently degrades to the deterministic
+  on-device pass and the toast says so; BG remover (whose device engine
+  downloads a 40 MB model) instead explains and asks you to flip the
+  toggle — no surprise downloads.
+- **`SOURCE_NOT_EDITABLE`** (VibesAI-class providers that only edit their
+  own generations) — both popovers point at the **This device** engine,
+  which works on any image.
+- Any other provider error surfaces with its reason, inline in the popover.
+
+The text-driven Magic eraser and Enhance stay provider-only (their local
+counterpart is the brush eraser); the brush eraser stays device-only (its
+provider counterpart is the Magic eraser).
 
 ## Local image power tools (any image, offline)
 
 ### Upscaler — Lanczos-3 (`lib/upscale.ts`)
 
 The "Upscale" button on a selected image offers 2× / 4× with a live
-target-size preview. Pure-TypedScript separable Lanczos-3 resampling with
+target-size preview. Pure-TypeScript separable Lanczos-3 resampling with
 premultiplied alpha (cut-outs keep clean edges — straight RGBA filtering
 bleeds transparent-pixel colors). Output capped at 8192px per side; the
 factor auto-reduces when the cap would be exceeded. Deterministic and
-unit-pinned (`lib/upscale.test.ts`).
+unit-pinned (`lib/upscale.test.ts`). v0.22 adds `lanczosResize()` — the same
+kernel to exact target dimensions — as the deterministic finish of the
+provider engine's upscale path.
 
 ### Brush magic eraser — pyramid diffusion (`lib/inpaint.ts`)
 
@@ -157,7 +184,7 @@ pointer to `get_design_content`.
 | `themeGeneration` | text slot | `themeGeneration` |
 | `altText` | vision slot | `altText` |
 | `videoGeneration` | video slot | `videoGeneration` |
-| `upscale` | — local, always on | — |
+| `upscale` | — local engine always available; provider engine via image-edit slot when configured | — |
 | `brushEraser` | — local, always on | — |
 
 ## Acceptance

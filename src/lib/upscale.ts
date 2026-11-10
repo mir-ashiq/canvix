@@ -152,3 +152,24 @@ export function lanczosUpscale(src: Raster, factor: number): Raster {
   // vertical pass: dstW×H → dstW×dstH
   return resampleAxis(mid, dstW, dstH, false)
 }
+
+/**
+ * Resize to EXACT dimensions with the same separable Lanczos-3 kernel
+ * (v0.22: the provider upscale path lands on the tool's advertised
+ * target size after the provider's AI re-render, which snaps to its own
+ * supported sizes). Sides are rounded and clamped to 1..MAX_OUTPUT_SIDE;
+ * a no-op request returns a copy.
+ */
+export function lanczosResize(src: Raster, dstW: number, dstH: number): Raster {
+  if (src.width < 1 || src.height < 1) throw new Error('upscale: empty raster')
+  if (src.data.length < src.width * src.height * 4) throw new Error('upscale: data/size mismatch')
+  const w = Math.max(1, Math.min(MAX_OUTPUT_SIDE, Math.round(dstW)))
+  const h = Math.max(1, Math.min(MAX_OUTPUT_SIDE, Math.round(dstH)))
+  if (w === src.width && h === src.height) {
+    return { data: new Uint8ClampedArray(src.data), width: w, height: h }
+  }
+  // horizontal pass: W×H → w×H
+  const mid = resampleAxis(src, w, src.height, true)
+  // vertical pass: w×H → w×h
+  return resampleAxis(mid, w, h, false)
+}

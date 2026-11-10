@@ -351,11 +351,31 @@ test.describe('Wave 4 — AI Power-Up', () => {
     await expect(page.getByRole('button', { name: 'Brush eraser' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Alt text' })).toBeVisible()
 
-    // run the REAL local upscaler — 2x on the 8×8 red square
+    // v0.22: the engine toggle — provider is the DEFAULT (user request);
+    // with no provider configured the upscale transparently runs on-device.
+    // The route is mocked to the NO_PROVIDER 503 shape so the test is
+    // deterministic on every host (dev machines may carry a .z-ai-config
+    // whose provider would otherwise answer — or refuse — for real).
+    await page.route('**/api/ai/image-edit', (route) =>
+      route.fulfill({
+        status: 503,
+        json: { error: 'This feature requires an AI provider configured on the server.', code: 'NO_PROVIDER' },
+      }),
+    )
     await page.getByRole('button', { name: 'Upscale image' }).click()
+    const engineGroup = page.getByRole('group', { name: 'Engine — provider or this device' })
+    await expect(engineGroup).toBeVisible()
+    await expect(engineGroup.getByTestId('engine-provider')).toHaveAttribute('aria-pressed', 'true')
+    await expect(engineGroup.getByTestId('engine-device')).toHaveAttribute('aria-pressed', 'false')
+
+    // run the upscale with the default (provider) engine — no provider is
+    // configured in this suite, so the deterministic on-device pass runs
+    // and the toast says so; 2x on the 8×8 red square → 16×16
     await page.getByRole('button', { name: /2× → 16px/ }).click()
     await page.getByRole('button', { name: /Upscale to 16×16/ }).click()
-    await expect(page.getByText('Upscaled 2×', { exact: true })).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText('Upscaled 2×', { exact: true }).first()).toBeVisible({ timeout: 30_000 })
+    // the toast's honest fallback note (aria-live mirrors the text, hence .first())
+    await expect(page.getByText(/No AI provider configured — enlarged on this device/).first()).toBeVisible()
 
     // document truth: the element's natural size doubled (8 → 16)
     await waitForDoc(

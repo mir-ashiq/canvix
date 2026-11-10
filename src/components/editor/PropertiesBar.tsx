@@ -29,7 +29,7 @@ import { IMAGE_FILTER_PRESETS, applyPresetToImageData, isImageFilterId, clampFil
 import { MASK_SHAPES, MASK_SHAPE_LABELS, isMaskShape, maskPolygon } from '@/lib/shapes'
 import { useLoadedImage } from './canvas/use-loaded-image'
 import { ToolbarPopover, SliderRow, IconTile } from './toolbar/popover-kit'
-import { BgRemoverButton, MagicEraserPopover, EnhanceButton, UpscaleButton, BrushEraserDialog, AltTextPopover } from './ImageAI'
+import { BgRemoverPopover, MagicEraserPopover, EnhanceButton, UpscaleButton, BrushEraserDialog, AltTextPopover } from './ImageAI'
 
 const ALIGN_ICONS = {
   left: AlignLeft,
@@ -443,7 +443,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           <MaskPopover el={image} ids={ids} />
           <ImageAdjustPopover el={image} ids={ids} />
           {/* v0.4 Canva AI image tools */}
-          <BgRemoverButton el={image} />
+          <BgRemoverPopover el={image} />
           <MagicEraserPopover el={image} />
           <EnhanceButton el={image} />
           {/* v0.19 (Wave 4): local image power tools — any image, offline */}

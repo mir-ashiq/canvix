@@ -106,20 +106,24 @@ test.describe('PPTX export — v0.22 fonts/transitions/animations', () => {
     await page.getByRole('button', { name: 'Add a heading', exact: true }).click()
     await expect(page.getByLabel('Design canvas')).toBeVisible()
 
-    // animate it: Animate panel → entrance fade
+    // Animate panel — it opens on the Page tab. v0.22 SFX note: once a
+    // transition is set, the section renders an "Audition Transition
+    // sound" button that stays disabled until a sound is picked — so
+    // tiles are targeted by their full accessible names (label + hint),
+    // never by a loose /transition/ regex (that matched the disabled
+    // audition button and timed out the first run of this spec).
     await page.getByRole('button', { name: 'Animate', exact: true }).click()
-    const fadeTile = page.getByRole('button', { name: /fade/i }).first()
-    if (await fadeTile.isVisible().catch(() => false)) {
-      await fadeTile.click()
-    }
 
-    // transition on the page: the Transitions section of the panel
-    const transBtn = page.getByRole('button', { name: /transitions?/i }).first()
-    if (await transBtn.isVisible().catch(() => false)) {
-      await transBtn.click()
-      const fadeTrans = page.getByRole('button', { name: /^fade$/i }).first()
-      if (await fadeTrans.isVisible().catch(() => false)) await fadeTrans.click()
-    }
+    // page transition: the Fade tile of the Page tab
+    await page
+      .getByRole('button', { name: 'Fade Crossfade between pages', exact: true })
+      .click()
+
+    // entrance animation on the selected heading: the Element tab's
+    // Fade tile (its glyph prepends "Fa" — the accessible name is
+    // "Fa Fade")
+    await page.getByRole('button', { name: 'Element', exact: true }).click()
+    await page.getByRole('button', { name: 'Fa Fade', exact: true }).click()
 
     // export through the dialog
     const downloadPromise = page.waitForEvent('download', { timeout: 120_000 })

@@ -67,8 +67,10 @@ print('PPTX OK: ' + str(len(names)) + ' parts')
 `], { encoding: 'utf-8' })
     expect(out.trim()).toMatch(/^PPTX OK: \d+ parts$/)
 
-    // the toast reports the export
-    await expect(page.getByText(/pptx downloaded/i)).toBeVisible({ timeout: 15_000 })
+    // the toast reports the export — anchored: Radix's ToastProvider also
+    // renders a visually-hidden announcer ("Notification PPTX downloaded…")
+    // for screen readers; the ^ anchor matches only the visible title.
+    await expect(page.getByText(/^PPTX downloaded/i)).toBeVisible({ timeout: 15_000 })
     expect(errors, `page errors: ${errors.join(' | ')}`).toEqual([])
   })
 })

@@ -96,6 +96,7 @@ const FEATURE_INFO: { key: string; label: string; hint: string }[] = [
   { key: 'translation', label: 'Translate', hint: 'Text translation in the text toolbar' },
   { key: 'assistant', label: 'Assistant', hint: 'The chat assistant that edits designs' },
   { key: 'photoSearch', label: 'Photo search', hint: 'Stock photo search in the Photos panel — Pexels/Pixabay keys, not an AI provider' },
+  { key: 'soundSearch', label: 'Sound search', hint: 'Stock sound search in the Audio panel — Freesound key (CC0 by default), not an AI provider' },
   // v0.19 (Wave 4 — AI Power-Up):
   { key: 'agenticPlanning', label: 'AI design plan', hint: 'Describe → review the plan → apply editable pages' },
   { key: 'notesGeneration', label: 'Speaker notes', hint: 'AI drafts presenter notes (reviewed before saving)' },
@@ -144,7 +145,8 @@ const SLOT_ENDPOINT: Record<string, string> = {
 }
 
 /** The stock-media connectors (A5) — a fixed set, one free key each,
- * shared by the Photos and Videos search rails. */
+ * shared by the Photos and Videos search rails; Freesound (Sound wave)
+ * keys the Audio rail on its own key. */
 const STOCK_PROVIDERS = [
   {
     key: 'pexels',
@@ -159,6 +161,13 @@ const STOCK_PROVIDERS = [
     hint: 'Photos + Videos search · free key at pixabay.com/api/docs',
     env: 'PIXABAY_API_KEY',
     placeholder: 'free Pixabay key',
+  },
+  {
+    key: 'freesound',
+    label: 'Freesound',
+    hint: 'Audio search (CC0 by default) · free key at freesound.org/apiv2/apply',
+    env: 'FREESOUND_API_KEY',
+    placeholder: 'free Freesound key',
   },
 ] as const
 
@@ -200,8 +209,7 @@ export function AdminAiConfig() {
     })
     setFeatures(data.features)
     // write-only credentials: never prefilled, cleared after every save
-    setStockPexels('')
-    setStockPixabay('')
+    setStockKeys({})
   }
 
   async function put(body: unknown, message: string) {
@@ -262,9 +270,8 @@ export function AdminAiConfig() {
 
   const [slotTest, setSlotTest] = useState<SlotTestState | null>(null)
 
-  // ── stock media (A5): Pexels/Pixabay keys, write-only like providers ──
-  const [stockPexels, setStockPexels] = useState('')
-  const [stockPixabay, setStockPixabay] = useState('')
+  // ── stock media (A5 + Sound wave): stock keys, write-only like providers ──
+  const [stockKeys, setStockKeys] = useState<Record<string, string>>({})
   const [stockTest, setStockTest] = useState<StockTestState | null>(null)
 
   /** Probe the ENDPOINT the slot actually uses (A3) — a chat-only
@@ -291,18 +298,20 @@ export function AdminAiConfig() {
    * empty keeps the stored credential (the write-only posture). */
   async function saveStockKeys() {
     const stock: Record<string, string> = {}
-    if (stockPexels.trim()) stock.pexels = stockPexels.trim()
-    if (stockPixabay.trim()) stock.pixabay = stockPixabay.trim()
-    await put({ stock }, 'Stock keys saved — the Photos and Videos rails pick them up immediately.')
+    for (const p of STOCK_PROVIDERS) {
+      const v = (stockKeys[p.key] ?? '').trim()
+      if (v) stock[p.key] = v
+    }
+    await put({ stock }, 'Stock keys saved — the stock rails pick them up immediately.')
   }
 
   /** Remove one stored key (explicit null) — env fallback restored. */
-  async function clearStockKey(name: 'pexels' | 'pixabay') {
+  async function clearStockKey(name: 'pexels' | 'pixabay' | 'freesound') {
     await put({ stock: { [name]: null } }, `Stored ${name} key cleared.`)
   }
 
   /** Probe the provider's real search endpoint with the effective key. */
-  async function testStockKey(name: 'pexels' | 'pixabay') {
+  async function testStockKey(name: 'pexels' | 'pixabay' | 'freesound') {
     setStockTest({ provider: name, ok: true, busy: true, message: 'probing…' })
     const res = await sendJson<{ ok: boolean; message?: string; error?: string }>(
       '/api/admin/config/stock-test',
@@ -579,28 +588,35 @@ export function AdminAiConfig() {
         </button>
       </Card>
 
-      {/* v0.16.5 (A5): the stock-media card — Pexels/Pixabay keys for the
-          Photos + Videos search rails, managed like the AI providers:
-          write-only credentials, masked placeholders, per-provider Test
-          (a real one-result search through the effective key) and Clear
-          (env fallback restored). NOT model slots — the A4 decision. */}
+      {/* v0.16.5 (A5) + Sound wave: the stock-media card — Pexels/Pixabay
+          keys for the Photos + Videos search rails and the Freesound key
+          for the Audio rail, managed like the AI providers: write-only
+          credentials, masked placeholders, per-provider Test (a real
+          one-result search through the effective key) and Clear (env
+          fallback restored). NOT model slots — the A4 decision. */}
       <Card
-        title="Stock media — Pexels & Pixabay"
+        title="Stock media — Pexels, Pixabay & Freesound"
         right={<Chip tone={stockKeyedCount > 0 ? 'good' : 'neutral'}>{stockKeyedCount > 0 ? `${stockKeyedCount} keyed` : 'no keys'}</Chip>}
       >
         <p className="mb-4 text-sm text-muted-foreground">
-          The same two free keys power the Photos and Videos search rails — no AI provider involved. Get a free key at{' '}
+          The Pexels/Pixabay keys power the Photos and Videos search rails; the Freesound key powers the Audio rail
+          (Creative Commons 0 results by default) — no AI provider involved. Get free keys at{' '}
           <a href="https://www.pexels.com/api/" target="_blank" rel="noreferrer" className="underline">
             pexels.com/api
-          </a>{' '}
-          and{' '}
+          </a>
+          ,{' '}
           <a href="https://pixabay.com/api/docs/" target="_blank" rel="noreferrer" className="underline">
             pixabay.com/api/docs
+          </a>{' '}
+          and{' '}
+          <a href="https://freesound.org/apiv2/apply/" target="_blank" rel="noreferrer" className="underline">
+            freesound.org/apiv2/apply
           </a>
           . Keys are write-only — stored, never displayed again; leave a field empty to keep the stored one. A stored
-          key wins over the <code className="rounded bg-muted px-1">PEXELS_API_KEY</code> /{' '}
-          <code className="rounded bg-muted px-1">PIXABAY_API_KEY</code> environment variables; clearing a stored key
-          falls back to the env key when one is set.
+          key wins over the matching environment variable (<code className="rounded bg-muted px-1">PEXELS_API_KEY</code> /{' '}
+          <code className="rounded bg-muted px-1">PIXABAY_API_KEY</code> /{' '}
+          <code className="rounded bg-muted px-1">FREESOUND_API_KEY</code>); clearing a stored key falls back to the
+          env key when one is set.
         </p>
         <div className="space-y-3">
           {STOCK_PROVIDERS.map((s) => {
@@ -621,10 +637,8 @@ export function AdminAiConfig() {
                     <span className="mb-1 block font-medium">API key</span>
                     <input
                       type="password"
-                      value={s.key === 'pexels' ? stockPexels : stockPixabay}
-                      onChange={(e) =>
-                        s.key === 'pexels' ? setStockPexels(e.target.value) : setStockPixabay(e.target.value)
-                      }
+                      value={stockKeys[s.key] ?? ''}
+                      onChange={(e) => setStockKeys((m) => ({ ...m, [s.key]: e.target.value }))}
                       placeholder={
                         state?.keyMasked
                           ? `stored: ${state.keyMasked}`
@@ -667,15 +681,15 @@ export function AdminAiConfig() {
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button
             onClick={() => void saveStockKeys()}
-            disabled={busy || (!stockPexels.trim() && !stockPixabay.trim())}
+            disabled={busy || !STOCK_PROVIDERS.some((p) => (stockKeys[p.key] ?? '').trim())}
             className="rounded-lg bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
             Save stock keys
           </button>
           <span className="text-xs text-muted-foreground">
             {view.stock.available
-              ? 'Search active — the Photos web-results section and the Videos rail answer now.'
-              : 'No stock key set — Photos keeps its bundled library and the Videos rail stays hidden.'}
+              ? 'Stock search active — the keyed rails answer now.'
+              : 'No stock key set — Photos keeps its bundled library, the Videos and Audio web-search sections stay hidden.'}
           </span>
         </div>
       </Card>

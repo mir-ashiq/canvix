@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { hasProviderForSlot } from '@/lib/ai/provider'
 import { stockPhotoAvailable } from '@/lib/stock-photo'
+import { stockSoundAvailable } from '@/lib/stock-sound'
 import { getFeatures } from '@/lib/admin/config'
 import { withLogging } from '@/lib/observability'
 
@@ -25,13 +26,15 @@ async function __canvix_get() {
   // v0.19 (Wave 4): five AI Power-Up capabilities — the text-slot
   // trio (plan/notes/theme), vision-slot alt text, the video slot,
   // and the two LOCAL image tools that need no provider at all.
-  const [text, vision, image, imageEdit, video, stockPhotos] = await Promise.all([
+  // Sound wave: soundSearch rides the Freesound stock key.
+  const [text, vision, image, imageEdit, video, stockPhotos, stockSounds] = await Promise.all([
     hasProviderForSlot('text'),
     hasProviderForSlot('vision'),
     hasProviderForSlot('image'),
     hasProviderForSlot('imageEdit'),
     hasProviderForSlot('video'),
     stockPhotoAvailable(), // async since A5 — keys resolve console-first
+    stockSoundAvailable(),
   ])
   const configured = text || vision || image || imageEdit || video
   const flags = await getFeatures()
@@ -45,6 +48,7 @@ async function __canvix_get() {
       translation: text && flags.translation,
       assistant: text && flags.assistant,
       photoSearch: stockPhotos && flags.photoSearch, // stock keys, not a model slot
+      soundSearch: stockSounds && flags.soundSearch, // Freesound stock key
       backgroundRemoval: true,     // local ONNX — always available
       colorPalette: true,          // local deterministic
       layoutSuggestions: true,     // local deterministic

@@ -53,6 +53,9 @@ export const AI_FEATURES = [
   'translation',
   'assistant',
   'photoSearch',
+  // Sound wave — stock sound search rides the Freesound key, the
+  // same stock-connector posture as photoSearch (not an AI slot)
+  'soundSearch',
   // v0.19 (Wave 4 — AI Power-Up):
   'agenticPlanning', // describe → AI multi-page plan → editable review gate
   'notesGeneration', // speaker notes from page content
@@ -115,6 +118,7 @@ export const DEFAULT_FEATURES: StoredFeatures = {
   translation: true,
   assistant: true,
   photoSearch: true,
+  soundSearch: true,
   // v0.19 (Wave 4) — default ON; stored tables that predate the flags
   // merge over these defaults (getFeatures spreads DEFAULT first).
   agenticPlanning: true,
@@ -131,14 +135,16 @@ export const DEFAULT_SETTINGS: StoredSettings = {
 
 // ── stock-media keys (v0.16.5 A5) ─────────────────────────────
 
-/** The two stock-media connectors — photos + videos share each key. */
-export type StockProviderName = 'pexels' | 'pixabay'
+/** The stock-media connectors — photos + videos share the Pexels/Pixabay
+ * keys; the Sound wave adds Freesound (its own key). */
+export type StockProviderName = 'pexels' | 'pixabay' | 'freesound'
 /** Stored stock keys (AppConfig `stock.providers`) — write-only like every credential here. */
 export type StoredStockKeys = Partial<Record<StockProviderName, string>>
 /** The pre-A5 way to key stock search — still the fallback when nothing is stored. */
 export const STOCK_ENV_KEYS: Record<StockProviderName, string> = {
   pexels: 'PEXELS_API_KEY',
   pixabay: 'PIXABAY_API_KEY',
+  freesound: 'FREESOUND_API_KEY',
 }
 
 const BASEURL_MAX = 2048
@@ -253,7 +259,7 @@ export function validateStockKeys(
   }
   const raw = input as Record<string, unknown>
   const out: Partial<Record<StockProviderName, string | null>> = {}
-  for (const name of ['pexels', 'pixabay'] as const) {
+  for (const name of ['pexels', 'pixabay', 'freesound'] as const) {
     const v = raw[name]
     if (v === undefined) continue
     if (v === null) {
@@ -570,7 +576,7 @@ export async function getStockKeys(): Promise<StoredStockKeys> {
   const rows = await readRows()
   const raw = asRecord(rows.get(CONFIG_KEYS.stock))
   const out: StoredStockKeys = {}
-  for (const name of ['pexels', 'pixabay'] as const) {
+  for (const name of ['pexels', 'pixabay', 'freesound'] as const) {
     const v = raw[name]
     if (typeof v === 'string' && v.trim()) out[name] = v.trim()
   }
@@ -580,7 +586,7 @@ export async function getStockKeys(): Promise<StoredStockKeys> {
 /** Merge a validated patch over the stored keys and write the full state. */
 export async function setStockKeys(patch: Partial<Record<StockProviderName, string | null>>): Promise<void> {
   const next: StoredStockKeys = { ...(await getStockKeys()) }
-  for (const name of ['pexels', 'pixabay'] as const) {
+  for (const name of ['pexels', 'pixabay', 'freesound'] as const) {
     const v = patch[name]
     if (v === null) delete next[name]
     else if (typeof v === 'string' && v) next[name] = v
@@ -597,8 +603,8 @@ export async function setStockKeys(patch: Partial<Record<StockProviderName, stri
  */
 export async function effectiveStockKeys(): Promise<Record<StockProviderName, string>> {
   const stored = await getStockKeys()
-  const out = { pexels: '', pixabay: '' }
-  for (const name of ['pexels', 'pixabay'] as const) {
+  const out = { pexels: '', pixabay: '', freesound: '' }
+  for (const name of ['pexels', 'pixabay', 'freesound'] as const) {
     out[name] = stored[name] ?? (process.env[STOCK_ENV_KEYS[name]] ?? '').trim()
   }
   return out

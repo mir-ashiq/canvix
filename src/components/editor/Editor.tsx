@@ -19,6 +19,7 @@ import { TextPanel } from './panels/TextPanel'
 import { UploadsPanel } from './panels/UploadsPanel'
 import { PhotosPanel } from './panels/PhotosPanel'
 import { VideosPanel } from './panels/VideosPanel'
+import { AudioPanel } from './panels/AudioPanel'
 import { BrandPanel } from './panels/BrandPanel'
 import { ToolsPanel } from './panels/ToolsPanel'
 import { ProjectsPanel } from './panels/ProjectsPanel'
@@ -54,6 +55,7 @@ const PANEL_TITLES: Record<Exclude<PanelId, null>, string> = {
   uploads: 'Uploads',
   photos: 'Photos',
   videos: 'Videos',
+  audio: 'Audio',
   tools: 'Tools',
   projects: 'Projects',
   apps: 'Apps',
@@ -481,6 +483,7 @@ export default function Editor() {
       case 'uploads': return <UploadsPanel />
       case 'photos': return <PhotosPanel />
       case 'videos': return <VideosPanel />
+      case 'audio': return <AudioPanel />
       case 'brand': return <BrandPanel />
       case 'tools': return <ToolsPanel />
       case 'projects': return <ProjectsPanel />

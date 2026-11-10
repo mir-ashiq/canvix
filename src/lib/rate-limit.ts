@@ -44,6 +44,7 @@ export type RateLimitBucket =
   | 'plugins:serve'
   | 'stockvideo:search'
   | 'stockphoto:search'
+  | 'stocksound:search'
   | 'icons:search'
   | 'templates:fill'
 
@@ -87,6 +88,10 @@ export const RATE_LIMITS: Record<RateLimitBucket, RateLimitConfig> = {
   // — one shared bucket shape with the video rail (the panel also
   // debounces at 600 ms and caches server-side for 24 h)
   'stockphoto:search': { windowMs: 60_000, max: 20 },
+  // Sound wave: stock-sound search spends the same PROVIDER quota
+  // (Freesound key) — the Audio panel debounces at 600 ms and caches
+  // server-side for 24 h, same bucket shape as the photo/video rails
+  'stocksound:search': { windowMs: 60_000, max: 20 },
   // v0.17 (Wave 2): iconify search/svg proxy — free public API, no key,
   // but every hit is outbound traffic from the Worker; the panel debounces
   // at 500 ms and caches, so 30/min per IP is generous for humans

@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Sparkles, X, Zap, Play, RotateCcw, ArrowLeft, ArrowRight, ArrowUp, ArrowDown } from 'lucide-react'
+import { Sparkles, X, Zap, Play, RotateCcw, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, Volume2 } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { ANIMATION_KINDS, TRANSITION_KINDS } from '@/lib/animations'
+import { SFX_PACK, isSfxId } from '@/lib/assets/sfx-pack'
+import { playSfx } from '@/lib/sfx'
 import type { AnimationDirection, AnimationEasing, AnimationKind, AnimationSpeed, ElementAnimation, PageTransition } from '@/lib/types'
 import { SPEED_PRESETS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
@@ -80,6 +82,7 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
       kind,
       duration: pageTransition?.kind === kind ? pageTransition.duration : 0.7,
       direction: pageTransition?.direction ?? 'left',
+      ...(isSfxId(pageTransition?.sfxId) ? { sfxId: pageTransition.sfxId } : {}),
     })
   }
 
@@ -229,6 +232,13 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                       ))}
                     </div>
                   )}
+                  {/* Sound wave: transition SFX — the 16 offline pack sounds,
+                      auditioned inline, stored on the transition config */}
+                  <SfxPicker
+                    label="Transition sound"
+                    value={pageTransition.sfxId}
+                    onChange={(sfxId) => setPageTransition({ ...pageTransition, ...(sfxId ? { sfxId } : { sfxId: undefined }) })}
+                  />
                 </div>
               )}
             </div>
@@ -367,6 +377,13 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                         </div>
                       </div>
                     )}
+                    {/* Sound wave: element animation SFX — fires when the
+                        animation triggers (at its delay) in preview/present */}
+                    <SfxPicker
+                      label="Entrance sound"
+                      value={selectedAnim.sfxId}
+                      onChange={(sfxId) => patchAnim({ ...(sfxId ? { sfxId } : { sfxId: undefined }) })}
+                    />
                   </div>
                 )}
               </>
@@ -402,4 +419,45 @@ function AnimationGlyph({ kind }: { kind: AnimationKind }) {
     default:
       return <div className={cls}>?</div>
   }
+}
+
+/**
+ * Sound wave: the SFX picker — a compact select over the 16 offline
+ * pack sounds with an inline audition button. `value` undefined =
+ * "None". Changing the pick previews nothing (Preview plays it in
+ * context); the speaker button auditions immediately.
+ */
+function SfxPicker({ label, value, onChange }: { label: string; value: string | undefined; onChange: (sfxId: string | undefined) => void }) {
+  return (
+    <div className="mt-2.5" data-testid="sfx-picker">
+      <span className="text-[10px] font-semibold text-white/50 block mb-1.5">{label}</span>
+      <div className="flex items-center gap-1.5">
+        <select
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value || undefined)}
+          className="min-w-0 flex-1 rounded-md border border-white/10 bg-[#16181D] px-2 py-1.5 text-[11px] text-white/85 outline-none focus:border-[#02C0CC]"
+          aria-label={label}
+        >
+          <option value="">None</option>
+          {SFX_PACK.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label} · {s.seconds}s
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={() => value && playSfx(value, 0.8)}
+          disabled={!value}
+          title={value ? 'Audition this sound' : 'Pick a sound first'}
+          aria-label={`Audition ${label}`}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/10 text-white/60 transition-colors hover:text-white hover:border-white/25 disabled:opacity-40"
+        >
+          <Volume2 size={13} />
+        </button>
+      </div>
+      <p className="mt-1 text-[9px] leading-snug text-white/30">
+        Plays in Preview and Present. For video export, insert the sound from the Audio panel as an autoplay element instead.
+      </p>
+    </div>
+  )
 }

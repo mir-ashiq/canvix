@@ -554,6 +554,20 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
               {Math.round(audio.bpm)} BPM
             </span>
           ) : null}
+          {/* Sound wave: durable audio attribution — the A4 photo pattern
+              (Freesound results, pack sounds, voiceover recordings). */}
+          {audio.credit ? (
+            <a
+              href={audio.credit.url || undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[11px] font-semibold text-[#02C0CC] bg-[#02C0CC]/10 border border-[#02C0CC]/25 rounded-full px-2 py-0.5 shrink-0 max-w-[190px] truncate"
+              title={`${audio.credit.license}${audio.credit.url ? ` — ${audio.credit.url}` : ''}`}
+              aria-label={`Audio by ${audio.credit.author} on ${audio.credit.provider}`}
+            >
+              {audio.credit.provider} · {audio.credit.author}
+            </a>
+          ) : null}
           <Divider />
           <PositionPopover ids={ids} count={1} element={first} />
         </>

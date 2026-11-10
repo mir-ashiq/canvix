@@ -103,6 +103,17 @@ generations" refusal surfaces as a structured 422 pointing at the local
 tools. No migration. Guide: docs/AI-POWER-UP.md · acceptance: 1309 unit
 tests (+54), wave4 e2e suite (tests/e2e/wave4-ai-powerup.spec.ts).
 
+### Sound cluster ✅ SHIPPED (v0.20.0, 2026-11-10)
+The original audit's Wave 3 ("Sound — feed the beat-sync moat") was re-scoped
+out of the consolidation programme's Wave 3 (editor depth) and is now closed
+as its own release: 16-sound offline library (original code synthesis, CC0 —
+no samples) · Freesound connector (the fourth stock-media connector, CC0
+filter by default, durable attribution) · voiceover recording (MediaRecorder →
+media store, full beat analysis) · animation + page-transition SFX
+(`sfxId`, additive). The v0.11 beat-sync infrastructure finally has a sound
+source. No migration. Guide + licence manifest: docs/SOUND.md · acceptance:
+1330 unit tests (+21), tests/e2e/sound-gated.spec.ts.
+
 ### Wave 5 — Export & Sharing Professionalisation
 Share links with view/comment/edit roles + password + expiry · ZIP batch export · WebP · PPTX ·
 print production marks (bleed/crop/300 DPI) · server-side rendering · portable `.canvix` project

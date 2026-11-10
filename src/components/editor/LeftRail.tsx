@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { LayoutTemplate, Shapes, Type, Upload, Palette, Layers, Wrench, FolderOpen, LayoutGrid, BookMarked, Image, Video } from 'lucide-react'
+import { LayoutTemplate, Shapes, Type, Upload, Palette, Layers, Wrench, FolderOpen, LayoutGrid, BookMarked, Image, Video, AudioLines } from 'lucide-react'
 import { useEditorStore, type PanelId } from '@/store/editor-store'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
@@ -20,6 +20,7 @@ const PANELS: { id: Exclude<PanelId, null>; label: string; icon: typeof LayoutTe
   { id: 'uploads', label: 'Uploads', icon: Upload },
   { id: 'photos', label: 'Photos', icon: Image },
   { id: 'videos', label: 'Videos', icon: Video },
+  { id: 'audio', label: 'Audio', icon: AudioLines },
   { id: 'tools', label: 'Tools', icon: Wrench },
   { id: 'projects', label: 'Projects', icon: FolderOpen },
   { id: 'apps', label: 'Apps', icon: LayoutGrid },

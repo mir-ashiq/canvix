@@ -41,6 +41,11 @@ export interface ElementAnimation {
   easing: AnimationEasing
   /** pan/rise travel direction */
   direction?: AnimationDirection
+  /** Sound wave: offline pack sound played when the animation
+   *  triggers (at its delay) in preview/present. Additive —
+   *  pre-sound documents are unaffected. Validated against the
+   *  pack catalogue; unknown ids are dropped on sanitize. */
+  sfxId?: string
 }
 
 export type TransitionKind = 'none' | 'fade' | 'slide' | 'morph'
@@ -50,6 +55,9 @@ export interface PageTransition {
   /** 0.1–2.5 s */
   duration: number
   direction?: AnimationDirection
+  /** Sound wave: offline pack sound played when this page
+   *  appears after another (preview/present). Additive. */
+  sfxId?: string
 }
 
 /** canva speed presets (seconds) */
@@ -423,6 +431,10 @@ export interface AudioElement extends BaseElement {
   bpm?: number
   /** beat grid in seconds (aligned to the strongest onset) */
   beats?: number[]
+  /** Sound wave: durable attribution for stock/recorded audio —
+   *  {provider, author, license, url} (the A4 photo pattern; shown in
+   *  the properties bar, never burned into exports). */
+  credit?: { provider: string; author: string; license: string; url: string }
 }
 
 /** Native video element — the editor renders the poster frame (captured at

@@ -7,6 +7,7 @@ import type { AudioElement, PageData, VideoElement } from '@/lib/types'
 import { gradientProps, pageSize } from '@/lib/editor-utils'
 import { animateElementAt, pageAnimationDuration } from '@/lib/animations'
 import { beatEnvelopeAt, beatSourceOf } from '@/lib/media/beat-detect'
+import { playSfx } from '@/lib/sfx'
 import { PreviewElements } from './element-node'
 
 interface PreviewStageProps {
@@ -65,6 +66,15 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
 
   // ── v0.5: element animation playback (rAF timeline over Konva nodes) ──
   const hasAnimations = animated && page.elements.some((e) => e.animation && e.animation.kind !== 'none')
+  // Sound wave: page-transition SFX — fires when this page's animated
+  // stage mounts (the incoming page of a transition; outgoing pages
+  // render non-animated, so no double-fire). reduce-motion mutes it —
+  // the same accessibility posture as the animation itself.
+  useEffect(() => {
+    if (!animated || reduceMotion || !stageReady) return
+    const sfxId = page.transition?.sfxId
+    if (sfxId && page.transition?.kind !== 'none') playSfx(sfxId, 0.7)
+  }, [animated, reduceMotion, playKey, stageReady, page])
   useEffect(() => {
     const layer = layerRef.current
     const stage = stageRef.current
@@ -97,11 +107,20 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
     const total = pageAnimationDuration(page) + 0.1
     let raf = 0
     let stopped = false
+    // Sound wave: element SFX fire once, on the rAF clock, when the
+    // element's animation triggers (t crosses its delay) — synced
+    // with the visual timeline, cancelled with it.
+    const fired = new Set<string>()
 
     const tick = (now: number) => {
       if (stopped) return
       const t = Math.min((now - start) / 1000, total)
       for (const el of animatable) {
+        const sfxId = el.animation?.sfxId
+        if (sfxId && !fired.has(el.id) && t >= (el.animation?.delay || 0)) {
+          fired.add(el.id)
+          playSfx(sfxId, 0.8)
+        }
         const node = layer.findOne(`#${el.id}`)
         const base = bases.get(el.id)
         if (!node || !base) continue

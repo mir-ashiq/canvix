@@ -32,6 +32,7 @@ export type PanelId =
   | 'uploads'
   | 'photos'
   | 'videos'
+  | 'audio'
   | 'tools'
   | 'projects'
   | 'apps'

@@ -123,14 +123,15 @@ async function sanitizedView() {
     models,
     features,
     settings,
-    // v0.16.5 (A5): the stock-media card's data — per-connector mask
-    // + which layer answers (console key vs env var), plus whether the
+    // v0.16.5 (A5) + Sound wave: the stock-media card's data — per-connector
+    // mask + which layer answers (console key vs env var), plus whether the
     // rails are live at all. Secret-free: masks and names only, never keys.
     stock: {
-      available: Boolean(stockEffective.pexels || stockEffective.pixabay),
+      available: Boolean(stockEffective.pexels || stockEffective.pixabay || stockEffective.freesound),
       providers: {
         pexels: stockProviderView('pexels', stockKeys.pexels),
         pixabay: stockProviderView('pixabay', stockKeys.pixabay),
+        freesound: stockProviderView('freesound', stockKeys.freesound),
       },
     },
   }

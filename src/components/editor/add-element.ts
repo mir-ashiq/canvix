@@ -419,6 +419,99 @@ export async function addAudioFromFile(
   )
 }
 
+/**
+ * Sound wave: shared insert path for bytes we hold in the browser —
+ * stock previews (Freesound), pack sounds, voiceover recordings.
+ * Uploads through the chunked media store, bakes the analysis in
+ * (waveform + BPM + beats — beat sync works day one), and stores a
+ * durable credit block on the element when one applies.
+ */
+async function addAudioBlob(
+  blob: Blob,
+  name: string,
+  credit?: { provider: string; author: string; license: string; url: string },
+  onProgress?: (ratio: number) => void,
+): Promise<void> {
+  const { uploadMediaFile, mediaSrc } = await import('@/lib/media/media-client')
+  const { analyzeAudioFile } = await import('@/lib/media/decode')
+  const { createAudioElement } = await import('@/lib/types')
+  const file = new File([blob], name, { type: blob.type || 'audio/mpeg' })
+  const [handle, analysis] = await Promise.all([uploadMediaFile(file, onProgress), analyzeAudioFile(file)])
+  const store = useEditorStore.getState()
+  const w = Math.min(520, Math.max(360, store.width * 0.55))
+  const pos = placement(w, 96, store.pages[store.currentPage].elements.length)
+  store.addElement(
+    createAudioElement(mediaSrc(handle.id), name.replace(/\.[^.]+$/, '').slice(0, 60), analysis.duration, {
+      ...pos,
+      width: Math.round(w),
+      height: 96,
+      peaks: analysis.peaks,
+      bpm: analysis.bpm,
+      beats: analysis.beats,
+      ...(credit ? { credit } : {}),
+    })
+  )
+}
+
+/**
+ * Sound wave: insert a Freesound search result. Downloads the CC0
+ * preview MP3 in the browser (the CDN answers CORS-open on GET),
+ * then rides the shared audio insert — quota, dedupe, caps and the
+ * full analysis all apply as-is.
+ */
+export async function addStockSound(
+  sound: {
+    id: string
+    name: string
+    preview: string
+    credit: { provider: string; author: string; license: string; url: string }
+  },
+  onProgress?: (ratio: number) => void,
+): Promise<void> {
+  const blob = await fetch(sound.preview).then((r) => {
+    if (!r.ok) throw new Error(`Download failed (${r.status}).`)
+    return r.blob()
+  })
+  await addAudioBlob(blob, `${sound.id}.mp3`, sound.credit, onProgress)
+}
+
+/**
+ * Sound wave: insert an offline pack sound as a native audio
+ * element — the same bundled file the animation SFX player uses,
+ * landing on the canvas so it can autoplay in preview/present and
+ * ride video export (the per-animation sfxId triggers do not).
+ */
+export async function addSfxToCanvas(id: string): Promise<void> {
+  const { sfxUrl, sfxById } = await import('@/lib/assets/sfx-pack')
+  const def = sfxById(id)
+  if (!def) return
+  const blob = await fetch(sfxUrl(id)).then((r) => {
+    if (!r.ok) throw new Error(`Could not load the sound (${r.status}).`)
+    return r.blob()
+  })
+  await addAudioBlob(blob, `${def.label}.wav`, {
+    provider: 'Canvix',
+    author: 'Canvix sound pack',
+    license: 'CC0 (synthesized for Canvix)',
+    url: 'https://canvix.app',
+  })
+}
+
+/**
+ * Sound wave: persist a voiceover recording (MediaRecorder blob
+ * from the Audio panel) through the shared audio insert path.
+ * Carries the "recorded by the author" credit block.
+ */
+export async function addVoiceoverRecording(blob: Blob): Promise<void> {
+  const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('webm') ? 'webm' : 'audio'
+  await addAudioBlob(blob, `voiceover-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}.${ext}`, {
+    provider: 'Canvix',
+    author: 'Recorded in the editor',
+    license: 'Yours — recorded locally, stored in your media library',
+    url: 'https://canvix.app',
+  })
+}
+
 /** Upload a video file, capture its poster frame, and add it to the canvas. */
 export async function addVideoFromFile(
   file: File,

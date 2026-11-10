@@ -42,8 +42,8 @@ async function __canvix_post(req: NextRequest) {
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const provider = typeof body.provider === 'string' ? body.provider.trim() : ''
-  if (provider !== 'pexels' && provider !== 'pixabay') {
-    return NextResponse.json({ ok: false, error: 'provider must be "pexels" or "pixabay".' }, { status: 400 })
+  if (provider !== 'pexels' && provider !== 'pixabay' && provider !== 'freesound') {
+    return NextResponse.json({ ok: false, error: 'provider must be "pexels", "pixabay" or "freesound".' }, { status: 400 })
   }
   const name = provider as StockProviderName
 
@@ -65,6 +65,13 @@ async function __canvix_post(req: NextRequest) {
     const base = (process.env.PEXELS_API_BASE ?? 'https://api.pexels.com').replace(/\/+$/, '')
     url = `${base}/v1/search?query=nature&per_page=1&orientation=landscape`
     init = { headers: { Authorization: key } }
+  } else if (name === 'freesound') {
+    // Sound wave: same probe shape — one CC0 result for "click"
+    const base = (process.env.FREESOUND_API_BASE ?? 'https://freesound.org/apiv2').replace(/\/+$/, '')
+    url =
+      `${base}/search/text/?query=click&filter=license:"Creative Commons 0"` +
+      `&fields=id,name&page_size=1&token=${encodeURIComponent(key)}`
+    init = {}
   } else {
     const base = (process.env.PIXABAY_API_BASE ?? 'https://pixabay.com/api').replace(/\/+$/, '')
     url = `${base}/?key=${encodeURIComponent(key)}&q=nature&image_type=photo&per_page=3&safesearch=true`
@@ -97,7 +104,9 @@ async function __canvix_post(req: NextRequest) {
     const total =
       name === 'pexels'
         ? Number((payload as { total_results?: unknown } | null)?.total_results)
-        : Number((payload as { total?: unknown } | null)?.total)
+        : name === 'freesound'
+          ? Number((payload as { count?: unknown } | null)?.count)
+          : Number((payload as { total?: unknown } | null)?.total)
     return NextResponse.json({
       ok: true,
       provider: name,

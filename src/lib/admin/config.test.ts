@@ -388,16 +388,18 @@ describe('stock keys (v0.16.5 A5)', () => {
   it('effectiveStockKeys: the console key wins, env fills the rest', async () => {
     vi.stubEnv('PEXELS_API_KEY', 'env-pexels')
     vi.stubEnv('PIXABAY_API_KEY', 'env-pixabay')
-    findMany.mockResolvedValue([{ key: 'stock.providers', value: { pexels: 'db-pexels' } }])
-    expect(await effectiveStockKeys()).toEqual({ pexels: 'db-pexels', pixabay: 'env-pixabay' })
+    vi.stubEnv('FREESOUND_API_KEY', 'env-freesound')
+    findMany.mockResolvedValue([{ key: 'stock.providers', value: { pexels: 'db-pexels', freesound: 'db-freesound' } }])
+    expect(await effectiveStockKeys()).toEqual({ pexels: 'db-pexels', pixabay: 'env-pixabay', freesound: 'db-freesound' })
     vi.unstubAllEnvs()
   })
 
   it('effectiveStockKeys with nothing anywhere → empty strings, never a throw', async () => {
     vi.stubEnv('PEXELS_API_KEY', '')
     vi.stubEnv('PIXABAY_API_KEY', '  ')
+    vi.stubEnv('FREESOUND_API_KEY', undefined as unknown as string)
     findMany.mockResolvedValue([])
-    expect(await effectiveStockKeys()).toEqual({ pexels: '', pixabay: '' })
+    expect(await effectiveStockKeys()).toEqual({ pexels: '', pixabay: '', freesound: '' })
     vi.unstubAllEnvs()
   })
 })

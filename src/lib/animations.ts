@@ -7,12 +7,14 @@
 // Static exports (PNG/JPG/PDF/SVG) ignore animations entirely.
 // ─────────────────────────────────────────────────────────────
 
+import { isSfxId } from '@/lib/assets/sfx-pack'
 import type {
   AnimationEasing,
   AnimationKind,
   AnyElement,
   ElementAnimation,
   PageData,
+  PageTransition,
 } from '@/lib/types'
 
 // ── easings ──────────────────────────────────────────────────
@@ -297,11 +299,35 @@ export function sanitizeAnimation(input: unknown): ElementAnimation | undefined 
   const direction = (['left', 'right', 'up', 'down'] as const).includes(a.direction as never)
     ? (a.direction as ElementAnimation['direction'])
     : undefined
+  // Sound wave: sfxId must name a real pack sound — unknown ids are
+  // dropped (never stored), so hostile/AI input can only pick from
+  // the 16 bundled files.
+  const sfxId = isSfxId(a.sfxId) ? a.sfxId : undefined
   return {
     kind,
     duration: Math.min(4, Math.max(0.1, Number(a.duration) || 0.9)),
     delay: Math.min(5, Math.max(0, Number(a.delay) || 0)),
     easing,
     direction,
+    ...(sfxId ? { sfxId } : {}),
+  }
+}
+
+/** normalize/clamp a page transition config (Sound wave: sfxId rides along) */
+export function sanitizePageTransition(input: unknown): PageTransition | undefined {
+  if (!input || typeof input !== 'object') return undefined
+  const t = input as Partial<PageTransition>
+  const kind = t.kind
+  if (!kind || !TRANSITION_KINDS.some((k) => k.kind === kind)) return undefined
+  if (kind === 'none') return undefined
+  const direction = (['left', 'right', 'up', 'down'] as const).includes(t.direction as never)
+    ? (t.direction as PageTransition['direction'])
+    : undefined
+  const sfxId = isSfxId(t.sfxId) ? t.sfxId : undefined
+  return {
+    kind,
+    duration: Math.min(2.5, Math.max(0.1, Number(t.duration) || 0.7)),
+    ...(direction ? { direction } : {}),
+    ...(sfxId ? { sfxId } : {}),
   }
 }

@@ -150,6 +150,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The Word Cloud plugin refused to install on v0.22.0 itself** — the
+  release raised the host app to 0.22.0 but left the bundled
+  manifest's `engines.canvix` ceiling at `<0.22.0`, so the first-party
+  rail (correctly) rejected the plugin against its own host — the two
+  `firstparty.test.ts` assertions that pin the shipped bundle to the
+  running build. The range widens to `>=0.13.4 <0.23.0` for this
+  minor series.
 - **PPTX media parts landed at the package root** — the slide rels
   say `../media/imageN.png` (relative to `ppt/slides/_rels/`), which
   resolves to `ppt/media/…`, but the writer placed parts at the zip

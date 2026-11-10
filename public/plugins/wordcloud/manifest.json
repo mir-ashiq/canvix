@@ -9,7 +9,7 @@
     "url": "https://github.com/mir-ashiq/canvix"
   },
   "engines": {
-    "canvix": ">=0.13.4 <0.22.0"
+    "canvix": ">=0.13.4 <0.23.0"
   },
   "entry": {
     "panel": "panel.html",

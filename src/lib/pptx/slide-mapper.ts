@@ -35,6 +35,8 @@ import { normalizeSpans } from '@/lib/rich-text'
 import { polygonPoints, starPointsEx, stretchPts, type Pt } from '@/lib/shapes'
 import { fitFontSize } from '@/lib/text-fit'
 import { emu, centerAfterRotation, parseColor, solidFill, strokeLn, xesc } from './xml-helpers'
+import { isSfxId } from '@/lib/assets/sfx-pack'
+import { timingXml, transitionXml, type AnimatedShape } from './transitions'
 
 // ── context ──────────────────────────────────────────────────
 
@@ -56,14 +58,25 @@ export interface PptxMediaBag {
   imagePart(src: string): Promise<string | null>
   /** register raw raster bytes (fallback renders) → part name */
   registerRaster(bytes: Uint8Array): Promise<string>
+  /** v0.22: the offline SFX pack — part name for a sound id
+   *  ('media/sfx2.wav'), fetched once per id; null when the bytes
+   *  are unavailable (export proceeds without the sound). */
+  soundPart(id: string): Promise<string | null>
 }
 
 export interface MappedSlide {
   xml: string
   /** relationship entries: rel id → media target */
   imageRels: Map<string, string>
+  /** v0.22: audio relationship entries (transition SFX) — same
+   *  rel-id namespace, a different relationship TYPE. */
+  soundRels: Map<string, string>
   rasters: number
   natives: number
+  /** entrance-animated shapes seen during the walk */
+  animated: AnimatedShape[]
+  /** the page's SFX actually landed a media part */
+  hasSound: boolean
 }
 
 // ── fills / shared property blocks ───────────────────────────
@@ -283,11 +296,16 @@ function textXml(t: TextElement, id: number, ctx: SlideMapContext): string | nul
   const paras = paragraphsOf(t)
   const rtl = t.direction === 'rtl'
   const align = t.align === 'center' ? 'ctr' : t.align === 'justify' ? 'just' : rtl ? (t.align === 'left' ? 'r' : 'l') : t.align === 'right' ? 'r' : 'l'
+  // v0.22 re-wrap safety: PowerPoint's line engine wraps slightly
+  // differently than the browser's. bare <a:normAutofit/> (no scale)
+  // tells PowerPoint to shrink-on-overflow instead of spilling text
+  // out of the shape; when OUR engine already auto-fit the text, the
+  // measured scale rides along so PowerPoint starts where we left off.
   const bodyPr =
     `<a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t">` +
     (t.autoFit && effSize < t.fontSize
       ? `<a:normAutofit fontScale="${Math.max(10000, Math.round((effSize / t.fontSize) * 100000))}" lnSpcReduction="0"/>`
-      : '') +
+      : `<a:normAutofit/>`) +
     `</a:bodyPr>`
   const ppr =
     `<a:pPr algn="${align}"${rtl ? ' rtl="1"' : ''}>` +
@@ -525,9 +543,12 @@ export async function mapSlide(
   ctx: SlideMapContext,
 ): Promise<MappedSlide> {
   const imageRels = new Map<string, string>()
+  const soundRels = new Map<string, string>()
   const shapes: string[] = []
+  const animated: AnimatedShape[] = []
   let rasters = 0
   let natives = 0
+  let hasSound = false
   const t = pageTransform(page, designW, designH)
 
   const background =
@@ -545,6 +566,10 @@ export async function mapSlide(
       const id = ctx.nextId()
       let xml: string | null = null
       let native = true
+      // v0.22: entrance animations carry into the timing tree — collect
+      // every visible animated element (native or raster, both are real
+      // shapes with ids) with the id it got on THIS slide
+      if (el.animation && el.animation.kind !== 'none') animated.push({ spid: id, animation: el.animation })
       if (el.type === 'text') {
         const te = el as TextElement
         // curved text / text effects / shadowed text → raster
@@ -584,6 +609,23 @@ export async function mapSlide(
   }
   await walk(page.elements)
 
+  // v0.22: transitions + entrance timing + the page's SFX ride along.
+  // The sound bytes come from the media bag (fetched once per id);
+  // its rel rides the audio relationship type, wired into the
+  // transition's <p:sndAc>.
+  let transition = transitionXml(page.transition)
+  const sfxId = page.transition?.sfxId
+  if (transition && sfxId && isSfxId(sfxId)) {
+    const part = await ctx.media.soundPart(sfxId)
+    if (part) {
+      const rid = `rId${imageRels.size + soundRels.size + 2}` // rId1 is the layout
+      soundRels.set(rid, part)
+      hasSound = true
+      transition = transitionXml(page.transition, rid)
+    }
+  }
+  const timing = timingXml(animated)
+
   const xml =
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
     `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
@@ -596,6 +638,16 @@ export async function mapSlide(
     `</p:spTree>` +
     `</p:cSld>` +
     `<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>` +
+    transition +
+    timing +
     `</p:sld>`
-  return { xml, imageRels, rasters, natives }
+  return {
+    xml,
+    imageRels,
+    soundRels,
+    rasters,
+    natives,
+    animated,
+    hasSound,
+  }
 }

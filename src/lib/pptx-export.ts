@@ -19,6 +19,9 @@
 
 import type { PageData } from '@/lib/types'
 import { collectImages } from '@/lib/video-export'
+import { resolveFontFaces } from '@/lib/pdf/fonts'
+import { collectTextFaces } from '@/lib/pdf/text-ops'
+import { sfxUrl } from '@/lib/assets/sfx-pack'
 import { ZipWriter } from '@/lib/pptx/zip-writer'
 import {
   appPropsXml,
@@ -36,6 +39,7 @@ import {
   slideMasterRelsXml,
   slideMasterXml,
   themeXml,
+  type EmbeddedFontFace,
 } from '@/lib/pptx/parts'
 import { mapSlide, type MappedSlide, type PptxMediaBag, type SlideMapContext } from '@/lib/pptx/slide-mapper'
 
@@ -48,6 +52,9 @@ export interface PptxExportOptions {
   /** document title (docProps + PowerPoint's title bar) */
   title?: string
   onProgress?: (ratio: number, label: string) => void
+  /** v0.22: test seam for the SFX fetch (the fontLadderIo pattern) —
+   *  defaults to the browser's same-origin fetch of /sfx/<id>.wav */
+  sfxIo?: { fetchBytes?: (url: string) => Promise<Uint8Array | null> }
 }
 
 export interface PptxExportResult {
@@ -60,6 +67,15 @@ export interface PptxExportResult {
   rasters: number
   /** how many pages carry speaker notes */
   notes: number
+  /** v0.22: how many pages carry a transition */
+  transitions: number
+  /** v0.22: how many pages carry the transition SFX bytes */
+  sounds: number
+  /** v0.22: how many elements carry an entrance animation */
+  animated: number
+  /** v0.22: how many font FACES were embedded (0 = ladder failed
+   *  or no text — the file still references the typefaces) */
+  fontsEmbedded: number
 }
 
 /** The media bag: dedupes sources → part names, holds the bytes. */
@@ -68,9 +84,14 @@ class MediaBag implements PptxMediaBag {
   private counter = 0
   private images: Map<string, HTMLImageElement>
 
-  constructor(images: Map<string, HTMLImageElement>) {
+  constructor(images: Map<string, HTMLImageElement>, sfxIo?: PptxExportOptions['sfxIo']) {
     this.images = images
+    this.sfxIo = sfxIo
   }
+
+  // v0.22: the offline SFX pack — fetched once per id, embedded as wav
+  private sounds = new Map<string, { name: string; bytes: Uint8Array } | null>()
+  private sfxIo?: PptxExportOptions['sfxIo']
 
   private async bytesFor(src: string): Promise<Uint8Array | null> {
     // JPEG data URLs pass through byte-identical (no re-encode —
@@ -117,6 +138,38 @@ class MediaBag implements PptxMediaBag {
     return name
   }
 
+  async soundPart(id: string): Promise<string | null> {
+    const hit = this.sounds.get(id)
+    if (hit) return hit.name
+    if (hit === null) return null
+    const fetchBytes =
+      this.sfxIo?.fetchBytes ??
+      (async (url: string) => {
+        if (typeof fetch === 'undefined') return null
+        try {
+          const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+          if (!res.ok) return null
+          return new Uint8Array(await res.arrayBuffer())
+        } catch {
+          return null
+        }
+      })
+    try {
+      const bytes = await fetchBytes(sfxUrl(id))
+      if (!bytes || bytes.length < 64) {
+        this.sounds.set(id, null)
+        return null
+      }
+      const name = `media/sfx${++this.counter}.wav`
+      this.parts.set(`sound:${id}`, { name, bytes })
+      this.sounds.set(id, { name, bytes })
+      return name
+    } catch {
+      this.sounds.set(id, null)
+      return null
+    }
+  }
+
   entries(): { name: string; bytes: Uint8Array }[] {
     return [...this.parts.values()]
   }
@@ -132,7 +185,7 @@ export async function exportDesignToPptx(opts: PptxExportOptions): Promise<PptxE
   opts.onProgress?.(0.08, 'Loading images…')
   const images = await collectImages(opts.pages)
 
-  const media = new MediaBag(images)
+  const media = new MediaBag(images, opts.sfxIo)
   let idCounter = 1
   const ctx: SlideMapContext = {
     images,
@@ -141,18 +194,54 @@ export async function exportDesignToPptx(opts: PptxExportOptions): Promise<PptxE
     nextId: () => ++idCounter,
   }
 
-  // 2. map every page (slide + optional notes)
+  // 2. resolve the document's text faces through the SAME collector the
+  //    PDF exporter uses (walks text spans, table cells, chart labels,
+  //    embed captions — everything the slides will reference), then the
+  //    shared font ladder for TTF bytes. Failures degrade silently:
+  //    typefaces stay referenced, viewers substitute (the pre-v0.22
+  //    behaviour).
+  opts.onProgress?.(0.1, 'Loading fonts…')
+  const faceRequests = [...collectTextFaces(opts.pages).values()].map((n) => n.face)
+  const resolvedFaces = await resolveFontFaces(faceRequests)
+  // family → face slots with TTF bytes only (std14 fallbacks can't embed)
+  const embedded = new Map<string, EmbeddedFontFace>()
+  const fontBytes: { name: string; bytes: Uint8Array }[] = []
+  let fontRelCursor = 0
+  const fontRids = new Map<string, string>()
+  for (const face of resolvedFaces.values()) {
+    if (face.kind !== 'ttf') continue
+    const slot = face.bold && face.italic ? 'bi' : face.bold ? 'bold' : face.italic ? 'italic' : 'regular'
+    let entry = embedded.get(face.family)
+    if (!entry) {
+      entry = { family: face.family, faces: {} }
+      embedded.set(face.family, entry)
+    }
+    if (entry.faces[slot]) continue
+    const rid = `rIdF${++fontRelCursor}`
+    const part = `fonts/font${fontRelCursor}.fntdata`
+    entry.faces[slot] = rid
+    fontRids.set(rid, part)
+    fontBytes.push({ name: `ppt/${part}`, bytes: face.bytes })
+  }
+
+  // 3. map every page (slide + optional notes)
   const mapped: MappedSlide[] = []
   let natives = 0
   let rasters = 0
   let notes = 0
+  let transitions = 0
+  let sounds = 0
+  let animated = 0
   for (let i = 0; i < n; i++) {
-    opts.onProgress?.(0.15 + (0.6 * i) / n, `Rendering slide ${i + 1} of ${n}…`)
+    opts.onProgress?.(0.15 + (0.55 * i) / n, `Rendering slide ${i + 1} of ${n}…`)
     const slide = await mapSlide(opts.pages[i], opts.designWidth, opts.designHeight, ctx)
     mapped.push(slide)
     natives += slide.natives
     rasters += slide.rasters
+    animated += slide.animated.length
     if (opts.pages[i].notes?.trim()) notes++
+    if (slide.xml.includes('<p:transition')) transitions++
+    if (slide.hasSound) sounds++
   }
 
   // 3. assemble the package
@@ -164,12 +253,21 @@ export async function exportDesignToPptx(opts: PptxExportOptions): Promise<PptxE
     .map((_, i) => (opts.pages[i].notes?.trim() ? `/ppt/notesSlides/notesSlide${i + 1}.xml` : null))
     .filter((p): p is string => !!p)
 
-  await zip.addText('[Content_Types].xml', contentTypesXml(slideParts, notesParts))
+  await zip.addText(
+    '[Content_Types].xml',
+    contentTypesXml(slideParts, notesParts, { fonts: fontBytes.length, sounds }),
+  )
   await zip.addText('_rels/.rels', rootRelsXml())
   await zip.addText('docProps/core.xml', corePropsXml(opts.title ?? 'Canvix design'))
   await zip.addText('docProps/app.xml', appPropsXml(n))
-  await zip.addText('ppt/presentation.xml', presentationXml(opts.designWidth, opts.designHeight, n, hasNotesMaster))
-  await zip.addText('ppt/_rels/presentation.xml.rels', presentationRelsXml(n, hasNotesMaster))
+  await zip.addText(
+    'ppt/presentation.xml',
+    presentationXml(opts.designWidth, opts.designHeight, n, hasNotesMaster, [...embedded.values()]),
+  )
+  await zip.addText(
+    'ppt/_rels/presentation.xml.rels',
+    presentationRelsXml(n, hasNotesMaster, [...fontRids.entries()].map(([rid, part]) => ({ rid, part }))),
+  )
   await zip.addText('ppt/theme/theme1.xml', themeXml())
   await zip.addText('ppt/slideMasters/slideMaster1.xml', slideMasterXml())
   await zip.addText('ppt/slideMasters/_rels/slideMaster1.xml.rels', slideMasterRelsXml())
@@ -183,12 +281,15 @@ export async function exportDesignToPptx(opts: PptxExportOptions): Promise<PptxE
     const slide = mapped[i]
     await zip.addText(`ppt/slides/slide${i + 1}.xml`, slide.xml)
     const rels =
-      slide.imageRels.size === 0
+      slide.imageRels.size === 0 && slide.soundRels.size === 0
         ? `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`
         : `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
           `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>` +
           [...slide.imageRels.entries()]
             .map(([rid, part]) => `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../${part}"/>`)
+            .join('') +
+          [...slide.soundRels.entries()]
+            .map(([rid, part]) => `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/audio" Target="../${part}"/>`)
             .join('') +
           `</Relationships>`
     await zip.addText(`ppt/slides/_rels/slide${i + 1}.xml.rels`, rels)
@@ -198,7 +299,15 @@ export async function exportDesignToPptx(opts: PptxExportOptions): Promise<PptxE
     }
   }
   for (const m of media.entries()) {
-    await zip.addBytes(m.name, m.bytes)
+    // v0.22 fix: media parts live under ppt/ — the slide rels say
+    // "../media/imageN.png" (relative to ppt/slides/_rels/), which
+    // resolves to ppt/media/…; before this the parts landed at the
+    // package ROOT and every image/sound in a PPTX was a broken ref
+    await zip.addBytes(`ppt/${m.name}`, m.bytes)
+  }
+  // v0.22: the embedded font parts (raw TTF bytes as fntdata)
+  for (const f of fontBytes) {
+    await zip.addBytes(f.name, f.bytes)
   }
 
   const bytes = await zip.finalize()
@@ -212,6 +321,10 @@ export async function exportDesignToPptx(opts: PptxExportOptions): Promise<PptxE
     natives,
     rasters,
     notes,
+    transitions,
+    sounds,
+    animated,
+    fontsEmbedded: fontBytes.length,
   }
 }
 

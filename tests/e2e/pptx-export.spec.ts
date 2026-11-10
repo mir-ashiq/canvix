@@ -74,3 +74,117 @@ print('PPTX OK: ' + str(len(names)) + ' parts')
     expect(errors, `page errors: ${errors.join(' | ')}`).toEqual([])
   })
 })
+
+/**
+ * v0.22 — the PPTX-limits wave through the dialog: a page with a
+ * Montserrat heading (font embedding), a fade transition, and an
+ * entrance animation on the heading (timing tree). Cracks the zip:
+ * embeddedFontLst + fntdata parts, the transition in the slide XML,
+ * the click group in the timing tree, media under ppt/media/ — then
+ * the LibreOffice round-trip (soffice converts it; a malformed
+ * timing tree would repair-prompt instead).
+ */
+test.describe('PPTX export — v0.22 fonts/transitions/animations', () => {
+  test('carries fonts, transitions and entrance timing into the file', async ({ page }) => {
+    test.setTimeout(180_000)
+    const errors: string[] = []
+    page.on('pageerror', (err) => errors.push(String(err)))
+
+    await page.goto('/')
+    await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' })
+    await page.getByRole('button', { name: /start designing/i }).first().click()
+    await expect(page.getByLabel('Create a design')).toBeVisible()
+
+    await page
+      .locator('section:has(h2:text("Start a new design")) [aria-label^="Create "]')
+      .first()
+      .click()
+    await expect(page.getByLabel('Design canvas')).toBeVisible({ timeout: 30_000 })
+
+    // a Montserrat heading with an entrance animation
+    await page.getByRole('button', { name: 'Text', exact: true }).click()
+    await page.getByRole('button', { name: 'Add a heading', exact: true }).click()
+    await expect(page.getByLabel('Design canvas')).toBeVisible()
+
+    // animate it: Animate panel → entrance fade
+    await page.getByRole('button', { name: 'Animate', exact: true }).click()
+    const fadeTile = page.getByRole('button', { name: /fade/i }).first()
+    if (await fadeTile.isVisible().catch(() => false)) {
+      await fadeTile.click()
+    }
+
+    // transition on the page: the Transitions section of the panel
+    const transBtn = page.getByRole('button', { name: /transitions?/i }).first()
+    if (await transBtn.isVisible().catch(() => false)) {
+      await transBtn.click()
+      const fadeTrans = page.getByRole('button', { name: /^fade$/i }).first()
+      if (await fadeTrans.isVisible().catch(() => false)) await fadeTrans.click()
+    }
+
+    // export through the dialog
+    const downloadPromise = page.waitForEvent('download', { timeout: 120_000 })
+    await page.getByRole('button', { name: 'Download', exact: true }).click()
+    await page.getByRole('button', { name: /^PPTX\b/ }).click()
+    await page.getByRole('button', { name: /Download 1 PPTX/i }).click()
+    const download = await downloadPromise
+    expect(download.suggestedFilename()).toMatch(/\.pptx$/)
+    const path = await download.path()
+
+    // crack the package open
+    const { execFileSync } = await import('node:child_process')
+    const out = execFileSync('python3', ['-c', `
+import zipfile, sys
+z = zipfile.ZipFile(${JSON.stringify(path)})
+names = z.namelist()
+slide = z.read('ppt/slides/slide1.xml').decode('utf-8')
+presentation = z.read('ppt/presentation.xml').decode('utf-8')
+
+# v0.22: transitions + entrance timing live in the slide
+if '<p:transition' not in slide:
+    sys.exit('no transition in slide1')
+if '<p:timing>' not in slide:
+    sys.exit('no timing tree in slide1')
+if 'presetClass="entr"' not in slide:
+    sys.exit('no entrance effect in the timing tree')
+
+# v0.22: fonts embedded as fntdata + listed in presentation
+fntdata = [n for n in names if n.endswith('.fntdata')]
+if not fntdata:
+    sys.exit('no embedded font parts (ladder may have failed - check network)')
+if '<p:embeddedFontLst>' not in presentation:
+    sys.exit('embeddedFontLst missing from presentation.xml')
+
+# v0.22: media parts live under ppt/media/ (the placement fix)
+bad = [n for n in names if n.startswith('media/')]
+if bad:
+    sys.exit('media at package root: ' + ','.join(bad))
+
+# v0.22: re-wrap safety — every text body carries normAutofit
+if '<a:normAutofit' not in slide:
+    sys.exit('normAutofit missing from slide1')
+
+print('PPTX v0.22 OK: %d parts, %d fonts' % (len(names), len(fntdata)))
+`], { encoding: 'utf-8' })
+    expect(out.trim()).toMatch(/^PPTX v0\.22 OK: \d+ parts, \d+ fonts$/)
+
+    // LibreOffice round-trip: converts cleanly when the XML is schema-sane
+    let soffice = true
+    try {
+      execFileSync('soffice', ['--version'])
+    } catch {
+      soffice = false
+    }
+    test.skip(!soffice, 'LibreOffice not installed on this runner')
+    const fs = await import('node:fs')
+    const tmp = `/tmp/pptx-v022-${Date.now()}.pptx`
+    fs.copyFileSync(path!, tmp)
+    execFileSync('soffice', ['--headless', '--convert-to', 'pdf', '--outdir', '/tmp', tmp], {
+      timeout: 90_000,
+    })
+    const pdf = tmp.replace(/\.pptx$/, '.pdf')
+    expect(fs.existsSync(pdf), 'soffice produced a PDF').toBe(true)
+    expect(fs.statSync(pdf).size).toBeGreaterThan(2000)
+
+    expect(errors, `page errors: ${errors.join(' | ')}`).toEqual([])
+  })
+})

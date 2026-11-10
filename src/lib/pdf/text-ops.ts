@@ -271,6 +271,10 @@ export function collectTextFaces(pages: { elements: unknown[] }[]): Map<string, 
       }
       case 'chart': {
         const ch = el as ChartElement
+        // defensive: documents from before the series/labels chart
+        // shape (and hostile hand-built ones) have neither — they
+        // contribute no text instead of crashing the face walk
+        if (!ch.series || !ch.labels) return
         for (const p of chartPrimitives(ch)) {
           if (p.kind === 'text') {
             noteText(map, { family: p.family, bold: !!p.bold, italic: false }, p.text)

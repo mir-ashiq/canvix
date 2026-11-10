@@ -17,8 +17,9 @@ import { xesc } from './xml-helpers'
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
 
 /** [Content_Types].xml — defaults for the extensions we emit plus
- *  an override per XML part. */
-export function contentTypesXml(slides: string[], notesSlides: string[]): string {
+ *  an override per XML part. v0.22: fntdata (embedded fonts) and
+ *  wav (transition SFX) defaults appear only when used. */
+export function contentTypesXml(slides: string[], notesSlides: string[], opts: { fonts: number; sounds: number } = { fonts: 0, sounds: 0 }): string {
   const hasNotesMaster = notesSlides.length > 0
   const overrides = [
     ...slides.map((p) => partOverride(p, 'application/vnd.openxmlformats-officedocument.presentationml.slide+xml')),
@@ -41,6 +42,8 @@ export function contentTypesXml(slides: string[], notesSlides: string[]): string
     `<Default Extension="png" ContentType="image/png"/>` +
     `<Default Extension="jpeg" ContentType="image/jpeg"/>` +
     `<Default Extension="jpg" ContentType="image/jpeg"/>` +
+    (opts.fonts > 0 ? `<Default Extension="fntdata" ContentType="application/x-fontdata"/>` : '') +
+    (opts.sounds > 0 ? `<Default Extension="wav" ContentType="audio/x-wav"/>` : '') +
     overrides.join('') +
     `</Types>`
   )
@@ -66,14 +69,37 @@ function rel(id: string, type: string, target: string, targetMode?: 'External'):
 
 /** ppt/presentation.xml — slide size (px → EMU), slide id list,
  *  notes master id list. Slide ids start at 256 (the format's
- *  reserved floor for slides). */
+ *  reserved floor for slides). v0.22: embeddedFontLst lists the
+ *  fonts whose bytes ride the package (ppt/fonts/fontN.fntdata).
+ *  The r:id for each face comes from the caller's font-rels map. */
+export interface EmbeddedFontFace {
+  /** the typeface name text runs reference */
+  family: string
+  /** face slot → presentation-relationship id for the fntdata part */
+  faces: Partial<Record<'regular' | 'bold' | 'italic' | 'bi', string>>
+}
+
 export function presentationXml(
   widthPx: number,
   heightPx: number,
   slideCount: number,
   hasNotesMaster: boolean,
+  embeddedFonts: EmbeddedFontFace[] = [],
 ): string {
   const ids = Array.from({ length: slideCount }, (_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`).join('')
+  const fontLst = embeddedFonts.length
+    ? `<p:embeddedFontLst>${embeddedFonts
+        .map(
+          (f) =>
+            `<p:embeddedFont><p:font typeface="${xesc(f.family)}"/>` +
+            (f.faces.regular ? `<p:regular r:id="${f.faces.regular}"/>` : '') +
+            (f.faces.bold ? `<p:bold r:id="${f.faces.bold}"/>` : '') +
+            (f.faces.italic ? `<p:italic r:id="${f.faces.italic}"/>` : '') +
+            (f.faces.bi ? `<p:bi r:id="${f.faces.bi}"/>` : '') +
+            `</p:embeddedFont>`,
+        )
+        .join('')}</p:embeddedFontLst>`
+    : ''
   return (
     XML_DECL +
     `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" saveSubsetFonts="1">` +
@@ -82,15 +108,23 @@ export function presentationXml(
     `<p:sldIdLst>${ids}</p:sldIdLst>` +
     `<p:sldSz cx="${Math.round(widthPx * 9525)}" cy="${Math.round(heightPx * 9525)}"/>` +
     `<p:notesSz cx="${Math.round(heightPx * 9525)}" cy="${Math.round(widthPx * 9525)}"/>` +
+    fontLst +
     `</p:presentation>`
   )
 }
 
-/** ppt/_rels/presentation.xml.rels — master, slides, notesMaster. */
-export function presentationRelsXml(slideCount: number, hasNotesMaster: boolean): string {
+/** ppt/_rels/presentation.xml.rels — master, slides, notesMaster,
+ *  and (v0.22) the embedded font parts. Font rel ids must not
+ *  collide with the slide/master/notesMaster ids. */
+export function presentationRelsXml(
+  slideCount: number,
+  hasNotesMaster: boolean,
+  fontParts: { rid: string; part: string }[] = [],
+): string {
   const rels = [rel('rId1', 'slideMaster', 'slideMasters/slideMaster1.xml')]
   for (let i = 0; i < slideCount; i++) rels.push(rel(`rId${i + 2}`, 'slide', `slides/slide${i + 1}.xml`))
   if (hasNotesMaster) rels.push(rel(`rId${slideCount + 2}`, 'notesMaster', 'notesMasters/notesMaster1.xml'))
+  for (const f of fontParts) rels.push(rel(f.rid, 'font', f.part))
   return XML_DECL + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels.join('')}</Relationships>`
 }
 

@@ -271,3 +271,133 @@ describe('exportDesignToPptx (node — no DOM, native elements only)', () => {
     expect(result.natives).toBe(6) // 5 on slide 1 + the background rect on slide 2
   })
 })
+
+// ── v0.22: transitions, entrance timing, re-wrap safety, sounds ──
+
+describe('exportDesignToPptx — v0.22 transitions/animations/autofit', () => {
+  it('always emits normAutofit (PowerPoint shrinks instead of spilling)', async () => {
+    const text = createTextElement({ x: 0, y: 0, width: 300, text: 'wrap safety', fontSize: 30 })
+    const result = await exportDesignToPptx({ designWidth: 400, designHeight: 300, pages: [page([text])] })
+    const slide = xml((await partsOf(result.blob)).get('ppt/slides/slide1.xml')!)
+    expect(slide).toContain('<a:normAutofit/>')
+  })
+
+  it('maps fade/slide transitions with speed and directional push', async () => {
+    const rect = () => createShapeElement('rect', { x: 0, y: 0, width: 100, height: 100, fill: '#FFF' })
+    const result = await exportDesignToPptx({
+      designWidth: 400,
+      designHeight: 300,
+      pages: [
+        page([rect()], { transition: { kind: 'fade', duration: 0.9 } }),
+        page([rect()], { transition: { kind: 'slide', duration: 2.0, direction: 'left' } }),
+        page([rect()]), // none
+      ],
+    })
+    expect(result.transitions).toBe(2)
+    const parts = await partsOf(result.blob)
+    const s1 = xml(parts.get('ppt/slides/slide1.xml')!)
+    const s2 = xml(parts.get('ppt/slides/slide2.xml')!)
+    const s3 = xml(parts.get('ppt/slides/slide3.xml')!)
+    expect(s1).toContain('<p:transition spd="med"><p:fade/></p:transition>')
+    expect(s2).toContain('<p:transition spd="slow"><p:push dir="l"/></p:transition>')
+    expect(s3).not.toContain('<p:transition')
+    // schema position: transition comes AFTER clrMapOvr, before timing/end
+    expect(s1.indexOf('<p:clrMapOvr>')).toBeLessThan(s1.indexOf('<p:transition'))
+    expect(s1.indexOf('<p:transition')).toBeLessThan(s1.indexOf('</p:sld>'))
+  })
+
+  it('carries entrance animations as one click group with delays', async () => {
+    const t1 = createTextElement({ x: 0, y: 0, width: 200, text: 'first', fontSize: 20 })
+    const t2 = createTextElement({ x: 0, y: 100, width: 200, text: 'second', fontSize: 20 })
+    t1.animation = { kind: 'fade', duration: 0.9, delay: 0, easing: 'easeOut' }
+    t2.animation = { kind: 'pan', duration: 0.5, delay: 1.2, easing: 'easeOut', direction: 'left' }
+    // rotate is an emphasis loop — documented NOT carried
+    const t3 = createTextElement({ x: 0, y: 200, width: 200, text: 'third', fontSize: 20 })
+    t3.animation = { kind: 'rotate', duration: 2, delay: 0, easing: 'linear' }
+    const result = await exportDesignToPptx({ designWidth: 400, designHeight: 300, pages: [page([t1, t2, t3])] })
+    expect(result.animated).toBe(3) // seen by the mapper…
+    const slide = xml((await partsOf(result.blob)).get('ppt/slides/slide1.xml')!)
+    expect(slide).toContain('<p:timing>')
+    expect(slide).toContain('nodeType="clickEffect"')
+    expect(slide).toContain('nodeType="withEffect"')
+    expect(slide).toContain('delay="1200"') // t2's 1.2 s delay
+    expect(slide).toContain('filter="wipeLeft"') // pan left
+    expect(slide).toContain('filter="fade"')
+    expect(slide).not.toContain('presetClass="emph"') // rotate dropped honestly
+    expect(slide).toContain('<p:bldP spid="') // build companions
+  })
+
+  it('wires the transition SFX as an embedded wav with an audio rel', async () => {
+    const rect = createShapeElement('rect', { x: 0, y: 0, width: 100, height: 100, fill: '#FFF' })
+    // a minimal RIFF/WAVE header + payload (the real fetch seam is
+    // browser-only; node tests inject bytes — the fontLadderIo posture)
+    const wav = new Uint8Array(128)
+    wav.set([0x52, 0x49, 0x46, 0x46, 0x7c, 0, 0, 0, 0x57, 0x41, 0x56, 0x45], 0)
+    const result = await exportDesignToPptx({
+      designWidth: 400,
+      designHeight: 300,
+      pages: [page([rect], { transition: { kind: 'fade', duration: 0.5, sfxId: 'whoosh-soft' } })],
+      sfxIo: { fetchBytes: async () => wav },
+    })
+    expect(result.sounds).toBe(1)
+    const parts = await partsOf(result.blob)
+    const slide = xml(parts.get('ppt/slides/slide1.xml')!)
+    expect(slide).toContain('<p:sndAc><p:stSnd><p:snd r:embed="rId')
+    const rels = xml(parts.get('ppt/slides/_rels/slide1.xml.rels')!)
+    expect(rels).toMatch(/relationships\/audio" Target="\.\.\/media\/sfx1\.wav"/)
+    const ct = xml(parts.get('[Content_Types].xml')!)
+    expect(ct).toContain('<Default Extension="wav" ContentType="audio/x-wav"/>')
+    const embedded = parts.get('ppt/media/sfx1.wav')
+    expect(embedded).toBeTruthy()
+    expect(embedded!.length).toBe(128)
+    expect(embedded![0]).toBe(0x52) // 'R' (RIFF)
+  })
+
+  it('omits sound machinery when no page has an SFX', async () => {
+    const rect = createShapeElement('rect', { x: 0, y: 0, width: 100, height: 100, fill: '#FFF' })
+    const result = await exportDesignToPptx({
+      designWidth: 400,
+      designHeight: 300,
+      pages: [page([rect], { transition: { kind: 'fade', duration: 0.5 } })],
+    })
+    expect(result.sounds).toBe(0)
+    const parts = await partsOf(result.blob)
+    const ct = xml(parts.get('[Content_Types].xml')!)
+    expect(ct).not.toContain('wav')
+  })
+})
+
+describe('exportDesignToPptx — media part placement (v0.22 fix)', () => {
+  it('degrades node image preload to null instead of crashing, and media lands under ppt/media/', async () => {
+    // 1×1 red JPEG. In node there is no Image constructor — the
+    // preload resolves null (the v0.22 robustness fix) and the image
+    // rides the raster/skip path instead of rejecting the export.
+    const jpeg =
+      'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwcJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPDIzNP/AABEIAAEAAQMBIgACEQEDEQH/xAAfAAABBQEBAQEBAQAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/aAAwDAQACEQMRAD8A/9k='
+    const img = {
+      type: 'image', id: 'i1', x: 10, y: 10, width: 80, height: 80, rotation: 0,
+      opacity: 1, locked: false, visible: true, src: jpeg, naturalWidth: 1, naturalHeight: 1,
+    } as unknown as PageData['elements'][number]
+    const result = await exportDesignToPptx({ designWidth: 200, designHeight: 200, pages: [page([img])] })
+    // the export completes; in node the image had no decodable bitmap
+    expect(result.pages).toBe(1)
+    const parts = await partsOf(result.blob)
+    expect(parts.has('ppt/slides/slide1.xml')).toBe(true)
+    // placement contract: whatever media parts exist live under ppt/media/
+    for (const name of parts.keys()) {
+      if (name.startsWith('media/')) throw new Error(`media part at package root: ${name}`)
+    }
+    // the sound part (browser fetch / injected io) lands under ppt/media/
+    const wav = new Uint8Array(128)
+    wav.set([0x52, 0x49, 0x46, 0x46], 0)
+    const rect = createShapeElement('rect', { x: 0, y: 0, width: 10, height: 10, fill: '#FFF' })
+    const withSound = await exportDesignToPptx({
+      designWidth: 200,
+      designHeight: 200,
+      pages: [page([rect], { transition: { kind: 'fade', duration: 0.5, sfxId: 'pop' } })],
+      sfxIo: { fetchBytes: async () => wav },
+    })
+    const parts2 = await partsOf(withSound.blob)
+    expect(parts2.has('ppt/media/sfx1.wav')).toBe(true)
+  })
+})

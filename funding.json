@@ -1,0 +1,80 @@
+{
+  "$schema": "https://fundingjson.org/schema/v1.1.0.json",
+  "version": "v1.1.0",
+  "entity": {
+    "type": "individual",
+    "role": "maintainer",
+    "name": "Ashiq Hussain Mir",
+    "email": "imsrenpsycho@gmail.com",
+    "description": "Solo maintainer of Canvix. Final-year student building the free, open-source design tool full-time around classes, and looking for a development runway to keep that pace through v1.0.",
+    "webpageUrl": {
+      "url": "https://github.com/mir-ashiq"
+    }
+  },
+  "projects": [
+    {
+      "guid": "canvix",
+      "name": "Canvix",
+      "description": "Free & open-source graphic design tool — a community-built Canva alternative. A browser-based drag-and-drop editor with a 366-template library, real-time collaboration, local exports (PNG, JPG, SVG, PDF, PPTX, GIF, video) and a modular AI layer split into text, vision, image and video capability slots that plug into any provider. MIT-licensed; every feature free forever, no watermarks, no paywalls.",
+      "webpageUrl": {
+        "url": "https://github.com/mir-ashiq/canvix"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/mir-ashiq/canvix"
+      },
+      "licenses": [
+        "spdx:MIT"
+      ],
+      "tags": [
+        "design",
+        "graphics",
+        "web-design",
+        "web-development",
+        "artificial-intelligence",
+        "productivity"
+      ]
+    }
+  ],
+  "funding": {
+    "channels": [
+      {
+        "guid": "to-be-confirmed",
+        "type": "other",
+        "address": "To be confirmed with the funder",
+        "description": "Placeholder payment channel. The concrete rail (bank transfer or payment provider) will be finalized together with the funding organization before any disbursement, and this manifest will be updated in the open."
+      }
+    ],
+    "plans": [
+      {
+        "guid": "final-year-tuition",
+        "status": "active",
+        "name": "Final-year tuition — full-time development runway",
+        "description": "Milestone 1 of 3 (USD 4,000). Covers final-year tuition so the maintainer can keep building Canvix at full-time pace instead of trading development hours for part-time work. Deliverable: sustained weekly release cadence through the academic year.",
+        "amount": 4000,
+        "currency": "USD",
+        "frequency": "one-time",
+        "channels": ["to-be-confirmed"]
+      },
+      {
+        "guid": "local-hardware-upgrade",
+        "status": "active",
+        "name": "Local hardware upgrade — faster build & test loops",
+        "description": "Milestone 2 of 3 (USD 2,000). RAM and CPU upgrade for the local dev machine. Direct effect: faster compiles and test runs — the 1,400+ unit tests and the Playwright e2e suite gate every release, so shorter loops mean shorter release cycles and faster security fixes.",
+        "amount": 2000,
+        "currency": "USD",
+        "frequency": "one-time",
+        "channels": ["to-be-confirmed"]
+      },
+      {
+        "guid": "v1-living-expenses",
+        "status": "active",
+        "name": "Living expenses — ship Canvix v1.0",
+        "description": "Milestone 3 of 3 (USD 1,000). Living-expense support for the final push to v1.0: API stabilization, documentation, and the first stable, semver-committed release.",
+        "amount": 1000,
+        "currency": "USD",
+        "frequency": "one-time",
+        "channels": ["to-be-confirmed"]
+      }
+    ]
+  }
+}

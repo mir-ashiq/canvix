@@ -783,12 +783,34 @@ background removal (local ONNX), color palettes and layout balancing keep workin
 and provider-backed features show a clear setup notice. Every AI route is rate-
 limited per IP and logs usage into the `AIUsage` table.
 
+### Capability slots — modular AI, one job per slot
+
+The AI layer is deliberately **not** one blob. It is split into capability
+slots — **text** (assistant, magic write, design plans, notes, theme,
+translate), **vision** (alt text, grounding), **image** (generation and magic
+editing) and **video** (text-to-video) — and every slot resolves its provider
+**independently** (`AI_SLOTS` in `src/lib/admin/config.ts`, resolution in
+`src/lib/ai/provider.ts`). Run everything on one provider, or mix vendors per
+slot through the admin console's multi-provider table, which carries per-slot
+base URLs, API keys and model ids. `/api/ai/capabilities` answers per-slot
+booleans, so the editor only ever offers what is actually configured — a
+missing slot degrades gracefully instead of breaking the app.
+
+Each slot speaks the same provider surface — a base URL and an API key (the
+video slot auto-detects both dialects it supports: the Sora-style async API
+and the z-ai one). That makes **moving from an experimental or local setup to
+official enterprise keys fully plug-and-play**: start self-hosting on whatever
+provider you already have, then point a slot at Fal.ai or Cloudflare Workers AI
+by updating the credentials in `.env` or the admin console and restarting. No
+code changes, no migrations, no editor redeploy — the slot, the probes and the
+feature gates all follow.
+
 ### Local-only vs provider-backed features
 
 | Feature | Works without a provider? |
 |---|---|
 | Editor, templates, uploads, draw, groups, rulers, crop | ✅ always local |
-| Exports — PNG / JPG / PDF / SVG / video | ✅ always local |
+| Exports — PNG / JPG / PDF / SVG / PPTX / GIF / video | ✅ always local |
 | Collaboration, presence, comments | ✅ only needs the database |
 | Background remover | ✅ local (in-browser ONNX) |
 | **Upscaler (Lanczos 2×/4×)** | ✅ local — v0.19 Wave 4, any image |

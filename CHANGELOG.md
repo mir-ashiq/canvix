@@ -9,6 +9,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Nothing yet.
 
+## [0.22.1] — 2026-11-12
+
+### Added
+
+- **The trust layer** (grant-application readiness — FOSS United,
+  GitHub Secure OSS Fund, Fal.ai, Cloudflare, Emergent Ventures):
+  - `SECURITY.md` — private vulnerability disclosure to the maintainer
+    (no public issues), scope, safe-harbor rules, response timelines,
+    and the hardening map reporters can lean on (headers/CSP, rate
+    limits, SSRF guards, MCP hardening, the v0.13 plugin sandbox).
+  - `GOVERNANCE.md` — the governance model stated plainly: solo
+    maintainer / BDFL (Ashiq Hussain Mir), a decision table, the
+    contribution bar, the values the project answers to (free forever,
+    MIT, self-hosting first-class, privacy by architecture), and a
+    bus-factor succession plan.
+  - `CODE_OF_CONDUCT.md` — Contributor Covenant 2.1.
+  - `funding.json` — a fundingjson.org v1.1.0 manifest (schema-
+    validated) declaring the $7,000 full-time-development runway:
+    final-year tuition ($4,000), local hardware upgrade ($2,000), and
+    living expenses for the push to v1.0 ($1,000). Payment channel is
+    a placeholder pending the funding organization.
+  - README: the AI capability-slot architecture made explicit — the
+    **text / vision / image / video** slots, per-slot provider
+    resolution, and the plug-and-play path from an experimental setup
+    to official enterprise keys (Fal.ai, Cloudflare Workers AI). The
+    local-vs-provider table's exports row now lists PPTX and GIF.
+
+### Fixed
+
+- **All 7 open Dependabot alerts closed** (dependency security wave):
+  - `sharp` ^0.34.3 → ^0.35.5 — clears the librsvg CVE-2026-96889,
+    libheif, and libvips advisories (GHSA-wq5f-xc86-pv6w,
+    GHSA-rgj7-g3m4-5g8c, GHSA-f88m-g3jw-g9cj); the tree now runs one
+    sharp (0.35.5, libvips 8.18.7) instead of three. The MCP PNG
+    export loader gained a one-line type fix for sharp 0.35's dual
+    package types.
+  - `zod` under `@imgly/background-removal` → ^4.6.7 via npm override
+    (GHSA-mrhx-c7xc-m3w5) — the library's dist bundles zod inline, so
+    the override only satisfies its manifest; the app's own zod was
+    already 4.6.7.
+  - `minimatch` ^10.2.2 → ^11.0.8 via spec-qualified override
+    (GHSA-g3hv-75wg-m249); eslint's out-of-range 3.1.5 is untouched.
+  - `glob` under `@node-minify/core`: pinned 10.3.3 → ^14.0.5
+    (GHSA-5j98-mcp5-4vw2), which also lifts its minimatch to 11.
+  - `deepmerge-ts` under `@prisma/config` → ^8.0.2
+    (GHSA-ggr8-5vv4-36mx).
+  - Verified end-to-end on the new tree: `tsc --noEmit`, `eslint`,
+    1384/1384 vitest, `next build` — all green.
+
 ## [0.22.0] — 2026-11-11
 
 ### Added

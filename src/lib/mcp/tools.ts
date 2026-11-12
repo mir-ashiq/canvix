@@ -40,7 +40,10 @@ export const SERVER_VERSION = '0.6.1'
 // next.config.ts pins it into the standalone trace for self-hosters.
 // Callers must all degrade gracefully when this returns null.
 
-type SharpModule = typeof import('sharp')
+// sharp 0.35 ships dual types: under `moduleResolution: bundler` the ESM
+// namespace carries the callable on `.default` — index it out so the type
+// is the callable constructor, not the namespace.
+type SharpModule = (typeof import('sharp'))['default']
 let sharpCache: SharpModule | null | undefined
 
 export async function loadSharp(): Promise<SharpModule | null> {

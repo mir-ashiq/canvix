@@ -49,7 +49,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-konva": "^19.2.5",
-    "sharp": "^0.34.3",
+    "sharp": "^0.35.5",
     "tailwind-merge": "^3.3.1",
     "z-ai-web-dev-sdk": "^0.0.18",
     "zustand": "^5.0.6"
@@ -74,9 +74,20 @@
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
+  "overrides": {
+    "@imgly/background-removal": {
+      "zod": "^4.6.7"
+    },
+    "@prisma/config": {
+      "deepmerge-ts": "^8.0.2"
+    },
+    "@node-minify/core": {
+      "glob": "^14.0.5"
+    },
+    "minimatch@^10.2.2": "^11.0.8"
+  },
   "allowScripts": {
     "sharp@0.35.5": true,
-    "sharp@0.34.5": true,
     "workerd@1.20261023.1": true,
     "protobufjs@7.6.6": true,
     "unrs-resolver@1.12.2": true,

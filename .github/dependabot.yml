@@ -1,0 +1,78 @@
+# Dependabot — security updates + weekly version bumps.
+#
+# The 2026-11 security wave (v0.22.1) closed 8 alerts, but they sat open
+# for 29h because nothing re-scanned the lockfile after the fix push.
+# This config keeps that from recurring:
+#
+#   version-updates  → weekly grouped PRs, so transitive pins (sharp,
+#                      glob, minimatch, zod, deepmerge-ts…) drift less
+#                      and the review diffs stay small
+#   security-updates → Dependabot opens fix PRs on a fresh advisory even
+#                      between the weekly windows (enabled by default
+#                      once version-updates are configured)
+#
+# Grouping: one PR for dev deps, one for runtime deps, one for GitHub
+# Actions — small enough to review, big enough not to spam.
+
+version: 2
+updates:
+  # npm — runtime + dev dependencies from package-lock.json
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    # Open a fix PR per advisory rather than batching them, so a
+    # single broken build never blocks the whole security wave.
+    groups:
+      dev-dependencies:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+        exclude-patterns:
+          # majors review alone, per package
+          - eslint*
+          - typescript
+          - next
+          - prisma
+          - "@opennextjs*"
+      production-dependencies:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - patch
+    # sharp pins libvips binaries; let the weekly PR carry it instead
+    # of auto-merging an image codec change unattended.
+    allow:
+      - dependency-type: all
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(dev-deps)"
+    labels:
+      - dependencies
+    open-pull-requests-limit: 10
+    rebase-strategy: auto
+    reviewers:
+      - mir-ashiq
+
+  # GitHub Actions workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Etc/UTC
+    commit-message:
+      prefix: "ci(actions)"
+    labels:
+      - dependencies
+    open-pull-requests-limit: 5
+    reviewers:
+      - mir-ashiq

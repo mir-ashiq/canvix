@@ -2,7 +2,7 @@
   "name": "canvix",
   "version": "0.22.1",
   "private": false,
-  "description": "Canvix \u2014 free & open-source graphic design tool. A community-built Canva alternative.",
+  "description": "Canvix — free & open-source graphic design tool. A community-built Canva alternative.",
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
     "build": "node scripts/build.mjs",
@@ -78,13 +78,16 @@
     "@imgly/background-removal": {
       "zod": "^4.6.7"
     },
-    "@prisma/config": {
-      "deepmerge-ts": "^8.0.2"
-    },
+    "minimatch@^10.2.2": "^11.0.8",
     "@node-minify/core": {
       "glob": "^14.0.5"
     },
-    "minimatch@^10.2.2": "^11.0.8"
+    "@opennextjs/cloudflare": {
+      "glob": "^14.0.5"
+    },
+    "@prisma/config": {
+      "deepmerge-ts": "^8.0.2"
+    }
   },
   "allowScripts": {
     "sharp@0.35.5": true,

@@ -29,7 +29,7 @@
   "dependencies": {
     "@imgly/background-removal": "^1.7.0",
     "@prisma/adapter-pg": "^6.16.0",
-    "@prisma/client": "^6.16.0",
+    "@prisma/client": "^7.10.1",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-dropdown-menu": "^2.1.15",
     "@radix-ui/react-popover": "^1.1.14",

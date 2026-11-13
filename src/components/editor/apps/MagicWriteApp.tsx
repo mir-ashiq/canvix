@@ -136,7 +136,16 @@ export function MagicWriteApp({ onClose }: AppPanelProps) {
         {busy ? 'Writing…' : 'Generate 3 options'}
       </button>
 
-      {error && <p className="text-[11px] text-[#FF8095] mt-2.5">{error}</p>}
+      {error && (
+        <div className="mt-2.5">
+          <p className="text-[11px] text-[#FF8095]">{error}</p>
+          {/* v0.23.1: text-slot failures often mean "no key" */}
+          <p className="text-[10.5px] text-white/45 mt-1 leading-snug">
+            Tip: add your own AI key in <span className="text-white/75 font-medium">Profile &amp; AI keys</span> (account menu) — your key is used before this
+            instance&apos;s providers.
+          </p>
+        </div>
+      )}
 
       {options.length > 0 && (
         <div className="mt-3 space-y-1.5">

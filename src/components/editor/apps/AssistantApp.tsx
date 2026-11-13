@@ -107,7 +107,9 @@ export function AssistantApp({ onClose }: AppPanelProps) {
       setTurns((ts) => [...ts, { role: 'assistant', content: data.reply!, actions: data.actions ?? [] }])
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Something went wrong.'
-      setTurns((ts) => [...ts, { role: 'assistant', content: message }])
+      // v0.23.1: assistant failures are often "no text-slot key" — nudge
+      // toward the user's own providers instead of a dead end.
+      setTurns((ts) => [...ts, { role: 'assistant', content: `${message}\n\nTip: add your own AI key in Profile & AI keys (account menu) — your key is used before this instance's providers.` }])
     } finally {
       setBusy(false)
     }

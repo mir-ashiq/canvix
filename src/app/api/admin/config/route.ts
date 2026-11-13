@@ -57,7 +57,11 @@ export const dynamic = 'force-dynamic'
 // v0.16.5 (A5) adds the stock section: { pexels?, pixabay? } keys
 // for the Photos AND Videos search rails — write-only, null clears,
 // env vars as fallback (the same precedence as every credential).
-const SLOT_ORDER: AiSlot[] = ['text', 'vision', 'image', 'imageEdit']
+// v0.22 (Wave 4): video joined the slot universe — it was missing here,
+// so the sanitized GET never reported its resolution and the console's
+// video row silently lost its saved binding on every reload (the save
+// path itself was fine — validateSlots already accepted 'video').
+const SLOT_ORDER: AiSlot[] = ['text', 'vision', 'image', 'imageEdit', 'video']
 
 function slotView(resolved: ResolvedSlot | null) {
   if (!resolved) return null

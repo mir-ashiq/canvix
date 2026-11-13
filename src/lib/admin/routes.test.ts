@@ -227,6 +227,30 @@ describe('PUT /api/admin/config × providers section (v0.16.2 A2)', () => {
     expect(upsertArg).toBeDefined()
   })
 
+  it('the video slot round-trips — SLOT_ORDER regression (v0.22 Wave 4 / v0.23.1 fix)', async () => {
+    // The sanitized GET built its per-slot resolution view from a hardcoded
+    // list that missed 'video', so a saved video binding was dropped from
+    // the console's view on reload (looked like "not saving"). The PUT path
+    // always accepted it; this pins the GET echo too.
+    dbMock.session.findUnique.mockResolvedValue(ADMIN_SESSION)
+    dbMock.appConfig.findMany.mockResolvedValue([
+      {
+        key: 'ai.providers',
+        value: {
+          providers: [{ id: 'psora', label: 'Sora', baseUrl: 'https://sora.example/v1', apiKey: 'sk-video-secret-abcdef' }],
+          slots: { video: { providerId: 'psora' } },
+        },
+      },
+    ])
+    const res = await configGet(req('http://localhost/api/admin/config'))
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      providers: { resolved: Record<string, { source: string; label: string | null } | null> }
+    }
+    expect(body.providers.resolved.video?.source).toBe('multi')
+    expect(body.providers.resolved.video?.label).toBe('Sora')
+  })
+
   it('keeps a stored key when the payload omits it (write-only credential)', async () => {
     dbMock.session.findUnique.mockResolvedValue(ADMIN_SESSION)
     dbMock.appConfig.findMany.mockResolvedValue([

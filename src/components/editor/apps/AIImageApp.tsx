@@ -154,7 +154,16 @@ export function AIImageApp({ onClose }: AppPanelProps) {
         {busy ? 'Dreaming…' : 'Generate image'}
       </button>
 
-      {error && <p className="text-[11px] text-[#FF8095] mt-2.5">{error}</p>}
+      {error && (
+        <div className="mt-2.5">
+          <p className="text-[11px] text-[#FF8095]">{error}</p>
+          {/* v0.23.1: generation failures often mean "no key on the image slot" */}
+          <p className="text-[10.5px] text-white/45 mt-1 leading-snug">
+            Tip: add your own AI key in <span className="text-white/75 font-medium">Profile &amp; AI keys</span> (account menu) — your key is used before this
+            instance&apos;s providers.
+          </p>
+        </div>
+      )}
 
       {busy && (
         <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] aspect-square flex flex-col items-center justify-center gap-2">

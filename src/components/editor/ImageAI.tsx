@@ -112,10 +112,13 @@ async function runImageAI(
     // generations — the route's message already points at the local
     // tools that work on any image.
     const reason = r.code === 'SOURCE_NOT_EDITABLE' ? '' : providerReason(r.detail)
+    // v0.23.1: provider failures often mean "no key on the slot" — a
+    // nudge toward the user's own keys beats a dead end.
+    const byokHint = " Tip: add your own AI key in Profile & AI keys (account menu) — it is used before this instance's providers."
     onDone(
       reason
-        ? `${r.error ?? 'The edit failed.'} — ${reason.slice(0, 220)}`
-        : (r.error ?? 'The edit failed. Please try again.'),
+        ? `${r.error ?? 'The edit failed.'} — ${reason.slice(0, 220)}.${byokHint}`
+        : `${r.error ?? 'The edit failed. Please try again.'}${byokHint}`,
     )
     return false
   }

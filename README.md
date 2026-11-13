@@ -805,6 +805,34 @@ by updating the credentials in `.env` or the admin console and restarting. No
 code changes, no migrations, no editor redeploy — the slot, the probes and the
 feature gates all follow.
 
+### Bring your own key — per-user AI providers (v0.23)
+
+The AI features do not have to run on the operator's keys. Every signed-in
+user gets a **profile page** (dashboard → account menu → *Profile & AI keys*)
+where they can save their own provider credentials — a label, an
+OpenAI-compatible base URL, an API key, and which capability slots
+(`text`, `vision`, `image`, `imageEdit`, `video`) the key should answer,
+with an optional model id per slot.
+
+Resolution is **user-first**: a saved key answers its slots *before* the
+instance-wide chain (multi-provider table → legacy override → env →
+`.z-ai-config`), so a user's AI work never spends the operator's quota —
+and `/api/ai/capabilities` reflects it, so the editor enables exactly the
+features the *user* can run. Anonymous visitors resolve the instance-wide
+slots exactly as before; a user with no saved keys notices nothing.
+
+Security posture (same as the admin console, `docs/ADMIN.md`):
+
+- keys are **write-only** — every read returns a mask (`sk-…last4`), the
+  API never sends the stored key back; editing a label never demands the
+  credential again
+- the key lives server-side in Postgres and is resolved per request — it
+  never reaches the browser (the capabilities endpoint stays booleans-only)
+- validation reuses the admin table's rules: http(s) base URLs, no
+  credentials embedded in the URL, model ids against a strict charset
+- a **Test connection** button runs a minimal round-trip against the
+  provider and reports the scrubbed reason on failure
+
 ### Local-only vs provider-backed features
 
 | Feature | Works without a provider? |

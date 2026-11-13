@@ -58,8 +58,13 @@ will not be met with legal action:
 
 **In scope:** the application code in this repository — the Next.js app, API
 routes, editor, collaboration/SSE layer, plugin manifest validation and
-bundled-plugin pipeline, MCP server, export pipelines, admin console, and the
-default deployment configurations documented in `README.md`.
+bundled-plugin pipeline, MCP server, export pipelines, admin console, the
+per-user AI provider storage (BYOK, v0.23), and the default deployment
+configurations documented in `README.md`.
+
+Per-user API keys (v0.23 "bring your own key") are stored server-side,
+masked on every read path, and never returned by any API — reports about
+key exposure or cross-user leakage are treated as highest severity.
 
 **Out of scope:**
 

@@ -143,7 +143,7 @@ function providerHeadersFrom(cfg: { token?: string; userId?: string; chatId?: st
 
 // ── per-slot resolution (v0.16.2 A2) ─────────────────────────
 
-export type SlotSource = 'multi' | 'db' | 'env' | 'file'
+export type SlotSource = 'multi' | 'db' | 'env' | 'file' | 'user'
 
 /** What one capability slot resolved to — never the key, but enough to act. */
 export interface ResolvedSlot {
@@ -160,6 +160,33 @@ export interface ResolvedSlot {
    *  X-Token / X-User-Id / X-Chat-Id) — env/file layers only; the
    *  multi-provider table and legacy DB override stay key-only. */
   headers?: Record<string, string>
+}
+
+// ── BYOK (v0.23): per-user providers ─────────────────────────
+//
+// The profile page stores per-user credentials (src/lib/ai/byok.ts).
+// resolveSlotForUser() puts them at the TOP of the chain for that
+// user: user provider → multi table → legacy → env → file. Users
+// without saved providers resolve exactly as before.
+
+/**
+ * Resolve one slot for a signed-in user: their own providers first
+ * (BYOK), then the instance-wide chain. `userId === null` is the
+ * anonymous path — identical to resolveSlot().
+ */
+export async function resolveSlotForUser(slot: AiSlot, userId: string | null): Promise<ResolvedSlot | null> {
+  if (userId) {
+    try {
+      const { resolveUserSlot } = await import('@/lib/ai/byok')
+      const userSlot = await resolveUserSlot(slot, userId)
+      if (userSlot) return userSlot
+    } catch (err) {
+      // BYOK must never break the fallback chain — a DB hiccup here
+      // degrades to the instance-wide slots, same as resolveSlot.
+      console.error(`[ai/byok] user slot resolution failed (${slot})`, err)
+    }
+  }
+  return resolveSlot(slot)
 }
 
 /**
@@ -245,6 +272,16 @@ const FEATURE_SLOTS: Record<string, AiSlot> = {
 /** Async probe — does THIS slot have a provider behind it? */
 export async function hasProviderForSlot(slot: AiSlot): Promise<boolean> {
   return (await resolveSlot(slot)) !== null
+}
+
+/**
+ * v0.23 (BYOK): the user-aware probe — the user's providers first,
+ * then the instance chain. `capabilities` and the MCP endpoint use
+ * this so a signed-in user with saved keys sees features enabled
+ * even on an otherwise unconfigured instance.
+ */
+export async function hasProviderForSlotForUser(slot: AiSlot, userId: string | null): Promise<boolean> {
+  return (await resolveSlotForUser(slot, userId)) !== null
 }
 
 // ── legacy single-chain resolution (v0.16 A1) ────────────────
@@ -527,6 +564,11 @@ export const FEATURE_DISABLED = {
  * context: { zai, model } (v0.16.2 A2 — the handler no longer resolves
  * the model itself, so a per-slot provider+model pair can never drift
  * apart between the client and the model id).
+ *
+ * v0.23 (BYOK): when the request carries a session, the user's own
+ * saved providers are tried FIRST for the feature's slot — the
+ * instance chain stays the fallback. Anonymous requests resolve
+ * exactly as before.
  */
 export async function withProvider(
   feature: string,
@@ -556,7 +598,19 @@ export async function withProvider(
     )
   }
   const slot = FEATURE_SLOTS[feature] ?? 'text'
-  const ctx = await getClientForSlot(slot)
+  // v0.23 (BYOK): resolve the session user (null when anonymous) and
+  // try their providers first for this slot.
+  const user = await import('@/lib/auth/session').then((m) => m.getSessionUser(req))
+  const resolved = await resolveSlotForUser(slot, user?.id ?? null)
+  let ctx: ProviderContext | null = null
+  if (resolved) {
+    try {
+      const zai = await makeClient(resolved.baseUrl, resolved.apiKey)
+      ctx = { zai, model: resolved.model, label: resolved.label, source: resolved.source }
+    } catch (err) {
+      console.error(`[ai] provider initialization failed (${slot}${user ? `, user ${user.username}` : ''})`, err)
+    }
+  }
   if (!ctx) {
     await recordUsage(feature, `no-provider (${slot})`, false, {
       status: 503,

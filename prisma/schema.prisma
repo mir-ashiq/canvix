@@ -45,6 +45,34 @@ model User {
   designs      Design[]  @relation("DesignOwner")
   folders      Folder[]  @relation("FolderOwner")
   sessions     Session[]
+  aiProviders  UserAIProvider[]
+}
+
+// ── v0.23: BYOK — per-user AI providers (profile page) ────────
+// A signed-in user can save their own AI credentials and use them
+// for every provider-backed feature, instead of the operator's
+// instance-wide slots. Mirrors the admin multi-provider shape
+// (baseUrl + apiKey + optional model per slot) but scoped to one
+// user row. Keys are write-only through the API: reads return the
+// same mask the admin console shows, never the stored key.
+model UserAIProvider {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // 3–60 chars — shown in the profile list and usage accounting
+  label     String
+  // http(s) URL, no embedded credentials (validated like the admin table)
+  baseUrl   String
+  // write-only credential — masked on every read path
+  apiKey    String
+  // capability slots this provider answers ('text','vision','image','imageEdit','video')
+  slots     String   @default("text")
+  // model id per slot, JSON: {"text":"glm-4.7",…} (validated against MODEL_RE)
+  models    Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 // Opaque server-side sessions. The cookie carries the raw token; the row

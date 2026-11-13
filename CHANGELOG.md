@@ -7,7 +7,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Nothing yet.
+- **Profile page + bring your own key** (v0.23): every signed-in user
+  gets a profile dialog (dashboard → account menu → *Profile & AI keys*)
+  with their account card and their own AI providers. A user-saved key
+  answers its capability slots **before** the instance-wide chain —
+  per-user BYOK without touching the operator's quota:
+  - new `UserAIProvider` model (migration `0012_user_ai_providers_byok`):
+    label, base URL, write-only API key, slots (`text`/`vision`/`image`/
+    `imageEdit`/`video`), optional per-slot model ids
+  - `src/lib/ai/byok.ts` — validation (reuses the admin table's rules),
+    masked listing, per-slot resolution; `provider.ts` gained
+    `resolveSlotForUser` and `withProvider` now resolves the session
+    user's slots first (anonymous path unchanged)
+  - `/api/profile/ai-providers` (GET/POST/PUT/DELETE) + `/test` —
+    session-scoped, same-origin, rate-limited; keys are never returned
+  - `/api/ai/capabilities` is user-aware: the editor enables exactly
+    the features the signed-in user can run on their own keys
+  - 17 new tests (validators, slot precedence, fallback parity);
+    full suite 1401/1401
+
+### Security
+
+- **All 8 Dependabot alerts fixed and auto-closed** (verified `fixed`
+  on the security tab): sharp 0.35.5 (librsvg/libheif/libvips CVEs),
+  zod 4.6.7, deepmerge-ts 8.0.2, minimatch 11.0.8, glob 14.0.5/14.0.6 —
+  `npm audit` reports **0 vulnerabilities**
+- `.github/dependabot.yml` — weekly grouped version updates (npm +
+  GitHub Actions) with per-advisory security PRs, so alerts never sit
+  unscanned again (the 2026-11 wave sat open for 29h before a rescan
+  poke)
 
 ## [0.22.1] — 2026-11-12
 

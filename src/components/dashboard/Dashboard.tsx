@@ -34,6 +34,7 @@ import {
   FolderPlus,
   FolderMinus,
   Check,
+  UserRound,
   Maximize,
   Smartphone,
   Monitor,
@@ -48,6 +49,7 @@ import { Input } from '@/components/ui/input'
 import { DesignPreview } from '@/components/design-preview'
 import { McpCard } from '@/components/dashboard/McpCard'
 import { AuthDialog } from '@/components/auth/AuthDialog'
+import { ProfilePanel } from '@/components/dashboard/ProfilePanel'
 import { useAuth, adoptAllDesigns, adoptDesign } from '@/lib/auth/client'
 import { TEMPLATES } from '@/lib/templates'
 import { createPage, TEMPLATE_CATEGORIES, type TemplateRecord } from '@/lib/types'
@@ -152,6 +154,8 @@ export function Dashboard() {
   const { user, login, register, logout, refresh: refreshAuth } = useAuth()
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
+  // v0.23: the profile dialog — account card + BYOK AI providers
+  const [profileOpen, setProfileOpen] = useState(false)
   const [adopting, setAdopting] = useState(false)
   // v0.9.1: the BULK action only claims designs attributed to THIS browser
   // (server enforces the same). Legacy (pre-accounts) designs are claimable
@@ -598,6 +602,9 @@ export function Dashboard() {
                         <FolderInput size={14} /> Adopt legacy (pre-accounts) designs ({legacyCount})
                       </DropdownMenuItem>
                     )}
+                    <DropdownMenuItem className="gap-2" onClick={() => setProfileOpen(true)}>
+                      <UserRound size={14} /> Profile &amp; AI keys
+                    </DropdownMenuItem>
                     <DropdownMenuItem className="gap-2" onClick={() => void logout().then(() => { void refreshAuth(); void refresh() })}>
                       <LogOut size={14} /> Sign out
                     </DropdownMenuItem>
@@ -1458,6 +1465,11 @@ export function Dashboard() {
           void refreshFolders()
         }}
       />
+
+      {/* ── v0.23: profile — account card + BYOK AI providers ── */}
+      {user ? (
+        <ProfilePanel open={profileOpen} onOpenChange={setProfileOpen} user={user} />
+      ) : null}
     </div>
   )
 }

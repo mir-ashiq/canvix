@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server'
-import { hasProviderForSlot } from '@/lib/ai/provider'
+import { NextResponse, type NextRequest } from 'next/server'
+import { hasProviderForSlotForUser } from '@/lib/ai/provider'
 import { stockPhotoAvailable } from '@/lib/stock-photo'
 import { stockSoundAvailable } from '@/lib/stock-sound'
 import { getFeatures } from '@/lib/admin/config'
+import { getSessionUser } from '@/lib/auth/session'
 import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
@@ -14,7 +15,7 @@ export const dynamic = 'force-dynamic'
  * show "requires server AI provider" states before the user tries a feature.
  * Only ever exposes which capabilities exist — never config, never keys.
  */
-async function __canvix_get() {
+async function __canvix_get(req: NextRequest) {
   // v0.16 (A1): a capability is available when a provider answers AND
   // the admin console has not switched the feature off. v0.16.2 (A2):
   // the provider check is per capability SLOT — with the multi-provider
@@ -27,12 +28,19 @@ async function __canvix_get() {
   // trio (plan/notes/theme), vision-slot alt text, the video slot,
   // and the two LOCAL image tools that need no provider at all.
   // Sound wave: soundSearch rides the Freesound stock key.
+  // v0.23 (BYOK): when the request carries a session, the user's saved
+  // providers answer the probes first — so people who bring their own keys
+  // see the AI features enabled even on an unconfigured instance. Anonymous
+  // requests resolve the instance-wide slots exactly as before. Booleans
+  // only, still — never config, never keys.
+  const user = await getSessionUser(req)
+  const uid = user?.id ?? null
   const [text, vision, image, imageEdit, video, stockPhotos, stockSounds] = await Promise.all([
-    hasProviderForSlot('text'),
-    hasProviderForSlot('vision'),
-    hasProviderForSlot('image'),
-    hasProviderForSlot('imageEdit'),
-    hasProviderForSlot('video'),
+    hasProviderForSlotForUser('text', uid),
+    hasProviderForSlotForUser('vision', uid),
+    hasProviderForSlotForUser('image', uid),
+    hasProviderForSlotForUser('imageEdit', uid),
+    hasProviderForSlotForUser('video', uid),
     stockPhotoAvailable(), // async since A5 — keys resolve console-first
     stockSoundAvailable(),
   ])

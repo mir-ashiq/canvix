@@ -168,7 +168,7 @@ jobs:
 
       - name: Upload Playwright traces (on failure)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-failures
           path: test-results/

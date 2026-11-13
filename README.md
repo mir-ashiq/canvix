@@ -1265,9 +1265,11 @@ tool descriptions so agents pick the right format.
       zoom/pan without modifier keys, bottom-sheet property panels
       (the responsive groundwork from v0.11.3 makes this tractable)
 
-**Path to v1.0** — the full phased plan (current-state analysis, 2026
-landscape research, prioritized epics with effort estimates, risk
-register) lives in `research/V0118-ROADMAP-RESEARCH.md`. The arc:
+**Path to v1.0** — the living roadmap (what's shipped, what's open,
+what's next, with per-epic status) is **[`ROADMAP.md`](ROADMAP.md)**.
+The original decision record (current-state analysis, 2026 landscape
+research, prioritized epics with effort estimates, risk register)
+lives in `research/V0118-ROADMAP-RESEARCH.md`. The arc:
 **v0.12** trust & rails (CI gate, security headers, rate limits, ops
 runbook) → **v0.13** plugin system MVP → **v0.14** daily-driver editor
 depth (persistent uploads, clipboard, folders, filters, charts,

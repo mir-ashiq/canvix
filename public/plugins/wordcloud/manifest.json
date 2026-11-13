@@ -3,13 +3,13 @@
   "id": "com.canvix.wordcloud",
   "name": "Word Cloud",
   "description": "Turn any text into a seeded word-cloud graphic. Deterministic, offline, zero network.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": {
     "name": "Canvix team",
     "url": "https://github.com/mir-ashiq/canvix"
   },
   "engines": {
-    "canvix": ">=0.13.4 <0.23.0"
+    "canvix": ">=0.13.4 <0.24.0"
   },
   "entry": {
     "panel": "panel.html",

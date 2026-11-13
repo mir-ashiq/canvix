@@ -25,6 +25,10 @@ export const SLOT_ENDPOINT: Record<string, string> = {
   vision: 'POST {base}/chat/completions',
   image: 'POST {base}/images/generations',
   imageEdit: 'POST {base}/images/generations/edit',
+  // v0.19 shipped the video slot; this map (v0.16.3) only caught up in
+  // v0.23.2 — until then the console's "Test video generation" button
+  // answered "Unknown slot" because the guard keys off this map.
+  video: 'POST {base}/videos/generations',
 }
 
 export interface ProbeVerdict {
@@ -96,6 +100,9 @@ export interface ProbeTarget {
   model?: string
   label: string
   source: string
+  /** v0.23.2: companion auth headers for the video dialects (the z-ai
+   * internal API's X-Token/X-User-Id/X-Chat-Id) — mirrors ResolvedSlot. */
+  headers?: Record<string, string>
 }
 
 /** Probe ONE capability slot through its real endpoint (A3). Provider
@@ -161,6 +168,106 @@ export async function probeSlot(slot: string, target: ProbeTarget): Promise<{ ve
         },
       }
     } catch (err) {
+      return { verdict: classifyProbeError(slot, err) }
+    }
+  }
+  if (slot === 'video') {
+    // v0.23.2: the video slot's zero-cost probe — the same transport and
+    // dialects the feature route uses (src/app/api/ai/video/route.ts):
+    // raw fetch (the SDK has no video surface), Sora-style
+    // POST /videos/generations first, the z-ai internal
+    // POST /video/generation only when that 404s. Companion headers
+    // (ResolvedSlot.headers) ride along so env/file-configured z-ai
+    // providers answer with their X-Token auth instead of 401-ing.
+    //
+    // Zero-cost posture (the imageEdit philosophy): we send a minimal
+    // prompt and treat a 4xx VALIDATION rejection as proof the endpoint
+    // exists — we never poll a task to completion, so a probe can never
+    // spend a generation. A 200 with a task id is an accepted probe (it
+    // starts a real provider-side task; video tasks are typically free
+    // to START and bill on completion/preview — still, the console's
+    // one-probe-per-10s rate limit is the guardrail).
+    const base = target.baseUrl.replace(/\/+$/, '')
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${target.apiKey}`,
+      'X-Z-AI-From': 'Z',
+      'Content-Type': 'application/json',
+      ...(target.headers ?? {}),
+    }
+    const body = JSON.stringify({
+      prompt: 'a one-second clip of a solid red circle',
+      size: '1024x576',
+      ...(model ? { model } : {}),
+    })
+    const verdictFrom = (status: number, text: string, endpoint: string, dialect: string): ProbeVerdict => {
+      const clean = text
+        .replace(/[\r\n\t]+/g, ' ')
+        .trim()
+        .slice(0, 220)
+      if (status === 404 || status === 405) {
+        return {
+          ok: false,
+          slot,
+          endpoint,
+          httpStatus: status,
+          message:
+            `The provider answered ${status} for ${endpoint.replace('{base}', 'its base URL')} — it does not serve video ` +
+            `generation${dialect === 'z-ai' ? ' in either dialect' : ''}. The video slot needs a provider with ` +
+            `POST /videos/generations (Sora-style) or the z-ai /video/generation route — pin one on this page.`,
+        }
+      }
+      if (status === 401 || status === 403) {
+        return {
+          ok: false,
+          slot,
+          endpoint,
+          httpStatus: status,
+          message: `The provider rejected the credentials (HTTP ${status}) — check the API key for this provider.`,
+        }
+      }
+      if (status >= 200 && status < 300) {
+        return {
+          ok: true,
+          slot,
+          endpoint,
+          httpStatus: status,
+          message: `The video endpoint accepted the probe${dialect === 'z-ai' ? ' (z-ai dialect)' : ''} — ` +
+            `the full path works. The probe task is discarded; nothing is billed for the test itself.`,
+        }
+      }
+      // 4xx validation rejection — endpoint exists, request shape refused
+      if (status >= 400 && status < 500) {
+        return {
+          ok: true,
+          slot,
+          endpoint,
+          httpStatus: status,
+          message: `Endpoint is reachable (HTTP ${status} rejecting the minimal probe — expected for this test shape). ` +
+            `The provider serves ${endpoint.replace('{base}', 'this route')}${dialect === 'z-ai' ? ' (z-ai dialect)' : ''}; ${clean}`,
+        }
+      }
+      return { ok: false, slot, endpoint, httpStatus: status, message: clean || 'The provider did not answer in time.' }
+    }
+    try {
+      // dialect 1 — Sora-style (the deployed shape), tried first so
+      // configured providers keep answering exactly as the feature does
+      const sora = await withTimeout(fetch(`${base}/videos/generations`, { method: 'POST', headers, body }))
+      const soraText = await sora.text()
+      if (sora.status !== 404) {
+        return { verdict: verdictFrom(sora.status, soraText, SLOT_ENDPOINT.video, 'sora') }
+      }
+      // dialect 2 — z-ai internal API, only when the Sora route is absent
+      const zai = await withTimeout(fetch(`${base}/video/generation`, { method: 'POST', headers, body }))
+      const zaiText = await zai.text()
+      return { verdict: verdictFrom(zai.status, zaiText, 'POST {base}/video/generation', 'z-ai') }
+    } catch (err) {
+      // fetch rejections (network, DNS, timeout) classify through the
+      // shared scrubber; a "status NNN" message re-routes to the map above
+      const raw = err instanceof Error ? err.message : String(err)
+      if (/status \d{3}/i.test(raw)) {
+        const m = raw.match(/status (\d{3})/i)
+        return { verdict: verdictFrom(Number(m![1]), raw, SLOT_ENDPOINT.video, 'sora') }
+      }
       return { verdict: classifyProbeError(slot, err) }
     }
   }

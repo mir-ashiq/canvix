@@ -27,7 +27,10 @@ export const dynamic = 'force-dynamic'
 // v0.16.4 (A4): imageSearch is retired — photo search runs on the
 // stock-provider keys, not on an AI slot (its searches are not AIUsage
 // rows; historical 'search' rows keep rendering in the log below)
-const SLOT_ORDER = ['text', 'vision', 'image', 'imageEdit'] as const
+// v0.23.2: 'video' joins the slot cards — the feature route has written
+// recordUsage('video', …) rows since v0.19, but the slot card never
+// showed here because this list predated the slot.
+const SLOT_ORDER = ['text', 'vision', 'image', 'imageEdit', 'video'] as const
 
 async function __canvix_get(req: NextRequest) {
   const guard = await requireAdmin(req)

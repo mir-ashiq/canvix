@@ -3,6 +3,12 @@
 // admin acts on. The production incident this encodes: NVIDIA NIM
 // (chat-only) pinned to every slot — text tests passed while image
 // generation 404'd with no explanation anywhere the admin could see.
+//
+// v0.23.2: the video slot's regression suite — the console's "Test
+// video generation" button answered "Unknown slot" because
+// SLOT_ENDPOINT (a v0.16.3 map) predated the v0.19 slot. The video
+// probe speaks raw fetch (the SDK has no video surface), so these
+// cases mock global fetch, not the SDK.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -28,6 +34,11 @@ vi.mock('z-ai-web-dev-sdk', () => ({
 import { classifyProbeError, probeSlot, SLOT_ENDPOINT } from './probe'
 
 const TARGET = { baseUrl: 'https://provider.test/v1', apiKey: 'k', label: 'Test Provider', source: 'multi' }
+
+/** fetch-mock helper — a Response with the minimum surface the probe reads. */
+function fetchOk(body: unknown, status = 200): Promise<Response> {
+  return Promise.resolve(new Response(JSON.stringify(body), { status }))
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -106,5 +117,92 @@ describe('probeSlot (A3)', () => {
     expect(out.verdict.ok).toBe(true)
     expect(out.reply).toBe('ok')
     expect(chatCreate).toHaveBeenCalled()
+  })
+})
+
+describe('probeSlot — video (v0.23.2: the "Unknown slot" regression)', () => {
+  it('the video slot is in the endpoint map — the guard no longer rejects it', () => {
+    expect(SLOT_ENDPOINT.video).toBe('POST {base}/videos/generations')
+  })
+
+  it('a Sora-style 200 with a task id is a full-path verdict', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() => fetchOk({ id: 'task-1' }))
+    const out = await probeSlot('video', TARGET)
+    expect(out.verdict.ok).toBe(true)
+    expect(out.verdict.httpStatus).toBe(200)
+    expect(out.verdict.message).toContain('full path works')
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://provider.test/v1/videos/generations',
+      expect.objectContaining({ method: 'POST' })
+    )
+    fetchMock.mockRestore()
+  })
+
+  it('a 4xx validation rejection PROVES the endpoint exists (zero-cost posture)', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(() => fetchOk({ error: 'prompt violates policy' }, 400))
+    const out = await probeSlot('video', TARGET)
+    expect(out.verdict.ok).toBe(true) // reachable — that is the signal
+    expect(out.verdict.httpStatus).toBe(400)
+    expect(out.verdict.message).toContain('reachable')
+    fetchMock.mockRestore()
+  })
+
+  it('Sora 404 falls through to the z-ai dialect, which answers 200', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementationOnce(() => fetchOk('404 page not found', 404))
+      .mockImplementationOnce(() => fetchOk({ id: 'ztask-1', task_status: 'PROCESSING' }))
+    const out = await probeSlot('video', TARGET)
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://provider.test/v1/video/generation',
+      expect.objectContaining({ method: 'POST' })
+    )
+    expect(out.verdict.ok).toBe(true)
+    expect(out.verdict.message).toContain('z-ai dialect')
+    fetchMock.mockRestore()
+  })
+
+  it('both dialects 404 is a NOT-SERVED verdict that names the fix', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(() => fetchOk('404 page not found', 404))
+    const out = await probeSlot('video', TARGET)
+    expect(out.verdict.ok).toBe(false)
+    expect(out.verdict.httpStatus).toBe(404)
+    expect(out.verdict.message).toContain('does not serve video')
+    expect(fetchMock).toHaveBeenCalledTimes(2) // tried both dialects
+    fetchMock.mockRestore()
+  })
+
+  it('a 401 is a credentials verdict (bearer rejected)', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() => fetchOk('unauthorized', 401))
+    const out = await probeSlot('video', TARGET)
+    expect(out.verdict.ok).toBe(false)
+    expect(out.verdict.message).toContain('credentials')
+    fetchMock.mockRestore()
+  })
+
+  it('companion headers ride the request (the z-ai X-Token auth)', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() => fetchOk({ id: 't' }))
+    await probeSlot('video', { ...TARGET, headers: { 'X-Token': 'tok', 'X-User-Id': 'u1' } })
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const headers = init.headers as Record<string, string>
+    expect(headers['X-Token']).toBe('tok')
+    expect(headers['X-User-Id']).toBe('u1')
+    expect(headers['Authorization']).toBe('Bearer k')
+    fetchMock.mockRestore()
+  })
+
+  it('a network failure is a failed verdict, never a thrown error', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(() => Promise.reject(new Error('fetch failed: ECONNREFUSED')))
+    const out = await probeSlot('video', TARGET)
+    expect(out.verdict.ok).toBe(false)
+    expect(out.verdict.message).toContain('ECONNREFUSED')
+    fetchMock.mockRestore()
   })
 })

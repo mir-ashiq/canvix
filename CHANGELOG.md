@@ -5,6 +5,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.23.2] — 2026-11-13
+
+### Fixed
+
+- **"Test video generation" answered "Unknown slot"** — the video
+  slot joined `SLOT_ENDPOINT` and the probe set. The admin console's
+  per-slot Test buttons (v0.16.3 A3) guard against a slot map that
+  predates the video slot (v0.19 Wave 4): clicking *Test video
+  generation* on a provider pinned to `video` (e.g. VibesAI ·
+  vibes-video) answered 400 "Unknown slot — use text, vision, image
+  or imageEdit" — the slot saved and resolved fine (v0.23.1), the
+  Videos panel generated fine, but the one button that exists to
+  verify the provider before trusting it refused to run. The fix
+  teaches the whole admin surface the fifth slot, which shipped in
+  v0.19 and was never added to any v0.16-era list:
+  - `src/lib/ai/probe.ts` — `video: 'POST {base}/videos/generations'`
+    joins `SLOT_ENDPOINT`; `probeSlot` gains a video branch that
+    mirrors the feature route's exact transport (`src/app/api/ai/
+    video/route.ts`): raw `fetch` (the SDK has no video surface),
+    the Sora-style `POST /videos/generations` tried first, the z-ai
+    internal `POST /video/generation` only when that 404s, companion
+    auth headers (`ResolvedSlot.headers` — the z-ai X-Token dialect)
+    riding along. Zero-cost posture (the imageEdit philosophy): a
+    4xx validation rejection PROVES the endpoint exists without
+    spending a generation; a 2xx is the full-path verdict; both-404
+    is a not-served verdict that names the fix.
+  - `src/app/api/admin/config/ai-test/route.ts` — the guard message
+    lists video; the `resolveSlot` cast types against `AI_SLOTS`
+    (the one source of truth) instead of a hand-rolled four-literal
+    union; the probe target carries the companion headers.
+  - **The admin Logs view learned the slot too** (the sibling gap
+    found while fixing the first): the video feature route has
+    written `recordUsage('video', …)` rows since v0.19, but they
+    were invisible — `LOG_FEATURES` (filter validation + per-feature
+    counters) and the route's `SLOT_ORDER` (the slot cards) predated
+    the slot, so video rows rendered but could not be filtered and
+    the video slot had no card. Both lists, and the Logs UI's label
+    maps + feature chips, now include video.
+  - 9 regression tests: the seven video-probe verdicts (200 w/ task
+    id, 4xx-proves-reachable, Sora-404 → z-ai fallthrough, both-404,
+    401, companion headers, network failure) and the logs pair
+    (video filterable, video counted). Full suite 1411/1411,
+    `tsc --noEmit` + `eslint` clean.
+
+## [0.23.1] — 2026-11-13
+
 ### Added
 
 - **Profile page + bring your own key** (v0.23): every signed-in user

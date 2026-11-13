@@ -58,12 +58,14 @@ const SLOT_LABEL: Record<string, string> = {
   vision: 'Vision',
   image: 'Image generation',
   imageEdit: 'Image editing',
+  video: 'Video generation',
 }
 const SLOT_FEATURES: Record<string, string> = {
   text: 'Magic Write · Translate · Assistant',
   vision: 'Magic Layers',
   image: 'Photos panel → Generate',
   imageEdit: 'Magic Eraser · Enhance · BG remove',
+  video: 'Videos panel → AI video card',
 }
 const SOURCE_LABEL: Record<string, string> = {
   multi: 'providers table',
@@ -74,7 +76,8 @@ const SOURCE_LABEL: Record<string, string> = {
 const WINDOWS = ['15m', '1h', '6h', '24h', '7d'] as const
 // 'search' stays for HISTORICAL rows (the retired imageSearch slot,
 // v0.16.4 A4 — stock-photo searches are not AIUsage rows)
-const FEATURES = ['assistant', 'write', 'translate', 'image', 'image-edit', 'magic-layers', 'search'] as const
+// v0.23.2: 'video' joins (filterable rows + per-feature counters)
+const FEATURES = ['assistant', 'write', 'translate', 'image', 'image-edit', 'magic-layers', 'search', 'video'] as const
 
 function fmtTime(iso: string): string {
   const d = new Date(iso)

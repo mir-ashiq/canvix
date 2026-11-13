@@ -44,7 +44,11 @@ export function parseLimit(value: string | null): number {
   return Math.min(400, Math.max(20, Math.round(n)))
 }
 
-/** Feature names the log can filter by (kept in a stable order for UIs). */
+/** Feature names the log can filter by (kept in a stable order for UIs).
+ * 'search' stays for HISTORICAL rows (the retired imageSearch slot,
+ * v0.16.4 A4). v0.23.2: 'video' joins — the feature route has written
+ * those rows since v0.19 but they were unfilterable (and missing from
+ * the per-feature counters) until now. */
 export const LOG_FEATURES = [
   'assistant',
   'write',
@@ -53,6 +57,7 @@ export const LOG_FEATURES = [
   'image-edit',
   'magic-layers',
   'search',
+  'video',
 ] as const
 
 export interface AiLogRow {

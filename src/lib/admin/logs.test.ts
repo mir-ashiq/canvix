@@ -110,6 +110,22 @@ describe('queryAiLogs (A3)', () => {
     rand.mockRestore()
   })
 
+  // v0.23.2: 'video' joins LOG_FEATURES — the feature route has written
+  // recordUsage('video', …) rows since v0.19, but they were unfilterable
+  // and absent from the counters because this list predated the slot.
+  it('filters and counts video rows (the v0.19 slot is a first-class log feature)', async () => {
+    const rand = vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    await queryAiLogs({ window: '24h', feature: 'video', outcome: 'all', limit: 150 })
+    expect(dbMock.aIUsage.findMany.mock.calls[0][0].where.feature).toBe('video')
+    dbMock.aIUsage.groupBy.mockResolvedValue([
+      { feature: 'video', ok: true, _count: { _all: 2 } },
+      { feature: 'video', ok: false, _count: { _all: 1 } },
+    ])
+    const out = await queryAiLogs({ window: '24h', outcome: 'all', limit: 150 })
+    expect(out.counts.byFeature.video).toEqual({ calls: 3, errors: 1 })
+    rand.mockRestore()
+  })
+
   it('sweeps rows past retention when the 1% dice come up', async () => {
     const rand = vi.spyOn(Math, 'random').mockReturnValue(0)
     dbMock.aIUsage.deleteMany.mockResolvedValue({ count: 12 })

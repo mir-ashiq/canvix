@@ -126,9 +126,12 @@ async function __canvix_post(req: NextRequest) {
   const slotProbe = typeof body.slot === 'string' ? body.slot.trim() : null
   if (slotProbe) {
     if (!(slotProbe in SLOT_ENDPOINT)) {
-      return NextResponse.json({ ok: false, error: 'Unknown slot — use text, vision, image or imageEdit.' }, { status: 400 })
+      return NextResponse.json({ ok: false, error: 'Unknown slot — use text, vision, image, imageEdit or video.' }, { status: 400 })
     }
-    const resolved = await resolveSlot(slotProbe as 'text' | 'vision' | 'image' | 'imageEdit')
+    // v0.23.2: the video slot joins the probe set — SLOT_ENDPOINT (and
+    // probeSlot) learned it; until now this guard answered "Unknown
+    // slot" for the console's "Test video generation" button.
+    const resolved = await resolveSlot(slotProbe as (typeof AI_SLOTS)[number])
     if (!resolved) {
       return NextResponse.json(
         { ok: false, error: `The ${slotProbe} slot has no provider — pin one on the AI & models page.` },
@@ -142,6 +145,9 @@ async function __canvix_post(req: NextRequest) {
       model: modelOverride ?? resolved.model,
       label: resolved.label ?? resolved.source,
       source: resolved.source,
+      // v0.23.2: companion auth headers ride the video probe (the z-ai
+      // dialect authenticates with X-Token, not just the bearer)
+      ...(resolved.headers ? { headers: resolved.headers } : {}),
     }
     try {
       const out = await probeSlot(slotProbe, target)

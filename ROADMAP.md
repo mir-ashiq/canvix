@@ -1,6 +1,6 @@
 # Canvix Roadmap — where we are, what's next
 
-> **Status date:** 2026-11-13 · **Current release:** [v0.23.1](https://github.com/mir-ashiq/canvix/releases/tag/v0.23.1) · **Test posture:** 1402 unit tests (108 files) · 32 e2e specs · CI gates every PR (`lint-unit` incl. production build + `e2e`) · `npm audit` **0 vulnerabilities**.
+> **Status date:** 2026-11-14 · **Current release:** [v0.23.2](https://github.com/mir-ashiq/canvix/releases/tag/v0.23.2) · **Test posture:** 1411 unit tests (108 files) · 32 e2e specs · CI gates every PR (`lint-unit` incl. production build + `e2e`) · `npm audit` **0 vulnerabilities**.
 >
 > This is the living map of the project: the two planning eras (the original **v0.11.8 → v1.0 roadmap** and the **consolidation programme** that overtook it), exactly what shipped under each, what remains open, and the recommended order for finishing the job. The full research it synthesizes: `research/V0118-ROADMAP-RESEARCH.md` (the original decision record) and `docs/COMPETITIVE-ANALYSIS.md` (the wave plan + five-cluster reanalysis).
 
@@ -100,6 +100,7 @@ Not in the original plan, forced by operating canvix.app in production:
 | — | Grant-application trust layer (SECURITY / GOVERNANCE / CONDUCT / funding.json) | ✅ | v0.22.1 |
 | — | **Bring your own key** — profile page, per-user AI providers (`UserAIProvider`, migration 0012), user-aware capabilities, key-before-instance resolution | ✅ | v0.23.0 |
 | — | v0.23.1 patch: admin video-slot save fix (the `SLOT_ORDER` omission), BYOK failure hints on all five AI surfaces, the missing `/test` route shipped (a `.gitignore` casualty) | ✅ | v0.23.1 |
+| — | v0.23.2 patch: the admin "Test video generation" button answered `Unknown slot` (v0.16-era slot lists never learned the v0.19 video slot) — fixed + 9 regression tests | ✅ | v0.23.2 |
 
 ### 2.3 Where that leaves the numbers
 
@@ -121,11 +122,25 @@ Not in the original plan, forced by operating canvix.app in production:
 
 ---
 
-## 3. In flight / recently landed (watch these)
+## 3. The NLnet grant track (WP1–WP5) — the active priority order
 
-- **v0.23.x BYOK polish** — the feature works end-to-end (verified live on canvix.app: save → mask echo → capabilities → test route → per-slot precedence), and v0.23.1 hardened the console round-trip. Optional next polish: usage accounting per user (`AIUsage` rows already carry the actor), and an admin-visible "N users have BYOK providers" stat.
+> **This section is the current plan of record.** If funded, these five work packages run in this order and absorb the recommended §6 order below (each WP *is* that recommendation, funded). If not funded, §6 remains the plan and the same items ship on the project's own cadence. Development standards for grant-funded code: [README § AI & Development Disclosure](README.md#-ai--development-disclosure) — human-authored engineering, AI tools read-only, `Grant: NLnet WP#` commit trailers.
+
+| WP | Scope | Absorbs | Effort | v1.0 unblocks |
+|---|---|---|---|---|
+| **WP1 — Deployment & API trust** | Docker image + compose file (Postgres + app, single `docker compose up`) · scoped API keys for self-hosters (read-only/read-write per key, revocable) | Wave 6 core (Docker), Wave 6 (scoped keys via the MCP-rail model) | M | Docker/compose is the single most-asked self-hoster item; the M-block and every deployment story after it get cheaper |
+| **WP2 — Real-time collaboration at scale** | Postgres `LISTEN/NOTIFY` → in-process hub → SSE fan-out (kills the per-connection poll loop) · **op-level undo broadcast** (undo syncs as ops, not `pages:replace`) | M4 + M6 | M/L | The scaling wall (~0.31–1.25 q/s per client); live-session correctness for shared editing |
+| **WP3 — Mobile & touch editing** | Touch-first editing (large handles, 1-finger drag vs 2-finger pan, double-tap zoom, long-press menu) · bottom-sheet properties · gesture polish (pinch-rotate, momentum pan, edge-pinch) | M1 + M2 + M3 — **the last unchecked README promise** | M | Closes the displaced v0.16 mobile block; parity with Canva mobile web |
+| **WP4 — Sharing roles & portability** | Share links with view/comment/edit roles (+ optional password & expiry) · `.canvix` portable project file (design JSON + embedded media, single-file backup/transfer) | Wave 5 remainder (share roles, `.canvix`) | M | The feature the competitive matrix scores hardest against Canva; the backup story self-hosters ask for |
+| **WP5 — v1.0 quality gate & vendor freedom** | The AI adapter interface — any OpenAI-compatible provider first-class, **removing the vendor-locked `z-ai-web-dev-sdk`** (the last pre-1.0 dependency) · S1–S4 stabilization (perf budgets in CI, a11y audit, self-hoster handbook, the 1.0 definition pass) | Debt #9 + §4.5 | M | The gate itself: vendor-neutral AI, then tag v1.0.0 |
+
+**Sequencing:** WP1 → WP2 → WP3 → WP4 → WP5 — deployment trust first (every later WP ships to a reproducible environment), the scaling wall before the traffic that mobile brings, sharing after the sessions it serves are correct, and the vendor-freedom/stabilization gate last, wrapping v1.0. Each WP lands as minor releases with the full CI wall + docs + export-parity checks per the standing acceptance bar.
+
+**Recently landed (context for the WPs):**
+
+- **v0.23.x BYOK arc** — profile page, per-user AI providers (`UserAIProvider`), key-before-instance resolution, admin test round-trips on all five slots (v0.23.2). WP5's adapter generalizes what BYOK proved per-user to the instance level.
 - **Dependency freshness** — the 2026-11-13 sweep merged 9 Dependabot PRs (Next 16.4.6, babel, Actions bumps, the 79-update dev group); lucide-react 1.x and Prisma 7 were deliberately declined with reasons on the PRs (lucide 1.0 drops brand icons the code imports; Prisma 7 breaks the patched-wasm generation flow). Both need real migration PRs, not bot bumps.
-- **Release hygiene** — the plugin-ceiling incident (×2) and the `.gitignore`-ate-my-route incident both argue for a small **release checklist** doc: bump host → check plugin `engines` ceiling → `git status` for untracked route files → cut tag + release notes. (Enhancement E9 below.)
+- **Release hygiene** — the plugin-ceiling incident (×2) and the `.gitignore`-ate-my-route incident are now covered by `RELEASE-CHECKLIST.md` (root) — the E9 item, closed 2026-11-14.
 
 ---
 
@@ -199,20 +214,20 @@ This is the largest *new* surface, and the audit's biggest measured deficit (Acc
 6. **Rich-text merge coarseness (risk #5).** Two offline editors of one text box still whole-box LWW — documented at R1 ship. Per-span stamps or a Yjs sub-document are the post-1.0 evaluation, only if real usage demands.
 7. **Video slot is code-complete but provider-dependent.** `videoGeneration: false` on canvix.app is a *configuration* state (no live video provider key), not missing code — worth an admin-console callout so operators don't misread it.
 8. **Workers bundle headroom (risk #1).** Still the standing constraint at ~2.1–2.9 MB gz vs the 3 MB cap — every wave re-verifies via `verify-deploy-readiness`; keep dynamic-importing new subsystems.
-9. **Release checklist** (new, from the two plugin-ceiling incidents + the gitignore casualty): host bump → plugin `engines` ceiling → untracked-file sweep → tag + release notes. S, and prevents repeat incidents.
+9. **Release checklist** — ✅ *closed 2026-11-14:* [`RELEASE-CHECKLIST.md`](RELEASE-CHECKLIST.md) (from the two plugin-ceiling incidents + the gitignore casualty): host bump → plugin `engines` ceiling → untracked-file sweep → tag + release notes.
 10. **Template/plugin ecosystem depth.** One first-party plugin (Word Cloud) proves the rail; the ecosystem wants 2–3 more reference plugins exercising different permission sets (the original P3 ask, partially met) — good first-contributor work.
 
 ---
 
 ## 6. Recommended order (the "what next" verdict)
 
-If only three things happen next, in order:
+**The NLnet grant track (§3) is the funded expression of this order — WP1–WP5 in sequence.** Without funding, the same three moves stand, in order:
 
-1. **Wave 6 core slice — Docker/compose + email/password reset + scoped API keys.** The enterprise wall is the biggest measured deficit and Docker is the highest-frequency self-hoster ask. (M-sized each, independent.)
-2. **The M-block, led by M4 (collab fan-out).** LISTEN/NOTIFY removes the scaling wall while staying Postgres-only; M1–M3 close the last README promise; M5/M6 double as Wave-6 items.
-3. **Wave 5 remainder (share roles first).** Roles+password+expiry sharing is the feature the competitive matrix scores hardest against Canva.
+1. **Wave 6 core slice — Docker/compose + scoped API keys.** The enterprise wall is the biggest measured deficit and Docker is the highest-frequency self-hoster ask. (M-sized each, independent.) *(= WP1)*
+2. **The M-block, led by M4 (collab fan-out) with M6 (op-level undo).** LISTEN/NOTIFY removes the scaling wall while staying Postgres-only; M1–M3 close the last README promise; M5/M6 double as Wave-6 items. *(= WP2 + WP3)*
+3. **Wave 5 remainder (share roles first, then `.canvix`).** Roles+password+expiry sharing is the feature the competitive matrix scores hardest against Canva. *(= WP4)*
 
-Then S1–S4 as the gate to v1.0. The enhancement list (§5) runs opportunistically alongside — items 1 (AI adapter), 4 (media GC) and 9 (release checklist) are the ones with disproportionate leverage.
+Then the v1.0 gate — AI adapter + S1–S4 *(= WP5)*. The enhancement list (§5) runs opportunistically alongside — items 1 (AI adapter), 4 (media GC) and 9 (release checklist) are the ones with disproportionate leverage.
 
 ---
 

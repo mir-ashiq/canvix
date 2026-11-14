@@ -56,6 +56,12 @@ browser suite either. The deploy pipelines (Vercel, Cloudflare Workers
 Builds, Netlify) publish `main` directly — CI is the only test gate they
 get, which is why it exists.
 
+**Cutting a release?** Follow [`RELEASE-CHECKLIST.md`](RELEASE-CHECKLIST.md)
+(host bump → plugin `engines` ceiling → untracked-route-file sweep → full
+CI wall → tag). It exists because three releases shipped with a gap CI
+cannot see — a plugin ceiling the host outgrew (×2) and a route file the
+scaffold-era `.gitignore` silently skipped.
+
 **One-time setup for maintainers — make the gate binding.** Branch
 protection cannot be enabled from a PR, so after merging the CI workflow:
 

@@ -355,6 +355,7 @@ export function Landing() {
             <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors inline-flex items-center gap-1.5">
               <Github size={15} /> GitHub
             </a>
+            <a href="https://github.com/mir-ashiq/canvix#-ai--development-disclosure" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">AI Disclosure</a>
             <a href="#features" className="hover:text-foreground transition-colors">Features</a>
             <a href="#templates" className="hover:text-foreground transition-colors">Templates</a>
           </div>

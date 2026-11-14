@@ -955,6 +955,16 @@ tool descriptions so agents pick the right format.
   rail and (since v0.11.8) the collaboration events rail; see the
   security audit and `research/V0118-ROADMAP-RESEARCH.md` §3.7
 
+## 🤖 AI & Development Disclosure
+
+NLnet's [generative-AI policy](https://nlnet.nl/policy/) expects projects with prior AI-generated code to say so publicly, in the repository itself. This is Canvix's complete disclosure — both of how the codebase was built and of the standard every future contribution is held to.
+
+**Historical development (v0.1 – v0.23.2).** Canvix was rapid-prototyped by a solo maintainer using AI coding assistants: drafting editor modules, unit tests and documentation at a pace (23 minor releases in 14 days) that would not otherwise have been possible for one person around classes. **No AI output was ever merged unreviewed.** Every line landed through the human review loop: the maintainer reads, edits and takes authorship responsibility for all of it; CI gates every PR on typecheck, lint, and the full test wall — **1,411 unit tests (108 files) and 32 end-to-end Playwright specs** — plus the production-build guard added in v0.16.1. Where AI-generated code failed that gate, it was fixed or rewritten before merge (the [changelog](CHANGELOG.md) records the honest incidents, e.g. the plugin-ceiling misses). The AI features in the product are runtime capabilities behind provider keys — they are not the development process.
+
+**Grant-funded milestones (WP1–WP5).** Any code funded through the proposed NLnet grant will be **human-authored engineering**. AI tools are restricted to read-only assistance — review, flaw detection, and test-case brainstorming — and never for authoring shipped code. To keep this auditable we adopt a commit convention: grant-funded commits carry a `Grant: NLnet WP#` trailer identifying the work package, and the maintainer is the sole recorded author of every commit. When an AI tool contributed to a commit's review, that fact is noted in plain prose in the commit message body (`AI-assisted: …`) — a commit note, never a `Co-authored-by` trailer — so the authorship record stays unambiguous: one human, responsible for every line. Anyone can audit the funding boundary with `git log --grep='Grant: NLnet'`.
+
+**Also disclosed:** the [funding.json](funding.json) manifest (three milestones, USD 7,000 total) exists for transparency about non-grant funding; it is not a revenue stream for the project.
+
 ## 🧭 Roadmap
 
 - [x] Canva-accurate dark theme & 8-tab editor rail *(v0.2.0)*

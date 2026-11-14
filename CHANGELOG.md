@@ -5,6 +5,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **NLnet application trust layer** — the repository now matches the
+  NLnet proposal (deadline 2027-01-03):
+  - `README.md` gains a dedicated **"AI & Development Disclosure"**
+    section (NLnet policy v2.0 requires prior AI-generated code to be
+    disclosed publicly in the repo): historical development v0.1–v0.23.2
+    (AI-assisted rapid prototyping, all output human-reviewed, gated by
+    1,411 unit tests + 32 e2e specs) and the grant-funded standard —
+    WP1–WP5 milestones human-authored, AI tools restricted to read-only
+    review/flaw detection, with a `Grant: NLnet WP#` commit-trailer
+    convention (AI review assistance, where used, is noted in the
+    commit body — never as a co-author) so the human/assist boundary
+    stays auditable. Linked from the canvix.app landing footer ("AI
+    Disclosure").
+  - `RELEASE-CHECKLIST.md` (root) — the four-step release discipline
+    from the roadmap's E9: bump host version → update the Word Cloud
+    plugin `engines` ceiling → sweep for untracked route files (the
+    `.gitignore` casualty, with the exact audit loop) → run the full
+    CI wall and verify on the live deployment. Cross-linked from
+    CONTRIBUTING.md and ROADMAP.md §5.
+  - `ROADMAP.md` — status line to v0.23.2 / 1,411 tests; the v0.23.2
+    row in the shipped map; §3 rewritten as **"The NLnet grant track
+    (WP1–WP5) — the active priority order"** (WP1 Docker/compose +
+    scoped API keys, WP2 Postgres LISTEN/NOTIFY collab fan-out +
+    op-level undo, WP3 mobile/touch editing, WP4 share-link roles +
+    `.canvix` portable bundle, WP5 v1.0 quality gate + removing the
+    vendor-locked `z-ai-web-dev-sdk`), each mapped to the epics it
+    absorbs; §6 recommended order reframed as the unfunded expression
+    of the same sequence.
+
 ## [0.23.2] — 2026-11-13
 
 ### Fixed

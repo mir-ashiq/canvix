@@ -36,6 +36,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     absorbs; §6 recommended order reframed as the unfunded expression
     of the same sequence.
 
+- **GenAI-policy alignment refinement** — scope aligned with NLnet's
+  published policy v2.0 and GenAI FAQ (verified 2026-11-14):
+  - README disclosure: policy link fixed (the old `nlnet.nl/policy/`
+    path 404s; correct URL is
+    `nlnet.nl/foundation/policies/generativeAI`), and the grant-standard
+    paragraph now states the exact boundary — read-only review of
+    human-authored code and tests (defects, security issues,
+    test-coverage gaps); AI may recommend additional test scenarios,
+    but all test cases, code, fixes and documentation are independently
+    human-authored; zero AI development in the funded scope; €0 for AI
+    subscriptions/credits (non-reimbursable).
+  - ROADMAP WP5 rescoped to **"v1.0 quality gate & vendor
+    independence"**: funded scope = removing the vendor-locked
+    `z-ai-web-dev-sdk` from core (one production file,
+    `src/lib/ai/provider.ts`; the SDK-free BYOK rail is the migration
+    path) + S1–S4 (CI perf budgets, WCAG a11y audit, self-hoster
+    handbook, 1.0 definition pass). The provider-neutral AI adapter is
+    **outside the funded scope** (FAQ: AI connectors stay out of funded
+    work) and proceeds as unfunded project work — §3 sequencing note,
+    §5 item 1 and §6 updated to match.
+  - WP2/WP4 language grounded in shipped work: WP2 builds on the HLC
+    LWW merge + deletion tombstones of v0.10.0; WP4 notes vector-text
+    PDF (v0.15.3) and native editable PPTX (v0.21.0) as the shipped
+    export track record the `.canvix` open format extends.
+
 ## [0.23.2] — 2026-11-13
 
 ### Fixed

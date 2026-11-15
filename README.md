@@ -512,6 +512,10 @@ npm run build
 npm run start
 ```
 
+### Windows installer
+
+The Windows package uses Docker Desktop for the Canvix web image and PostgreSQL volume. Download `CanvixSetup.exe` from a GitHub release for the guided installer, or `CanvixSetup.msi` for direct Windows Installer use. The launcher checks releases and offers runtime or launcher updates. See [`packaging/windows/README.md`](packaging/windows/README.md) for local builds.
+
 ## ☁️ Deploy — Vercel, Netlify, Cloudflare Workers, or your own box
 
 Canvix runs on **any Node host** and — since v0.9.3 — on **Cloudflare

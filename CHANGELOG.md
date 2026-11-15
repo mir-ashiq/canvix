@@ -47,19 +47,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     but all test cases, code, fixes and documentation are independently
     human-authored; zero AI development in the funded scope; €0 for AI
     subscriptions/credits (non-reimbursable).
-  - ROADMAP WP5 rescoped to **"v1.0 quality gate & vendor
-    independence"**: funded scope = removing the vendor-locked
-    `z-ai-web-dev-sdk` from core (one production file,
-    `src/lib/ai/provider.ts`; the SDK-free BYOK rail is the migration
-    path) + S1–S4 (CI perf budgets, WCAG a11y audit, self-hoster
-    handbook, 1.0 definition pass). The provider-neutral AI adapter is
-    **outside the funded scope** (FAQ: AI connectors stay out of funded
-    work) and proceeds as unfunded project work — §3 sequencing note,
-    §5 item 1 and §6 updated to match.
+  - ROADMAP WP5 rescoped to **"v1.0 quality gate"**: funded scope =
+    S1–S4 stabilization only (CI perf budgets, WCAG a11y audit,
+    self-hoster handbook, 1.0 definition pass). The vendor SDK and any
+    replacement client are entirely outside the funded scope (FAQ: AI
+    connectors stay out of funded work) — see the corrections under
+    "Changed" below for the precise code-level picture
+    (`src/lib/ai/provider.ts` constructs every AI client, BYOK
+    included). §3 sequencing note, §5 item 1 and §6 updated to match.
   - WP2/WP4 language grounded in shipped work: WP2 builds on the HLC
     LWW merge + deletion tombstones of v0.10.0; WP4 notes vector-text
     PDF (v0.15.3) and native editable PPTX (v0.21.0) as the shipped
     export track record the `.canvix` open format extends.
+
+### Changed
+
+- **Funding-boundary corrections, verified against code and policy**
+  (2026-11-15; follow-up to the alignment commit above):
+  - **BYOK scope claim fixed.** The previous entry said the BYOK rail
+    is "SDK-free"; wrong. `src/lib/ai/byok.ts` stores and resolves
+    per-user credentials, but every client — instance slots and BYOK
+    alike — is constructed by `makeClient()` in
+    `src/lib/ai/provider.ts` via `z-ai-web-dev-sdk`. The vendor SDK
+    spans every AI request today (ROADMAP §3 context note + §5 item 1
+    now state this precisely).
+  - **SDK removal moved out of the funded scope.** Removing the SDK
+    means writing the direct OpenAI-compatible client — that *is* AI
+    connector work, and the GenAI FAQ keeps connectors outside funded
+    work; funding the removal while leaving the replacement unfunded
+    was an impossible split. WP5 is now the pure S1–S4 quality gate
+    (~60 h); the whole provider track (removal + adapter, ~65 h)
+    rides unfunded. README disclosure updated to match.
+  - **Workstation hardware line removed (€1,200 → €0).** NLnet's
+    external-spending policy: "NLnet does not allocate grant money to
+    basic operational IT cost, such as regular laptops,
+    desktops/workstations, or mobile phones." The request is now
+    labour-only.
+  - **WP3 refocused (~100 h → ~60 h)** on accessible touch/pointer
+    semantics (WCAG pointer-target minimums) and responsive layout
+    verification; deep gesture polish stays on the project's own
+    cadence. Revised funded total: **420 h ≈ €12,600 at €30/h
+    cost-recovery (~21 weeks at 20 h/week)**, hardware €0.
 
 ## [0.23.2] — 2026-11-13
 

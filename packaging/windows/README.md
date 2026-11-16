@@ -17,4 +17,4 @@ The build downloads these verified runtime inputs when absent from `packaging/wi
 - Node.js `22.14.0` Windows x64 ZIP
 - PostgreSQL `17.12-1` Windows x64 binaries ZIP
 
-The `Windows installer` GitHub Actions workflow builds and publishes `CanvixSetup.exe` and `CanvixSetup.msi` in the matching GitHub release. The standalone package has no GHCR visibility requirement.
+Each local build is written to a timestamped folder such as `builds/Canvix-0.23.2-20261116-114530/`, containing `CanvixSetup.exe` and `CanvixSetup.msi`. The `Windows installer` GitHub Actions workflow uploads those timestamped files and publishes them under the canonical `CanvixSetup.exe` and `CanvixSetup.msi` release asset names. The standalone package has no GHCR visibility requirement.

@@ -89,6 +89,7 @@ mini-services/
 /packaging/windows/standalone/downloads/
 /packaging/windows/standalone/payload/
 /packaging/windows/standalone/staging/
+/builds/
 CanvixSetup.msi
 CanvixSetup.exe
 CanvixSetup.wixpdb

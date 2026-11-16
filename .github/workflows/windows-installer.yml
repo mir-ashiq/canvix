@@ -59,9 +59,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: canvix-windows-installer
-          path: |
-            CanvixSetup.msi
-            CanvixSetup.exe
+          path: builds/Canvix-*/*
           if-no-files-found: error
 
   release:
@@ -88,7 +86,7 @@ jobs:
             "The package bundles Node.js, PostgreSQL, the Canvix server and the local database setup." \
             > notes.md
           if gh release view "v$VERSION" --repo "$REPO" >/dev/null 2>&1; then
-            gh release upload "v$VERSION" --repo "$REPO" --clobber CanvixSetup.msi CanvixSetup.exe
+            gh release upload "v$VERSION" --repo "$REPO" --clobber builds/Canvix-*/CanvixSetup.msi builds/Canvix-*/CanvixSetup.exe
           else
-            gh release create "v$VERSION" --repo "$REPO" --target "$SHA" --title "v$VERSION" --notes-file notes.md --generate-notes CanvixSetup.msi CanvixSetup.exe
+            gh release create "v$VERSION" --repo "$REPO" --target "$SHA" --title "v$VERSION" --notes-file notes.md --generate-notes builds/Canvix-*/CanvixSetup.msi builds/Canvix-*/CanvixSetup.exe
           fi

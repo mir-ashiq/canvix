@@ -9,6 +9,9 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $downloads = Join-Path $PSScriptRoot 'downloads'
 $staging = Join-Path $PSScriptRoot 'staging'
 $payload = Join-Path $staging 'payload'
+$artifactRoot = Join-Path $root 'builds'
+$buildStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$artifactDirectory = Join-Path $artifactRoot "Canvix-$Version-$buildStamp"
 $nodeZip = Join-Path $downloads "node-v$NodeVersion-win-x64.zip"
 $postgresZip = Join-Path $downloads "postgresql-$PostgresVersion-windows-x64-binaries.zip"
 $nodeUrl = "https://nodejs.org/dist/v$NodeVersion/node-v$NodeVersion-win-x64.zip"
@@ -32,6 +35,10 @@ if ($null -eq $nodeExe) {
     throw 'The Node.js archive does not contain node.exe.'
 }
 
+if (Test-Path $payload) {
+    Remove-Item $payload -Recurse -Force
+}
+
 Push-Location $root
 try {
     & npm.cmd ci --no-audit --no-fund
@@ -45,7 +52,7 @@ finally {
 
 $prepare = Join-Path $PSScriptRoot 'prepare-runtime.ps1'
 & $prepare -SourceDir $root -OutputDir $payload -NodeExePath $nodeExe.FullName -PostgresZip $postgresZip
-if ($LASTEXITCODE -ne 0) { throw "Runtime assembly failed with exit code $LASTEXITCODE." }
+if ($LASTEXITCODE -gt 7) { throw "Runtime assembly failed with exit code $LASTEXITCODE." }
 
 $launcherProject = Join-Path $root 'packaging\windows\CanvixLauncher\CanvixLauncher.csproj'
 $launcherPublish = Join-Path $root 'packaging\windows\CanvixLauncher\bin\Release\net8.0-windows\win-x64\publish'
@@ -62,9 +69,12 @@ $bootstrapperProject = Join-Path $root 'packaging\windows\CanvixSetupBootstrappe
 if ($LASTEXITCODE -ne 0) { throw "Setup publish failed with exit code $LASTEXITCODE." }
 
 $setupSource = Join-Path $root 'packaging\windows\CanvixSetupBootstrapper\bin\Release\net8.0-windows\win-x64\publish\CanvixSetup.exe'
-Copy-Item $setupSource (Join-Path $root 'CanvixSetup.exe') -Force
 & wix msi validate $msi
 if ($LASTEXITCODE -ne 0) { throw "MSI validation failed with exit code $LASTEXITCODE." }
 
-Write-Host "Standalone installer ready: $root\CanvixSetup.exe"
-Write-Host "Standalone MSI ready: $msi"
+New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
+Move-Item $msi (Join-Path $artifactDirectory 'CanvixSetup.msi') -Force
+Copy-Item $setupSource (Join-Path $artifactDirectory 'CanvixSetup.exe') -Force
+
+Write-Host "Standalone installer ready: $artifactDirectory\CanvixSetup.exe"
+Write-Host "Standalone MSI ready: $artifactDirectory\CanvixSetup.msi"

@@ -61,6 +61,36 @@ try {
         Remove-Item $destinationPackage -Recurse -Force -ErrorAction SilentlyContinue
         Copy-Tree $sourcePackage $destinationPackage
     }
+
+    $copiedDependencies = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    function Copy-DependencyTree([string]$PackageName) {
+        if (!$copiedDependencies.Add($PackageName)) { return }
+
+        $sourcePackage = Join-Path $sourceModules $PackageName
+        $manifestPath = Join-Path $sourcePackage 'package.json'
+        if (!(Test-Path $manifestPath)) {
+            throw "The build is missing node_modules\$PackageName."
+        }
+
+        $destinationPackage = Join-Path $payloadModules $PackageName
+        Remove-Item $destinationPackage -Recurse -Force -ErrorAction SilentlyContinue
+        Copy-Tree $sourcePackage $destinationPackage
+
+        $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+        foreach ($dependencySet in @($manifest.dependencies, $manifest.optionalDependencies)) {
+            if ($null -eq $dependencySet) { continue }
+            foreach ($dependencyName in $dependencySet.PSObject.Properties.Name) {
+                $dependencyManifest = Join-Path (Join-Path $sourceModules $dependencyName) 'package.json'
+                if (Test-Path $dependencyManifest) {
+                    Copy-DependencyTree $dependencyName
+                }
+            }
+        }
+    }
+
+    foreach ($package in @('c12', 'deepmerge-ts', 'effect', 'empathic', '@prisma/adapter-pg')) {
+        Copy-DependencyTree $package
+    }
     Copy-Tree (Join-Path $SourceDir '.next\static') (Join-Path $appDir '.next\static')
     Copy-Tree (Join-Path $SourceDir 'public') (Join-Path $appDir 'public')
     Copy-Tree (Join-Path $SourceDir 'prisma') (Join-Path $appDir 'prisma')

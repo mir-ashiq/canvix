@@ -129,24 +129,40 @@ internal sealed class MainForm : Form
 
     private async Task StartCanvixAsync()
     {
-        SetBusy(true, "Starting local Canvix...");
+        var elapsed = Stopwatch.StartNew();
+        var phase = "Starting local Canvix";
+        using var statusTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        statusTimer.Tick += (_, _) => SetStatus($"{phase} ({elapsed.Elapsed:mm\\:ss})");
+        SetBusy(true, $"{phase} (00:00)");
+        statusTimer.Start();
         try
         {
+            phase = "Checking the standalone runtime";
+            SetStatus($"{phase} ({elapsed.Elapsed:mm\\:ss})");
             EnsureRuntimeFiles();
             EnsureEnvironmentFile();
+
+            phase = "Starting local PostgreSQL";
+            SetStatus($"{phase} ({elapsed.Elapsed:mm\\:ss})");
             await EnsurePostgresAsync();
-            SetStatus("Preparing the local Canvix database...");
+
+            phase = "Preparing the local database";
+            SetStatus($"{phase} ({elapsed.Elapsed:mm\\:ss})");
             await RunDatabaseSetupAsync();
+
+            phase = "Starting the Canvix server";
+            SetStatus($"{phase} ({elapsed.Elapsed:mm\\:ss})");
             await StartApplicationAsync();
-            SetStatus($"Canvix is running at http://127.0.0.1:{AppPort}");
+            SetStatus($"Canvix is running at http://127.0.0.1:{AppPort} ({elapsed.Elapsed:mm\\:ss})");
             OpenUrl($"http://127.0.0.1:{AppPort}");
         }
         catch (Exception ex)
         {
-            SetStatus($"Could not start Canvix: {ex.Message}");
+            SetStatus($"Could not start Canvix after {elapsed.Elapsed:mm\\:ss}: {ex.Message}");
         }
         finally
         {
+            statusTimer.Stop();
             SetBusy(false);
         }
     }
@@ -300,18 +316,21 @@ internal sealed class MainForm : Form
             var start = await RunProcessAsync(
                 PostgresBinPath("pg_ctl.exe"),
                 ["-D", PostgresDataDirectory, "-l", PostgresLogPath, "-o", $"-h 127.0.0.1 -p {PostgresPort}", "-w", "start"],
-                _dataDirectory);
+                _dataDirectory,
+                captureOutput: false);
             if (start.ExitCode != 0 && !await IsPostgresReadyAsync())
             {
                 throw new InvalidOperationException(ReadPostgresFailure(start.Error));
             }
         }
 
+        var databaseEnvironment = LoadEnvironment();
+        databaseEnvironment["PGPASSWORD"] = GetEnvironmentValue("POSTGRES_PASSWORD", "");
         var createDatabase = await RunProcessAsync(
             PostgresBinPath("createdb.exe"),
-            ["-h", "127.0.0.1", "-p", PostgresPort.ToString(CultureInfo.InvariantCulture), "-U", "canvix", "canvix"],
+            ["-h", "127.0.0.1", "-p", PostgresPort.ToString(CultureInfo.InvariantCulture), "-w", "-U", "canvix", "canvix"],
             _dataDirectory,
-            LoadEnvironment());
+            databaseEnvironment);
         if (createDatabase.ExitCode != 0 &&
             !createDatabase.Error.Contains("already exists", StringComparison.OrdinalIgnoreCase))
         {
@@ -432,7 +451,8 @@ internal sealed class MainForm : Form
         var result = await RunProcessAsync(
             PostgresBinPath("pg_ctl.exe"),
             ["-D", PostgresDataDirectory, "-m", "fast", "-w", "stop"],
-            _dataDirectory);
+            _dataDirectory,
+            captureOutput: false);
         if (result.ExitCode != 0 && await IsPostgresReadyAsync())
         {
             throw new InvalidOperationException(result.Error.Trim());
@@ -443,15 +463,16 @@ internal sealed class MainForm : Form
         string fileName,
         IEnumerable<string> arguments,
         string workingDirectory,
-        IReadOnlyDictionary<string, string>? environment = null)
+        IReadOnlyDictionary<string, string>? environment = null,
+        bool captureOutput = true)
     {
         var startInfo = new ProcessStartInfo
         {
             FileName = fileName,
             WorkingDirectory = workingDirectory,
             UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
+            RedirectStandardOutput = captureOutput,
+            RedirectStandardError = captureOutput,
             CreateNoWindow = true,
         };
         foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
@@ -462,9 +483,15 @@ internal sealed class MainForm : Form
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"{Path.GetFileName(fileName)} could not start.");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+        if (!captureOutput)
+        {
+            await process.WaitForExitAsync(timeout.Token);
+            return new CommandResult(process.ExitCode, "", "");
+        }
+
         var outputTask = process.StandardOutput.ReadToEndAsync();
         var errorTask = process.StandardError.ReadToEndAsync();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         await process.WaitForExitAsync(timeout.Token);
         return new CommandResult(process.ExitCode, await outputTask, await errorTask);
     }

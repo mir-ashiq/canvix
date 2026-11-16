@@ -69,7 +69,7 @@
     "tw-animate-css": "^1.3.5",
     "typescript": "^5",
     "vitest": "^5.1.0",
-    "wrangler": "^4.160.0"
+    "wrangler": "^4.161.0"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

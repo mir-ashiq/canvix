@@ -7,10 +7,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>CanvixSetup</AssemblyName>
     <RootNamespace>CanvixSetupBootstrapper</RootNamespace>
-    <Version>0.23.1</Version>
-    <AssemblyVersion>0.23.1.0</AssemblyVersion>
-    <FileVersion>0.23.1.0</FileVersion>
-    <InformationalVersion>0.23.1</InformationalVersion>
+    <Version>0.23.2</Version>
+    <AssemblyVersion>0.23.2.0</AssemblyVersion>
+    <FileVersion>0.23.2.0</FileVersion>
+    <InformationalVersion>0.23.2</InformationalVersion>
     <MsiPath Condition="'$(MsiPath)' == ''">$(MSBuildThisFileDirectory)..\..\..\CanvixSetup.msi</MsiPath>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>

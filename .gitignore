@@ -85,6 +85,14 @@ tools/
 .env.local
 mini-services/
 
+# standalone Windows package build outputs
+/packaging/windows/standalone/downloads/
+/packaging/windows/standalone/payload/
+/packaging/windows/standalone/staging/
+CanvixSetup.msi
+CanvixSetup.exe
+CanvixSetup.wixpdb
+
 # test artifacts
 /test-results/
 /playwright-report/

@@ -1,0 +1,94 @@
+name: Windows installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish, for example 0.23.2
+        type: string
+        required: true
+        default: "0.23.2"
+      node_version:
+        description: Node.js runtime version bundled in the installer
+        type: string
+        required: true
+        default: "22.14.0"
+      postgres_version:
+        description: PostgreSQL binary ZIP version bundled in the installer
+        type: string
+        required: true
+        default: "17.12-1"
+
+concurrency:
+  group: canvix-windows-installer
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install WiX
+        shell: pwsh
+        run: dotnet tool install --global wix --version 5.0.2
+
+      - name: Build standalone installer
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+          NODE_VERSION: ${{ inputs.node_version }}
+          POSTGRES_VERSION: ${{ inputs.postgres_version }}
+        run: >-
+          pwsh -NoProfile -File packaging/windows/standalone/build-standalone.ps1
+          -Version $env:VERSION
+          -NodeVersion $env:NODE_VERSION
+          -PostgresVersion $env:POSTGRES_VERSION
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canvix-windows-installer
+          path: |
+            CanvixSetup.msi
+            CanvixSetup.exe
+          if-no-files-found: error
+
+  release:
+    needs: windows-installer
+    if: inputs.version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: canvix-windows-installer
+
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+          SHA: ${{ github.sha }}
+        run: |
+          printf '%s\n' \
+            "Canvix standalone Windows installer." \
+            "" \
+            "The package bundles Node.js, PostgreSQL, the Canvix server and the local database setup." \
+            > notes.md
+          if gh release view "v$VERSION" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "v$VERSION" --repo "$REPO" --clobber CanvixSetup.msi CanvixSetup.exe
+          else
+            gh release create "v$VERSION" --repo "$REPO" --target "$SHA" --title "v$VERSION" --notes-file notes.md --generate-notes CanvixSetup.msi CanvixSetup.exe
+          fi

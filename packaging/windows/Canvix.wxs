@@ -10,6 +10,7 @@
     <MediaTemplate EmbedCab="yes" />
     <Feature Id="MainFeature" Title="Canvix" Level="1">
       <ComponentGroupRef Id="MainComponents" />
+      <ComponentGroupRef Id="StandaloneComponents" />
       <ComponentGroupRef Id="StartMenuComponents" />
     </Feature>
   </Package>
@@ -27,8 +28,13 @@
     <ComponentGroup Id="MainComponents" Directory="INSTALLFOLDER">
       <Component Id="LauncherComponent" Bitness="always64">
         <File Id="CanvixLauncherExe" Source="$(var.PublishDir)\CanvixLauncher.exe" KeyPath="yes" />
-        <File Id="CanvixComposeFile" Source="$(var.SourceDir)\docker-compose.yml" />
       </Component>
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="StandaloneComponents" Directory="INSTALLFOLDER">
+      <Files Include="$(var.StandaloneDir)\**\*" />
     </ComponentGroup>
   </Fragment>
 

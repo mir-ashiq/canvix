@@ -38,7 +38,7 @@ function nextFrame(): Promise<void> {
  */
 export async function captureStage(opts: {
   pixelScale: number
-  mimeType?: 'image/png' | 'image/jpeg'
+  mimeType?: 'image/png' | 'image/jpeg' | 'image/webp'
   quality?: number
 }): Promise<string> {
   const { stage, layer, pageWidth, pageHeight, zoom, pan } = canvasBridge

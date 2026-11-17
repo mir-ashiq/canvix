@@ -7,6 +7,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **WebP export** (Wave 5 remainder, roadmap §4.3) — the fourth raster
+  format in the export dialog, riding the browser-native encoder (zero
+  new dependencies, the §8 discipline): the format card is
+  feature-detected per browser and hidden where the canvas can't encode
+  WebP — Safari accepts `image/webp` in `toDataURL()` and then silently
+  returns PNG bytes, so the card never appears there, and a
+  post-capture guard refuses to save mislabelled PNG bytes under a
+  `.webp` name even if the probe is bypassed. Full parity with the
+  PNG/JPG raster path: 1× / 2× / 3× detail, current page or
+  all-pages-per-file. Verified by a unit suite (probe honesty, PNG
+  fallback, fail-closed encoder) and a Playwright spec (magic bytes,
+  all-pages suffixes, card-hidden-under-stubbed-Safari).
+- **Fixed: export dialog clipping on short viewports** — the option
+  sets for GIF/PPTX made the dialog taller than a 720p screen with no
+  scroll, leaving the download button unreachable (a pre-existing clip
+  the new format card pushed over the edge). The dialog now caps at
+  `calc(100vh-4rem)` and scrolls its options internally.
 - **NLnet application trust layer** — the repository now matches the
   NLnet proposal (deadline 2027-01-03):
   - `README.md` gains a dedicated **"AI & Development Disclosure"**

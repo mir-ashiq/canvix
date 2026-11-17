@@ -21,6 +21,7 @@ import {
   type VideoExportEngineDecision,
 } from '@/lib/video-export'
 import { planGifFrames, selectGifPages, type GifPageRange } from '@/lib/gif-plan'
+import { WEBP_QUALITY, assertWebpDataUrl, canvasEncodesWebp } from '@/lib/webp-plan'
 import { toast } from '@/hooks/use-toast'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
@@ -56,6 +57,7 @@ const SCALES = [
 const FORMATS = [
   { id: 'png', label: 'PNG', hint: 'Lossless · transparency', icon: FileImage },
   { id: 'jpg', label: 'JPG', hint: 'Smaller file', icon: FileImage },
+  { id: 'webp', label: 'WebP', hint: 'Modern · smallest file', icon: FileImage },
   { id: 'pdf', label: 'PDF', hint: 'Vector text · all pages', icon: FileType2 },
   { id: 'pptx', label: 'PPTX', hint: 'PowerPoint · editable slides', icon: Presentation },
   { id: 'svg', label: 'SVG', hint: 'Vector · editable', icon: FileCode2 },
@@ -130,6 +132,26 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       live = false
     }
   }, [pages, scale])
+
+  // Wave 5: does THIS browser's canvas actually encode WebP? Safari
+  // accepts 'image/webp' in toDataURL and silently returns PNG bytes —
+  // so the card is offered only where the probe passes (the §8
+  // discipline: degrade honestly, never offer a lie with a file
+  // extension). Probed once per dialog; null = not known yet.
+  const [webpSupported, setWebpSupported] = useState<boolean | null>(null)
+  useEffect(() => {
+    let live = true
+    void (async () => {
+      const scratch = document.createElement('canvas')
+      scratch.width = 1
+      scratch.height = 1
+      const supported = canvasEncodesWebp((m) => scratch.toDataURL(m, 0.8))
+      if (live) setWebpSupported(supported)
+    })()
+    return () => {
+      live = false
+    }
+  }, [])
 
   const base = sanitizeFilename(name)
   const pageCount = allPages ? pages.length : 1
@@ -293,7 +315,8 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         onOpenChange(false)
         return
       }
-      const mimeType = format === 'png' ? 'image/png' : 'image/jpeg'
+      const mimeType =
+        format === 'png' ? 'image/png' : format === 'jpg' ? 'image/jpeg' : 'image/webp'
       const indices = allPages ? pages.map((_, i) => i) : [currentPage]
       const savedPage = currentPage
       for (let k = 0; k < indices.length; k++) {
@@ -303,7 +326,15 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           // wait for the stage to re-render the page
           await new Promise((r) => setTimeout(r, 220))
         }
-        const url = await captureStage({ pixelScale: scale, mimeType, quality: 0.94 })
+        const url = await captureStage({
+          pixelScale: scale,
+          mimeType,
+          quality: format === 'webp' ? WEBP_QUALITY : 0.94,
+        })
+        // honest-degradation guard: if the browser handed back PNG
+        // bytes despite the webp request, refuse rather than save a
+        // mislabelled file (the Safari fallback path)
+        if (format === 'webp') assertWebpDataUrl(url)
         const suffix = indices.length > 1 ? `-page-${idx + 1}` : ''
         triggerDownload(url, `${base}${suffix}.${format}`)
         if (indices.length > 1) await new Promise((r) => setTimeout(r, 380))
@@ -321,7 +352,11 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
-      <DialogContent className="rounded-[28px] sm:max-w-md">
+      {/* max-h + internal scroll: the GIF/PPTX option sets can outgrow
+          short viewports (720p) — the footer must stay reachable, the
+          options scroll inside (a pre-existing clip the 8th format
+          card pushed over the edge) */}
+      <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto rounded-[28px] sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileImage size={18} className="text-[#7D2AE8]" /> Download your design
@@ -333,7 +368,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <div>
             <h4 className="text-xs font-semibold text-muted-foreground mb-2">File type</h4>
             <div className="grid grid-cols-3 gap-1.5">
-              {FORMATS.map((f) => {
+              {FORMATS.filter((f) => f.id !== 'webp' || webpSupported === true).map((f) => {
                 const Ico = f.icon
                 return (
                   <button

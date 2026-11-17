@@ -101,6 +101,7 @@ Not in the original plan, forced by operating canvix.app in production:
 | — | **Bring your own key** — profile page, per-user AI providers (`UserAIProvider`, migration 0012), user-aware capabilities, key-before-instance resolution | ✅ | v0.23.0 |
 | — | v0.23.1 patch: admin video-slot save fix (the `SLOT_ORDER` omission), BYOK failure hints on all five AI surfaces, the missing `/test` route shipped (a `.gitignore` casualty) | ✅ | v0.23.1 |
 | — | v0.23.2 patch: the admin "Test video generation" button answered `Unknown slot` (v0.16-era slot lists never learned the v0.19 video slot) — fixed + 9 regression tests | ✅ | v0.23.2 |
+| — | **WebP export** — the fourth raster format (Wave 5 remainder): browser-native encoder, feature-detected card (hidden where the canvas lies — Safari's silent PNG fallback), honest-degradation guard on the captured bytes, 1×/2×/3× + all-pages parity with PNG/JPG | ✅ | Unreleased (Wave 5 slice) |
 
 ### 2.3 Where that leaves the numbers
 
@@ -176,7 +177,6 @@ Only the PPTX slice shipped. Remaining scope, in recommended order:
 |---|---|---|---|
 | **Share links with roles** | view/comment/edit roles + password + expiry on public share URLs | The current share model is owner/read-only; the collab guard gives the enforcement seam | M |
 | **ZIP batch export** | Export a folder / multi-page ranges in one download | Rides the existing encoders; the container work is standard | S/M |
-| **WebP export** | Ninth raster format | Encoder is in-platform (`Image.encode`); dialog + plumbing only | S |
 | **Print production marks** | Bleed/crop marks, 300 DPI target | PDF path already vector; marks are geometry | S/M |
 | **`.canvix` portable project file** | Single-file design bundle (design JSON + embedded media) | Backup/portability story; the media store already chunks | M |
 | **Server-side rendering** | Headless export (the MCP `export_design` path extended) | Careful scope: no render farm (the discipline list) — one-shot, capped | M/L |

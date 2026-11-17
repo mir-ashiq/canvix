@@ -38,7 +38,7 @@ Pro tier, no subscription, no trial countdown, no watermark ransom, no
 is a design tool that never asks you for a credit card:
 
 - All **366 templates** — including the entire premium collection — are free
-- All **exports** (PNG, JPG, SVG, PDF, PPTX, video, GIF) are free and unwatermarked
+- All **exports** (PNG, JPG, WebP, SVG, PDF, PPTX, video, GIF) are free and unwatermarked
 - All **AI features** (magic edit, magic write, background removal, translate)
   run against your own API keys, so there is nothing for us to meter
 - **Accounts are free** — username + password, no email, no verification,
@@ -471,7 +471,7 @@ is right here.
   live in the editor, video exports and SVG exports
 - **Undo / redo** — full history stack with keyboard shortcuts
 - **Autosave** — designs persist to the database automatically
-- **Export** — PNG & JPG at 1× / 2× / 3× quality, current page or all pages,
+- **Export** — PNG, JPG & WebP at 1× / 2× / 3× quality, current page or all pages,
   generated 100% client-side
 - **Responsive** — the same editor adapts to desktop, tablet and mobile with
   touch gestures (pinch-zoom, drag-to-pan)
@@ -838,7 +838,7 @@ Security posture (same as the admin console, `docs/ADMIN.md`):
 | Feature | Works without a provider? |
 |---|---|
 | Editor, templates, uploads, draw, groups, rulers, crop | ✅ always local |
-| Exports — PNG / JPG / PDF / SVG / PPTX / GIF / video | ✅ always local |
+| Exports — PNG / JPG / WebP / PDF / SVG / PPTX / GIF / video | ✅ always local |
 | Collaboration, presence, comments | ✅ only needs the database |
 | Background remover | ✅ local (in-browser ONNX) |
 | **Upscaler (Lanczos 2×/4×)** | ✅ local — v0.19 Wave 4, any image |

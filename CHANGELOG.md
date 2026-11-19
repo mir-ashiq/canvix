@@ -7,6 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Admin: BYOK adoption stat** — the console overview now answers
+  "how many users added their own API keys": a new **Own API keys**
+  stat card (distinct accounts with ≥1 `UserAIProvider` row, key
+  count, how many of the five capability slots user keys cover —
+  the CSV `slots` column parsed per-slot in SQL). Aggregate-only:
+  no usernames ride along. `/api/admin/overview` gains a matching
+  `byok` block.
 - **WebP export** (Wave 5 remainder, roadmap §4.3) — the fourth raster
   format in the export dialog, riding the browser-native encoder (zero
   new dependencies, the §8 discipline): the format card is
@@ -110,6 +117,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Admin console audit (2026-11-19)** — a full sweep of all five
+  console pages (zero runtime errors: console, page, HTTP) found and
+  fixed three defects:
+  - the **Model slots** card's chip read `X/4 wired` with five slots
+    configured — the v0.19 video slot never reached the hardcoded
+    denominator, so a fully-wired instance displayed "5/4 wired".
+    The chip now counts from the slot list itself.
+  - the overview's **AI providers** card counted *stored* slot
+    bindings, not slots that actually *resolve* — a stale binding
+    (provider removed from the list) overstated the wiring, and
+    `providersSummary()` now resolves each of the five slots before
+    counting.
+  - the **user search** lowercased the query while the database
+    `contains` stayed case-sensitive, so any username stored with
+    uppercase letters was unfindable in any case. Registration
+    lowercases usernames, so this mostly bit instances with seeded
+    or imported rows — the search is now genuinely case-insensitive
+    (`mode: 'insensitive'`), and `docs/ADMIN.md` no longer claims
+    "usernames are stored lowercase" as the reason it worked.
+  Verified by a new regression spec (`admin-audit-regressions.spec.ts`:
+  mixed-case search in both cases, the BYOK block, the 5-slot chip)
+  and the existing 7-test admin suite.
 - **"Test video generation" answered "Unknown slot"** — the video
   slot joined `SLOT_ENDPOINT` and the probe set. The admin console's
   per-slot Test buttons (v0.16.3 A3) guard against a slot map that

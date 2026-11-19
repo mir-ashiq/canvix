@@ -56,10 +56,17 @@ is changed; the env always wins, and the badge says so.
 - **AI calls** are split teal (succeeded) / red (failed) from the
   `AIUsage` accounting that has existed since v0.5.
 - **Top routes / usage by feature** cover the last 7 days.
+- **Own API keys** (v0.23) is the BYOK adoption stat: distinct accounts
+  with at least one row in `UserAIProvider`, how many keys they stored,
+  and how many of the five capability slots those keys cover. Keys are
+  never shown — this is the same aggregate-only posture as the rest of
+  the page (no usernames ride along).
 
 ### Users
 
-- Search is a username substring (usernames are stored lowercase).
+- Search is a case-insensitive username substring. (Registration
+  lowercases usernames, but rows seeded or imported by other means may
+  carry mixed case — the search matches those too.)
 - **make admin / revoke** uses a two-step inline confirm. The route
   refuses self-modification (`SELF_ROLE_CHANGE`) — an admin can never
   lock themselves out of the only page that undoes role changes.

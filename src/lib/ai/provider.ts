@@ -313,16 +313,23 @@ export interface ProvidersSummary {
   configured: boolean
   source: SlotSource | null
   providerCount: number
+  /** how many of the five capability slots actually RESOLVE (a stored
+   *  binding whose provider vanished resolves to nothing — counting
+   *  stored entries overstated the wiring; the console's "X/5 wired"
+   *  is only honest if X is the resolved count) */
   slotsSet: number
 }
 export async function providersSummary(): Promise<ProvidersSummary> {
   const multi = await getProviders()
   if (multi && multi.providers.length) {
+    const resolved = await Promise.all(
+      (['text', 'vision', 'image', 'imageEdit', 'video'] as const).map((slot) => resolveSlot(slot)),
+    )
     return {
       configured: true,
       source: 'multi',
       providerCount: multi.providers.length,
-      slotsSet: Object.keys(multi.slots).length,
+      slotsSet: resolved.filter((r) => r !== null).length,
     }
   }
   const text = await resolveSlot('text')

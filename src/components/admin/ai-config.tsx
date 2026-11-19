@@ -493,7 +493,9 @@ export function AdminAiConfig() {
         title="Model slots"
         right={
           <Chip tone={Object.values(view.providers.resolved).some((r) => r !== null) ? 'good' : 'neutral'}>
-            {Object.values(view.providers.resolved).filter((r) => r !== null).length}/4 wired
+            {/* SLOT_INFO, not a literal — the v0.19 video slot made this
+                read "5/4 wired" until the count came from the source */}
+            {Object.values(view.providers.resolved).filter((r) => r !== null).length}/{SLOT_INFO.length} wired
           </Chip>
         }
       >

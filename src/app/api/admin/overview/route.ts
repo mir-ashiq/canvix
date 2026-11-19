@@ -54,6 +54,8 @@ async function __canvix_get(req: NextRequest) {
       aiByFeature,
       recentUsers,
       provider,
+      byokRows,
+      byokSlotRows,
     ] = await Promise.all([
       db.user.count(),
       db.design.count({ where: { deletedAt: null } }),
@@ -87,6 +89,19 @@ async function __canvix_get(req: NextRequest) {
         select: { id: true, username: true, role: true, createdAt: true },
       }),
       providersSummary(),
+      // BYOK adoption (v0.23): who brought their own key. Distinct users
+      // with at least one UserAIProvider row, total provider rows, and
+      // per-slot coverage — the slots column is a CSV string ("text,vision"),
+      // so coverage is the count of rows whose CSV contains the slot name.
+      // Aggregate-only posture: usernames never ride along.
+      db.$queryRaw<{ users: number; providers: number }[]>`
+        SELECT COUNT(DISTINCT "userId")::int AS users, COUNT(*)::int AS providers
+        FROM "UserAIProvider"`,
+      db.$queryRaw<{ slot: string; n: number }[]>`
+        SELECT s.slot, COUNT(*)::int AS n FROM "UserAIProvider" p,
+        unnest(ARRAY['text','vision','image','imageEdit','video']) AS s(slot)
+        WHERE ',' || p.slots || ',' LIKE '%,' || s.slot || ',%'
+        GROUP BY s.slot`,
     ])
     const dbLatencyMs = Date.now() - probeStart
 
@@ -136,6 +151,12 @@ async function __canvix_get(req: NextRequest) {
         source: provider.source,
         providerCount: provider.providerCount,
         slotsSet: provider.slotsSet,
+      },
+      // v0.23 BYOK adoption — "how many users added their own API keys"
+      byok: {
+        users: byokRows[0]?.users ?? 0,
+        providers: byokRows[0]?.providers ?? 0,
+        slots: Object.fromEntries(byokSlotRows.map((r) => [r.slot, r.n])),
       },
     })
   } catch (error) {

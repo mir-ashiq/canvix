@@ -32,6 +32,12 @@ interface Overview {
   aiByFeature: { feature: string; calls: number; ok: number }[]
   recentUsers: { id: string; username: string; role: string; createdAt: string; admin: boolean }[]
   provider: { configured: boolean; source: string | null; providerCount: number; slotsSet: number }
+  /** v0.23: BYOK adoption — users who added their own API keys */
+  byok: {
+    users: number
+    providers: number
+    slots: Record<string, number>
+  }
 }
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -104,6 +110,18 @@ export function AdminOverview() {
                 ? `${data.provider.slotsSet}/5 slots wired · via ${SOURCE_LABEL[data.provider.source] ?? data.provider.source}`
                 : `via ${SOURCE_LABEL[data.provider.source ?? ''] ?? data.provider.source}`
               : 'local features only'
+          }
+        />
+        {/* v0.23 BYOK adoption: how many users brought their own key.
+            users = distinct accounts with ≥1 UserAIProvider row; the sub
+            line counts how many of the five slots user keys cover. */}
+        <StatCard
+          label="Own API keys"
+          value={data.byok.users > 0 ? fmt(data.byok.users) : 'none'}
+          sub={
+            data.byok.users > 0
+              ? `${fmt(data.byok.providers)} key${data.byok.providers === 1 ? '' : 's'} · ${Object.values(data.byok.slots).filter((n) => n > 0).length}/5 slots covered`
+              : 'no user-added keys (BYOK)'
           }
         />
       </div>

@@ -18,9 +18,13 @@ async function __canvix_get(req: NextRequest) {
   if (!guard.ok) return guard.res
 
   try {
-    const q = (req.nextUrl.searchParams.get('q') ?? '').trim().toLowerCase().slice(0, 64)
+    // case-insensitive on purpose: usernames are stored as-typed, so a
+    // case-sensitive `contains` made every mixed-case username
+    // unfindable (searching "JohnDoe" or "johndoe" both missed) —
+    // mode: 'insensitive' is the honest fix, no lowercasing games.
+    const q = (req.nextUrl.searchParams.get('q') ?? '').trim().slice(0, 64)
     const page = Math.max(0, Math.min(Number(req.nextUrl.searchParams.get('page')) || 0, 500))
-    const where = q ? { username: { contains: q } } : {}
+    const where = q ? { username: { contains: q, mode: 'insensitive' as const } } : {}
 
     const [total, users] = await Promise.all([
       db.user.count({ where }),

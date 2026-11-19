@@ -136,6 +136,9 @@ interface EditorState {
   // v0.3.1: version history (server-backed on Postgres since v0.4; localStorage fallback)
   versions: DesignVersion[]
   saveVersion: (label?: string) => void
+  /** v0.24 (D5): snapshot automatically before a destructive op — the
+   *  caller names the operation so the label says what it protects. */
+  autoVersion: (reason: string) => void
   restoreVersion: (id: string) => void
   deleteVersion: (id: string) => void
 
@@ -802,6 +805,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   deletePage: (index) => {
     const { pages } = get()
     if (pages.length <= 1) return
+    get().autoVersion('page delete')
     get().pushHistory()
     const removedId = pages[index].id
     const next = [...pages]
@@ -834,6 +838,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   applyTemplate: (t) => {
+    get().autoVersion('template apply')
     get().pushHistory()
     const pages = clone(t.pages.map((p) => ({ ...p, id: uid('page') })))
     set({
@@ -949,6 +954,44 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       })
       .catch(() => { /* offline — local entry already stored */ })
   },
+  /** v0.24 (D5): auto-snapshot before a destructive op. Same shape as
+   *  saveVersion but: (a) the label names the incoming operation, (b)
+   *  the snapshot is flagged `auto`, and (c) when the 30-slot list is
+   *  full an OLD AUTO is evicted first — a manual snapshot is never
+   *  dropped to make room for one. No network hop: these fire on
+   *  hot paths (the op itself already saves), so the optimistic local
+   *  entry is the record; restore works from it exactly like a manual
+   *  snapshot. */
+  autoVersion: (reason) => {
+    const { designId, designName, width, height, pages, versions } = get()
+    if (!designId) return
+    // throttle: a repeated op of the same kind within 60 s refreshes
+    // nothing — one protective snapshot is enough, and a user clicking
+    // through five template previews must not evict five slots.
+    const [head] = versions
+    if (head?.auto && head.label === `Auto — before ${reason}` && Date.now() - head.at < 60_000) return
+    const v: DesignVersion = {
+      id: uid('ver'),
+      label: `Auto — before ${reason}`,
+      at: Date.now(),
+      name: designName,
+      width,
+      height,
+      pages, // immutable snapshot — reference shares structure, no deep clone
+      auto: true,
+    }
+    let next = [v, ...versions]
+    if (next.length > 30) {
+      // preferential prune: drop the OLDEST auto (scanning from the
+      // tail — the list is newest-first, and index 0 is the snapshot
+      // we just made); if there is none, fall back to the plain
+      // 30-most-recent cut (all-manual list, original behavior)
+      const victim = findIndexRight(next.slice(1), (x) => x.auto === true)
+      next = victim === -1 ? next.slice(0, 30) : next.filter((_, i) => i !== victim + 1)
+    }
+    set({ versions: next })
+    persistVersions(designId, next)
+  },
   restoreVersion: (id) => {
     const v = get().versions.find((x) => x.id === id)
     if (!v) return
@@ -980,6 +1023,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   closeCrop: () => set({ cropTargetId: null }),
 
   resizeDesign: (width, height) => {
+    get().autoVersion('Magic Resize')
     get().pushHistory()
     const { pages, width: oldW, height: oldH } = get()
     // v0.4 magic resize: smart re-layout — elements scale & keep their relative
@@ -992,6 +1036,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   // ── v0.4: magic translate ────────────────────────────
   translateTexts: (updates) => {
     if (!updates.length) return
+    get().autoVersion('Translate')
     get().pushHistory()
     const { pages, version } = get()
     const map = new Map(updates.map((u) => [u.id, u.text]))
@@ -1018,6 +1063,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     emit({ kind: 'elements:add', pageId: next[currentPage].id, elements: stamped })
   },
   replaceCurrentPage: (page) => {
+    get().autoVersion('Magic Layers')
     get().pushHistory()
     const { pages, currentPage } = get()
     const next = [...pages]
@@ -1332,6 +1378,13 @@ function loadVersions(designId: string): DesignVersion[] {
   } catch {
     return []
   }
+}
+
+/** v0.24 (D5): last index matching pred — the versions list is newest-
+ *  first, so the LAST auto is the OLDEST one, the eviction candidate. */
+function findIndexRight<T>(list: T[], pred: (x: T) => boolean): number {
+  for (let i = list.length - 1; i >= 0; i--) if (pred(list[i])) return i
+  return -1
 }
 
 function persistVersions(designId: string, versions: DesignVersion[]) {

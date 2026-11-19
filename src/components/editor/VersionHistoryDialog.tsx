@@ -84,6 +84,14 @@ export function VersionHistoryDialog({ open, onOpenChange }: { open: boolean; on
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-[13px] font-semibold truncate">{v.label}</span>
+                  {v.auto && (
+                    <span
+                      className="text-[10px] font-bold text-white/50 bg-white/[0.08] border border-white/15 rounded-full px-1.5 py-px uppercase tracking-wide shrink-0"
+                      title="Saved automatically before a destructive operation"
+                    >
+                      auto
+                    </span>
+                  )}
                   {i === 0 && <span className="text-[10px] font-bold text-[#02C0CC] uppercase tracking-wide">latest</span>}
                 </div>
                 <div className="flex items-center gap-1.5 text-[11px] text-white/45 mt-0.5">

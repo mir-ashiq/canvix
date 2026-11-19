@@ -591,6 +591,11 @@ export interface DesignVersion {
   width: number
   height: number
   pages: PageData[]
+  /** v0.24 (D5): true when saved automatically before a destructive op
+   *  (template apply / Magic Resize / Translate / Magic Layers / page
+   *  delete). Auto snapshots prune first when the 30-slot list fills —
+   *  a manual snapshot is never dropped to make room for one. */
+  auto?: boolean
 }
 
 export interface DesignSnapshot {

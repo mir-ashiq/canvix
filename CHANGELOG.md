@@ -7,6 +7,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Auto version snapshots before destructive ops (D5)** — the five
+  operations that can discard large amounts of work in one click
+  (template apply, Magic Resize, Translate, Magic Layers page-replace,
+  page delete) now save a version snapshot of the pre-op state first.
+  The snapshot appears in Version history with an **auto** chip and a
+  label naming the incoming operation ("Auto — before page delete").
+  Design notes: a 60-second same-reason throttle keeps a user clicking
+  through template previews from evicting five slots; when the
+  30-slot list overflows, the OLDEST auto snapshot is evicted first —
+  a manual snapshot is never dropped to make room for one (an
+  all-manual list keeps the original 30-most-recent cut). Restoring
+  an auto snapshot works exactly like a manual one. Unit suite covers
+  all five seams, the throttle and both prune paths; e2e proves the
+  page-delete loop through the real editor (delete → chip visible →
+  restore brings the page back).
 - **Admin: BYOK adoption stat** — the console overview now answers
   "how many users added their own API keys": a new **Own API keys**
   stat card (distinct accounts with ≥1 `UserAIProvider` row, key

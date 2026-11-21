@@ -198,15 +198,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # POSTGRES_PASSWORD is the only required variable. Compose's
+      # ${VAR:?msg} interpolation fires on EVERY compose command —
+      # `build` included — so the .env must exist before any of them
+      # (the first CI run failed exactly here: build before .env).
+      - name: Write the compose .env
+        run: echo "POSTGRES_PASSWORD=ci-smoke-password" > .env
+
       - name: Build the app image (multi-stage, standalone)
         run: docker compose build app
 
-      # POSTGRES_PASSWORD is the only required variable (compose
-      # fails with a pointed message without it — that behaviour is
-      # itself part of the contract).
       - name: Bring the stack up (pg17 + app, migrate-on-boot)
         run: |
-          echo "POSTGRES_PASSWORD=ci-smoke-password" > .env
           docker compose up -d --wait
           # --wait: blocks until both containers are healthy, i.e.
           # the entrypoint already ran migrate deploy + the server
@@ -252,4 +255,9 @@ jobs:
 
       - name: Assert the stack is clean after down
         if: always()
-        run: docker compose down -v --remove-orphans
+        run: |
+          # .env must exist for ANY compose command (the required-
+          # variable interpolation above) — re-create it in case an
+          # earlier step failed before the Write step ran
+          [ -f .env ] || echo "POSTGRES_PASSWORD=ci-smoke-password" > .env
+          docker compose down -v --remove-orphans

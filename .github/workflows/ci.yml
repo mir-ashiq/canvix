@@ -222,16 +222,19 @@ jobs:
             sleep 2
           done
           echo "health: $BODY"
-          echo "$BODY" | python3 -c '
-          import json, sys
-          body = json.load(sys.stdin)
+          # heredoc-fed python: no shell interpolation headaches. The
+          # compose db hostname "db" classifies as remote (only
+          # localhost is local) — expected inside the compose network.
+          BODY="$BODY" python3 - <<'PY'
+          import json, os
+          body = json.loads(os.environ["BODY"])
           assert body.get("ok") is True, f"health not ok: {body}"
           db = body.get("database", {})
-          assert db.get("kind") == "local", f"unexpected db kind: {db}"
+          assert db.get("kind") == "remote" and db.get("host") == "db", f"unexpected db: {db}"
           templates = body.get("templates", 0)
           assert templates >= 300, f"template library did not sync on boot: {templates}"
-          print(f"health green: {templates} templates, db={db.get(\"database\")}")
-          '
+          print(f"health green: {templates} templates, db host {db.get('host')}")
+          PY
 
       - name: Register an account through the real route
         run: |

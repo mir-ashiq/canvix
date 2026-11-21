@@ -7,6 +7,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Docker self-hosting (WP1: deployment & API trust)** — the
+  one-command self-host the roadmap promised: `cp
+  .env.docker.example .env`, set `POSTGRES_PASSWORD`, `docker
+  compose up -d` → Canvix + Postgres 17, app on :3000, migrations
+  applied automatically on boot, the 366-template library syncing
+  itself from code on first boot (no seed step, no Node toolchain,
+  no host build). The image is a three-stage build
+  (`deps → builder → runner`) around the same `.next/standalone`
+  artifact every self-hosted Node deploy already uses — Docker is
+  just another consumer of it. The runner stays non-root (uid 1001)
+  with dumb-init PID 1 (`docker stop` drains in-flight requests) and
+  carries exactly one native binary: the Prisma schema-engine, in an
+  isolated `/opt/migrate` toolchain the entrypoint uses for
+  migrate-on-boot (the app itself is rust-free — engineType="client"
+  compiles queries to WASM at runtime). Two Docker-specific traps
+  handled and documented: `HOSTNAME` injection (the standalone
+  server binds `process.env.HOSTNAME || 0.0.0.0` — the container id
+  would kill it) and db-url.ts's TLS-forcing for non-localhost
+  hosts (the compose URL pins `?sslmode=disable` for the in-network
+  `db` hostname). The migrate toolchain carries the same `effect`
+  override as the app (Dependabot #9) with an install-time assertion
+  — a vulnerable effect in the image is a build error, not a silent
+  regression. Pre-migration databases (tables, no history)
+  auto-baseline against `0001_init`, ported from db-setup.sh's
+  documented recovery. `CANVIX_RUN_MIGRATIONS=0` opts out for
+  multi-replica deploys where a separate job owns migrations. CI
+  gains a **docker job on every PR**: build the image, compose up,
+  assert `/api/health` fully green (migrated + seeded — proving
+  migrate-on-boot and the template sync), register an account
+  through the real route (scrypt + session round-trip), landing
+  200, down. Local daemon-free verification:
+  `scripts/test-migrate-toolchain.sh`. Full operator guide:
+  `docs/DOCKER.md`.
 - **REST API + scoped API keys (Wave 6 core)** — the `/api/v1` REST
   rail. Users create `cvx_…` bearer keys in Settings → Profile & AI
   keys → API keys: pick a label and scopes (`designs:read`,

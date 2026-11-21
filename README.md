@@ -518,6 +518,11 @@ Canvix runs on **any Node host** and — since v0.9.3 — on **Cloudflare
 Workers** too, and — since v0.9.4 — on **Netlify**. Same codebase, same
 database, zero config divergence.
 
+**Fastest self-host (Docker)?** `cp .env.docker.example .env`, set
+`POSTGRES_PASSWORD`, `docker compose up -d` → app + Postgres 17 with
+migrations applied on boot — the full story in
+[`docs/DOCKER.md`](docs/DOCKER.md).
+
 **Running it long-term?** Two operations guides shipped with v0.12.4:
 [`docs/BACKUP-AND-RESTORE.md`](docs/BACKUP-AND-RESTORE.md) — the
 one-command `pg_dump` backup, a restore drill executed and verified

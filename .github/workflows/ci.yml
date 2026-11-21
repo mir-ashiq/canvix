@@ -174,3 +174,82 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+  # ── Docker self-host smoke: every PR + main ─────────────────────
+  # WP1 (deployment & API trust). Proves the operator story end to
+  # end on every PR: `docker compose up` from a clean checkout must
+  # produce a migrated, seeded, serving Canvix — the exact promise
+  # docs/DOCKER.md makes. Builds the production image (multi-stage,
+  # standalone) and drives the real containers:
+  #
+  #   pg17 + app → migrate-on-boot → /api/health ok:true (which
+  #   asserts reachable + migrated + seeded, incl. the boot-time
+  #   template sync) → register an account through the real route
+  #   (scrypt + session + cookies, the full auth rail) → landing
+  #   page serves → compose down.
+  #
+  # Kept separate from lint-unit/e2e: no Node setup, no npm ci —
+  # everything inside the image. Runs on ubuntu-latest's own Docker.
+  docker:
+    name: docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build the app image (multi-stage, standalone)
+        run: docker compose build app
+
+      # POSTGRES_PASSWORD is the only required variable (compose
+      # fails with a pointed message without it — that behaviour is
+      # itself part of the contract).
+      - name: Bring the stack up (pg17 + app, migrate-on-boot)
+        run: |
+          echo "POSTGRES_PASSWORD=ci-smoke-password" > .env
+          docker compose up -d --wait
+          # --wait: blocks until both containers are healthy, i.e.
+          # the entrypoint already ran migrate deploy + the server
+          # answered /api/health inside the container healthcheck.
+
+      - name: Assert /api/health is fully green (migrated + seeded)
+        run: |
+          for i in $(seq 1 30); do
+            BODY=$(curl -fsS http://localhost:3000/api/health 2>/dev/null) && break
+            sleep 2
+          done
+          echo "health: $BODY"
+          echo "$BODY" | python3 -c '
+          import json, sys
+          body = json.load(sys.stdin)
+          assert body.get("ok") is True, f"health not ok: {body}"
+          db = body.get("database", {})
+          assert db.get("kind") == "local", f"unexpected db kind: {db}"
+          templates = body.get("templates", 0)
+          assert templates >= 300, f"template library did not sync on boot: {templates}"
+          print(f"health green: {templates} templates, db={db.get(\"database\")}")
+          '
+
+      - name: Register an account through the real route
+        run: |
+          RESP=$(curl -sS -o /tmp/reg.json -c /tmp/reg-cookies.txt -w '%{http_code}' \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"docker-smoke","password":"ci-smoke-passphrase-1"}' \
+            http://localhost:3000/api/auth/register)
+          echo "register: $RESP $(cat /tmp/reg.json)"
+          [ "$RESP" = "201" ] || { echo "register failed"; exit 1; }
+          # and the session cookie it issued actually authenticates
+          AUTH=$(curl -sS -o /tmp/me.json -b /tmp/reg-cookies.txt -w '%{http_code}' \
+            http://localhost:3000/api/auth/me)
+          echo "me (with session): $AUTH $(cat /tmp/me.json)"
+          [ "$AUTH" = "200" ] || { echo "session did not authenticate"; exit 1; }
+
+      - name: Landing page serves
+        run: |
+          CODE=$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:3000/)
+          echo "landing: $CODE"
+          [ "$CODE" = "200" ]
+
+      - name: Assert the stack is clean after down
+        if: always()
+        run: docker compose down -v --remove-orphans

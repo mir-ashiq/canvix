@@ -7,6 +7,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **REST API + scoped API keys (Wave 6 core)** — the `/api/v1` REST
+  rail. Users create `cvx_…` bearer keys in Settings → Profile & AI
+  keys → API keys: pick a label and scopes (`designs:read`,
+  `designs:write` reserved, `all` sugar), and the raw key is shown
+  exactly once — only its SHA-256 is stored (same shape as sessions:
+  a DB leak never yields usable keys). v1 surface: `GET
+  /api/v1/designs` (keyset-paginated, 60/page) and `GET
+  /api/v1/designs/[id]` — both owner-scoped, deliberately narrower
+  than the browser dashboard (no ownerless shared designs to machine
+  credentials; foreign ids are a flat 404). Revocation is a
+  timestamp, so 401s distinguish `revoked_key` / `expired_key` /
+  `invalid_key`, and 403 says `insufficient_scope` — errors are the
+  automation contract. Key creation is same-origin, rate-limited
+  (10/h/IP) and capped at 20 active keys. Full documentation in
+  `docs/API.md`. Unit suite (16 cases: token entropy, scope parsing
+  — unknown scopes never silently widened — and the full auth
+  matrix) + e2e lifecycle (create → use → revoke through the real
+  UI and API). Dev note: the e2e caught that Prisma `findUnique`
+  does not return relations by default — the auth lookup missed
+  `include: { user: true }` and every valid key 401'd
+  "owner no longer exists"; fixed and locked in.
+- **Admin: video-slot callout (roadmap §5.7)** — the Logs view's
+  slot strip now explains, when any slot is wired but video is not,
+  that video generation is code-complete but provider-dependent:
+  wire a text-to-video provider on the AI & models page to switch
+  it on — nothing is broken.
+- **Admin: Logs view e2e coverage** — `/admin/logs` (the "why did
+  the AI feature fail" page) had zero e2e coverage since v0.16.3;
+  the new spec proves denial for plain accounts, seeded AIUsage
+  rows surfacing with status chips and scrubbed reasons, the
+  errors-only filter, and the counts strip.
 - **Auto version snapshots before destructive ops (D5)** — the five
   operations that can discard large amounts of work in one click
   (template apply, Magic Resize, Translate, Magic Layers page-replace,

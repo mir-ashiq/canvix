@@ -47,6 +47,7 @@ export type RateLimitBucket =
   | 'stocksound:search'
   | 'icons:search'
   | 'templates:fill'
+  | 'keys:create'
 
 export interface RateLimitConfig {
   /** window length in milliseconds */
@@ -100,6 +101,9 @@ export const RATE_LIMITS: Record<RateLimitBucket, RateLimitConfig> = {
   // designs in persist mode — 30/min per IP covers CSV batches (≤ 100
   // rows each) while blocking bulk-abuse
   'templates:fill': { windowMs: 60_000, max: 30 },
+  // v0.24 (Wave 6): API-key creation is credential creation — 10 per
+  // hour per IP is generous for a human and hostile to enumeration
+  'keys:create': { windowMs: 3_600_000, max: 10 },
 }
 
 export function rateLimitsDisabled(): boolean {

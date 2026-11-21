@@ -46,6 +46,7 @@ model User {
   folders      Folder[]  @relation("FolderOwner")
   sessions     Session[]
   aiProviders  UserAIProvider[]
+  apiKeys      ApiKey[]
 }
 
 // ── v0.23: BYOK — per-user AI providers (profile page) ────────
@@ -86,6 +87,29 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+// ── v0.24 (Wave 6 core): scoped API keys — the REST rail ───────
+// A user-created bearer key for the /api/v1 REST surface. Storage
+// mirrors Session: the row id is sha256(raw token), so a DB leak
+// never yields usable keys; the raw value is shown exactly once at
+// creation. Scopes are a CSV subset of API_KEY_SCOPES
+// (src/lib/auth/api-key.ts); revocation is a timestamp, not a
+// delete, so the 401 reason can say "revoked" and the audit trail
+// (lastUsedAt) survives.
+model ApiKey {
+  id        String    @id // sha256(token) hex
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label      String
+  // CSV of API_KEY_SCOPES, or 'all' (sugar for every current scope)
+  scopes    String    @default("designs:read")
+  createdAt DateTime  @default(now())
+  lastUsedAt DateTime?
+  expiresAt DateTime?
+  revokedAt  DateTime?
+
+  @@index([userId])
 }
 
 // A user design / project — the core artifact of Canvix.

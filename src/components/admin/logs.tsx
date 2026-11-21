@@ -102,6 +102,17 @@ function StatusChip({ ok, status }: { ok: boolean; status: number | null }) {
   return <Chip tone="bad">{status ?? 'failed'}</Chip>
 }
 
+/** v0.24 (§5.7): the video slot's callout conditions. */
+function videoUnconfigured(slots: SlotView[]): boolean {
+  return slots.some((s) => s.slot === 'video' && !s.configured)
+}
+function othersWired(slots: SlotView[]): boolean {
+  // only nudge when the rest of the instance clearly works — a fully
+  // unwired instance doesn't need a video-specific explanation
+  const others = slots.filter((s) => s.slot !== 'video')
+  return others.some((s) => s.configured)
+}
+
 export function AdminLogs() {
   const [data, setData] = useState<LogsView | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -223,6 +234,21 @@ export function AdminLogs() {
           ))}
           {!data && <div className="h-20 animate-pulse rounded-xl bg-muted" />}
         </div>
+        {/* v0.24 (roadmap §5.7): the video slot is provider-dependent —
+            an unwired video card on the capabilities endpoint is a
+            CONFIGURATION state (no live video provider on this
+            instance), not missing code. Say so, so operators don't
+            misread the slot strip as a bug. */}
+        {data && videoUnconfigured(data.slots) && othersWired(data.slots) && (
+          <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+            Video generation is code-complete but provider-dependent: this instance has no live video provider key, so the
+            Videos panel hides the AI video card. Wire a provider that serves text-to-video on the{' '}
+            <a href="/admin/ai" className="underline underline-offset-2">
+              AI &amp; models
+            </a>{' '}
+            page to switch it on — nothing is broken.
+          </p>
+        )}
       </Card>
 
       {/* ── request log ── */}

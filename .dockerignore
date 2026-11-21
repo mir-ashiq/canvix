@@ -1,0 +1,57 @@
+# .dockerignore — keep the build context (and the builder stage's
+# COPY . .) to what the build actually reads. Mirrors .gitignore's
+# artifacts plus Docker's own outputs.
+
+# build outputs & caches
+.next
+.open-next
+dev.log
+server.log
+test-results
+playwright-report
+coverage
+
+# the database config / runtime files never belong in an image
+.env
+.env.*
+!.env.example
+
+# git & CI
+.git
+.gitignore
+.github
+
+# node tooling local state
+node_modules
+npm-debug.log*
+
+# local editor / OS noise
+.DS_Store
+*.swp
+.idea
+.vscode
+
+# docs & research not read by the build (keeps context small)
+docs
+research
+*.md
+!README.md
+
+# the docker files themselves (never COPY'd, avoids cache churn)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# playwright / test rigs
+tests
+playwright*.config.ts
+playwright.plugins.config.ts
+playwright.stockvideo.config.ts
+
+# scripts not needed inside the image (patch-prisma-wasm.mjs and
+# build.mjs ARE needed — they run in deps/builder stages; the
+# entrypoint is COPY'd explicitly)
+scripts/verify-*
+scripts/*-e2e.sh
+scripts/debug-*
+scripts/qa-*

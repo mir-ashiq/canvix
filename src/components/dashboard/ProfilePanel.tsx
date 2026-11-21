@@ -30,6 +30,9 @@ import {
   ImageIcon,
   Clapperboard,
   PenLine,
+  Copy,
+  Braces,
+  Ban,
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -54,6 +57,20 @@ interface ProviderRow {
   createdAt: string
   updatedAt: string
 }
+
+interface ApiKeyRow {
+  id: string
+  label: string
+  scopes: string
+  createdAt: string
+  lastUsedAt: string | null
+  revokedAt: string | null
+}
+
+const API_SCOPE_OPTIONS = [
+  { id: 'designs:read', label: 'designs:read', hint: 'List and read your designs over the REST API' },
+  { id: 'designs:write', label: 'designs:write', hint: 'Create and update your designs (reserved — not enforced by any endpoint yet)' },
+] as const
 
 const SLOT_OPTIONS = [
   { id: 'text', label: 'Text', icon: Bot, hint: 'Magic Write, Assistant, Translate, Plan, Notes, Theme' },
@@ -199,6 +216,85 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
   }
 
   const memberSince = new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })
+
+  // ── API keys (v0.24, Wave 6): the REST rail ──
+  const [apiKeys, setApiKeys] = useState<ApiKeyRow[] | null>(null)
+  const [keyFormOpen, setKeyFormOpen] = useState(false)
+  const [keyLabel, setKeyLabel] = useState('')
+  const [keyScopes, setKeyScopes] = useState<string[]>(['designs:read'])
+  const [keySaving, setKeySaving] = useState(false)
+  const [freshKey, setFreshKey] = useState<string | null>(null) // shown exactly once
+  const [copied, setCopied] = useState(false)
+
+  const loadKeys = useCallback(async () => {
+    try {
+      const res = await fetch('/api/keys', { cache: 'no-store' })
+      if (res.status === 401) {
+        setApiKeys([])
+        return
+      }
+      const data = (await res.json()) as { keys?: ApiKeyRow[]; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Could not load API keys.')
+      setApiKeys(data.keys ?? [])
+    } catch {
+      setApiKeys([])
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    void Promise.resolve().then(() => loadKeys())
+  }, [open, loadKeys])
+
+  const createKey = async () => {
+    if (keySaving || !keyLabel.trim()) return
+    setKeySaving(true)
+    try {
+      const res = await fetch('/api/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: keyLabel, scopes: keyScopes }),
+      })
+      const data = (await res.json()) as { key?: string; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Could not create the key.')
+      setFreshKey(data.key ?? null)
+      setKeyLabel('')
+      setKeyScopes(['designs:read'])
+      setKeyFormOpen(false)
+      await loadKeys()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Could not create the key.', variant: 'destructive' })
+    } finally {
+      setKeySaving(false)
+    }
+  }
+
+  const revokeKey = async (k: ApiKeyRow) => {
+    if (!window.confirm(`Revoke “${k.label}”? Requests using it stop working immediately.`)) return
+    try {
+      const res = await fetch(`/api/keys/${encodeURIComponent(k.id)}`, { method: 'DELETE' })
+      const data = (await res.json()) as { error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Could not revoke the key.')
+      toast({ title: 'Key revoked' })
+      await loadKeys()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Could not revoke the key.', variant: 'destructive' })
+    }
+  }
+
+  const copyFreshKey = async () => {
+    if (!freshKey) return
+    try {
+      await navigator.clipboard.writeText(freshKey)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* clipboard denied — the key stays selectable to copy manually */
+    }
+  }
+
+  const fmtKeyDate = (iso: string | null): string =>
+    iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -384,6 +480,142 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
                   {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} {editing ? 'Save changes' : 'Save provider'}
                 </Button>
               </div>
+            </div>
+          )}
+        </div>
+        {/* ── API keys (v0.24): the REST rail ── */}
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4" data-testid="api-keys-card">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 font-semibold text-[14px]">
+              <Braces size={15} className="text-[#00C4CC]" /> API keys
+            </div>
+            <Button
+              size="sm"
+              className="btn-cv rounded-full px-3 h-8 gap-1.5"
+              onClick={() => {
+                setFreshKey(null)
+                setKeyFormOpen((v) => !v)
+              }}
+            >
+              <Plus size={14} /> Create key
+            </Button>
+          </div>
+          <p className="text-[12px] text-white/50 leading-relaxed mb-3">
+            Script against Canvix over REST: send <span className="font-mono text-white/75">Authorization: Bearer &lt;key&gt;</span> to{' '}
+            <span className="font-mono text-white/75">/api/v1/designs</span>. Keys are shown once at creation and can be revoked any
+            time — see docs/API.md for the full surface.
+          </p>
+
+          {/* the raw key, shown exactly once */}
+          {freshKey && (
+            <div className="mb-3 rounded-lg border border-[#00C4CC]/30 bg-[#00C4CC]/10 p-3">
+              <div className="text-[12px] text-[#8fe8ef] font-semibold mb-1.5">Copy this key now — it will not be shown again.</div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 min-w-0 break-all font-mono text-[12px] text-white/90 bg-black/30 rounded px-2 py-1.5">{freshKey}</code>
+                <Button size="sm" className="btn-cv h-8 px-3 gap-1.5 shrink-0" onClick={() => void copyFreshKey()}>
+                  {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {keyFormOpen && (
+            <div className="mb-3 rounded-lg border border-white/10 bg-[#0F1115] p-4 space-y-3" data-testid="api-key-form">
+              <div>
+                <label htmlFor="api-key-label" className="text-[11px] font-medium text-white/60 uppercase tracking-wide">Label</label>
+                <Input
+                  id="api-key-label"
+                  className="mt-1 bg-white/[0.05] border-white/10 text-white placeholder:text-white/30 h-9 text-[13px]"
+                  placeholder="CI export script"
+                  value={keyLabel}
+                  maxLength={40}
+                  onChange={(e) => setKeyLabel(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-white/60 uppercase tracking-wide">Scopes</label>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {API_SCOPE_OPTIONS.map((o) => {
+                    const active = keyScopes.includes(o.id)
+                    return (
+                      <button
+                        key={o.id}
+                        type="button"
+                        title={o.hint}
+                        onClick={() => setKeyScopes((s) => (s.includes(o.id) ? s.filter((x) => x !== o.id) : [...s, o.id]))}
+                        className={cn(
+                          'text-[12px] rounded-full border px-2.5 py-1 font-mono transition-colors',
+                          active
+                            ? 'border-[#00C4CC]/50 bg-[#00C4CC]/15 text-[#8fe8ef]'
+                            : 'border-white/10 bg-white/[0.03] text-white/55 hover:text-white/80'
+                        )}
+                      >
+                        {o.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <Button size="sm" variant="ghost" className="h-8 text-white/70" onClick={() => setKeyFormOpen(false)}>
+                  Cancel
+                </Button>
+                <Button size="sm" className="btn-cv h-8 gap-1.5" disabled={keySaving || !keyLabel.trim() || keyScopes.length === 0} onClick={() => void createKey()}>
+                  {keySaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Create key
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {apiKeys === null ? (
+            <div className="flex items-center justify-center gap-2 py-6 text-white/50 text-sm">
+              <Loader2 size={15} className="animate-spin" /> Loading…
+            </div>
+          ) : apiKeys.length === 0 ? (
+            <div className="text-center py-6 text-white/45 text-[13px]">No API keys yet.</div>
+          ) : (
+            <div className="space-y-2">
+              {apiKeys.map((k) => {
+                const revoked = !!k.revokedAt
+                return (
+                  <div key={k.id} className={cn('rounded-lg border border-white/10 bg-[#0F1115] p-3', revoked && 'opacity-55')}>
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13px] font-semibold truncate flex items-center gap-2">
+                          {k.label}
+                          {revoked && (
+                            <span className="text-[10px] font-bold uppercase tracking-wide bg-red-500/15 text-red-300 border border-red-500/30 rounded px-1.5 py-0.5">
+                              revoked
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-white/45">
+                          created {fmtKeyDate(k.createdAt)} · last used {fmtKeyDate(k.lastUsedAt)}
+                        </div>
+                      </div>
+                      {!revoked && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 text-white/70 hover:text-red-300 shrink-0"
+                          title="Revoke key"
+                          aria-label={`Revoke API key ${k.label}`}
+                          onClick={() => void revokeKey(k)}
+                        >
+                          <Ban size={14} />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {k.scopes.split(',').map((s) => (
+                        <span key={s} className="text-[11px] font-mono rounded-full border border-[#00C4CC]/25 bg-[#00C4CC]/10 text-[#8fe8ef] px-2 py-0.5">
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

@@ -413,8 +413,60 @@ export async function applyDesignAction(action: DesignAction, caller?: ActionCal
       return 'Page duplicated'
     }
 
-    case 'generateImage': {
-      const prompt = String(action.prompt ?? '').slice(0, 400).trim()
+    // v0.27.3: the agent's goto_page tool — switching pages is what
+    // makes add_page useful (before this, the agent could append a
+    // page and then had no way to edit it). Bounds-checked here, not
+    // in the tool: the model's page count may be stale.
+    case 'gotoPage': {
+      const s = useEditorStore.getState()
+      const page = Math.round(Number(action.page))
+      if (!Number.isFinite(page) || page < 1 || page > s.pages.length) {
+        return `Page out of range — the design has ${s.pages.length} page(s)`
+      }
+      if (page - 1 === s.currentPage) return `Already on page ${page}`
+      s.setCurrentPage(page - 1)
+      s.clearSelection()
+      return `Switched to page ${page}`
+    }
+
+    // v0.27.3 (agent): search licensed stock photography and place the
+    // best match. Runs the SAME client path PhotosPanel uses — the
+    // server's /api/stock-photo/search (provider keys stay server-side,
+    // results sanitized + credited) and addStockPhoto's download →
+    // media-store → credited element pipeline. No new trust surface.
+    case 'addStockPhoto': {
+      const query = String(action.query ?? '').trim().slice(0, 120)
+      if (!query) return 'No photo query given'
+      const res = await fetch('/api/stock-photo/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, count: 12 }),
+      })
+      const data = (await res.json().catch(() => ({}))) as {
+        results?: { id: string; provider: string; width: number; height: number; download: string; alternates: string[]; credit: { provider: string; author: string; license: string; url: string } }[]
+        error?: string
+      }
+      if (!res.ok || !Array.isArray(data.results) || data.results.length === 0) {
+        return `No stock photo matched "${query}"${data.error ? ` (${data.error})` : ''} — try add_image to generate one`
+      }
+      // pick by orientation when asked, else the first (provider-ranked)
+      const orientation = String(action.orientation ?? '')
+      const wanted =
+        orientation === 'portrait'
+          ? (ratio) => ratio < 1
+          : orientation === 'square'
+            ? (ratio) => ratio >= 0.8 && ratio <= 1.25
+            : orientation === 'landscape'
+              ? (ratio) => ratio >= 1
+              : null
+      const pick =
+        (wanted && data.results.find((r) => wanted(r.width / Math.max(1, r.height)))) ?? data.results[0]
+      const { addStockPhoto: place } = await import('@/components/editor/add-element')
+      await place(pick)
+      return `Stock photo "${query}" added (credit: ${pick.credit.author}/${pick.credit.provider})`
+    }
+
+    case 'generateImage': {      const prompt = String(action.prompt ?? '').slice(0, 400).trim()
       if (!prompt) return 'No image prompt'
       const res = await fetch('/api/ai/image', {
         method: 'POST',
@@ -632,6 +684,8 @@ export function describeAction(action: DesignAction): string {
     case 'distributeElements': return 'Distribute evenly'
     case 'addPage': return 'Add a page'
     case 'duplicatePage': return 'Duplicate this page'
+    case 'gotoPage': return `Go to page ${action.page}`
+    case 'addStockPhoto': return `Stock photo: ${String(action.query ?? '').slice(0, 40)}`
     case 'generateImage': return `Generate image: ${String(action.prompt ?? '').slice(0, 42)}…`
     case 'suggestPalette': return 'Use this palette'
     case 'translate': return `Translate to ${action.language}`

@@ -212,7 +212,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   },
   {
     name: 'add_image',
-    description: 'Add an image: generate one with AI (prompt) — the only mode in v0.27. A placeholder appears immediately; the image swaps in when ready.',
+    description: 'Add an image: generate one with AI (prompt) — the only mode in v0.27. A placeholder appears immediately; the image swaps in when ready. For real photos prefer add_stock_photo.',
     risk: 'write',
     argsSpec: '{prompt: string, x?: number, y?: number, width?: number}',
     sanitize: (args, ctx) => {
@@ -233,6 +233,40 @@ export const AGENT_TOOLS: AgentTool[] = [
           },
         ],
         observation: `Image generation started for: "${prompt.slice(0, 60)}".`,
+      }
+    },
+  },
+  {
+    // v0.27.3: the stock-photo rail (Pexels/Pixabay) existed as an app
+    // but the agent couldn't reach it — "add a photo of a coffee shop"
+    // forced AI generation. The client action runs the SAME search +
+    // download + media-store path PhotosPanel uses (licensed, credited,
+    // deduped), so the agent gets real photography with zero new trust
+    // surface: the server never calls the stock APIs.
+    name: 'add_stock_photo',
+    description: 'Search licensed stock photography (Pexels/Pixabay) and place the best match: real photos, correct aspect ratio, attribution stored on the element. Use for concrete subjects (a coffee cup, a laptop, a mountain); use add_image for abstract/stylized art.',
+    risk: 'write',
+    argsSpec: '{query: string, orientation?: "landscape"|"portrait"|"square", x?: number, y?: number, width?: number}',
+    sanitize: (args, ctx) => {
+      const query = str(args, 'query', 120).trim()
+      if (query.length < 2) return { ok: false, error: 'query must describe the photo (min 2 chars), e.g. "coffee cup on table".' }
+      const orientation = enumVal(args, 'orientation', ['landscape', 'portrait', 'square'] as const, '' as never)
+      const x = num(args, 'x')
+      const y = num(args, 'y')
+      const width = num(args, 'width')
+      return {
+        ok: true,
+        actions: [
+          {
+            type: 'addStockPhoto',
+            query,
+            ...(orientation ? { orientation } : {}),
+            ...(x !== null ? { x: clamp(x, 0, ctx.width) } : {}),
+            ...(y !== null ? { y: clamp(y, 0, ctx.height) } : {}),
+            ...(width !== null ? { width: clamp(width, 40, ctx.width) } : {}),
+          },
+        ],
+        observation: `Stock photo search queued for "${query.slice(0, 60)}" — it downloads and appears in place.`,
       }
     },
   },
@@ -424,13 +458,23 @@ export const AGENT_TOOLS: AgentTool[] = [
   },
   {
     name: 'distribute_elements',
-    description: 'Distribute ≥2 elements evenly along an axis.',
+    description: 'Distribute ≥3 elements evenly along an axis.',
     risk: 'write',
     argsSpec: '{ids: string[], axis: "x"|"y"}',
     sanitize: (args, ctx) => {
       const { ids, error } = idList(args, ctx)
       if (error) return { ok: false, error }
-      if (ids.length < 2) return { ok: false, error: 'distribute needs at least 2 element ids.' }
+      // the client's distributeElements needs ≥3 boxes — 2 has no gap
+      // to even out (use align_elements or move_elements instead)
+      if (ids.length < 3) {
+        return {
+          ok: false,
+          error:
+            ids.length === 2
+              ? 'distribute needs 3+ element ids — with 2, use align_elements (e.g. mode "cy") or move_elements instead.'
+              : 'distribute needs at least 3 element ids.',
+        }
+      }
       const axis = enumVal(args, 'axis', ['x', 'y'] as const, 'x')
       return {
         ok: true,
@@ -520,17 +564,38 @@ export const AGENT_TOOLS: AgentTool[] = [
   },
   {
     name: 'add_page',
-    description: 'Append a new blank page.',
+    description: 'Append a new blank page, then goto_page to edit it.',
     risk: 'write',
     argsSpec: '{}',
-    sanitize: () => ({ ok: true, actions: [{ type: 'addPage' }], observation: 'New page appended.' }),
+    sanitize: () => ({ ok: true, actions: [{ type: 'addPage' }], observation: 'New page appended (last page). Use goto_page to switch to it before adding elements.' }),
   },
   {
     name: 'duplicate_page',
     description: 'Duplicate the current page (then edit the copy).',
     risk: 'write',
     argsSpec: '{}',
-    sanitize: () => ({ ok: true, actions: [{ type: 'duplicatePage' }], observation: 'Current page duplicated.' }),
+    sanitize: () => ({ ok: true, actions: [{ type: 'duplicatePage' }], observation: 'Current page duplicated (the copy is the last page). Use goto_page to switch to it.' }),
+  },
+  {
+    // v0.27.3: without page navigation, add_page was a dead end — the
+    // agent could append a page but every subsequent tool still edited
+    // the OLD page. goto_page closes the loop; the client action is
+    // bounds-checked against the live document.
+    name: 'goto_page',
+    description: 'Switch the editor to a page by 1-based number, then call get_page_state — element ids are per-page and change with the switch. The context lists "editing page N" and one-line summaries of the others.',
+    risk: 'read',
+    argsSpec: '{page: number (1-based)}',
+    sanitize: (args) => {
+      const page = num(args, 'page')
+      if (page === null || !Number.isInteger(page) || page < 1 || page > 60) {
+        return { ok: false, error: 'page must be an integer 1–60 (1-based; the context shows how many pages exist).' }
+      }
+      return {
+        ok: true,
+        actions: [{ type: 'gotoPage', page }],
+        observation: `Switched to page ${page}. The next get_page_state returns that page's elements — ids from other pages are invalid now.`,
+      }
+    },
   },
 
   // ── compound layout intelligence ───────────────────────────

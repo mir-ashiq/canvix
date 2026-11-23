@@ -33,17 +33,20 @@ export function heuristicIntent(message: string): AgentIntent | null {
   // multi-step briefs → plan
   const planSignals = [
     /\b(and|then|also|plus)\b.*\b(and|then|also|plus|with|including)\b/,
-    /\bcomplete (redesign|makeover|campaign|deck|poster)\b/,
     /\b(design|create|make|build)\s+(a|an|me|the)\b/,
     /\bfull\b.*\b(layout|design|page)\b/,
-    /\brebrand\b/,
     /\bposter\b.*\b(with|and|palette)\b/,
     /\blaunch\b.*\b(with|and|palette)\b/,
+    /\bnew colors and fonts\b/,
+    /\bcolors? and fonts?\b.*\b(new|change|swap)\b/,
   ]
-  if (planSignals.filter((re) => re.test(m)).length >= 2) return 'plan'
+  // strong plan intents fire on ONE match — a redesign/rebrand is
+  // never a surgical edit no matter how it's phrased (harness catch)
+  const strongPlan = /\b(complete|full|total)\s+(redesign|makeover|rebrand)\b|\brebrand\b|\bcomplete redesign\b/
+  if (strongPlan.test(m) || planSignals.filter((re) => re.test(m)).length >= 2) return 'plan'
   // surgical single edits → act
   const actSignals = [
-    /\b(make|set|change|turn|swap|move|align|delete|remove|add|bold|italic|bigger|smaller|recolor|color|colour)\b/,
+    /\b(make|set|change|turn|swap|move|align|center|centre|delete|remove|add|bold|italic|underline|bigger|smaller|recolor|recolour|color|colour)\b/,
     /^\s*(bold|italic|underline)\s+(this|it|the)\b/,
   ]
   if (actSignals.some((re) => re.test(m)) && m.split(/\s+/).length <= 18) return 'act'

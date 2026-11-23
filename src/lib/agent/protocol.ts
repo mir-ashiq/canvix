@@ -71,24 +71,49 @@ export interface AgentTurn {
   variant?: number
 }
 
+/** Keys that mark a parsed object as an actual agent turn (or an
+ *  act-route reply). Used to prefer a real turn over preamble objects
+ *  when a model emits several JSON objects in one reply. */
+const TURN_KEYS = new Set(['tool', 'done', 'thought', 'reply', 'intent'])
+
+function looksLikeTurn(obj: Record<string, unknown>): boolean {
+  return Object.keys(obj).some((k) => TURN_KEYS.has(k))
+}
+
 /** Parse one model reply into an AgentTurn. Tolerates markdown fences,
- * leading prose and trailing junk (the same robustness ladder the
- * assistant route uses). Returns null when no JSON object is found. */
+ *  leading prose, trailing junk and MULTI-OBJECT replies (a model that
+ *  emits `{"a":1}\n{"tool":…}` — a parsed object that looks like a
+ *  turn wins over one that doesn't; among turn-shaped candidates the
+ *  outermost/earliest wins, which is the original single-object
+ *  behavior). Returns null when no JSON object is found. */
 export function parseAgentTurn(raw: string): AgentTurn | null {
   const cleaned = raw.replace(/```(?:json)?/gi, '').trim()
-  const start = cleaned.indexOf('{')
-  if (start === -1) return null
-  let end = cleaned.lastIndexOf('}')
-  while (end > start) {
-    try {
-      const obj = JSON.parse(cleaned.slice(start, end + 1)) as Record<string, unknown>
-      if (obj && typeof obj === 'object') return obj as AgentTurn
-    } catch {
-      /* shrink the window and retry */
+  // window scan: starts forward (outermost first), ends backward
+  // (largest window first) — nested braces in strings are skipped
+  // naturally because only windows that PARSE count
+  let fallback: Record<string, unknown> | null = null
+  for (let start = cleaned.indexOf('{'); start !== -1; start = cleaned.indexOf('{', start + 1)) {
+    let end = cleaned.lastIndexOf('}')
+    while (end > start) {
+      let obj: Record<string, unknown> | null = null
+      try {
+        obj = JSON.parse(cleaned.slice(start, end + 1)) as Record<string, unknown>
+      } catch {
+        obj = null
+      }
+      if (obj && typeof obj === 'object') {
+        if (looksLikeTurn(obj)) return obj as AgentTurn
+        // remember the first parseable object as a fallback (a reply
+        // with no turn keys at all — e.g. act-route {"reply":…} is
+        // covered by TURN_KEYS, so this is genuinely unknown-shaped)
+        if (!fallback) fallback = obj
+        break // this start's largest window parsed; smaller windows
+        // of the same start would be inner fragments — move on
+      }
+      end = cleaned.lastIndexOf('}', end - 1)
     }
-    end = cleaned.lastIndexOf('}', end - 1)
   }
-  return null
+  return fallback ? (fallback as AgentTurn) : null
 }
 
 /** Serialize an event as an SSE line. */

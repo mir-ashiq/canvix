@@ -63,6 +63,7 @@ export function loopSystemPrompt(design: AgentDesignCtx, ctx: ToolContext): stri
     '5. Prefer the BRAND KIT colors/fonts when one is given.',
     '6. When the goal is achieved, verify visually via get_page_state (once), then emit {"done":true,"summary":"…"}. Never claim work you did not do.',
     '7. Args must match each tool spec exactly. On an error observation, fix the args and retry — the error message tells you what to change.',
+    '8. Tools edit the CURRENT page only. To work on another page: goto_page {page: N}, then get_page_state — ids change with the page. add_page appends the LAST page.',
     '',
     'CURRENT DESIGN:',
     serializeDesignContext(design),
@@ -97,6 +98,18 @@ export async function runAgentLoop(deps: LoopDeps): Promise<{ summary: string; s
 
   const started = Date.now()
   let steps = 0
+  /** PROGRESS steps — model turns that led somewhere (a valid tool
+   *  call or a done). Rejections and repair retries do NOT count:
+   *  the budget guards against over-ambition, and a run that wasted
+   *  its 8 steps on two bad calls + a JSON repair never got to be
+   *  ambitious in the first place (v0.27.3 audit fix). */
+  let progressSteps = 0
+  /** free-correction strikes — sanitize rejections and unknown tools
+   *  are budget-free so the model can self-correct, but a model that
+   *  NEVER produces a valid call would loop forever on wall-clock
+   *  alone, growing the message list until the process dies (found
+   *  by the harness OOM). Three strikes and the run ends. */
+  let strikes = 0
   let toolCalls = 0
   let summary = ''
 
@@ -106,13 +119,21 @@ export async function runAgentLoop(deps: LoopDeps): Promise<{ summary: string; s
       emit({ v: 1, type: 'aborted', reason: signal.reason ?? 'Stopped by user' })
       return { summary: summary || 'Stopped by the user.', steps, toolCalls }
     }
-    if (steps >= AGENT_BUDGETS.maxSteps || toolCalls >= AGENT_BUDGETS.maxToolCalls) {
+    if (progressSteps >= AGENT_BUDGETS.maxSteps || toolCalls >= AGENT_BUDGETS.maxToolCalls) {
       emit({
         v: 1,
         type: 'done',
         summary: summary || 'Reached the step budget — everything applied so far is kept. Refine with another message.',
         steps,
         toolCalls,
+      })
+      return { summary, steps, toolCalls }
+    }
+    if (strikes >= 3) {
+      emit({
+        v: 1,
+        type: 'error',
+        message: 'Stopped after 3 invalid tool calls in a row — the error messages under each step explain what to fix; try rephrasing the request.',
       })
       return { summary, steps, toolCalls }
     }
@@ -164,13 +185,13 @@ export async function runAgentLoop(deps: LoopDeps): Promise<{ summary: string; s
     const thought = String(turn.thought ?? '').slice(0, 300)
     if (!tool) {
       const known = [...AGENT_TOOL_MAP.keys()].slice(0, 6).join(', ')
+      strikes += 1
       messages.push({
         role: 'user',
         content: `ERROR: unknown tool "${toolName}". Valid tools: ${known}… (full list in the system prompt). Retry with a valid tool.`,
       })
       continue
     }
-
     emit({ v: 1, type: 'step', index: steps, thought, tool: toolName })
 
     const args = (turn.args && typeof turn.args === 'object' && !Array.isArray(turn.args) ? turn.args : {}) as Record<string, unknown>
@@ -178,9 +199,15 @@ export async function runAgentLoop(deps: LoopDeps): Promise<{ summary: string; s
 
     if (!result.ok) {
       // free correction: rejected calls don't consume the tool budget
+      // (but they cost a strike — 3 in a row end the run)
+      strikes += 1
       messages.push({ role: 'user', content: observationFor(toolName, result, false) })
       continue
     }
+    strikes = 0
+    // a SANITIZED call is progress — it will reach the client as an
+    // action (or a confirmation prompt). Rejections above stay free.
+    progressSteps += 1
 
     // ── destructive gate ─────────────────────────────────────
     if (tool.risk === 'destructive' && !confirmed.has(toolName)) {
@@ -200,6 +227,17 @@ export async function runAgentLoop(deps: LoopDeps): Promise<{ summary: string; s
         messages.push({
           role: 'user',
           content: `The user DECLINED the ${toolName} call. Do not retry it. Continue with non-destructive tools or finish.`,
+        })
+        continue
+      }
+      // v0.27.3: an approved destructive call still needs the client's
+      // apply ack — the failure path (apply throws on the client) must
+      // feed the error back to the model instead of counting as done
+      const ack = (await deps.awaitApply?.()) ?? { ok: true }
+      if (!ack.ok) {
+        messages.push({
+          role: 'user',
+          content: `ERROR applying ${toolName}: ${ack.message ?? 'client rejected the action'}. The document was NOT changed. Adjust and retry or finish.`,
         })
         continue
       }

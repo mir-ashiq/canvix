@@ -86,15 +86,18 @@ src/components/editor/apps/AssistantApp.tsx   rebuilt: streaming steps,
   session history, suggestion chips, brand-context note
 ```
 
-## Tool registry (v0.27 — 18 tools)
+## Tool registry (v0.27.3 — 24 tools)
 
 read-only: `get_page_state` (re-serialized state after edits),
-`list_templates`, `list_fonts`, `get_brand`
-write: `add_text`, `add_shape`, `add_image`(stock/gen), `add_sticker`,
-`add_table`, `add_chart`, `update_elements`, `set_text_style`,
-`move_elements`, `align_elements`, `distribute_elements`, `set_background`,
-`set_font`, `recolor`, `add_page`, `duplicate_page`, `apply_template`,
-`fix_overlaps`, `balance_layout`, `animate_page`, `translate_texts`
+`goto_page` (switch pages — element ids are per-page)
+write: `add_text`, `add_shape`, `add_image` (AI generation),
+`add_stock_photo` (licensed Pexels/Pixabay search via the existing
+client rail — real photos with attribution), `add_sticker`,
+`add_table`, `update_elements`, `set_text_style`,
+`move_elements`, `align_elements`, `distribute_elements`,
+`set_background`, `set_font`, `recolor`, `add_page`,
+`duplicate_page`, `fix_overlaps`, `balance_layout`,
+`animate_page`, `translate_texts`
 destructive (confirm): `delete_elements`, `clear_page`
 
 Every tool compiles to one or more `DesignAction`s (the existing,
@@ -117,6 +120,23 @@ client ──POST /api/ai/agent {message, history, design, mode, confirmMap}
         budget exhausted or model says done → verify step:
           re-read state, check goal, emit {done, summary}
 ```
+
+## Budgets & failure discipline (v0.27.3)
+
+- **Progress budget** (`maxSteps: 8`) counts only turns that led
+  somewhere — a sanitized tool call or a done. Sanitize rejections,
+  unknown tools and the one JSON-repair retry are FREE, so a run
+  that stumbles twice still gets its full productive budget.
+- **Strike rule**: rejections are free of the tool budget, but three
+  CONSECUTIVE invalid calls end the run with an actionable error —
+  without this, a model that never produces a valid call loops on
+  wall-clock alone while the message list grows unboundedly (found
+  by the harness: it OOM'd the worker). A successful call resets
+  the strike count.
+- **Approved destructive calls also await the client's apply ack** —
+  a failed apply feeds the error back to the model instead of being
+  counted as done. The panel only persists a tool approval after a
+  SUCCESSFUL apply.
 
 ## What deliberately stays out (scope discipline)
 

@@ -21,16 +21,25 @@ export const useAppStore = create<AppStore>((set) => ({
   // v0.11.4: the address bar follows the view — the editor lives at
   // /design/<id>, everything else resets to /. replaceState (not push)
   // because popstate is not routed in this SPA shell.
+  // v0.27.2: every view switch also resets the window scroll — the
+  // swap is client-side (no navigation), so without this the browser
+  // keeps the offset: a landing page scrolled to the FAQ opened the
+  // dashboard (or editor) mid-page. Instant, not smooth: the reset
+  // must land before React commits the shorter view, or the browser
+  // clamps a stale offset to the new page's max scroll.
   goLanding: () => {
     set({ view: 'landing' })
     replaceUrl('/')
+    window.scrollTo(0, 0)
   },
   goDashboard: () => {
     set({ view: 'dashboard' })
     replaceUrl('/')
+    window.scrollTo(0, 0)
   },
   openEditor: (design) => {
     set({ view: 'editor', pendingDesign: design })
     if (design?.id) replaceUrl(designPath(design.id))
+    window.scrollTo(0, 0)
   },
 }))

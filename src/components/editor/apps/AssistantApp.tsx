@@ -281,8 +281,9 @@ export function AssistantApp({ onClose }: AppPanelProps) {
           case 'action': {
             const actions = event.actions as DesignAction[]
             if (event.risk === 'destructive') {
-              if (autoApply && confirmedRef.current.has(event.tool)) {
-                // user already approved this tool this run
+              if (confirmedRef.current.has(event.tool)) {
+                // user already approved this tool this run (or
+                // auto-apply is on and they approved earlier)
                 const ack = await applyActions(actions)
                 if (ack.ok) appliedCount += actions.length
                 await bridgePost({ ack: { ok: ack.ok, message: ack.message, design: buildDesignContext() } })
@@ -374,13 +375,19 @@ export function AssistantApp({ onClose }: AppPanelProps) {
     const pending = pendingConfirm
     if (!pending) return
     setPendingConfirm(null)
-    if (ok) confirmedRef.current.add(pending.tool)
-    await bridgePost({ confirm: { tool: pending.tool, ok } })
-    if (ok) {
-      // apply immediately so the user sees the result; ack the run
-      const ack = await applyActions(pending.actions)
-      await bridgePost({ ack: { ok: ack.ok, message: ack.message, design: buildDesignContext() } })
+    if (!ok) {
+      await bridgePost({ confirm: { tool: pending.tool, ok: false } })
+      return
     }
+    // apply immediately so the user sees the result, then ack the run
+    // (the loop now also waits for this ack on approved destructive
+    // calls — a failed apply must be reported, not counted as done).
+    // The approval only persists on SUCCESS — a failed apply must
+    // re-ask, not silently auto-apply the retry (v0.27.3 audit fix).
+    const ack = await applyActions(pending.actions)
+    if (ack.ok) confirmedRef.current.add(pending.tool)
+    await bridgePost({ confirm: { tool: pending.tool, ok: true } })
+    await bridgePost({ ack: { ok: ack.ok, message: ack.message, design: buildDesignContext() } })
   }
 
   const stop = () => {

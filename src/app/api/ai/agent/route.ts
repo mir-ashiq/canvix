@@ -187,7 +187,7 @@ async function __canvix_post(req: NextRequest) {
               `${AGENT_BUDGETS.maxDirectActions} actions, only when clearly asked. Empty array otherwise. Never invent element ids.\n\n` +
               'Action types: addText{text,fontSize,bold,color,align,y}, updateElements{ids,patch}, deleteElements{ids}, moveElements{ids,dx,dy,to}, ' +
               'setHeadingsColor{color}, setTextColor{color}, setFont{fontFamily,targets}, setBackground{kind,from,to,angle}, alignElements{ids,mode}, ' +
-              'distributeElements{ids,axis}, fixOverlaps, balanceLayout, addPage, duplicatePage, suggestPalette{colors}, translate{language}, magicAnimate, generateImage{prompt}.\n\n' +
+              'distributeElements{ids,axis}, fixOverlaps, balanceLayout, addPage, duplicatePage, gotoPage{page}, addStockPhoto{query}, suggestPalette{colors}, translate{language}, magicAnimate, generateImage{prompt}.\n\n' +
               `Fonts (exact names): ${fontFamilies().slice(0, 30).join(', ')}…\n\nCURRENT DESIGN:\n${serializeDesignContext(design)}`
             const raw = await chat([{ role: 'system', content: system }, ...history, { role: 'user', content: message }])
             // reuse the assistant route's robust parse shape

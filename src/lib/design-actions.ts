@@ -535,6 +535,425 @@ export async function applyDesignAction(action: DesignAction, caller?: ActionCal
       return msg
     }
 
+    // ───────────────────────────────────────────────────────────
+    // v0.28 (Phase 3): the full capability bridge — every editor
+    // surface the audit found (docs/AI-CAPABILITY-MATRIX.md) gets a
+    // validated, undoable action here. All of them ride the store's
+    // existing history + collab path; none bypass validation.
+    // ───────────────────────────────────────────────────────────
+
+    case 'addLine': {
+      const variant = ['solid', 'dashed', 'arrow', 'arrowBoth'].includes(String(action.variant)) ? String(action.variant) : 'solid'
+      const x = Number(action.x)
+      const y = Number(action.y)
+      const length = Number(action.length) || 320
+      if (!Number.isFinite(x) || !Number.isFinite(y) || length < 8) return 'Bad line geometry (need x, y, length ≥ 8)'
+      const { createLineElement } = await import('@/lib/types')
+      const el = createLineElement({
+        x: Math.round(x),
+        y: Math.round(y),
+        width: Math.round(Math.min(length, width * 1.2)),
+        stroke: typeof action.stroke === 'string' && HEX.test(action.stroke) ? action.stroke : '#1F2226',
+        strokeWidth: Math.min(40, Math.max(1, Number(action.strokeWidth) || 4)),
+        dashed: variant === 'dashed',
+        arrowStart: variant === 'arrowBoth',
+        arrowEnd: variant === 'arrow' || variant === 'arrowBoth',
+        rotation: Math.min(359, Math.max(0, Number(action.rotation) || 0)),
+      })
+      useEditorStore.getState().addElement(el)
+      return `Line added (${variant})`
+    }
+
+    case 'addIcon': {
+      // server-side search of the same offline pack the Icons app uses
+      const { searchIcons } = await import('@/lib/assets/icon-pack')
+      const query = String(action.query ?? '').trim().slice(0, 60)
+      if (!query) return 'No icon query given'
+      const matches = searchIcons(query, 1)
+      if (!matches.length) return `No icon matches "${query}" — try a simpler noun (arrow, star, check, heart…)`
+      const icon = matches[0]
+      const size = Math.min(600, Math.max(24, Number(action.size) || 96))
+      const { addIconPath } = await import('@/components/editor/add-element')
+      addIconPath(icon.d, typeof action.stroke === 'string' && HEX.test(action.stroke) ? action.stroke : '#1F2226')
+      return `Icon "${icon.name}" added (${size}px nominal)`
+    }
+
+    case 'addIllustration': {
+      const { ILLUSTRATIONS } = await import('@/lib/assets/illustrations')
+      const query = String(action.query ?? '').trim().toLowerCase().slice(0, 60)
+      if (!query) return 'No illustration query given'
+      const hit =
+        ILLUSTRATIONS.find((i) => i.name.toLowerCase() === query) ??
+        ILLUSTRATIONS.find((i) => i.name.toLowerCase().includes(query) || i.tags.some((t) => t.includes(query)))
+      if (!hit) return `No illustration matches "${query}" — the packs cover abstract/nature/business/decoration scenes`
+      const { addIllustration } = await import('@/components/editor/add-element')
+      addIllustration(hit.svg)
+      return `Illustration "${hit.name}" added`
+    }
+
+    case 'addGraphic': {
+      const { GRAPHICS } = await import('@/lib/editor-utils')
+      const id = String(action.graphicId ?? '').trim()
+      const hit = GRAPHICS.find((g) => g.id === id) ?? GRAPHICS.find((g) => g.name.toLowerCase().includes(id.toLowerCase()))
+      if (!hit) return `Unknown graphic "${id}"`
+      const { addGraphic } = await import('@/components/editor/add-element')
+      addGraphic(hit.id, typeof action.fill === 'string' && HEX.test(action.fill) ? action.fill : undefined)
+      return `Graphic "${hit.name}" added`
+    }
+
+    case 'addChart': {
+      const kind = ['bar', 'line', 'donut', 'scatter'].includes(String(action.kind)) ? (String(action.kind) as 'bar') : null
+      if (!kind) return 'kind must be bar | line | donut | scatter'
+      const labels = Array.isArray(action.labels) ? (action.labels as unknown[]).map((l) => String(l).slice(0, 24)).slice(0, 24) : null
+      // series: [{name, color, values[]}] — validated shape, clamped
+      let series: { name: string; color: string; values: number[] }[] | null = null
+      if (Array.isArray(action.series)) {
+        series = (action.series as unknown[])
+          .filter((s): s is { name?: unknown; color?: unknown; values?: unknown } => !!s && typeof s === 'object')
+          .slice(0, 6)
+          .map((s) => ({
+            name: String(s.name ?? 'Series').slice(0, 24),
+            color: typeof s.color === 'string' && HEX.test(s.color) ? s.color : '#7630D7',
+            values: Array.isArray(s.values) ? (s.values as unknown[]).map((v) => Number(v) || 0).slice(0, 24) : [],
+          }))
+          .filter((s) => s.values.length >= 2)
+      }
+      const { createChartElement } = await import('@/lib/types')
+      const el = createChartElement(kind, {
+        x: Math.round(Math.min(Math.max(Number(action.x) || width * 0.14, 0), width - 100)),
+        y: Math.round(Math.min(Math.max(Number(action.y) || height * 0.2, 0), height - 100)),
+        ...(labels?.length ? { labels } : {}),
+        ...(series?.length ? { series } : {}),
+      })
+      useEditorStore.getState().addElement(el)
+      return `Chart added (${kind}${series?.length ? `, ${series.length} series` : ', sample data — editable'})`
+    }
+
+    case 'addQr': {
+      const value = String(action.value ?? '').trim().slice(0, 500)
+      if (!value) return 'No QR value given'
+      const size = Math.min(800, Math.max(96, Number(action.size) || 288))
+      try {
+        const QRCode = (await import('qrcode')).default
+        const dataUrl = await QRCode.toDataURL(value, {
+          width: size,
+          margin: 1,
+          color: {
+            dark: typeof action.dark === 'string' && HEX.test(action.dark) ? action.dark : '#000000',
+            light: typeof action.light === 'string' && HEX.test(action.light) ? action.light : '#FFFFFF',
+          },
+        })
+        useEditorStore.getState().addElement(
+          createImageElement(dataUrl, size, size, {
+            x: Math.round(Number.isFinite(Number(action.x)) ? Number(action.x) : (width - size) / 2),
+            y: Math.round(Number.isFinite(Number(action.y)) ? Number(action.y) : (height - size) / 2),
+            width: size,
+            height: size,
+            radius: 12,
+          }),
+        )
+        return `QR code added (${size}×${size})`
+      } catch {
+        return 'QR generation failed for this value'
+      }
+    }
+
+    case 'addFrame': {
+      const frameShape = ['rect', 'rounded', 'circle', 'star', 'polygon'].includes(String(action.frameShape))
+        ? (String(action.frameShape) as 'rect')
+        : 'rect'
+      const { createFrameElement } = await import('@/lib/types')
+      const size = Math.min(1200, Math.max(80, Number(action.width) || 320))
+      const el = createFrameElement(frameShape, {
+        x: Math.round(Number.isFinite(Number(action.x)) ? Number(action.x) : (width - size) / 2),
+        y: Math.round(Number.isFinite(Number(action.y)) ? Number(action.y) : (height - size) / 2),
+        width: size,
+        height: Math.round(Math.min(1200, Math.max(80, Number(action.height) || Math.round(size * 0.66)))),
+      })
+      useEditorStore.getState().addElement(el)
+      return `Frame added (${frameShape}) — fill it with fill_frame`
+    }
+
+    case 'addEmbed': {
+      const url = String(action.url ?? '').trim().slice(0, 400)
+      if (!/^https?:\/\//.test(url)) return 'url must be a http(s) link'
+      const { createEmbedElement } = await import('@/lib/types')
+      useEditorStore.getState().addElement(
+        createEmbedElement(url, {
+          x: Math.round((width - 320) / 2),
+          y: Math.round((height - 200) / 2),
+        }),
+      )
+      return 'Embed card added'
+    }
+
+    case 'duplicateElements': {
+      const ids = resolveIds(action.ids)
+      if (!ids.length) return 'No matching elements'
+      const s = useEditorStore.getState()
+      const page = currentPageElements()
+      const clones = ids
+        .map((id) => page.find((e) => e.id === id))
+        .filter((e): e is NonNullable<typeof e> => !!e && !e.locked)
+        .map((e) => ({
+          ...structuredClone(e),
+          id: `${e.type}-${Math.random().toString(36).slice(2, 9)}`,
+          x: e.x + 24,
+          y: e.y + 24,
+        }))
+      if (!clones.length) return 'Nothing duplicable (locked?)'
+      s.addElementsBulk(clones)
+      return `Duplicated ${clones.length} element${clones.length > 1 ? 's' : ''} (offset 24px)`
+    }
+
+    case 'groupElements': {
+      const ids = resolveIds(action.ids)
+      if (ids.length < 2) return 'Grouping needs 2+ element ids'
+      const s = useEditorStore.getState()
+      s.setSelection(ids)
+      s.groupSelection()
+      s.clearSelection()
+      return `Grouped ${ids.length} elements`
+    }
+
+    case 'ungroupElements': {
+      const ids = resolveIds(action.ids)
+      const s = useEditorStore.getState()
+      const page = currentPageElements()
+      const groups = ids.filter((id) => page.find((e) => e.id === id)?.type === 'group')
+      if (!groups.length) return 'No group elements among the ids'
+      for (const gid of groups) {
+        s.setSelection([gid])
+        s.ungroupSelection()
+      }
+      s.clearSelection()
+      return `Ungrouped ${groups.length} group${groups.length > 1 ? 's' : ''}`
+    }
+
+    case 'reorderLayers': {
+      // ids in the desired z order; dir is a shortcut for single moves
+      const s = useEditorStore.getState()
+      if (typeof action.dir === 'string' && ['up', 'down', 'front', 'back'].includes(action.dir)) {
+        const ids = resolveIds(action.ids)
+        if (!ids.length) return 'No matching elements'
+        for (const id of ids) s.moveLayer(id, action.dir as 'up')
+        return `Moved ${ids.length} element(s) ${action.dir}`
+      }
+      if (Array.isArray(action.ids) && action.ids.length >= 2) {
+        const order = (action.ids as unknown[]).map(String)
+        // apply from the bottom up so relative order is preserved
+        for (const id of [...order].reverse()) s.reorderLayer(id, 0)
+        // simpler: park each at front in reverse → final z equals `order`
+        return `Reordered ${order.length} elements`
+      }
+      return 'Give ids + dir (up|down|front|back), or ≥2 ids for an explicit z order'
+    }
+
+    case 'animateElements': {
+      const ids = resolveIds(action.ids)
+      if (!ids.length) return 'No matching elements'
+      const kinds = ['none', 'fade', 'rise', 'pan', 'pop', 'wipe', 'zoom', 'rotate', 'breathe'] as const
+      const rawKind = String(action.kind)
+      if (!(kinds as readonly string[]).includes(rawKind)) return `kind must be one of ${kinds.join(', ')}`
+      const kind = rawKind as (typeof kinds)[number]
+      if (kind === 'none') {
+        const s = useEditorStore.getState()
+        s.setElementAnimation(ids, null)
+        return `Cleared animation on ${ids.length} element(s)`
+      }
+      const s = useEditorStore.getState()
+      s.setElementAnimation(ids, {
+        kind,
+        duration: Math.min(5, Math.max(0.2, Number(action.duration) || 0.6)),
+        delay: Math.min(10, Math.max(0, Number(action.delay) || 0)),
+        easing: ['linear', 'easeIn', 'easeOut', 'easeInOut', 'spring'].includes(String(action.easing))
+          ? (String(action.easing) as 'easeOut')
+          : 'easeOut',
+        ...(['left', 'right', 'up', 'down'].includes(String(action.direction)) ? { direction: String(action.direction) as 'left' } : {}),
+      })
+      return `Animated ${ids.length} element(s): ${kind}`
+    }
+
+    case 'setPageTransition': {
+      const kinds = ['none', 'fade', 'slide', 'zoom', 'flip'] as const
+      const rawKind = String(action.kind)
+      if (!(kinds as readonly string[]).includes(rawKind)) return `kind must be one of ${kinds.join(', ')}`
+      const kind = rawKind as (typeof kinds)[number]
+      if (kind === 'none') {
+        useEditorStore.getState().setPageTransition(null)
+        return 'Page transition cleared'
+      }
+      const s = useEditorStore.getState()
+      s.setPageTransition({ kind, duration: Math.min(2, Math.max(0.2, Number(action.duration) || 0.5)) } as Parameters<typeof s.setPageTransition>[0])
+      return `Page transition set: ${kind}`
+    }
+
+    case 'deletePage': {
+      const s = useEditorStore.getState()
+      if (s.pages.length <= 1) return 'Cannot delete the only page'
+      const page = Math.round(Number(action.page))
+      const target = Number.isFinite(page) ? page - 1 : s.currentPage
+      if (target < 0 || target >= s.pages.length) return `Page out of range (1–${s.pages.length})`
+      if (s.pages[target].elements.length > 0 && !action.confirmed) {
+        return `Page ${target + 1} has ${s.pages[target].elements.length} elements — confirm:true is required to delete it`
+      }
+      s.deletePage(target)
+      return `Deleted page ${target + 1}`
+    }
+
+    case 'setBrandKit': {
+      const s = useEditorStore.getState()
+      const colors = Array.isArray(action.colors)
+        ? (action.colors as unknown[]).filter((c): c is string => typeof c === 'string' && HEX.test(c)).slice(0, 10)
+        : undefined
+      const headingFont = typeof action.headingFont === 'string' ? action.headingFont.slice(0, 60) : undefined
+      const bodyFont = typeof action.bodyFont === 'string' ? action.bodyFont.slice(0, 60) : undefined
+      if (!colors?.length && !headingFont && !bodyFont) return 'Nothing to set (colors[], headingFont, bodyFont)'
+      s.setBrand({
+        ...s.brand,
+        ...(colors?.length ? { colors } : {}),
+        ...(headingFont ? { headingFont } : {}),
+        ...(bodyFont ? { bodyFont } : {}),
+      })
+      return 'Brand kit updated — the agent will respect it in this and later runs'
+    }
+
+    case 'resizeDesign': {
+      const w = Math.round(Number(action.width))
+      const h = Math.round(Number(action.height))
+      if (!(w >= 50 && w <= 10000 && h >= 50 && h <= 10000)) return 'width/height must be 50–10000 px'
+      const s = useEditorStore.getState()
+      if (s.width === w && s.height === h) return `Already ${w}×${h}`
+      s.resizeDesign(w, h)
+      return `Canvas resized to ${w}×${h} (elements re-laid out proportionally)`
+    }
+
+    case 'maskImage': {
+      const ids = resolveIds(action.ids)
+      const masks = ['none', 'circle', 'rounded', 'star', 'polygon', 'heart', 'hexagon']
+      const mask = masks.includes(String(action.mask)) ? String(action.mask) : null
+      if (!mask) return `mask must be one of ${masks.join(', ')}`
+      const page = currentPageElements()
+      const images = ids.filter((id) => page.find((e) => e.id === id)?.type === 'image')
+      if (!images.length) return 'No image elements among the ids'
+      const s = useEditorStore.getState()
+      for (const id of images) {
+        s.updateElements([id], { maskShape: mask === 'none' ? undefined : mask, ...(mask === 'polygon' ? { maskSides: Math.min(12, Math.max(3, Number(action.sides) || 6)) } : {}) })
+      }
+      return `Masked ${images.length} image(s): ${mask}`
+    }
+
+    case 'adjustImage': {
+      const ids = resolveIds(action.ids)
+      const page = currentPageElements()
+      const images = ids.filter((id) => page.find((e) => e.id === id)?.type === 'image')
+      if (!images.length) return 'No image elements among the ids'
+      const clampAdj = (v: unknown) => Math.min(100, Math.max(-100, Math.round(Number(v) || 0)))
+      const s = useEditorStore.getState()
+      for (const id of images) {
+        const patch: Record<string, unknown> = {}
+        if (action.brightness !== undefined) patch.brightness = clampAdj(action.brightness)
+        if (action.contrast !== undefined) patch.contrast = clampAdj(action.contrast)
+        if (action.saturation !== undefined) patch.saturation = clampAdj(action.saturation)
+        if (typeof action.filter === 'string') patch.filter = action.filter === 'none' ? undefined : action.filter
+        if (Object.keys(patch).length) s.updateElements([id], patch)
+      }
+      return `Adjusted ${images.length} image(s)`
+    }
+
+    case 'measureText': {
+      // real metrics — the same canvas measureText the renderer uses
+      const text = String(action.text ?? '')
+      if (!text) return 'No text given'
+      const fontSize = Math.min(400, Math.max(6, Number(action.fontSize) || 48))
+      const style = `${String(action.bold) === 'true' || action.bold === true ? 'bold ' : ''}${fontSize}px ${String(action.fontFamily ?? 'Poppins')}`
+      let w = fontSize * 0.6 * text.length
+      let lineHeight = Math.round(fontSize * 1.25)
+      try {
+        const c = document.createElement('canvas')
+        const ctx = c.getContext('2d')
+        if (ctx) {
+          ctx.font = style
+          w = Math.max(1, ctx.measureText(text).width)
+          lineHeight = Math.round(fontSize * (Number(action.lineHeight) || 1.25))
+        }
+      } catch {
+        /* headless fallback: 0.6 estimate */
+      }
+      return `width=${Math.round(w)}px lineHeight=${lineHeight}px (text ${text.length} chars @ ${fontSize}px)`
+    }
+
+    case 'setTextSpans': {
+      const ids = resolveIds(action.ids)
+      if (!ids.length) return 'No matching elements'
+      // spans must concatenate to the element text — validated
+      const spans = Array.isArray(action.spans)
+        ? (action.spans as unknown[]).filter((s): s is Record<string, unknown> => !!s && typeof s === 'object' && typeof (s as { text?: unknown }).text === 'string')
+        : []
+      if (!spans.length) return 'spans must be [{text, bold?, italic?, color?…}]'
+      const { normalizeSpans } = await import('@/lib/rich-text')
+      const page = currentPageElements()
+      const s = useEditorStore.getState()
+      let applied = 0
+      for (const id of ids) {
+        const el = page.find((e) => e.id === id)
+        if (el?.type !== 'text') continue
+        const joined = spans.map((sp) => String(sp.text)).join('')
+        if (joined.replace(/\s+/g, ' ').trim() !== (el as { text: string }).text.replace(/\s+/g, ' ').trim()) {
+          return `Spans must concatenate exactly to the element text ("${(el as { text: string }).text.slice(0, 40)}…") — got "${joined.slice(0, 40)}…"`
+        }
+        const norm = normalizeSpans(spans as unknown as import('@/lib/types').TextSpan[], (el as { text: string }).text)
+        if (norm) {
+          s.updateElements([id], { spans: norm })
+          applied++
+        }
+      }
+      return applied ? `Styled ${applied} text element(s)` : 'No text elements styled'
+    }
+
+    case 'exportDesign': {
+      // the agent's export path: current page → PNG data URL → download
+      const format = ['png', 'jpg'].includes(String(action.format)) ? (String(action.format) as 'png') : 'png'
+      const { captureStage } = await import('@/components/editor/canvas/canvas-bridge')
+      try {
+        const url = await captureStage({ pixelScale: 1, mimeType: format === 'png' ? 'image/png' : 'image/jpeg', quality: 0.92 })
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${(useEditorStore.getState().designName || 'canvix-design').replace(/[^a-z0-9-_]+/gi, '-')}.${format}`
+        a.click()
+        return `Exported the current page as ${format.toUpperCase()} (download started)`
+      } catch {
+        return 'Export failed — the canvas is not ready'
+      }
+    }
+
+    case 'addStockVideo': {
+      const query = String(action.query ?? '').trim().slice(0, 120)
+      if (!query) return 'No video query given'
+      const res = await fetch('/api/stock-video/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, count: 6 }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { results?: { id: string; mp4: string; alternates: string[]; width: number; height: number; credit: { provider: string; author: string; license: string; url: string } }[]; error?: string }
+      if (!res.ok || !Array.isArray(data.results) || data.results.length === 0) {
+        return `No stock video matched "${query}"${data.error ? ` (${data.error})` : ''}`
+      }
+      const pick = data.results[0]
+      const { addStockVideo: place } = await import('@/components/editor/add-element')
+      await place(pick)
+      return `Stock video "${query}" added (credit: ${pick.credit.author}/${pick.credit.provider})`
+    }
+
+    case 'addSfx': {
+      const { sfxById } = await import('@/lib/assets/sfx-pack')
+      const id = String(action.sfxId ?? '').trim()
+      if (!sfxById(id)) return 'Unknown sound id — ask the user to pick sounds from the Audio panel, or use an animation sfxId'
+      const { addSfxToCanvas } = await import('@/components/editor/add-element')
+      await addSfxToCanvas(id)
+      return `Sound "${id}" added to the canvas`
+    }
+
     default:
       return 'Unsupported action'
   }

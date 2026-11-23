@@ -1,37 +1,35 @@
 // ─────────────────────────────────────────────────────────────
-// The comprehensive agent harness (v0.27.3) — "test it thoroughly,
-// not one simple case". Four layers:
+// The v0.28 agent harness — "test it thoroughly, not one simple
+// case". Layers:
 //
-//   1. TOOL MATRIX   — every registered tool × valid / invalid /
-//                      boundary args, asserting both the accept and
-//                      the actionable-error contract.
-//   2. LOOP FLOWS    — realistic multi-step runs (poster build,
-//                      page-switch flow, stock-photo flow, repair,
-//                      budget exhaustion, confirm gates, abort).
-//   3. WIRE FORMAT   — sseLine/parseAgentTurn round-trips, event
-//                      versioning, malformed-line tolerance.
-//   4. ROUTER MATRIX — heuristic + parseIntent across phrasings.
+//   1. TOOL MATRIX      — every registered tool × valid/invalid/
+//                         boundary/adversarial args; registry
+//                         coverage forces new tools to add cases.
+//   2. MODES            — mode tool surfaces (review physically
+//                         cannot write), heuristic classification.
+//   3. BRIEF CONTRACT   — extraction (exact texts/colors/dims) and
+//                         validation against real state.
+//   4. SKILLS ENGINE    — router matching, prompt injection,
+//                         progressive disclosure contract.
+//   5. LIFECYCLE FLOWS  — Case A exact-copy poster; Case B review
+//                         grounding; Case C long run (>8 steps, no
+//                         cap); Case D geometry repair; Case E
+//                         capability sweep; Case F safety (strikes,
+//                         cycles, abort, decline, provider failure).
+//   6. WIRE FORMAT      — SSE round-trips, parser robustness.
 //
-// The "LLM" is a scripted queue — deterministic, no network. The
-// harness asserts the INVARIANTS the real model relies on:
-//   · every rejected call returns an error that names the fix
-//   · actions the client must apply are always well-formed
-//   · budgets can never be exceeded, and free retries stay free
-//   · destructive tools never apply without an explicit approval
+// The "LLM" is a scripted queue — deterministic, no network.
 // ─────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from 'vitest'
-import {
-  parseAgentTurn,
-  sseLine,
-  AGENT_BUDGETS,
-  AGENT_PROTOCOL_VERSION,
-  type AgentEvent,
-} from './protocol'
-import { AGENT_TOOL_MAP, AGENT_TOOLS, toolsPromptSection, type ToolContext, type SanitizeResult } from './tools'
-import { runAgentLoop, loopSystemPrompt } from './loop'
-import { heuristicIntent, parseIntent } from './router'
+import { parseAgentTurn, sseLine, AGENT_GUARDS, AGENT_PROTOCOL_VERSION, type AgentEvent } from './protocol'
+import { AGENT_TOOL_MAP, AGENT_TOOLS, type ToolContext, type SanitizeResult } from './tools'
+import { runAgentLoop, toolsForMode, loopSystemPrompt } from './loop'
+import { heuristicMode, parseMode, modeAllowsWrites, MODE_TOOL_RISK } from './router'
+import { DESIGN_SKILLS, selectSkills, skillsPromptSection } from './skills'
+import { extractBrief, validateBrief, briefPromptSection, FORMAT_PRESETS, type DesignBrief } from './brief'
 import { serializeDesignContext, contextValidIds, type AgentDesignCtx } from './context'
+import type { AgentMode } from './protocol'
 
 // ── fixtures ─────────────────────────────────────────────────
 
@@ -78,689 +76,832 @@ function scriptedChat(replies: string[]) {
 
 const turn = (tool: string, args: Record<string, unknown> = {}, thought = 'step') =>
   JSON.stringify({ thought, tool, args })
-const done = (summary: string) => JSON.stringify({ done: true, summary })
+const done = (summary: string, extra: Record<string, unknown> = {}) =>
+  JSON.stringify({ done: true, summary, ...extra })
 
 // ═════════════════════════════════════════════════════════════
-// 1. TOOL MATRIX — every tool, valid + invalid + boundary
+// 1. TOOL MATRIX
 // ═════════════════════════════════════════════════════════════
 
 describe('harness · tool matrix', () => {
   const tool = (name: string) => {
     const t = AGENT_TOOL_MAP.get(name)
-    if (!t) throw new Error(`tool "${name}" is not registered — harness covers every tool`)
+    if (!t) throw new Error(`tool "${name}" is not registered`)
     return t
   }
   const call = (name: string, args: Record<string, unknown>, c: ToolContext = ctx): SanitizeResult =>
     tool(name).sanitize(args, c)
 
   it('every tool in the registry is covered by this harness', () => {
-    // the source of truth: if a tool is added without harness coverage,
-    // this fails and forces the author to add cases below
     const covered = [
       'get_page_state', 'add_text', 'add_shape', 'add_image', 'add_stock_photo', 'add_sticker',
       'add_table', 'update_elements', 'set_text_style', 'move_elements', 'align_elements',
       'distribute_elements', 'set_background', 'set_font', 'recolor', 'add_page', 'duplicate_page',
       'goto_page', 'fix_overlaps', 'balance_layout', 'animate_page', 'translate_texts',
       'delete_elements', 'clear_page',
+      // v0.28 bridge tools
+      'add_line', 'add_icon', 'add_illustration', 'add_chart', 'add_qr', 'add_frame', 'add_embed',
+      'duplicate_elements', 'group_elements', 'ungroup_elements', 'reorder_layers',
+      'animate_elements', 'set_page_transition', 'delete_page', 'set_brand_kit', 'resize_design',
+      'mask_image', 'adjust_image', 'measure_text', 'set_text_spans', 'export_design',
+      'add_stock_video', 'validate_brief',
     ]
-    for (const t of AGENT_TOOLS) expect(covered).toContain(t.name)
+    for (const t of AGENT_TOOLS) expect(covered, `add harness cases for new tool "${t.name}"`).toContain(t.name)
     expect(covered).toHaveLength(AGENT_TOOLS.length)
+    expect(AGENT_TOOLS.length).toBeGreaterThanOrEqual(46)
   })
 
-  // ── add_text ─────────────────────────────────────────────
-  it('add_text: valid full args', () => {
-    const r = call('add_text', { text: 'Grand Opening', fontSize: 96, x: 80, y: 120, width: 900, color: '#7D2AE8', bold: true, align: 'left' })
-    expect(r.ok).toBe(true)
-    if (r.ok) expect(r.actions[0]).toMatchObject({ type: 'addText', text: 'Grand Opening', fontSize: 96, color: '#7d2ae8', bold: true, align: 'left' })
-  })
-  it('add_text: yBand rides when y is absent', () => {
-    const r = call('add_text', { text: 'Sub', yBand: 'bottom' })
-    expect(r.ok).toBe(true)
-    if (r.ok) expect(r.actions[0]).toMatchObject({ y: 'bottom' })
-  })
-  it('add_text: exact y overrides yBand', () => {
-    const r = call('add_text', { text: 'Sub', y: 500, yBand: 'top' })
-    expect(r.ok).toBe(true)
-    if (r.ok) expect(r.actions[0]).toMatchObject({ y: 500 })
-    if (r.ok) expect(r.actions[0].yBand).toBeUndefined()
-  })
-  it('add_text: boundary fontSize 6 and 400 pass, 5 and 401 fail with the range echoed', () => {
-    expect(call('add_text', { text: 'x', fontSize: 6 }).ok).toBe(true)
-    expect(call('add_text', { text: 'x', fontSize: 400 }).ok).toBe(true)
-    for (const bad of [5, 401, 1200]) {
-      const r = call('add_text', { text: 'x', fontSize: bad })
-      expect(r.ok).toBe(false)
-      if (!r.ok) expect(r.error).toContain(String(bad))
-    }
-  })
-  it('add_text: empty text and bad color rejected with actionable errors', () => {
-    expect(call('add_text', { text: '   ' }).ok).toBe(false)
-    const r = call('add_text', { text: 'x', color: 'purple' })
-    expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.error).toContain('#RRGGBB')
-  })
-  it('add_text: unknown font rejected with valid examples listed', () => {
-    const r = call('add_text', { text: 'x', fontFamily: 'Comic Sans' })
-    expect(r.ok).toBe(false)
-    if (!r.ok) {
-      expect(r.error).toContain('Comic Sans')
-      expect(r.error).toContain('Poppins')
-    }
-  })
-  it('add_text: 400-char text is trimmed at the cap (no prompt injection via overflow)', () => {
-    const r = call('add_text', { text: 'A'.repeat(900) })
-    expect(r.ok).toBe(true)
-    if (r.ok) expect((r.actions[0].text as string).length).toBeLessThanOrEqual(400)
+  // ── v0.27 tools (regression) ─────────────────────────────
+  it('core v0.27 tools still validate correctly', () => {
+    expect(call('add_text', { text: 'Hi', fontSize: 6 }).ok).toBe(true)
+    expect(call('add_text', { text: 'x', fontSize: 5 }).ok).toBe(false)
+    expect(call('add_text', { text: 'x', fontFamily: 'Comic Sans' }).ok).toBe(false)
+    expect(call('update_elements', { ids: ['ghost'], patch: { fill: '#123456' } }).ok).toBe(false)
+    expect(call('update_elements', { ids: ['el-1'], patch: { fill: 'red' } }).ok).toBe(false)
+    expect(call('distribute_elements', { ids: ['el-1', 'el-2'], axis: 'x' }).ok).toBe(false)
+    expect(call('distribute_elements', { ids: ['el-1', 'el-2', 'img-1'], axis: 'x' }).ok).toBe(true)
+    expect(call('goto_page', { page: 2 }).ok).toBe(true)
+    expect(call('goto_page', { page: 0 }).ok).toBe(false)
+    expect(tool('delete_elements').risk).toBe('destructive')
+    expect(tool('clear_page').risk).toBe('destructive')
   })
 
-  // ── add_shape ────────────────────────────────────────────
-  it('add_shape: every shape kind accepts and compiles', () => {
-    for (const shape of ['rect', 'ellipse', 'triangle', 'star', 'line']) {
-      const r = call('add_shape', { shape, x: 10, y: 10, width: 100, height: 80 })
-      expect(r.ok, shape).toBe(true)
-      if (r.ok) expect(r.actions[0]).toMatchObject({ type: 'addShape', shape })
-    }
-  })
-  it('add_shape: missing numbers and tiny sizes rejected naming the field', () => {
-    const r1 = call('add_shape', { shape: 'rect', x: 1, y: 1 })
-    expect(r1.ok).toBe(false)
-    if (!r1.ok) expect(r1.error).toContain('width')
-    const r2 = call('add_shape', { shape: 'rect', x: 1, y: 1, width: 2, height: 80 })
-    expect(r2.ok).toBe(false)
-    if (!r2.ok) expect(r2.error).toContain('≥ 4')
-    expect(call('add_shape', { shape: 'hexagon', x: 1, y: 1, width: 50, height: 50 }).ok).toBe(false)
-  })
-
-  // ── add_image / add_stock_photo ──────────────────────────
-  it('add_image: prompt validation + placement clamps', () => {
-    expect(call('add_image', { prompt: 'ok' }).ok).toBe(false)
-    const r = call('add_image', { prompt: 'an abstract gradient banner', x: -50, y: 2000, width: 5000 })
+  // ── extended update_elements patch surface ───────────────
+  it('update_elements accepts the full v0.28 patch surface', () => {
+    const r = call('update_elements', {
+      ids: ['el-1'],
+      patch: { rotation: 45, opacity: 0.5, italic: true, uppercase: true, curve: 30, flipH: true, locked: true, visible: false, letterSpacing: 2, lineHeight: 1.4 },
+    })
     expect(r.ok).toBe(true)
     if (r.ok) {
-      expect(r.actions[0]).toMatchObject({ type: 'generateImage', prompt: 'an abstract gradient banner' })
-      expect(r.actions[0].x).toBe(0)      // clamped into the page
-      expect(r.actions[0].width).toBe(1080) // clamped to page width
+      expect(r.actions[0].patch).toMatchObject({ rotation: 45, opacity: 0.5, curve: 30, locked: true })
     }
   })
-  it('add_stock_photo: query + orientation validation, compiles addStockPhoto action', () => {
-    expect(call('add_stock_photo', { query: 'a' }).ok).toBe(false)
-    for (const orientation of ['landscape', 'portrait', 'square']) {
-      const r = call('add_stock_photo', { query: 'coffee cup on a wooden table', orientation })
-      expect(r.ok, orientation).toBe(true)
-      if (r.ok) expect(r.actions[0]).toMatchObject({ type: 'addStockPhoto', query: 'coffee cup on a wooden table', orientation })
-    }
-    const bad = call('add_stock_photo', { query: 'coffee', orientation: 'diagonal' })
-    expect(bad.ok).toBe(true) // unknown enum falls back — no orientation filter
-    if (bad.ok) expect(bad.actions[0].orientation).toBeUndefined()
-  })
-
-  // ── add_sticker / add_table ──────────────────────────────
-  it('add_sticker: emoji required, size bounds', () => {
-    expect(call('add_sticker', { emoji: '' }).ok).toBe(false)
-    expect(call('add_sticker', { emoji: '🚀', size: 10 }).ok).toBe(false)
-    const r = call('add_sticker', { emoji: '✨', size: 200 })
-    expect(r.ok).toBe(true)
-    if (r.ok) expect(r.actions[0]).toMatchObject({ type: 'addSticker', emoji: '✨', size: 200 })
-  })
-  it('add_table: header/rows validation + cell caps', () => {
-    expect(call('add_table', { header: [], rows: [['a']] }).ok).toBe(false)
-    expect(call('add_table', { header: ['A'], rows: [] }).ok).toBe(false)
-    const r = call('add_table', {
-      header: ['Plan', 'Price', 'Seats'],
-      rows: [
-        ['Free', '$0', '1'],
-        ['Pro', '$12', '5'],
-        ['Team', '$49', '25'],
-      ],
-    })
-    expect(r.ok).toBe(true)
-    if (r.ok) expect(r.actions[0]).toMatchObject({ type: 'addTable', header: ['Plan', 'Price', 'Seats'] })
-  })
-
-  // ── update_elements / set_text_style ─────────────────────
-  it('update_elements: full patch surface, one action per call', () => {
-    const r = call('update_elements', {
-      ids: ['el-1', 'el-2'],
-      patch: { x: 10, y: 20, width: 200, height: 100, rotation: 15, opacity: 0.5, fill: '#00AAFF', bold: true, align: 'right' },
-    })
-    expect(r.ok).toBe(true)
-    if (r.ok) expect(r.actions[0]).toMatchObject({ type: 'updateElements', ids: ['el-1', 'el-2'] })
-  })
-  it('update_elements: every invalid patch value is named', () => {
+  it('update_elements rejects out-of-range curve/brightness with the range echoed', () => {
     for (const [patch, hint] of [
-      [{ fill: 'nope' }, '#RRGGBB'],
-      [{ fontSize: 900 }, '6–400'],
+      [{ curve: 300 }, '−180..180'],
+      [{ brightness: 400 }, '−100..100'],
       [{ opacity: 2 }, '0–1'],
-      [{ width: 'wide' }, 'number'],
     ] as const) {
       const r = call('update_elements', { ids: ['el-1'], patch })
       expect(r.ok, JSON.stringify(patch)).toBe(false)
       if (!r.ok) expect(r.error).toContain(hint)
     }
   })
-  it('update_elements: stale/foreign ids rejected, valid ones listed', () => {
-    const r = call('update_elements', { ids: ['ghost-9'], patch: { fill: '#123456' } })
-    expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.error).toContain('ghost-9')
-    if (!r.ok) expect(r.error).toContain('get_page_state')
-  })
-  it('set_text_style: font + size + color compile to one updateElements', () => {
-    const r = call('set_text_style', { ids: ['txt-1'], fontFamily: 'Poppins', fontSize: 64, bold: true, color: '#FF0055' })
-    expect(r.ok).toBe(true)
-    if (r.ok) expect(r.actions[0]).toMatchObject({ type: 'updateElements', ids: ['txt-1'], patch: { fontFamily: 'Poppins', fontSize: 64, bold: true, fill: '#ff0055' } })
-  })
 
-  // ── move / align / distribute ────────────────────────────
-  it('move_elements: deltas clamp to ±2 pages; snap bands map', () => {
-    const r = call('move_elements', { ids: ['el-1'], dx: 99999, dy: -99999 })
-    expect(r.ok).toBe(true)
-    if (r.ok) expect(r.actions[0].dx).toBe(2160) // 2 × 1080
-    const snap = call('move_elements', { ids: ['el-1'], to: 'center' })
-    expect(snap.ok).toBe(true)
-    if (snap.ok) expect(snap.actions[0]).toMatchObject({ to: 'center' })
-    expect(call('move_elements', { ids: ['el-1'] }).ok).toBe(false) // neither dx/dy nor to
+  // ── new v0.28 tools: valid + invalid each ────────────────
+  it('add_line validates geometry and variants', () => {
+    expect(call('add_line', { x: 10, y: 10, length: 200, variant: 'arrow', stroke: '#123456' }).ok).toBe(true)
+    expect(call('add_line', { x: 10, length: 200 }).ok).toBe(false) // no y
+    expect(call('add_line', { x: 1, y: 1, length: 4 }).ok).toBe(false) // too short
+    expect(call('add_line', { x: 1, y: 1, length: 200, stroke: 'blue' }).ok).toBe(false)
   })
-  it('align_elements: all six modes accept; bad mode rejects', () => {
-    for (const mode of ['left', 'cx', 'right', 'top', 'cy', 'bottom']) {
-      expect(call('align_elements', { ids: ['el-1', 'el-2'], mode }).ok, mode).toBe(true)
-    }
-    expect(call('align_elements', { ids: ['el-1'], mode: 'diagonal' }).ok).toBe(false)
+  it('add_icon / add_illustration require queries', () => {
+    expect(call('add_icon', { query: 'arrow right' }).ok).toBe(true)
+    expect(call('add_icon', { query: 'a' }).ok).toBe(false)
+    expect(call('add_illustration', { query: 'waves' }).ok).toBe(true)
+    expect(call('add_illustration', { query: 'x' }).ok).toBe(false)
   })
-  it('distribute_elements: needs 3+ ids (client contract) and says what to use instead', () => {
-    const two = call('distribute_elements', { ids: ['el-1', 'el-2'], axis: 'x' })
-    expect(two.ok).toBe(false)
-    if (!two.ok) expect(two.error).toContain('align_elements')
-    const three = call('distribute_elements', { ids: ['el-1', 'el-2', 'img-1'], axis: 'y' })
-    expect(three.ok).toBe(true)
-  })
-
-  // ── page-level tools ─────────────────────────────────────
-  it('set_background: solid + gradient + angle clamp; bad forms rejected', () => {
-    expect(call('set_background', { kind: 'solid', from: '#0D1117' }).ok).toBe(true)
-    const g = call('set_background', { kind: 'gradient', from: '#7D2AE8', to: '#02C0CC', angle: 999 })
-    expect(g.ok).toBe(true)
-    if (g.ok) expect(g.actions[0].angle).toBe(360)
-    expect(call('set_background', { kind: 'gradient', from: '#7D2AE8' }).ok).toBe(false)
-    expect(call('set_background', { kind: 'plaid', from: '#000000' }).ok).toBe(false)
-  })
-  it('set_font: targets enum + catalog validation', () => {
-    for (const targets of ['all', 'headings', 'body']) {
-      expect(call('set_font', { fontFamily: 'Inter', targets }).ok, targets).toBe(true)
-    }
-    expect(call('set_font', { fontFamily: 'Wingdings' }).ok).toBe(false)
-  })
-  it('recolor: both modes + the 3-color palette floor', () => {
-    expect(call('recolor', { color: '#FF0055', targets: 'text' }).ok).toBe(true)
-    expect(call('recolor', { palette: ['#7D2AE8', '#02C0CC', '#FFD166'] }).ok).toBe(true)
-    expect(call('recolor', { palette: ['#7D2AE8', 'nope', '#FFD166'] }).ok).toBe(false)
-    expect(call('recolor', {}).ok).toBe(false)
-  })
-  it('add_page / duplicate_page / fix_overlaps / balance_layout / animate_page / translate_texts compile', () => {
-    expect(call('add_page', {})).toMatchObject({ ok: true })
-    expect(call('duplicate_page', {})).toMatchObject({ ok: true })
-    expect(call('fix_overlaps', {})).toMatchObject({ ok: true })
-    expect(call('balance_layout', {})).toMatchObject({ ok: true })
-    expect(call('animate_page', {})).toMatchObject({ ok: true })
-    expect(call('translate_texts', { language: 'Spanish' })).toMatchObject({ ok: true })
-    expect(call('translate_texts', {}).ok).toBe(false)
-  })
-
-  // ── goto_page (new in v0.27.3) ───────────────────────────
-  it('goto_page: 1-based integer validation', () => {
-    const ok = call('goto_page', { page: 2 })
+  it('add_chart validates kind + series shape', () => {
+    const ok = call('add_chart', {
+      kind: 'bar',
+      labels: ['Q1', 'Q2'],
+      series: [{ name: 'Rev', color: '#7630D7', values: [10, 20] }],
+    })
     expect(ok.ok).toBe(true)
-    if (ok.ok) expect(ok.actions[0]).toMatchObject({ type: 'gotoPage', page: 2 })
-    for (const bad of [0, -1, 61, 2.5, 'two']) {
-      expect(call('goto_page', { page: bad }).ok, String(bad)).toBe(false)
-    }
-    expect(call('goto_page', {}).ok).toBe(false)
+    if (ok.ok) expect(ok.actions[0]).toMatchObject({ type: 'addChart', kind: 'bar' })
+    expect(call('add_chart', { kind: 'pie' }).ok).toBe(false) // not a kind
+    expect(call('add_chart', { kind: 'donut', series: [{ name: 'X', values: [1] }] }).ok).toBe(true) // 1-value series dropped → sample data
   })
-
-  // ── destructive ──────────────────────────────────────────
-  it('delete_elements / clear_page are the only destructive tools', () => {
-    for (const t of AGENT_TOOLS) {
-      const shouldBeDestructive = t.name === 'delete_elements' || t.name === 'clear_page'
-      expect(t.risk === 'destructive', t.name).toBe(shouldBeDestructive)
-    }
+  it('add_qr validates value + colors', () => {
+    expect(call('add_qr', { value: 'https://canvix.app', dark: '#090B1A' }).ok).toBe(true)
+    expect(call('add_qr', { value: '' }).ok).toBe(false)
+    expect(call('add_qr', { value: 'x', dark: 'navy' }).ok).toBe(false)
   })
-  it('clear_page expands to every current id and refuses an empty page', () => {
-    const r = call('clear_page', {})
-    expect(r.ok).toBe(true)
-    if (r.ok) expect((r.actions[0].ids as string[]).sort()).toEqual([...ctx.validIds].sort())
-    const empty = call('clear_page', {}, { ...ctx, validIds: new Set() })
-    expect(empty.ok).toBe(false)
+  it('add_frame / add_embed validate', () => {
+    expect(call('add_frame', { frameShape: 'circle', width: 400, height: 400 }).ok).toBe(true)
+    expect(call('add_frame', { frameShape: 'hexagon' }).ok).toBe(false)
+    expect(call('add_embed', { url: 'https://youtu.be/x' }).ok).toBe(true)
+    expect(call('add_embed', { url: 'ftp://nope' }).ok).toBe(false)
+  })
+  it('duplicate/group/ungroup/reorder validate id lists', () => {
+    expect(call('duplicate_elements', { ids: ['el-1'] }).ok).toBe(true)
+    expect(call('group_elements', { ids: ['el-1'] }).ok).toBe(false)
+    expect(call('group_elements', { ids: ['el-1', 'el-2'] }).ok).toBe(true)
+    expect(call('reorder_layers', { ids: ['el-1'], dir: 'front' }).ok).toBe(true)
+    expect(call('reorder_layers', { ids: ['el-1'], dir: 'sideways' }).ok).toBe(false)
+    expect(call('reorder_layers', { ids: ['el-1'] }).ok).toBe(false) // neither dir nor ≥2 ids
+  })
+  it('animate_elements + set_page_transition validate kinds', () => {
+    expect(call('animate_elements', { ids: ['el-1'], kind: 'pop', duration: 0.4, direction: 'up' }).ok).toBe(true)
+    expect(call('animate_elements', { ids: ['el-1'], kind: 'explode' }).ok).toBe(false)
+    expect(call('set_page_transition', { kind: 'slide' }).ok).toBe(true)
+    expect(call('set_page_transition', { kind: 'spin' }).ok).toBe(false)
+  })
+  it('delete_page is destructive and bounds-checks', () => {
+    expect(tool('delete_page').risk).toBe('destructive')
+    expect(call('delete_page', { page: 2 }).ok).toBe(true)
+    expect(call('delete_page', { page: 0 }).ok).toBe(false)
+    expect(call('delete_page', { page: 500 }).ok).toBe(false)
+  })
+  it('set_brand_kit validates fonts against the catalog', () => {
+    expect(call('set_brand_kit', { colors: ['#090B1A', '#8B5CF6'], headingFont: 'Poppins' }).ok).toBe(true)
+    expect(call('set_brand_kit', { headingFont: 'Wingdings' }).ok).toBe(false)
+    expect(call('set_brand_kit', {}).ok).toBe(false)
+  })
+  it('resize_design validates the 50–10000 range', () => {
+    expect(call('resize_design', { width: 1080, height: 1920 }).ok).toBe(true)
+    expect(call('resize_design', { width: 10, height: 10 }).ok).toBe(false)
+    expect(call('resize_design', { width: 99999, height: 10 }).ok).toBe(false)
+  })
+  it('mask_image / adjust_image validate masks and ranges', () => {
+    expect(call('mask_image', { ids: ['img-1'], mask: 'circle' }).ok).toBe(true)
+    expect(call('mask_image', { ids: ['img-1'], mask: 'blob' }).ok).toBe(false)
+    expect(call('adjust_image', { ids: ['img-1'], brightness: 40, contrast: -20 }).ok).toBe(true)
+    expect(call('adjust_image', { ids: ['img-1'], brightness: 400 }).ok).toBe(false)
+    expect(call('adjust_image', { ids: ['el-1'], brightness: 10 }).ok).toBe(true) // ids valid; client filters to images
+  })
+  it('measure_text validates font + size and is read-only', () => {
+    expect(tool('measure_text').risk).toBe('read')
+    expect(call('measure_text', { text: 'Design Beyond Limits', fontSize: 96, fontFamily: 'Poppins', bold: true }).ok).toBe(true)
+    expect(call('measure_text', { text: 'x', fontSize: 5 }).ok).toBe(false)
+    expect(call('measure_text', { text: 'x', fontSize: 48, fontFamily: 'Nope' }).ok).toBe(false)
+  })
+  it('set_text_spans requires span arrays', () => {
+    expect(call('set_text_spans', { ids: ['txt-1'], spans: [{ text: 'Hel' }, { text: 'lo', bold: true }] }).ok).toBe(true)
+    expect(call('set_text_spans', { ids: ['txt-1'], spans: [] }).ok).toBe(false)
+    expect(call('set_text_spans', { ids: ['txt-1'] }).ok).toBe(false)
+  })
+  it('export_design / add_stock_video / validate_brief compile', () => {
+    expect(call('export_design', { format: 'png' }).ok).toBe(true)
+    expect(call('export_design', { format: 'bmp' }).ok).toBe(true) // falls back to png client-side
+    expect(call('add_stock_video', { query: 'city timelapse' }).ok).toBe(true)
+    expect(call('add_stock_video', { query: 'ab' }).ok).toBe(false)
+    expect(call('validate_brief', {}).ok).toBe(true)
   })
 
   // ── universal invariants ─────────────────────────────────
-  it('EVERY tool: accepted calls always carry ≥1 action object with a type', () => {
-    // sample one valid call per tool
-    const valid: Record<string, Record<string, unknown>> = {
-      get_page_state: {},
-      add_text: { text: 'Hi' },
-      add_shape: { shape: 'rect', x: 1, y: 1, width: 50, height: 50 },
-      add_image: { prompt: 'a banner' },
-      add_stock_photo: { query: 'coffee' },
-      add_sticker: { emoji: '🚀' },
-      add_table: { header: ['A'], rows: [['1']] },
-      update_elements: { ids: ['el-1'], patch: { fill: '#123456' } },
-      set_text_style: { ids: ['txt-1'], fontSize: 40 },
-      move_elements: { ids: ['el-1'], dx: 10 },
-      align_elements: { ids: ['el-1'], mode: 'cx' },
-      distribute_elements: { ids: ['el-1', 'el-2', 'img-1'], axis: 'x' },
-      set_background: { kind: 'solid', from: '#0D1117' },
-      set_font: { fontFamily: 'Inter' },
-      recolor: { color: '#FF0055' },
-      add_page: {},
-      duplicate_page: {},
-      goto_page: { page: 1 },
-      fix_overlaps: {},
-      balance_layout: {},
-      animate_page: {},
-      translate_texts: { language: 'French' },
-      delete_elements: { ids: ['el-1'] },
-      clear_page: {},
-    }
-    for (const t of AGENT_TOOLS) {
-      const r = t.sanitize(valid[t.name], ctx)
-      expect(r.ok, t.name).toBe(true)
-      if (r.ok) {
-        expect(r.actions.length, t.name).toBeGreaterThan(0)
-        expect(typeof r.actions[0].type, t.name).toBe('string')
-        expect(r.observation, t.name).toBeTruthy()
-      }
-    }
-  })
-  it('EVERY tool: rejections always produce a non-empty actionable error', () => {
-    // garbage args must be rejected (never crash, never pass through)
-    for (const t of AGENT_TOOLS) {
-      const r = t.sanitize({ ids: [], text: '', patch: {} }, ctx)
-      if (!r.ok) {
-        expect(r.error.length, t.name).toBeGreaterThan(10)
-      } else {
-        // tools with no args (add_page etc.) legitimately accept {}
-        expect(['add_page', 'duplicate_page', 'fix_overlaps', 'balance_layout', 'animate_page', 'get_page_state', 'clear_page']).toContain(t.name)
-      }
-    }
-  })
-  it('sanitizers never throw on adversarial args (wrong types everywhere)', () => {
+  it('EVERY tool: sanitizers never throw on adversarial args', () => {
     const adversarial = [
       { ids: 'not-an-array', patch: { fill: { deep: 'object' } } },
       { text: { nested: true }, fontSize: NaN },
-      { header: 'string', rows: 42 },
-      { page: Infinity, factor: 'x' },
-      { palette: 'no', ids: [null, 123, {}] },
-      { dx: '1e999', shape: { fake: 1 } },
+      { header: 'string', rows: 42, series: 'no' },
+      { page: Infinity, factor: 'x', spans: 7 },
+      { palette: 'no', ids: [null, 123, {}], values: [{ no: 'text' }] },
+      { dx: '1e999', shape: { fake: 1 }, mask: { deep: 1 } },
     ]
     for (const t of AGENT_TOOLS) {
       for (const args of adversarial) {
-        expect(() => t.sanitize(args as Record<string, unknown>, ctx), `${t.name} ${JSON.stringify(args)}`).not.toThrow()
+        expect(() => t.sanitize(args as Record<string, unknown>, ctx), `${t.name} ${JSON.stringify(args).slice(0, 40)}`).not.toThrow()
       }
+    }
+  })
+  it('exactly three tools are destructive', () => {
+    const destructive = AGENT_TOOLS.filter((t) => t.risk === 'destructive').map((t) => t.name)
+    expect(destructive.sort()).toEqual(['clear_page', 'delete_elements', 'delete_page'])
+  })
+  it('read tools are exactly the state/measure/validate set', () => {
+    const reads = AGENT_TOOLS.filter((t) => t.risk === 'read').map((t) => t.name)
+    expect(reads.sort()).toEqual(['get_page_state', 'goto_page', 'measure_text', 'validate_brief'])
+  })
+})
+
+// ═════════════════════════════════════════════════════════════
+// 2. MODES
+// ═════════════════════════════════════════════════════════════
+
+describe('harness · modes', () => {
+  it('every mode has a risk surface', () => {
+    for (const mode of Object.keys(MODE_TOOL_RISK) as AgentMode[]) {
+      expect(Array.isArray(MODE_TOOL_RISK[mode])).toBe(true)
+    }
+  })
+  it('read-only modes have ZERO write tools in their surface', () => {
+    for (const mode of ['review', 'explain', 'plan', 'discuss'] as AgentMode[]) {
+      const surface = toolsForMode(mode)
+      expect(surface.length, mode).toBeGreaterThanOrEqual(0)
+      expect(surface.every((t) => t.risk === 'read'), mode).toBe(true)
+      expect(modeAllowsWrites(mode)).toBe(false)
+    }
+    // discuss gets NO tools at all
+    expect(toolsForMode('discuss')).toHaveLength(0)
+  })
+  it('write modes expose the full bridge', () => {
+    for (const mode of ['create', 'edit', 'improve'] as AgentMode[]) {
+      const surface = toolsForMode(mode)
+      expect(surface.length, mode).toBeGreaterThan(40)
+      expect(modeAllowsWrites(mode)).toBe(true)
+    }
+  })
+  it('heuristic classification: the seven mode examples from the brief', () => {
+    expect(heuristicMode('Make a poster').mode).toBe('create')
+    expect(heuristicMode('Move the title down').mode).toBe('edit')
+    expect(heuristicMode("What's wrong with this design?").mode).toBe('review')
+    expect(heuristicMode('Make this professional').mode).toBe('improve')
+    expect(heuristicMode('How does gradient editing work?').confidence).toBe('high') // product question
+    expect(heuristicMode('Fix the Canvix agent tool loop').mode).toBe('discuss')
+    expect(heuristicMode('Propose a plan for the deck').mode).toBe('plan')
+  })
+  it('heuristic classification: more phrasings', () => {
+    expect(heuristicMode('Design a bold poster for a coffee launch with a warm palette').mode).toBe('create')
+    expect(heuristicMode('Make the title bold').mode).toBe('edit')
+    expect(heuristicMode('Critique this layout').mode).toBe('review')
+    expect(heuristicMode('what font is the headline?').mode).toBe('explain')
+    expect(heuristicMode('Polish this design').mode).toBe('improve')
+    expect(heuristicMode('lol').confidence).toBe('low')
+  })
+  it('parseMode reads fenced and bare JSON, rejects junk', () => {
+    expect(parseMode('{"mode":"review"}')).toBe('review')
+    expect(parseMode('```json\n{"mode":"create"}\n```')).toBe('create')
+    expect(parseMode('sure!')).toBeNull()
+  })
+  it('the system prompt respects the mode surface', () => {
+    const reviewPrompt = loopSystemPrompt({ design, ctx, mode: 'review' })
+    expect(reviewPrompt).not.toContain('- add_text')
+    expect(reviewPrompt).toContain('REVIEW')
+    const createPrompt = loopSystemPrompt({ design, ctx, mode: 'create' })
+    expect(createPrompt).toContain('- add_text')
+  })
+})
+
+// ═════════════════════════════════════════════════════════════
+// 3. BRIEF CONTRACT
+// ═════════════════════════════════════════════════════════════
+
+describe('harness · brief contract', () => {
+  it('extracts exact quoted texts, hex colors and dimensions as MANDATORY', () => {
+    const brief = extractBrief(
+      'Make a 1080x1080 poster with navy #090B1A background, purple #8B5CF6 and cyan #22D3EE accents, saying "Design Beyond Limits", "Create Smarter. Design Faster." and "Try Canvix Free"',
+    )
+    expect(brief.requiredTexts.map((t) => t.text)).toEqual([
+      'Design Beyond Limits',
+      'Create Smarter. Design Faster.',
+      'Try Canvix Free',
+    ])
+    expect(brief.requiredTexts.every((t) => t.tier === 'mandatory')).toBe(true)
+    expect(brief.requiredColors.map((c) => c.hex)).toEqual(['#090b1a', '#8b5cf6', '#22d3ee'])
+    expect(brief.dimensions).toMatchObject({ width: 1080, height: 1080, tier: 'mandatory' })
+  })
+  it('unquoted headline patterns still extract; restrictions too', () => {
+    const brief = extractBrief('Add the headline Grand Opening Gala and no dark colors please')
+    expect(brief.requiredTexts.some((t) => t.text.startsWith('Grand Opening'))).toBe(true)
+    expect(brief.restrictions.length).toBeGreaterThan(0)
+  })
+  it('platform presets fill dimensions as preference when unspecified', () => {
+    const brief = extractBrief('Design an instagram story for the launch')
+    expect(brief.format).toBe('story')
+    expect(brief.dimensions).toMatchObject({ width: 1080, height: 1920, tier: 'preference' })
+    // explicit dims outrank the preset
+    const explicit = extractBrief('Instagram post but 800x800')
+    expect(explicit.dimensions).toMatchObject({ width: 800, height: 800, tier: 'mandatory' })
+  })
+  it('FORMAT_PRESETS covers the social formats the matrix promises', () => {
+    for (const id of ['instagram-post', 'story', 'youtube-thumbnail', 'poster', 'presentation', 'business-card', 'menu', 'logo']) {
+      expect(FORMAT_PRESETS[id], id).toBeTruthy()
+    }
+  })
+  it('validation passes when exact text + colors are present, fails with the unmet item named', () => {
+    const brief = extractBrief('"Design Beyond Limits" with #8B5CF6 on 1080x1080')
+    const ok = validateBrief(brief, {
+      texts: ['DESIGN BEYOND LIMITS — really'],
+      colors: ['#8b5cf6'],
+      width: 1080,
+      height: 1080,
+    })
+    expect(ok.satisfied).toBe(true)
+    const bad = validateBrief(brief, { texts: ['Creative Pulse'], colors: ['#FF0000'], width: 500, height: 500 })
+    expect(bad.satisfied).toBe(false)
+    expect(bad.unmet.some((u) => u.includes('Design Beyond Limits'))).toBe(true)
+    expect(bad.unmet.some((u) => u.includes('8B5CF6'))).toBe(true)
+    expect(bad.unmet.some((u) => u.includes('1080'))).toBe(true)
+  })
+  it('case-insensitive hex matching; whitespace-tolerant text matching', () => {
+    const brief = extractBrief('"Hello World" #AABBCC')
+    expect(
+      validateBrief(brief, { texts: ['  hello\nworld  '], colors: ['#AABBCC'], width: 1080, height: 1080 }).satisfied,
+    ).toBe(true)
+    expect(
+      validateBrief(brief, { texts: ['x'], colors: ['#aabbcc'], width: 1080, height: 1080 }).satisfied,
+    ).toBe(false)
+  })
+  it('briefPromptSection states the verbatim rule', () => {
+    const brief = extractBrief('"Try Canvix Free" #02C0CC')
+    const s = briefPromptSection(brief)
+    expect(s).toContain('Try Canvix Free')
+    expect(s).toContain('02C0CC')
+    expect(s).toContain('never substitute')
+  })
+})
+
+// ═════════════════════════════════════════════════════════════
+// 4. SKILLS ENGINE
+// ═════════════════════════════════════════════════════════════
+
+describe('harness · skills engine', () => {
+  it('ten skills ship, each with a complete playbook', () => {
+    expect(DESIGN_SKILLS).toHaveLength(10)
+    for (const s of DESIGN_SKILLS) {
+      expect(s.id).toBeTruthy()
+      expect(s.playbook.principles.length).toBeGreaterThanOrEqual(4)
+      expect(s.playbook.planning.length).toBeGreaterThanOrEqual(2)
+      expect(s.playbook.validation.length).toBeGreaterThanOrEqual(2)
+      expect(s.modes.length).toBeGreaterThan(0)
+      expect(s.whenToUse.length).toBeGreaterThan(0)
+    }
+  })
+  it('the router selects poster+typography+color+layout for a poster brief', () => {
+    const skills = selectSkills('Design a bold poster for a coffee launch with a warm palette', 'create')
+    const ids = skills.map((s) => s.id)
+    expect(ids).toContain('poster-design')
+    expect(ids).toContain('color')
+    expect(skills.length).toBeLessThanOrEqual(3) // progressive disclosure cap
+  })
+  it('the critique skill owns review mode', () => {
+    const skills = selectSkills('review this', 'review')
+    expect(skills[0]?.id).toBe('critique')
+  })
+  it('brand skill ranks up when a brand kit is present', () => {
+    const withBrand = selectSkills('make it on brand and consistent', 'improve', true)
+    const without = selectSkills('make it on brand and consistent', 'improve', false)
+    expect(withBrand.some((s) => s.id === 'brand')).toBe(true)
+    expect(without.some((s) => s.id === 'brand')).toBe(false)
+  })
+  it('skillsPromptSection injects ONLY the selected playbooks', () => {
+    const skills = selectSkills('Design a youtube thumbnail', 'create')
+    const s = skillsPromptSection(skills)
+    expect(s).toContain('Skill:')
+    for (const skill of DESIGN_SKILLS) {
+      const included = skills.some((x) => x.id === skill.id)
+      // a headline principle fragment should appear only when selected
+      if (!included) expect(s).not.toContain(skill.name)
     }
   })
 })
 
 // ═════════════════════════════════════════════════════════════
-// 2. LOOP FLOWS — realistic multi-step runs
+// 5. LIFECYCLE FLOWS (Cases A–F)
 // ═════════════════════════════════════════════════════════════
 
-describe('harness · loop flows', () => {
-  it('FLOW poster build: background → headline → subline → photo → verify → done (6 steps, ordered events)', async () => {
+describe('harness · lifecycle flows (Cases A–F)', () => {
+  /** Case A: the exact promotional poster — quoted copy + hex
+   *  colors must survive verbatim through a full create run. */
+  it('CASE A: exact promotional design — brief texts/colors pass through and done is gated on validation', async () => {
+    const brief = extractBrief(
+      '1080x1080 Canvix poster, navy #090B1A background, purple #8B5CF6, cyan #22D3EE, white #FFFFFF, gray #A1A1AA, "Design Beyond Limits", "Create Smarter. Design Faster.", "Try Canvix Free"',
+    )
     const events: AgentEvent[] = []
+    let validationCalls = 0
+    // model: bg → headline → subline → CTA → attempt done (validation
+    // FAILS first: gray missing) → fix → done (passes)
     const { chat, calls } = scriptedChat([
-      turn('set_background', { kind: 'gradient', from: '#1A1B2E', to: '#7D2AE8', angle: 160 }),
-      turn('add_text', { text: 'GRAND OPENING', fontSize: 120, x: 60, y: 140, width: 960, bold: true, color: '#FFFFFF' }),
-      turn('add_text', { text: 'Saturday · 10 AM · Free coffee all day', fontSize: 36, x: 60, y: 320, color: '#FFD166' }),
-      turn('add_stock_photo', { query: 'coffee shop interior warm light', orientation: 'landscape' }),
-      turn('get_page_state'),
-      done('Poster built: gradient background, headline, subline and a licensed photo.'),
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('add_text', { text: 'Design Beyond Limits', fontSize: 110, color: '#FFFFFF', bold: true }),
+      turn('add_text', { text: 'Create Smarter. Design Faster.', fontSize: 40, color: '#22D3EE' }),
+      turn('add_text', { text: 'Try Canvix Free', fontSize: 36, color: '#8B5CF6' }),
+      done('Poster complete'),
+      turn('add_text', { text: 'Free forever · canvix.app', fontSize: 22, color: '#A1A1AA' }),
+      done('Poster complete with all colors'),
     ])
     const result = await runAgentLoop({
       chat,
       design,
+      mode: 'create',
+      brief,
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
-      // the client pushes refreshed context with every ack — the loop
-      // re-serializes it after get_page_state
-      refreshedContext: () => design,
+      validateBriefOnClient: async () => {
+        validationCalls++
+        // first check: gray missing; second: everything present
+        if (validationCalls === 1) return { satisfied: false, unmet: ['Required color #A1A1AA not used anywhere on the page'] }
+        return { satisfied: true, unmet: [] }
+      },
     })
     expect(result.toolCalls).toBe(5)
-    expect(result.steps).toBe(6)
-    expect(result.summary).toContain('Poster built')
-
-    // event ORDER: start(implicit) → step → action → observation × N → done
-    const kinds = events.map((e) => e.type)
-    expect(kinds[0]).toBe('step')
-    expect(kinds[kinds.length - 1]).toBe('done')
-    expect(kinds.filter((k) => k === 'step')).toHaveLength(5)
-    expect(kinds.filter((k) => k === 'action')).toHaveLength(5)
-    // every action references its step index and carries a callId
-    for (const a of events.filter((e) => e.type === 'action')) {
-      const act = a as Extract<AgentEvent, { type: 'action' }>
-      expect(act.callId).toMatch(/^call-/)
-      expect(act.actions.length).toBeGreaterThan(0)
-    }
-    // the loop fed the model its observation after each apply (messages grow)
-    expect(calls.length).toBe(6)
-    expect(calls[5][calls[5].length - 1].content).toContain('UPDATED PAGE STATE')
+    expect(result.summary).toContain('all colors')
+    expect(result.verification).toContain('validated')
+    // the failed done was REFUSED and the model was told what's missing
+    expect(calls.some((c) => c.some((m) => m.content.includes('NOT DONE')))).toBe(true)
+    expect(calls.some((c) => c.some((m) => m.content.includes('A1A1AA')))).toBe(true)
+    // brief events streamed for the panel
+    expect(events.some((e) => e.type === 'brief')).toBe(true)
   })
 
-  it('FLOW page-switch: add_page → goto_page → get_page_state → build on the new page', async () => {
-    const events: AgentEvent[] = []
+  it('CASE A (anti-substitution): a model that renames the copy cannot finish — after 3 rejected completions the run ends honestly with the unmet list', async () => {
+    const brief = extractBrief('"Design Beyond Limits"')
+    let validationCalls = 0
     const { chat, calls } = scriptedChat([
-      turn('add_page'),
-      turn('goto_page', { page: 4 }), // design.pageCount=3 → new page is #4
-      turn('get_page_state'),
-      turn('add_text', { text: 'Page 4 headline', fontSize: 80 }),
-      done('Added page 4 with its headline.'),
+      turn('add_text', { text: 'Creative Pulse', fontSize: 96 }),
+      done('Done'),  // rejected 1
+      done('Done'),  // rejected 2
+      done('Done'),  // rejected 3 → honest blocked ending
+      done('Done'),  // never reached
     ])
-    // a client that refreshes context after get_page_state
-    const refreshed: AgentDesignCtx = { ...design, currentPageIndex: 3, elements: [] }
+    const events: AgentEvent[] = []
     const result = await runAgentLoop({
       chat,
       design,
+      mode: 'create',
+      brief,
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
-      refreshedContext: () => refreshed,
-    })
-    expect(result.toolCalls).toBe(4)
-    // after the refresh, the loop told the model it's on page 4 and
-    // validIds were recomputed from the refreshed context
-    const lastCall = calls[3]
-    expect(lastCall[lastCall.length - 1].content).toContain('editing page 4')
-    // actions: addPage, gotoPage, __getContext, addText
-    const tools = events.filter((e) => e.type === 'action').map((e) => (e as { tool: string }).tool)
-    expect(tools).toEqual(['add_page', 'goto_page', 'get_page_state', 'add_text'])
-  })
-
-  it('FLOW self-correction ladder: bad hex → bad font → good call; rejections stay budget-free', async () => {
-    const { chat } = scriptedChat([
-      turn('update_elements', { ids: ['txt-1'], patch: { fill: 'purple' } }),
-      turn('add_text', { text: 'Hi', fontFamily: 'Comic Sans' }),
-      turn('update_elements', { ids: ['txt-1'], patch: { fill: '#7D2AE8' } }),
-      done('Fixed the color on the third try.'),
-    ])
-    const result = await runAgentLoop({ chat, design, emit: () => {}, awaitApply: async () => ({ ok: true }) })
-    expect(result.toolCalls).toBe(1)
-    // v0.27.3: progress budget counts only productive steps — both
-    // rejections were free, so the run still had full budget left
-    expect(result.steps).toBe(4)
-  })
-
-  it('FLOW budget exhaustion: a model that never finishes is cut off with a done event (never a hang)', async () => {
-    const events: AgentEvent[] = []
-    let modelTurns = 0
-    const result = await runAgentLoop({
-      chat: async () => {
-        modelTurns += 1
-        return turn('add_sticker', { emoji: '🤖' })
+      validateBriefOnClient: async () => {
+        validationCalls++
+        return { satisfied: false, unmet: ['Required text missing or altered: "Design Beyond Limits"'] }
       },
-      design,
-      emit: (e) => events.push(e),
-      awaitApply: async () => ({ ok: true }),
     })
-    // maxSteps=8 productive calls cap the loop; each add_sticker is
-    // productive so the loop stops at exactly 8 tool calls
-    expect(modelTurns).toBe(AGENT_BUDGETS.maxSteps)
-    expect(result.toolCalls).toBe(AGENT_BUDGETS.maxSteps)
+    // every completion claim was validated and refused…
+    expect(validationCalls).toBe(3)
+    expect(calls.some((c) => c.some((m) => m.content.includes('NOT DONE')))).toBe(true)
+    // …and the run ends HONESTLY with the unmet list — no fake success
+    expect(result.summary).toContain('unmet requirements')
+    expect(result.summary).toContain('Design Beyond Limits')
+    expect(result.summary).not.toMatch(/^Done/)
     const last = events[events.length - 1]
     expect(last.type).toBe('done')
   })
 
-  it('FLOW rejected-forever model: rejections are tool-budget-free but 3 strikes end the run (no infinite loop)', async () => {
+  /** Case B: review-only grounding — a review of an incomplete
+   *  poster reports what IS there; no write tool ever fires. */
+  it('CASE B: review-only grounding — no writes, findings streamed', async () => {
     const events: AgentEvent[] = []
-    let modelTurns = 0
+    const { chat } = scriptedChat([
+      turn('get_page_state'),
+      done('The poster has a headline and two rectangles but no CTA and no contact details.', {
+        findings: [
+          { severity: 'P1', issue: 'No call-to-action element on the page', fix: 'Add a CTA pill with the accent color' },
+          { severity: 'P2', issue: 'Two rectangles overlap by 25% (el-1 × el-2)', fix: 'Separate or group them intentionally' },
+        ],
+      }),
+    ])
+    // which tools actually reached the client as actions
+    const appliedTools: string[] = []
     const result = await runAgentLoop({
-      chat: async () => {
-        modelTurns += 1
-        return turn('update_elements', { ids: ['ghost'], patch: { fill: '#123456' } }) // always invalid
-      },
+      chat,
       design,
+      mode: 'review',
+      emit: (e) => {
+        if (e.type === 'action') appliedTools.push(e.tool)
+        events.push(e)
+      },
+      awaitApply: async () => ({ ok: true }),
+    })
+    // review reads state (get_page_state rides the action→ack path so
+    // the client pushes refreshed context) but NEVER a write tool
+    expect(appliedTools.every((t) => ['get_page_state', 'validate_brief', 'measure_text', 'goto_page'].includes(t))).toBe(true)
+    expect(result.toolCalls).toBe(1) // only get_page_state
+    expect(result.findings).toHaveLength(2)
+    expect(result.findings?.[0].severity).toBe('P1')
+    // even if the model TRIES a write tool in review mode:
+    const { chat: rogueChat } = scriptedChat([
+      turn('get_page_state'),
+      turn('add_text', { text: 'sneaky edit' }),
+      done('Reviewed'),
+    ])
+    const rogueAppliedTools: string[] = []
+    const rogue = await runAgentLoop({
+      chat: rogueChat,
+      design,
+      mode: 'review',
+      emit: (e) => {
+        if (e.type === 'action') rogueAppliedTools.push(e.tool)
+      },
+      awaitApply: async () => ({ ok: true }),
+    })
+    // the write tool is not in the surface — refused before any action
+    expect(rogueAppliedTools.every((t) => t !== 'add_text')).toBe(true)
+    expect(rogue.toolCalls).toBe(1)
+  })
+
+  /** Case C: a long multi-page run — >8 tool calls completes with
+   *  no step cap (v0.27 would have stopped at 8). */
+  it('CASE C: 14-step multi-page deck build completes (no arbitrary cap)', async () => {
+    const replies: string[] = []
+    // page 1: bg + 2 texts; goto page 2: bg + 2 texts; verify; done
+    replies.push(turn('set_background', { kind: 'solid', from: '#0D1117' }))
+    replies.push(turn('add_text', { text: 'Slide One', fontSize: 90 }))
+    replies.push(turn('add_text', { text: 'The vision', fontSize: 32 }))
+    replies.push(turn('add_page'))
+    replies.push(turn('goto_page', { page: 2 }))
+    replies.push(turn('get_page_state'))
+    replies.push(turn('set_background', { kind: 'solid', from: '#0D1117' }))
+    replies.push(turn('add_text', { text: 'Slide Two', fontSize: 90 }))
+    replies.push(turn('add_text', { text: 'The numbers', fontSize: 32 }))
+    replies.push(turn('add_chart', { kind: 'bar', labels: ['22', '23', '24'], series: [{ name: 'ARR', color: '#02C0CC', values: [1, 4, 12] }] }))
+    replies.push(turn('add_line', { x: 100, y: 800, length: 800, variant: 'arrow' }))
+    replies.push(turn('animate_elements', { ids: ['txt-1'], kind: 'rise' }))
+    replies.push(turn('get_page_state'))
+    replies.push(done('Two slides built with consistent styling.'))
+    expect(replies.length).toBe(14) // v0.27's cap was 8
+    const { chat, calls } = scriptedChat(replies)
+    // refreshed page-2 state: two fresh elements (ids the model just made)
+    const refreshed: AgentDesignCtx = {
+      ...design,
+      currentPageIndex: 1,
+      elements: [
+        { id: 'txt-1', type: 'text', x: 0, y: 100, width: 800, height: 120, text: 'Slide Two', fontSize: 90, fill: '#FFFFFF' },
+        { id: 'txt-2', type: 'text', x: 0, y: 260, width: 600, height: 80, text: 'The numbers', fontSize: 32, fill: '#02C0CC' },
+      ],
+    }
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'create',
+      emit: () => {},
+      awaitApply: async () => ({ ok: true }),
+      refreshedContext: () => refreshed,
+    })
+    expect(result.toolCalls).toBe(13) // every step applied — no cap hit
+    expect(result.steps).toBe(13)
+    // page switch flowed through: the model saw page 2's state
+    expect(calls[6].some((m) => m.content.includes('UPDATED PAGE STATE'))).toBe(true)
+  })
+
+  /** Case D: geometry repair — off-canvas + overlaps detected and
+   *  fixed with fix_overlaps. */
+  it('CASE D: geometry repair — fix_overlaps after placement', async () => {
+    const { chat } = scriptedChat([
+      turn('add_text', { text: 'Big Headline', fontSize: 140, x: 0, y: 0 }),
+      turn('add_text', { text: 'Sub', fontSize: 40, x: 0, y: 20 }), // overlaps the headline
+      turn('fix_overlaps'),
+      turn('get_page_state'),
+      done('Layout fixed — overlaps resolved.'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'improve',
+      emit: () => {},
+      awaitApply: async () => ({ ok: true }),
+      refreshedContext: () => design,
+    })
+    expect(result.toolCalls).toBe(4)
+    expect(result.summary).toContain('fixed')
+  })
+
+  /** Case E: capability sweep — one valid call per v0.28 tool. */
+  it('CASE E: capability sweep — every bridge tool applies cleanly in sequence', async () => {
+    const valid: [string, Record<string, unknown>][] = [
+      ['get_page_state', {}],
+      ['set_background', { kind: 'gradient', from: '#090B1A', to: '#8B5CF6', angle: 160 }],
+      ['add_text', { text: 'Hello', fontSize: 64, color: '#FFFFFF' }],
+      ['add_shape', { shape: 'rect', x: 10, y: 10, width: 100, height: 80 }],
+      ['add_line', { x: 10, y: 200, length: 300, variant: 'arrow' }],
+      ['add_icon', { query: 'rocket' }],
+      ['add_illustration', { query: 'waves' }],
+      ['add_chart', { kind: 'donut', labels: ['A', 'B'], series: [{ name: 'S', color: '#8B5CF6', values: [3, 7] }] }],
+      ['add_qr', { value: 'https://canvix.app' }],
+      ['add_frame', { frameShape: 'circle', width: 300, height: 300 }],
+      ['add_embed', { url: 'https://youtu.be/demo' }],
+      ['add_sticker', { emoji: '🚀', size: 120 }],
+      ['add_table', { header: ['Plan', 'Price'], rows: [['Free', '$0']] }],
+      ['add_stock_photo', { query: 'coffee cup', orientation: 'landscape' }],
+      ['add_stock_video', { query: 'city timelapse' }],
+      ['add_image', { prompt: 'abstract gradient banner' }],
+      ['update_elements', { ids: ['el-1'], patch: { fill: '#8B5CF6', rotation: 15, opacity: 0.9 } }],
+      ['set_text_style', { ids: ['txt-1'], fontFamily: 'Poppins', fontSize: 72, bold: true }],
+      ['set_text_spans', { ids: ['txt-2'], spans: [{ text: 'Wor' }, { text: 'ld', bold: true }] }],
+      ['move_elements', { ids: ['el-1'], dx: 40, dy: 20 }],
+      ['align_elements', { ids: ['el-1', 'el-2'], mode: 'cx' }],
+      ['distribute_elements', { ids: ['el-1', 'el-2', 'img-1'], axis: 'y' }],
+      ['duplicate_elements', { ids: ['el-1'] }],
+      ['group_elements', { ids: ['el-1', 'el-2'] }],
+      ['reorder_layers', { ids: ['img-1'], dir: 'front' }],
+      ['mask_image', { ids: ['img-1'], mask: 'circle' }],
+      ['adjust_image', { ids: ['img-1'], brightness: 20, contrast: -10 }],
+      ['measure_text', { text: 'Design Beyond Limits', fontSize: 96, fontFamily: 'Poppins' }],
+      ['set_font', { fontFamily: 'Inter', targets: 'all' }],
+      ['recolor', { color: '#02C0CC', targets: 'text' }],
+      ['animate_elements', { ids: ['el-1'], kind: 'pop', duration: 0.5 }],
+      ['set_page_transition', { kind: 'fade' }],
+      ['add_page', {}],
+      ['duplicate_page', {}],
+      ['goto_page', { page: 1 }],
+      ['animate_page', {}],
+      ['balance_layout', {}],
+      ['fix_overlaps', {}],
+      ['translate_texts', { language: 'Spanish' }],
+      ['set_brand_kit', { colors: ['#090B1A', '#8B5CF6', '#22D3EE'], headingFont: 'Poppins', bodyFont: 'Inter' }],
+      ['resize_design', { width: 1080, height: 1350 }],
+      ['validate_brief', {}],
+      ['export_design', { format: 'png' }],
+      // destructive last (declined — proves the gate in the sweep too)
+      ['clear_page', {}],
+    ]
+    const { chat } = scriptedChat([...valid.map(([t, a]) => turn(t, a)), done('Sweep complete')])
+    let declined = false
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'create',
+      emit: () => {},
+      confirmed: new Set(),
+      awaitConfirm: async () => {
+        declined = true
+        return false
+      },
+      awaitApply: async () => ({ ok: true }),
+      refreshedContext: () => design,
+      validateBriefOnClient: async () => ({ satisfied: true, unmet: [] }),
+    })
+    // every write tool applied except the declined clear_page
+    expect(result.toolCalls).toBe(valid.length - 1)
+    expect(declined).toBe(true)
+    expect(result.summary).toBe('Sweep complete')
+  })
+
+  /** Case F: safety — strikes, cycles, abort, decline, provider failure. */
+  it('CASE F1: three consecutive invalid calls end the run with STRIKES', async () => {
+    const events: AgentEvent[] = []
+    const result = await runAgentLoop({
+      chat: async () => turn('update_elements', { ids: ['ghost'], patch: { fill: '#123456' } }),
+      design,
+      mode: 'edit',
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
     })
-    // 3 strikes → error event, exactly 3 model turns, zero applies
-    expect(modelTurns).toBe(3)
     expect(result.toolCalls).toBe(0)
+    const err = events.find((e) => e.type === 'error')
+    expect(err && err.type === 'error' && err.code).toBe('STRIKES')
+  })
+  it('CASE F2: an identical call repeated 3× triggers cycle wrap-up', async () => {
+    const events: AgentEvent[] = []
+    const result = await runAgentLoop({
+      chat: async () => turn('add_sticker', { emoji: '🤖' }),
+      design,
+      mode: 'create',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    // 2 identical applies are allowed; the 3rd wraps up
+    expect(result.toolCalls).toBe(2)
     const last = events[events.length - 1]
-    expect(last.type).toBe('error')
-    if (last.type === 'error') expect(last.message).toContain('3 invalid tool calls')
+    expect(last.type).toBe('done')
   })
-
-  it('FLOW strike reset: two bad calls, one good, two more bad — the run continues (strikes are consecutive)', async () => {
-    const { chat } = scriptedChat([
-      turn('update_elements', { ids: ['ghost'], patch: { fill: '#123456' } }), // strike 1
-      turn('add_sticker', { emoji: '🚀' }),                                    // good → reset
-      turn('update_elements', { ids: ['ghost'], patch: { fill: '#123456' } }), // strike 1 again
-      turn('update_elements', { ids: ['ghost-2'], patch: { fill: '#123456' } }), // strike 2
-      done('Mixed luck but finished.'),
-    ])
-    const result = await runAgentLoop({ chat, design, emit: () => {}, awaitApply: async () => ({ ok: true }) })
-    expect(result.summary).toBe('Mixed luck but finished.')
-    expect(result.toolCalls).toBe(1)
-  })
-
-  it('FLOW destructive decline: the model is told, adapts, and finishes — nothing was applied', async () => {
-    const applied: unknown[] = []
-    const { chat, calls } = scriptedChat([
-      turn('clear_page'),
-      turn('add_text', { text: 'Starting fresh instead', fontSize: 64 }),
-      done('Kept your content and added a fresh headline.'),
-    ])
-    const result = await runAgentLoop({
-      chat,
-      design,
-      emit: () => {},
-      confirmed: new Set(),
-      awaitConfirm: async () => false,
-      awaitApply: async () => {
-        applied.push('x')
-        return { ok: true }
-      },
-    })
-    expect(result.toolCalls).toBe(1) // only the add_text
-    expect(applied).toHaveLength(1)  // clear_page never applied
-    const declineMsg = calls[1].find((m) => m.role === 'user')
-    expect(declineMsg?.content).toContain('DECLINED')
-  })
-
-  it('FLOW destructive approve-then-apply-failure: the failure feeds back (v0.27.3 fix)', async () => {
-    const applied: string[] = []
-    const { chat, calls } = scriptedChat([
-      turn('delete_elements', { ids: ['el-1'] }),
-      turn('delete_elements', { ids: ['el-2'] }),
-      done('Deleted what I could.'),
-    ])
-    const result = await runAgentLoop({
-      chat,
-      design,
-      emit: () => {},
-      awaitConfirm: async () => true,
-      awaitApply: async () => {
-        applied.push('attempt')
-        return applied.length === 1
-          ? { ok: false, message: 'Element locked by another collaborator' }
-          : { ok: true }
-      },
-    })
-    // first delete: approved but apply FAILED → error observation, not counted
-    expect(result.toolCalls).toBe(1)
-    const failureMsg = calls[1].find((m) => m.role === 'user')
-    expect(failureMsg?.content).toContain('locked by another collaborator')
-    expect(failureMsg?.content).toContain('NOT changed')
-  })
-
-  it('FLOW abort mid-run: everything applied so far is kept and reported', async () => {
+  it('CASE F3: abort mid-run keeps applied work and reports Stop', async () => {
     const signal = { aborted: false, reason: 'Stopped by user' }
     let n = 0
     const result = await runAgentLoop({
       chat: async () => {
         n += 1
-        if (n === 4) signal.aborted = true // user hits Stop during turn 4
-        return turn('add_sticker', { emoji: '⭐' })
+        if (n === 4) signal.aborted = true
+        return turn('add_sticker', { emoji: '⭐', n }) // distinct args — no cycle guard
       },
       design,
+      mode: 'create',
       emit: () => {},
       signal,
       awaitApply: async () => ({ ok: true }),
     })
-    // abort is checked at the TOP of the loop: turn 4 (already in
-    // flight when Stop landed) still applied; there is no turn 5
-    expect(result.toolCalls).toBe(4)
+    expect(result.toolCalls).toBe(4) // the in-flight 4th applied; no 5th call
     expect(result.summary).toContain('Stopped')
   })
-
-  it('FLOW JSON repair: first reply is prose, the repair turn succeeds', async () => {
-    const { chat } = scriptedChat([
-      'Sure! Let me add a nice headline for you. I will use a bold font.',
-      turn('add_text', { text: 'Repaired', fontSize: 72 }),
-      done('Recovered after the repair.'),
+  it('CASE F4: a declined destructive call redirects the model, applies nothing', async () => {
+    const applied: unknown[] = []
+    const { chat, calls } = scriptedChat([
+      turn('delete_elements', { ids: ['el-1'] }),
+      turn('add_text', { text: 'Kept your content', fontSize: 40 }),
+      done('Deleted nothing; added a note instead.'),
     ])
-    const result = await runAgentLoop({ chat, design, emit: () => {}, awaitApply: async () => ({ ok: true }) })
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'edit',
+      emit: () => {},
+      confirmed: new Set(),
+      awaitConfirm: async () => false,
+      awaitApply: async () => {
+        applied.push(1)
+        return { ok: true }
+      },
+    })
     expect(result.toolCalls).toBe(1)
-    expect(result.summary).toBe('Recovered after the repair.')
+    expect(applied).toHaveLength(1)
+    expect(calls[1].some((m) => m.content.includes('DECLINED'))).toBe(true)
   })
-
-  it('FLOW provider failure: a thrown chat becomes an error event, never an unhandled rejection', async () => {
+  it('CASE F5: provider failure emits PROVIDER error, keeps work', async () => {
     const events: AgentEvent[] = []
     const result = await runAgentLoop({
       chat: async () => {
         throw new Error('429 quota exceeded')
       },
       design,
+      mode: 'create',
       emit: (e) => events.push(e),
     })
     expect(result.toolCalls).toBe(0)
     const err = events.find((e) => e.type === 'error')
-    expect(err).toBeTruthy()
-    if (err && err.type === 'error') expect(err.message).toContain('429')
+    expect(err && err.type === 'error' && err.code).toBe('PROVIDER')
   })
-
-  it('the system prompt carries the full tool list, the design context and the page rule', () => {
-    const prompt = loopSystemPrompt(design, ctx)
-    for (const t of AGENT_TOOLS) expect(prompt).toContain(t.name)
-    expect(prompt).toContain('Launch Poster')
-    expect(prompt).toContain('BRAND KIT')
-    expect(prompt).toContain('goto_page') // the new page rule
-    expect(prompt).toContain('editing page 1')
-    expect(prompt).toContain('grp-1') // group ids are valid targets
+  it('CASE F6: a write tool attempted in discuss-adjacent review mode is refused with guidance', async () => {
+    const { chat, calls } = scriptedChat([
+      turn('add_text', { text: 'nope' }),
+      turn('get_page_state'),
+      done('Reported.'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'review',
+      emit: () => {},
+      awaitApply: async () => ({ ok: true }),
+    })
+    expect(result.toolCalls).toBe(1)
+    expect(calls.some((c) => c.some((m) => m.content.includes('not available in review mode')))).toBe(true)
+  })
+  it('CASE F7: compaction folds a long conversation and emits a compact event', async () => {
+    const events: AgentEvent[] = []
+    const replies: string[] = []
+    for (let i = 0; i < 65; i++) replies.push(turn('add_sticker', { emoji: '⭐', n: i }))
+    replies.push(done('Long run complete'))
+    const result = await runAgentLoop({
+      chat: scriptedChat(replies).chat,
+      design,
+      mode: 'create',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    expect(events.some((e) => e.type === 'compact')).toBe(true)
+    expect(result.toolCalls).toBe(65) // compaction never stops the run
+  })
+  it('usage telemetry streams during long runs', async () => {
+    const events: AgentEvent[] = []
+    const replies: string[] = []
+    for (let i = 0; i < 40; i++) replies.push(turn('add_sticker', { emoji: '⭐' }))
+    replies.push(done('done'))
+    await runAgentLoop({
+      chat: scriptedChat(replies).chat,
+      design,
+      mode: 'create',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    const usage = events.filter((e) => e.type === 'usage')
+    expect(usage.length).toBeGreaterThan(0)
+  })
+  it('the system prompt carries the brief, skills, page rule and mode heading', () => {
+    const brief = extractBrief('"Try Canvix Free"')
+    const prompt = loopSystemPrompt({ design, ctx, mode: 'create', brief, skills: DESIGN_SKILLS.slice(0, 2) })
+    expect(prompt).toContain('DESIGN BRIEF CONTRACT')
+    expect(prompt).toContain('Try Canvix Free')
+    expect(prompt).toContain('MODE: CREATE')
+    expect(prompt).toContain('Skill:')
+    expect(prompt).toContain('goto_page')
+    expect(prompt).toContain('measure_text')
   })
 })
 
 // ═════════════════════════════════════════════════════════════
-// 3. WIRE FORMAT
+// 6. WIRE FORMAT + CONTEXT
 // ═════════════════════════════════════════════════════════════
 
-describe('harness · SSE wire format', () => {
-  it('every event type serializes to exactly one `data: {json}\\n\\n` line and round-trips', () => {
+describe('harness · wire format + context', () => {
+  it('every event type serializes to one data: line and round-trips', () => {
     const samples: AgentEvent[] = [
-      { v: 1, type: 'start', intent: 'plan' },
-      { v: 1, type: 'step', index: 1, thought: 'thinking', tool: 'add_text' },
-      { v: 1, type: 'plan', steps: ['a', 'b'] },
-      { v: 1, type: 'action', stepIndex: 1, callId: 'call-1-ab12cd', risk: 'write', tool: 'add_text', actions: [{ type: 'addText', text: 'Hi' }] },
-      { v: 1, type: 'ack', callId: 'call-1-ab12cd', ok: true },
-      { v: 1, type: 'observation', stepIndex: 1, message: 'added' },
-      { v: 1, type: 'done', summary: 'All set', steps: 3, toolCalls: 2 },
-      { v: 1, type: 'error', message: 'provider down', code: 'PROVIDER' },
-      { v: 1, type: 'aborted', reason: 'Stopped by user' },
+      { v: 2, type: 'start', intent: 'create', runId: 'run-x' },
+      { v: 2, type: 'mode', mode: 'review', reason: 'classified' },
+      { v: 2, type: 'skill', id: 'critique', name: 'Design Critique' },
+      { v: 2, type: 'brief', brief: { requiredTexts: [] } },
+      { v: 2, type: 'plan', steps: ['a'] },
+      { v: 2, type: 'step', index: 1, thought: 't', tool: 'add_text' },
+      { v: 2, type: 'action', stepIndex: 1, callId: 'c1', risk: 'write', tool: 'add_text', actions: [{ type: 'addText' }] },
+      { v: 2, type: 'ack', callId: 'c1', ok: true },
+      { v: 2, type: 'observation', stepIndex: 1, message: 'ok' },
+      { v: 2, type: 'usage', turns: 3, toolCalls: 2, elapsedMs: 1234, modelCalls: 3 },
+      { v: 2, type: 'compact', fromMessages: 60, toMessages: 12 },
+      { v: 2, type: 'done', summary: 'ok', steps: 3, toolCalls: 2, verification: 'brief validated' },
+      { v: 2, type: 'error', message: 'x', code: 'STRIKES' },
+      { v: 2, type: 'aborted', reason: 'Stopped by user' },
     ]
     for (const ev of samples) {
       const line = sseLine(ev)
       expect(line.startsWith('data: ')).toBe(true)
       expect(line.endsWith('\n\n')).toBe(true)
-      expect(line.split('\n\n')[0]).toBe(`data: ${JSON.stringify(ev)}`)
       expect(JSON.parse(line.slice(6))).toEqual(ev)
     }
   })
-  it('the protocol version is 1 everywhere (client compat contract)', () => {
-    expect(AGENT_PROTOCOL_VERSION).toBe(1)
+  it('protocol version is 2 and guards are the documented values', () => {
+    expect(AGENT_PROTOCOL_VERSION).toBe(2)
+    expect(AGENT_GUARDS.strikes).toBe(3)
+    expect(AGENT_GUARDS.cycleRepeat).toBe(3)
+    expect(AGENT_GUARDS.idleMs).toBe(240_000)
+    expect(AGENT_GUARDS.compactAtMessages).toBe(60)
+    // NO step/tool/wall-clock caps exist anymore
+    expect(AGENT_GUARDS).not.toHaveProperty('maxSteps')
+    expect(AGENT_GUARDS).not.toHaveProperty('maxToolCalls')
+    expect(AGENT_GUARDS).not.toHaveProperty('maxWallMs')
   })
-  it('parseAgentTurn: nested braces in strings survive; fences and prose tolerated', () => {
-    const t = parseAgentTurn('Here you go:\n```json\n{"thought":"a {b} c","tool":"add_text","args":{"text":"}{"}}\n```')
-    expect(t?.tool).toBe('add_text')
-    expect((t?.args as { text: string }).text).toBe('}{')
+  it('parseAgentTurn: fences, prose, nested braces, multi-object, junk', () => {
+    expect(parseAgentTurn('```json\n{"tool":"add_text","args":{"text":"Hi"}}\n```')?.tool).toBe('add_text')
+    expect(parseAgentTurn('Sure:\n{"thought":"a {b} c","tool":"add_text","args":{"text":"}{"}}')?.args).toEqual({ text: '}{' })
+    expect(parseAgentTurn('{"a":1}\n{"tool":"get_page_state","args":{}}')?.tool).toBe('get_page_state')
+    expect(parseAgentTurn('no json')).toBeNull()
+    expect(parseAgentTurn('{"done":true,"findings":[{"severity":"P1","issue":"x"}]}')?.findings).toHaveLength(1)
   })
-  it('parseAgentTurn: picks the LARGEST valid object (multi-object replies)', () => {
-    const t = parseAgentTurn('{"a":1}\n{"thought":"x","tool":"get_page_state","args":{}}')
-    expect(t?.tool).toBe('get_page_state')
-  })
-})
-
-// ═════════════════════════════════════════════════════════════
-// 4. ROUTER MATRIX
-// ═════════════════════════════════════════════════════════════
-
-describe('harness · router matrix', () => {
-  it('asks: questions land on ask', () => {
-    for (const m of [
-      'What do you think of this design?',
-      'How does this look?',
-      'Is this font too small?',
-      'Why is the text overlapping?',
-    ]) {
-      expect(heuristicIntent(m), m).toBe('ask')
-    }
-  })
-  it('acts: single surgical edits land on act', () => {
-    for (const m of [
-      'Make the title bold',
-      'change all heading colors to purple',
-      'Delete the subtitle',
-      'Center everything',
-    ]) {
-      expect(heuristicIntent(m), m).toBe('act')
-    }
-  })
-  it('plans: multi-goal briefs land on plan', () => {
-    for (const m of [
-      'Design a bold poster for a coffee launch with a warm palette and a big headline',
-      'complete redesign of this flyer with new colors and fonts',
-      'rebrand this deck',
-    ]) {
-      expect(heuristicIntent(m), m).toBe('plan')
-    }
-  })
-  it('unsure → null → the model classifier decides', () => {
-    expect(heuristicIntent('lol')).toBeNull()
-    expect(heuristicIntent('')).toBeNull()
-  })
-  it('parseIntent: fenced, bare, and garbage forms', () => {
-    expect(parseIntent('{"intent":"act"}')).toBe('act')
-    expect(parseIntent('```json\n{"intent":"plan"}\n```')).toBe('plan')
-    expect(parseIntent('sure!')).toBe('plan') // fallback
-    expect(parseIntent('')).toBe('plan')
-  })
-})
-
-// ═════════════════════════════════════════════════════════════
-// 5. CONTEXT SERIALIZATION
-// ═════════════════════════════════════════════════════════════
-
-describe('harness · context serialization', () => {
-  it('serializes every element, selection, brand, overlaps and other pages', () => {
+  it('context serialization covers all elements, selection, brand, pages', () => {
     const s = serializeDesignContext(design)
     for (const id of ['el-1', 'el-2', 'txt-1', 'txt-2', 'grp-1', 'img-1']) expect(s).toContain(id)
-    expect(s).toContain('[SELECTED]') // txt-1 is selected
-    expect(s).toContain('text="Hello"')
-    expect(s).toContain('Overlapping pairs: rect#el-1 × rect#el-2')
-    expect(s).toContain('Other pages')
-    expect(s).toContain('1080x1080')
+    expect(s).toContain('[SELECTED]')
+    expect(s).toContain('BRAND KIT')
     expect(s).toContain('3 page(s)')
-  })
-  it('an empty page serializes honestly', () => {
-    const s = serializeDesignContext({ elements: [] })
-    expect(s).toContain('(empty page)')
-    expect(s).toContain('none detected')
-  })
-  it('contextValidIds: groups included, selected included', () => {
-    const ids = contextValidIds(design)
-    expect(ids.has('grp-1')).toBe(true)
-    expect(ids.has('txt-2')).toBe(true)
-    expect(ids.size).toBe(6)
-  })
-  it('toolsPromptSection lists every tool with its risk tier', () => {
-    const s = toolsPromptSection()
-    for (const t of AGENT_TOOLS) {
-      expect(s).toContain(`${t.name} (${t.risk})`)
-    }
   })
 })

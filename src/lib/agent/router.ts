@@ -1,69 +1,132 @@
 // ─────────────────────────────────────────────────────────────
-// Agent router (v0.27) — one cheap classification call that keeps
-// simple work cheap (tldraw request() vs prompt(); Anthropic's
-// "don't default to agents").
+// Agent modes (v0.28, Phase 8) — intent → MODE with a tool surface.
 //
-//   act  → one completion with the tools spec → up to 3 actions
-//   ask  → one completion, answer only, no tools
-//   plan → the full agent loop
+// Replaces the v0.27 act/ask/plan triage. Seven modes:
+//   create  — build a new design from a written request
+//   edit    — specific modifications to the existing design
+//   review  — inspect + feedback, ZERO write tools
+//   improve — apply design refinements
+//   explain — answer questions about the design/tools, ZERO writes
+//   plan    — prepare a spec or proposed changes, ZERO writes
+//   discuss — product/engineering talk, ZERO writes
 //
-// The classifier is a model call with a tiny JSON contract. On any
-// doubt (parse failure, provider error, timeout) it falls back to
-// `plan` — the loop handles everything an `act` could, just slower.
+// Read-only modes are ENFORCED STRUCTURALLY: the loop builds the
+// tool map from the mode's allowlist, so a review run physically
+// cannot call add_text no matter what the model tries. This kills
+// the "agent edited the canvas during a review" failure class.
+//
+// The heuristic pre-classifier stays free (zero model calls) and
+// now returns a mode; the model classifier refines when unsure.
 // ─────────────────────────────────────────────────────────────
 
-export type AgentIntent = 'act' | 'ask' | 'plan'
+import type { AgentMode } from './protocol'
 
-/** Heuristic pre-classifier — free, zero-latency. Runs BEFORE the model
- *  call; when it is confident (≥ 2 signals), the model call is skipped
- *  entirely. Returns null when unsure. */
-export function heuristicIntent(message: string): AgentIntent | null {
-  const m = message.trim().toLowerCase()
-  if (!m) return null
-  // questions about the design / advice
-  const askSignals = [
-    /^(what|why|how|which|when|where|who)\b/,
-    /\b(is|are|do|does|can|should) (this|it|the|these)\b.*\?/,
-    /\bwhat do you think\b/,
-    /\breview (this|my)\b/,
-    /\bfeedback\b.*\?/,
-    /\bcritique\b/,
-  ]
-  if (askSignals.filter((re) => re.test(m)).length >= 1 && m.endsWith('?')) return 'ask'
-  // multi-step briefs → plan
-  const planSignals = [
-    /\b(and|then|also|plus)\b.*\b(and|then|also|plus|with|including)\b/,
-    /\b(design|create|make|build)\s+(a|an|me|the)\b/,
-    /\bfull\b.*\b(layout|design|page)\b/,
-    /\bposter\b.*\b(with|and|palette)\b/,
-    /\blaunch\b.*\b(with|and|palette)\b/,
-    /\bnew colors and fonts\b/,
-    /\bcolors? and fonts?\b.*\b(new|change|swap)\b/,
-  ]
-  // strong plan intents fire on ONE match — a redesign/rebrand is
-  // never a surgical edit no matter how it's phrased (harness catch)
-  const strongPlan = /\b(complete|full|total)\s+(redesign|makeover|rebrand)\b|\brebrand\b|\bcomplete redesign\b/
-  if (strongPlan.test(m) || planSignals.filter((re) => re.test(m)).length >= 2) return 'plan'
-  // surgical single edits → act
-  const actSignals = [
-    /\b(make|set|change|turn|swap|move|align|center|centre|delete|remove|add|bold|italic|underline|bigger|smaller|recolor|recolour|color|colour)\b/,
-    /^\s*(bold|italic|underline)\s+(this|it|the)\b/,
-  ]
-  if (actSignals.some((re) => re.test(m)) && m.split(/\s+/).length <= 18) return 'act'
-  return null
+/** Which tool-risk tiers each mode may use. Write-capable modes get
+ *  read+write (+destructive through the confirm gate); read-only
+ *  modes get reads only. */
+export const MODE_TOOL_RISK: Record<AgentMode, readonly ('read' | 'write' | 'destructive')[]> = {
+  create: ['read', 'write', 'destructive'],
+  edit: ['read', 'write', 'destructive'],
+  improve: ['read', 'write', 'destructive'],
+  review: ['read'],
+  explain: ['read'],
+  plan: ['read'],
+  discuss: [],
 }
 
-/** System prompt for the model classifier. */
-export const ROUTER_SYSTEM =
-  'You classify user messages to a design-editor AI. Reply ONLY with JSON: {"intent":"act"|"ask"|"plan"}.\n' +
-  'act = one surgical edit or 2-3 quick edits (change a color, make the title bold, add one text).\n' +
-  'ask = a question or advice request about the design, expecting an answer not edits (review, what font is this, how does this look).\n' +
-  'plan = a bigger brief needing several steps (design/redesign/rebrand/complete layouts, anything with multiple goals or "and" chains of edits).\n' +
-  'When unsure between act and plan, choose plan.'
+export function modeAllowsWrites(mode: AgentMode): boolean {
+  return MODE_TOOL_RISK[mode].includes('write')
+}
 
-/** Parse the classifier reply. Anything unreadable → plan (safe default). */
-export function parseIntent(raw: string): AgentIntent {
+/** System-prompt heading per mode. */
+export const MODE_PROMPTS: Record<AgentMode, string> = {
+  create: 'MODE: CREATE — build the requested design on the canvas. Empty or stale pages are yours to fill; respect the Design Brief Contract exactly.',
+  edit: 'MODE: EDIT — perform the specific requested modifications. Touch only what the request implies; preserve everything else.',
+  review: 'MODE: REVIEW — inspect the design and report findings. You have NO write tools: every critique must be grounded in the page state you read. Report only what is actually present; missing required items are findings, not facts to invent. End with {"done":true,"summary":…,"findings":[{severity,issue,fix}]}.',
+  improve: 'MODE: IMPROVE — apply professional design refinements (typography, hierarchy, spacing, contrast, alignment). Preserve content and intent; improve execution.',
+  explain: 'MODE: EXPLAIN — answer the question about the design, its elements or the editor. Read state as needed; do not modify anything.',
+  plan: 'MODE: PLAN — read the design and produce a concrete plan (steps, elements, colors, fonts) WITHOUT applying it. End with {"done":true,"summary":…,"plan":[…steps]}.',
+  discuss: 'MODE: DISCUSS — a product/engineering conversation about Canvix (architecture, features, bugs, workflow). The canvas is not in scope; answer directly and end with {"done":true,"summary":…}.',
+}
+
+/** Free heuristic pre-classifier — runs before any model call.
+ *  Returns { mode, confidence }: 'high' skips the model call,
+ *  'low' lets the model classifier decide. */
+export function heuristicMode(message: string): { mode: AgentMode; confidence: 'high' | 'low' } {
+  const m = message.trim()
+  if (!m) return { mode: 'discuss', confidence: 'low' }
+  const lower = m.toLowerCase()
+
+  // discuss: about the tool/product itself, not the user's design
+  const productWords = /\b(canvix|the (app|editor|product|repo|codebase)|your (architecture|agent|tools?)|this project|github)\b/
+  const asksAboutProduct = productWords.test(lower) && /\b(how (does|do|is|are)|why|bug|broken|error|architecture|implemented|feature|work)s?\b/.test(lower)
+  const fixTheProduct = /\bfix (the|your) (agent|editor|app|code|bug)|\bagent'?s (tool|loop|architecture)\b/.test(lower)
+  if (asksAboutProduct || fixTheProduct) return { mode: 'discuss', confidence: 'high' }
+
+  // review: critique/feedback asks — never modify
+  if (/\b(what'?s wrong|critique|review|feedback|rate|score|assess|evaluate|how does (this|it) look)\b/.test(lower)) {
+    return { mode: /\band (fix|improve|change)\b/.test(lower) ? 'improve' : 'review', confidence: 'high' }
+  }
+
+  // explain: questions about the current design or editor features
+  if (
+    (/\b(what (font|color|size|element)s?|which font|how many (elements|pages|texts)|what does (this|the))\b/.test(lower) &&
+      (lower.endsWith('?') || lower.includes('what'))) ||
+    /^how (does|do|can) .+(work|function)\b.*\??$/.test(lower) // "how does gradient editing work?"
+  ) {
+    return { mode: 'explain', confidence: 'high' }
+  }
+
+  // plan: explicit planning asks
+  if (/\b(plan|propose|outline|design spec|how would you (redesign|approach))\b/.test(lower) && !/\b(then do it|and apply|then apply)\b/.test(lower)) {
+    return { mode: 'plan', confidence: 'high' }
+  }
+
+  // improve: polish/make-professional requests on an existing design
+  if (/\b(make (this|it) (more )?(professional|better|prettier|nicer|polished)|polish|clean up|refine|jazz|spice|tighten)\b/.test(lower)) {
+    return { mode: 'improve', confidence: 'high' }
+  }
+
+  // create: build briefs. Artifact nouns make intent unambiguous —
+  // "make a poster" is create even though "make" is also a surgical
+  // edit verb ("make the title bold")
+  const artifactNoun = /\b(poster|flyer|menu|logo|banner|thumbnail|deck|presentation|slide|campaign|invitation|infographic|card|graphic|advert|ad|cover|header|brochure|certificate|resume|newsletter)\b/
+  if (artifactNoun.test(lower) && m.split(/\s+/).length >= 2) return { mode: 'create', confidence: 'high' }
+  const createSignals = [
+    /\b(design|create|make|build|generate)\b.*\b(a|an|me|the|some)\b/,
+    /\bcomplete redesign\b|\brebrand\b|\bmakeover\b/,
+  ]
+  if (createSignals.filter((re) => re.test(lower)).length >= 1 && m.split(/\s+/).length >= 3) {
+    // "make X bold" is edit, not create — single-element surgical verbs
+    const surgical = /\b(make|set|change|turn|swap|move|align|center|centre|delete|remove|add|bold|italic|underline|bigger|smaller|recolor|recolour|rotate|flip)\b/.test(lower) && m.split(/\s+/).length <= 18
+    const mentionsBuilding = /\b(from scratch|new|blank)\b/.test(lower)
+    if (!surgical || mentionsBuilding) return { mode: 'create', confidence: 'high' }
+  }
+
+  // edit: surgical single-element changes
+  const editSignals = /\b(make|set|change|turn|swap|move|align|center|centre|delete|remove|add|bold|italic|underline|bigger|smaller|recolor|recolour|rotate|flip|resize|rename|duplicate)\b/
+  if (editSignals.test(lower) && m.split(/\s+/).length <= 25) return { mode: 'edit', confidence: 'high' }
+
+  return { mode: 'discuss', confidence: 'low' }
+}
+
+/** System prompt for the model classifier (used when heuristics are
+ *  unsure). Reply JSON {"mode": "…"}. */
+export const ROUTER_SYSTEM =
+  'You classify user messages to a graphic-design editor AI. Reply ONLY with JSON: {"mode":"create"|"edit"|"review"|"improve"|"explain"|"plan"|"discuss"}.\n' +
+  'create = build a new design or a major rebuild from a brief (poster, deck, menu, campaign, "design me…").\n' +
+  'edit = specific modifications to the existing design (make the title bold, move the logo, change this color).\n' +
+  'review = inspect and critique the design WITHOUT changing it (what is wrong, how does it look, rate it).\n' +
+  'improve = apply professional refinements to the existing design (make it professional, polish it, fix the layout).\n' +
+  'explain = answer a question about the current design or the editor (what font is this, how many pages).\n' +
+  'plan = produce a plan/spec without applying it (propose a redesign, outline a deck).\n' +
+  'discuss = conversation about Canvix the product (architecture, bugs, features) with no canvas work.\n' +
+  'When unsure between create and edit, choose create only if the user asks for a new/rebuilt design; otherwise edit.'
+
+/** Parse the classifier reply. Unreadable → null (caller keeps the
+ *  heuristic mode). */
+export function parseMode(raw: string): AgentMode | null {
   const cleaned = raw.replace(/```(?:json)?/gi, '').trim()
-  const m = cleaned.match(/"intent"\s*:\s*"(act|ask|plan)"/)
-  return m ? (m[1] as AgentIntent) : 'plan'
+  const m = cleaned.match(/"mode"\s*:\s*"(create|edit|review|improve|explain|plan|discuss)"/)
+  return m ? (m[1] as AgentMode) : null
 }

@@ -2,41 +2,49 @@ import { NextRequest } from 'next/server'
 import { withProvider } from '@/lib/ai/provider'
 import { withLogging } from '@/lib/observability'
 import {
-  AGENT_BUDGETS,
   AGENT_PROTOCOL_VERSION,
   parseAgentTurn,
   sseLine,
   type AgentEvent,
+  type AgentMode,
 } from '@/lib/agent/protocol'
-import { AGENT_TOOL_MAP, fontFamilies } from '@/lib/agent/tools'
-import { serializeDesignContext, contextValidIds, type AgentDesignCtx } from '@/lib/agent/context'
-import { heuristicIntent, parseIntent, ROUTER_SYSTEM, type AgentIntent } from '@/lib/agent/router'
-import { runAgentLoop } from '@/lib/agent/loop'
+import { fontFamilies } from '@/lib/agent/tools'
+import { serializeDesignContext, type AgentDesignCtx } from '@/lib/agent/context'
+import { heuristicMode, parseMode, ROUTER_SYSTEM, modeAllowsWrites, MODE_TOOL_RISK } from '@/lib/agent/router'
+import { runAgentLoop, toolsForMode } from '@/lib/agent/loop'
+import { selectSkills } from '@/lib/agent/skills'
+import { extractBrief } from '@/lib/agent/brief'
 
 export const runtime = 'nodejs'
-export const maxDuration = 120
+export const maxDuration = 800
 
 // ─────────────────────────────────────────────────────────────
-// POST /api/ai/agent — the design agent (v0.27).
+// POST /api/ai/agent — the design agent (v0.28).
 //
-// Streams SSE AgentEvents (src/lib/agent/protocol.ts). The model plans;
-// the CLIENT executes actions through applyDesignAction — the same
-// validated, undoable, collab-synced path user edits ride. The server
-// never writes the document during a run.
+// Streams SSE AgentEvents (src/lib/agent/protocol.ts, v2). The model
+// plans; the CLIENT executes actions through applyDesignAction — the
+// same validated, undoable, collab-synced path user edits ride. The
+// server never writes the document during a run.
 //
-// The client bridge: while a run is in flight the client may POST
-// side-channel messages (acks + confirmations) to the SAME connection's
-// pending promises via the `bridge` map below, keyed by run id. Simpler
-// than WebSockets, works on every deploy target (same SSE-only posture
-// as the collab rail).
+// v0.28 route responsibilities:
+//  · classify the MODE (create/edit/review/improve/explain/plan/
+//    discuss) — heuristic first, one cheap model call when unsure
+//  · extract the Design Brief Contract from the message (Phase 5)
+//  · pre-select skills for the run (Phase 2, progressive disclosure)
+//  · explain/plan/discuss/review run a read-only loop; discuss runs
+//    a single completion (no canvas context needed)
+//  · the client bridge: while a run is in flight the client may POST
+//    side-channel messages (acks + confirmations + brief validation
+//    results) to the SAME connection's pending promises via the
+//    `bridge` map below, keyed by run id.
 // ─────────────────────────────────────────────────────────────
 
 interface AgentBody {
   message?: string
   history?: { role: 'user' | 'assistant'; content: string }[]
   design?: AgentDesignCtx
-  /** 'act' | 'ask' | 'plan' — client may pass a pinned intent (chips) */
-  intent?: AgentIntent
+  /** client-pinned mode (chips) */
+  mode?: AgentMode
   /** tools the user pre-approved this run (from the confirm dialog) */
   confirmed?: string[]
 }
@@ -46,10 +54,12 @@ interface RunBridge {
   confirms: Map<string, (ok: boolean) => void>
   /** apply acks, FIFO */
   acks: ((ack: { ok: boolean; message?: string; design?: AgentDesignCtx }) => void)[]
+  /** brief validation result pushed by the client (Phase 5) */
+  briefResult: ((r: { satisfied: boolean; unmet: string[] } | null) => void) | null
   /** the latest context the client pushed (after applying actions) */
   latestDesign: AgentDesignCtx
-  /** client-abort flag (Stop button closes the stream; the route notices
-   *  via req.signal too) */
+  /** client-abort flag (Stop button closes the stream; the route
+   *  notices via req.signal too) */
   aborted: boolean
 }
 
@@ -65,18 +75,16 @@ async function __canvix_post(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as AgentBody & {
     confirm?: { tool: string; ok: boolean }
     ack?: { ok: boolean; message?: string; design?: AgentDesignCtx }
+    briefResult?: { satisfied: boolean; unmet: string[] } | null
   }
   const message = (body.message ?? '').trim().slice(0, 2000)
 
-  // side-channel: an in-flight run's ack / confirmation / refreshed
-  // context rides a ?bridge=<runId> POST with no `message`. NOTE: the
-  // body was parsed ONCE above — a second req.json() would throw
-  // (the stream is consumed), which is why the bridge reads the same
-  // parsed object instead of re-reading the request. The bridge POSTs
-  // are handled BEFORE withProvider on purpose: they are same-origin
-  // by construction (the panel only ever POSTs to its own run id) and
-  // MUST NOT consume the assistant feature's rate-limit budget — a
-  // long run's 8 acks + the run itself would otherwise blow 12/min.
+  // side-channel: an in-flight run's ack / confirmation / brief
+  // validation rides a ?bridge=<runId> POST with no `message`. The
+  // body was parsed ONCE above — the bridge reads the same parsed
+  // object. Bridge POSTs are handled BEFORE withProvider on purpose:
+  // they are same-origin by construction and MUST NOT consume the
+  // assistant feature's rate-limit budget.
   const bridgeId = req.nextUrl.searchParams.get('bridge')
   if (bridgeId && !message) {
     const bridge = bridges.get(bridgeId)
@@ -93,6 +101,13 @@ async function __canvix_post(req: NextRequest) {
       const resolve = bridge.acks.shift()
       resolve?.({ ok: body.ack.ok, message: body.ack.message, design: body.ack.design })
     }
+    if (body.briefResult !== undefined) {
+      const resolve = bridge.briefResult
+      if (resolve) {
+        bridge.briefResult = null
+        resolve(body.briefResult)
+      }
+    }
     return new Response(JSON.stringify({ ok: true }), { status: 200 })
   }
 
@@ -103,10 +118,10 @@ async function __canvix_post(req: NextRequest) {
   // withProvider expects a NextResponse-returning callback — wrap the
   // SSE Response (a plain web Response) so the provider chain types line
   // up; the body streams through untouched.
-  const wrapped = await withProvider('assistant', req, { limit: 12, windowSec: 60 }, async (ctx) => {
+  const wrapped = await withProvider('assistant', req, { limit: 20, windowSec: 60 }, async (ctx) => {
     const design: AgentDesignCtx = body.design ?? {}
     const history = (body.history ?? [])
-      .slice(-AGENT_BUDGETS.maxHistory)
+      .slice(-12)
       .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
       .map((m) => ({ role: m.role, content: m.content.slice(0, 800) }))
 
@@ -119,27 +134,38 @@ async function __canvix_post(req: NextRequest) {
       return String(completion.choices[0]?.message?.content ?? '')
     }
 
-    // ── 1. route the intent (heuristic first, model fallback) ──
-    let intent: AgentIntent
-    if (body.intent && ['act', 'ask', 'plan'].includes(body.intent)) {
-      intent = body.intent
+    // ── 1. classify the mode (heuristic first, model when unsure) ──
+    let mode: AgentMode
+    if (body.mode && MODE_TOOL_RISK[body.mode]) {
+      mode = body.mode // the client pinned a mode (chips)
     } else {
-      intent = heuristicIntent(message) ?? 'plan'
-      if (intent === 'plan') {
-        // the heuristic's `plan` is a guess — one cheap model call to be
-        // sure we don't pay loop latency for a simple edit
+      const h = heuristicMode(message)
+      mode = h.mode
+      if (h.confidence === 'low') {
         try {
-          intent = parseIntent(
+          const modelMode = parseMode(
             await chat([
               { role: 'system', content: ROUTER_SYSTEM },
               { role: 'user', content: message.slice(0, 500) },
             ]),
           )
+          if (modelMode) mode = modelMode
         } catch {
           /* provider hiccup — the heuristic answer stands */
         }
       }
     }
+
+    // ── 2. extract the brief contract + pre-select skills ─────
+    const brief =
+      mode === 'create' || mode === 'improve'
+        ? extractBrief(message, design.width, design.height)
+        : null
+    const skills = selectSkills(
+      message,
+      mode,
+      !!(design.brand && (design.brand.colors?.length || design.brand.headingFont)),
+    )
 
     const runId = newRunId()
     const encoder = new TextEncoder()
@@ -162,75 +188,61 @@ async function __canvix_post(req: NextRequest) {
         })
 
         try {
-          emit({ v: AGENT_PROTOCOL_VERSION, type: 'start', intent })
+          emit({ v: AGENT_PROTOCOL_VERSION, type: 'start', intent: mode, runId })
 
-          // ── 2a. ask → answer only ───────────────────────────
-          if (intent === 'ask') {
+          // ── 3a. discuss → one completion, no canvas loop ────
+          // (product/engineering talk; the design is irrelevant)
+          if (mode === 'discuss') {
             const answer = await chat([
               {
                 role: 'system',
                 content:
-                  'You are the Canvix design assistant. Answer the question about the CURRENT design concisely (max 120 words), plain text, practical. Do not output JSON.\n\nCURRENT DESIGN:\n' +
+                  'You are the Canvix assistant in a product/engineering discussion. Answer concisely (max 200 words), plain text, practical. Do not output JSON. Do not modify anything.',
+              },
+              ...history,
+              { role: 'user', content: message },
+            ])
+            emit({ v: AGENT_PROTOCOL_VERSION, type: 'done', summary: answer.slice(0, 1600), steps: 1, toolCalls: 0 })
+            return
+          }
+
+          // ── 3b. explain → one grounded answer ───────────────
+          if (mode === 'explain') {
+            const answer = await chat([
+              {
+                role: 'system',
+                content:
+                  'You are the Canvix design assistant. Answer the question about the CURRENT design below concisely (max 150 words), plain text. Ground every claim in the state shown — never invent elements. Do not output JSON.\n\nCURRENT DESIGN:\n' +
                   serializeDesignContext(design),
               },
               ...history,
               { role: 'user', content: message },
             ])
-            emit({ v: 1, type: 'done', summary: answer.slice(0, 1200), steps: 1, toolCalls: 0 })
+            emit({ v: AGENT_PROTOCOL_VERSION, type: 'done', summary: answer.slice(0, 1600), steps: 1, toolCalls: 0 })
             return
           }
 
-          // ── 2b. act → one completion, ≤3 actions ────────────
-          if (intent === 'act') {
-            const system =
-              'You are the Canvix design assistant. Reply ONLY with JSON: {"reply": string, "actions": array} — actions are DesignAction objects (same schema as the assistant app). Max ' +
-              `${AGENT_BUDGETS.maxDirectActions} actions, only when clearly asked. Empty array otherwise. Never invent element ids.\n\n` +
-              'Action types: addText{text,fontSize,bold,color,align,y}, updateElements{ids,patch}, deleteElements{ids}, moveElements{ids,dx,dy,to}, ' +
-              'setHeadingsColor{color}, setTextColor{color}, setFont{fontFamily,targets}, setBackground{kind,from,to,angle}, alignElements{ids,mode}, ' +
-              'distributeElements{ids,axis}, fixOverlaps, balanceLayout, addPage, duplicatePage, gotoPage{page}, addStockPhoto{query}, suggestPalette{colors}, translate{language}, magicAnimate, generateImage{prompt}.\n\n' +
-              `Fonts (exact names): ${fontFamilies().slice(0, 30).join(', ')}…\n\nCURRENT DESIGN:\n${serializeDesignContext(design)}`
-            const raw = await chat([{ role: 'system', content: system }, ...history, { role: 'user', content: message }])
-            // reuse the assistant route's robust parse shape
-            const parsed = parseAgentTurn(raw)
-            if (parsed && typeof (parsed as unknown as { reply?: string }).reply !== 'undefined') {
-              const p = parsed as unknown as { reply?: string; actions?: unknown[] }
-              const actions = Array.isArray(p.actions) ? p.actions.slice(0, AGENT_BUDGETS.maxDirectActions) : []
-              if (actions.length > 0) {
-                emit({
-                  v: 1,
-                  type: 'action',
-                  stepIndex: 1,
-                  callId: `direct-${runId}`,
-                  risk: 'write',
-                  tool: 'direct-actions',
-                  actions,
-                })
-              }
-              emit({ v: 1, type: 'done', summary: String(p.reply ?? '').slice(0, 1200), steps: 1, toolCalls: actions.length })
-            } else {
-              // plain-text fallback — treat as an answer
-              emit({ v: 1, type: 'done', summary: raw.slice(0, 1200) || 'I could not answer that — try rephrasing.', steps: 1, toolCalls: 0 })
-            }
-            return
-          }
-
-          // ── 2c. plan → the agent loop ──────────────────────
+          // ── 3c. every other mode → the agent loop (review/
+          //    plan run read-only tool surfaces inside the loop)
           const bridge: RunBridge = {
             confirms: new Map(),
             acks: [],
+            briefResult: null,
             latestDesign: design,
             aborted: false,
           }
           bridges.set(runId, bridge)
-          // the FIRST SSE line after start tells the client the run id so
-          // its side-channel POSTs can find this bridge
-          emit({ v: 1, type: 'plan', steps: [] })
-          emit({ v: 1, type: 'observation', stepIndex: 0, message: `__runId:${runId}` })
+          // tell the client the run id so its side-channel POSTs can
+          // find this bridge (protocol detail: rides an observation)
+          emit({ v: AGENT_PROTOCOL_VERSION, type: 'observation', stepIndex: 0, message: `__runId:${runId}` })
 
           try {
             await runAgentLoop({
               chat,
               design,
+              mode,
+              brief,
+              skills,
               emit,
               confirmed: new Set(body.confirmed ?? []),
               signal: {
@@ -241,7 +253,6 @@ async function __canvix_post(req: NextRequest) {
               },
               awaitConfirm: (tool) =>
                 new Promise<boolean>((resolve) => {
-                  // auto-approve if the user already approved this tool
                   bridge.confirms.set(tool, resolve)
                   // safety: never hang forever on a silent client
                   setTimeout(() => {
@@ -249,21 +260,34 @@ async function __canvix_post(req: NextRequest) {
                       bridge.confirms.delete(tool)
                       resolve(false)
                     }
-                  }, 45_000)
+                  }, 120_000)
                 }),
               awaitApply: () =>
                 new Promise<{ ok: boolean; message?: string }>((resolve) => {
                   bridge.acks.push((ack) => resolve({ ok: ack.ok, message: ack.message }))
-                  setTimeout(() => resolve({ ok: true, message: 'ack timeout — assumed applied' }), 30_000)
+                  setTimeout(() => resolve({ ok: true, message: 'ack timeout — assumed applied' }), 60_000)
                 }),
               refreshedContext: () => bridge.latestDesign,
+              validateBriefOnClient: () =>
+                new Promise<{ satisfied: boolean; unmet: string[] } | null>((resolve) => {
+                  bridge.briefResult = resolve
+                  // the client answers on the bridge; give it a generous
+                  // window, then fall back to null (no client validation
+                  // available — the run continues without the gate)
+                  setTimeout(() => {
+                    if (bridge.briefResult === resolve) {
+                      bridge.briefResult = null
+                      resolve(null)
+                    }
+                  }, 30_000)
+                }),
             })
           } finally {
             bridges.delete(runId)
           }
         } catch (err) {
           emit({
-            v: 1,
+            v: AGENT_PROTOCOL_VERSION,
             type: 'error',
             message: `Agent run failed: ${err instanceof Error ? err.message.slice(0, 200) : 'unknown error'}.`,
           })

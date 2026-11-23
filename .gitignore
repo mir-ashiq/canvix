@@ -89,3 +89,4 @@ mini-services/
 # test artifacts
 /test-results/
 /playwright-report/
+core

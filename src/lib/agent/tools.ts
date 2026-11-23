@@ -105,6 +105,15 @@ function enumVal<T extends string>(args: Record<string, unknown>, key: string, a
   return typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : fallback
 }
 
+/** Strict enum: either a valid member or an actionable error (the
+ *  silent fallback would let "hexagon" silently become "rect" —
+ *  caught by the v0.28 harness). */
+function enumStrict<T extends string>(args: Record<string, unknown>, key: string, allowed: readonly T[]): { value: T } | { error: string } {
+  const v = args[key]
+  if (typeof v === 'string' && (allowed as readonly string[]).includes(v)) return { value: v as T }
+  return { error: `"${key}" must be one of ${allowed.join('|')}; you sent ${JSON.stringify(v) ?? 'nothing'}.` }
+}
+
 // ── the registry ─────────────────────────────────────────────
 
 export const AGENT_TOOLS: AgentTool[] = [
@@ -332,9 +341,9 @@ export const AGENT_TOOLS: AgentTool[] = [
   // ── edit elements ──────────────────────────────────────────
   {
     name: 'update_elements',
-    description: 'Patch properties of elements by id: x, y, width, height, text, fill, fontSize, bold, align, rotation, opacity, radius, lineHeight, letterSpacing.',
+    description: 'Patch properties of elements by id: geometry (x,y,width,height,rotation), style (fill,fontSize,bold,italic,underline,strike,uppercase,align,lineHeight,letterSpacing,curve,text), image (flipH,flipV,brightness,contrast,saturation), layer (locked,visible,opacity).',
     risk: 'write',
-    argsSpec: '{ids: string[], patch: {x?, y?, width?, height?, text?, fill?, fontSize?, bold?, align?, rotation?, opacity?}}',
+    argsSpec: '{ids: string[], patch: {x?, y?, width?, height?, rotation?, text?, fill?, fontSize?, bold?, italic?, underline?, strike?, uppercase?, align?, lineHeight?, letterSpacing?, curve?, flipH?, flipV?, brightness?, contrast?, saturation?, locked?, visible?, opacity?}}',
     sanitize: (args, ctx) => {
       const { ids, error } = idList(args, ctx)
       if (error) return { ok: false, error }
@@ -344,10 +353,20 @@ export const AGENT_TOOLS: AgentTool[] = [
       }
       const patch: Record<string, unknown> = {}
       const p = patchRaw as Record<string, unknown>
-      for (const key of ['x', 'y', 'width', 'height', 'rotation', 'lineHeight', 'letterSpacing'] as const) {
+      for (const key of ['x', 'y', 'width', 'height', 'rotation', 'lineHeight', 'letterSpacing', 'curve'] as const) {
         if (p[key] !== undefined) {
           const v = num(p as Record<string, unknown>, key)
           if (v === null) return { ok: false, error: `patch.${key} must be a number; you sent ${JSON.stringify(p[key])}.` }
+          patch[key] = v
+        }
+      }
+      if (p.curve !== undefined && (Number(p.curve) < -180 || Number(p.curve) > 180)) {
+        return { ok: false, error: `patch.curve must be −180..180 degrees; you sent ${JSON.stringify(p.curve)}.` }
+      }
+      for (const key of ['brightness', 'contrast', 'saturation'] as const) {
+        if (p[key] !== undefined) {
+          const v = num(p, key)
+          if (v === null || v < -100 || v > 100) return { ok: false, error: `patch.${key} must be −100..100; you sent ${JSON.stringify(p[key])}.` }
           patch[key] = v
         }
       }
@@ -367,10 +386,12 @@ export const AGENT_TOOLS: AgentTool[] = [
         if (!c) return { ok: false, error: `patch.fill must be #RRGGBB; you sent ${JSON.stringify(p.fill)}.` }
         patch.fill = c
       }
-      if (p.bold !== undefined) patch.bold = p.bold === true
+      for (const flag of ['bold', 'italic', 'underline', 'strike', 'uppercase', 'flipH', 'flipV', 'locked', 'visible'] as const) {
+        if (p[flag] !== undefined) patch[flag] = p[flag] === true
+      }
       if (p.align !== undefined) patch.align = enumVal(p as Record<string, unknown>, 'align', ['left', 'center', 'right'] as const, 'center')
       if (Object.keys(patch).length === 0) {
-        return { ok: false, error: 'patch is empty — set at least one supported property (x, y, width, height, text, fill, fontSize, bold, align, rotation, opacity).' }
+        return { ok: false, error: 'patch is empty — set at least one supported property (see the tool spec).' }
       }
       return {
         ok: true,
@@ -634,7 +655,405 @@ export const AGENT_TOOLS: AgentTool[] = [
 
   // ── destructive (confirm gate) ─────────────────────────────
   {
+    // v0.28 (Phase 3): the full capability bridge — every gap the
+    // audit found (docs/AI-CAPABILITY-MATRIX.md) becomes a tool.
+    // All compile to DesignActions the CLIENT validates + applies.
+    name: 'add_line',
+    description: 'Add a line: solid, dashed, arrow, or double-headed arrow.',
+    risk: 'write',
+    argsSpec: '{x: number, y: number, length: number, variant?: "solid"|"dashed"|"arrow"|"arrowBoth", stroke?: "#RRGGBB", strokeWidth?: 1-40, rotation?: 0-359}',
+    sanitize: (args, ctx) => {
+      const x = num(args, 'x')
+      const y = num(args, 'y')
+      const length = num(args, 'length')
+      if (x === null || y === null) return { ok: false, error: 'x and y are required numbers (the line\'s start point).' }
+      if (length === null || length < 8) return { ok: false, error: 'length must be ≥ 8 px.' }
+      const variant = enumVal(args, 'variant', ['solid', 'dashed', 'arrow', 'arrowBoth'] as const, 'solid' as never)
+      // a PRESENT-but-invalid stroke errors; an absent stroke is fine
+      if (args.stroke !== undefined && !hex(args, 'stroke')) {
+        return { ok: false, error: `stroke must be #RRGGBB; you sent ${JSON.stringify(args.stroke)}.` }
+      }
+      return {
+        ok: true,
+        actions: [{
+          type: 'addLine',
+          x: clamp(x, -ctx.width, ctx.width),
+          y: clamp(y, -ctx.height, ctx.height),
+          length,
+          variant,
+          ...(hex(args, 'stroke') ? { stroke: hex(args, 'stroke')! } : {}),
+          ...(num(args, 'strokeWidth') !== null ? { strokeWidth: clamp(num(args, 'strokeWidth')!, 1, 40) } : {}),
+          ...(num(args, 'rotation') !== null ? { rotation: clamp(num(args, 'rotation')!, 0, 359) } : {}),
+        }],
+        observation: `Line (${variant}) added.`,
+      }
+    },
+  },
+  {
+    name: 'add_icon',
+    description: 'Search the icon pack by keyword (arrow, check, star, heart, cart…) and place the best match as a stroke icon.',
+    risk: 'write',
+    argsSpec: '{query: string, stroke?: "#RRGGBB", size?: 24-600}',
+    sanitize: (args) => {
+      const query = str(args, 'query', 60).trim()
+      if (query.length < 2) return { ok: false, error: 'query must name the icon concept, e.g. "arrow-right", "check".' }
+      return {
+        ok: true,
+        actions: [{ type: 'addIcon', query, ...(hex(args, 'stroke') ? { stroke: hex(args, 'stroke')! } : {}), ...(num(args, 'size') !== null ? { size: clamp(num(args, 'size')!, 24, 600) } : {}) }],
+        observation: `Icon search queued for "${query}".`,
+      }
+    },
+  },
+  {
+    name: 'add_illustration',
+    description: 'Place a decorative SVG illustration by keyword (abstract/nature/business/decoration scenes).',
+    risk: 'write',
+    argsSpec: '{query: string}',
+    sanitize: (args) => {
+      const query = str(args, 'query', 60).trim()
+      if (query.length < 3) return { ok: false, error: 'query must describe the scene, e.g. "waves", "mountain scene".' }
+      return { ok: true, actions: [{ type: 'addIllustration', query }], observation: `Illustration search queued for "${query}".` }
+    },
+  },
+  {
+    name: 'add_chart',
+    description: 'Add a data-bound chart: bar, line, donut, or scatter. Provide labels + series for real data; omit for editable sample data.',
+    risk: 'write',
+    argsSpec: '{kind: "bar"|"line"|"donut"|"scatter", labels?: string[], series?: [{name, color, values: number[]}], x?: number, y?: number}',
+    sanitize: (args, ctx) => {
+      const kind = enumVal(args, 'kind', ['bar', 'line', 'donut', 'scatter'] as const, '' as never)
+      if (!kind) return { ok: false, error: 'kind must be bar, line, donut, or scatter.' }
+      const labels = Array.isArray(args.labels) ? args.labels.map((l) => String(l).slice(0, 24)).slice(0, 24) : undefined
+      let series: unknown
+      if (Array.isArray(args.series)) {
+        series = args.series
+          .filter((s) => !!s && typeof s === 'object')
+          .slice(0, 6)
+          .map((s) => {
+            const so = s as { name?: unknown; color?: unknown; values?: unknown }
+            return {
+              name: String(so.name ?? 'Series').slice(0, 24),
+              color: typeof so.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(so.color) ? so.color : '#7630D7',
+              values: Array.isArray(so.values) ? so.values.map((v) => Number(v) || 0).slice(0, 24) : [],
+            }
+          })
+          .filter((s) => s.values.length >= 2)
+        if (!(series as unknown[]).length) series = undefined
+      }
+      return {
+        ok: true,
+        actions: [{
+          type: 'addChart',
+          kind,
+          ...(labels?.length ? { labels } : {}),
+          ...(series ? { series } : {}),
+          ...(num(args, 'x') !== null ? { x: clamp(num(args, 'x')!, 0, ctx.width) } : {}),
+          ...(num(args, 'y') !== null ? { y: clamp(num(args, 'y')!, 0, ctx.height) } : {}),
+        }],
+        observation: `Chart (${kind}) queued.`,
+      }
+    },
+  },
+  {
+    name: 'add_qr',
+    description: 'Generate and place a QR code for a URL or text.',
+    risk: 'write',
+    argsSpec: '{value: string, size?: 96-800, dark?: "#RRGGBB", light?: "#RRGGBB", x?: number, y?: number}',
+    sanitize: (args, ctx) => {
+      const value = str(args, 'value', 500).trim()
+      if (value.length < 2) return { ok: false, error: 'value is required (the URL or text the QR encodes).' }
+      return {
+        ok: true,
+        actions: [{
+          type: 'addQr',
+          value,
+          ...(num(args, 'size') !== null ? { size: clamp(num(args, 'size')!, 96, 800) } : {}),
+          ...(hex(args, 'dark') ? { dark: hex(args, 'dark')! } : {}),
+          ...(hex(args, 'light') ? { light: hex(args, 'light')! } : {}),
+          ...(num(args, 'x') !== null ? { x: clamp(num(args, 'x')!, 0, ctx.width) } : {}),
+          ...(num(args, 'y') !== null ? { y: clamp(num(args, 'y')!, 0, ctx.height) } : {}),
+        }],
+        observation: 'QR code queued.',
+      }
+    },
+  },
+  {
+    name: 'add_frame',
+    description: 'Add an image frame (rect/rounded/circle/star/polygon) — a placeholder you later fill with fill_frame or that auto-fills on image drop.',
+    risk: 'write',
+    argsSpec: '{frameShape?: "rect"|"rounded"|"circle"|"star"|"polygon", width?: 80-1200, height?: 80-1200, x?: number, y?: number}',
+    sanitize: (args, ctx) => {
+      const shape = enumStrict(args, 'frameShape', ['rect', 'rounded', 'circle', 'star', 'polygon'] as const)
+      if ('error' in shape) return { ok: false, error: shape.error }
+      const frameShape = shape.value
+      return {
+        ok: true,
+        actions: [{
+          type: 'addFrame',
+          frameShape,
+          ...(num(args, 'width') !== null ? { width: clamp(num(args, 'width')!, 80, 1200) } : {}),
+          ...(num(args, 'height') !== null ? { height: clamp(num(args, 'height')!, 80, 1200) } : {}),
+          ...(num(args, 'x') !== null ? { x: clamp(num(args, 'x')!, 0, ctx.width) } : {}),
+          ...(num(args, 'y') !== null ? { y: clamp(num(args, 'y')!, 0, ctx.height) } : {}),
+        }],
+        observation: `Frame (${frameShape}) queued.`,
+      }
+    },
+  },
+  {
+    name: 'add_embed',
+    description: 'Embed a YouTube video, Google Map, or generic link as a card.',
+    risk: 'write',
+    argsSpec: '{url: string}',
+    sanitize: (args) => {
+      const url = str(args, 'url', 400).trim()
+      if (!/^https?:\/\//.test(url)) return { ok: false, error: 'url must start with http:// or https://.' }
+      return { ok: true, actions: [{ type: 'addEmbed', url }], observation: 'Embed card queued.' }
+    },
+  },
+  {
+    name: 'duplicate_elements',
+    description: 'Duplicate elements by id (copies land 24px offset).',
+    risk: 'write',
+    argsSpec: '{ids: string[]}',
+    sanitize: (args, ctx) => {
+      const { ids, error } = idList(args, ctx)
+      if (error) return { ok: false, error }
+      if (!ids.length) return { ok: false, error: 'ids must include at least one existing element id.' }
+      return { ok: true, actions: [{ type: 'duplicateElements', ids }], observation: `Duplicating ${ids.length} element(s).` }
+    },
+  },
+  {
+    name: 'group_elements',
+    description: 'Group 2+ elements so they move/transform together.',
+    risk: 'write',
+    argsSpec: '{ids: string[]}',
+    sanitize: (args, ctx) => {
+      const { ids, error } = idList(args, ctx)
+      if (error) return { ok: false, error }
+      if (ids.length < 2) return { ok: false, error: 'group needs 2+ element ids.' }
+      return { ok: true, actions: [{ type: 'groupElements', ids }], observation: `Grouping ${ids.length} elements.` }
+    },
+  },
+  {
+    name: 'ungroup_elements',
+    description: 'Ungroup group elements by id (children become editable individually).',
+    risk: 'write',
+    argsSpec: '{ids: string[]}',
+    sanitize: (args, ctx) => {
+      const { ids, error } = idList(args, ctx)
+      if (error) return { ok: false, error }
+      if (!ids.length) return { ok: false, error: 'ids must include at least one group element id.' }
+      return { ok: true, actions: [{ type: 'ungroupElements', ids }], observation: 'Ungrouping.' }
+    },
+  },
+  {
+    name: 'reorder_layers',
+    description: 'Change stacking: move ids up/down/front/back, or pass ≥2 ids in the desired z-order.',
+    risk: 'write',
+    argsSpec: '{ids: string[], dir?: "up"|"down"|"front"|"back"}',
+    sanitize: (args, ctx) => {
+      const { ids, error } = idList(args, ctx)
+      if (error) return { ok: false, error }
+      if (!ids.length) return { ok: false, error: 'ids must include at least one existing element id.' }
+      const dir = enumVal(args, 'dir', ['up', 'down', 'front', 'back'] as const, '' as never)
+      if (!dir && ids.length < 2) return { ok: false, error: 'Pass dir (up|down|front|back) for single moves, or ≥2 ids for an explicit z order.' }
+      return { ok: true, actions: [{ type: 'reorderLayers', ids, ...(dir ? { dir } : {}) }], observation: dir ? `Layer(s) moved ${dir}.` : 'Reordering layers.' }
+    },
+  },
+  {
+    name: 'animate_elements',
+    description: 'Set an entry animation on elements: fade, rise, pan, pop, wipe, zoom, rotate, breathe (or none to clear).',
+    risk: 'write',
+    argsSpec: '{ids: string[], kind: "none"|"fade"|"rise"|"pan"|"pop"|"wipe"|"zoom"|"rotate"|"breathe", duration?: 0.2-5s, delay?: 0-10s, easing?: "linear"|"easeIn"|"easeOut"|"easeInOut"|"spring", direction?: "left"|"right"|"up"|"down"}',
+    sanitize: (args, ctx) => {
+      const { ids, error } = idList(args, ctx)
+      if (error) return { ok: false, error }
+      if (!ids.length) return { ok: false, error: 'ids must include at least one existing element id.' }
+      const kind = enumVal(args, 'kind', ['none', 'fade', 'rise', 'pan', 'pop', 'wipe', 'zoom', 'rotate', 'breathe'] as const, '' as never)
+      if (!kind) return { ok: false, error: 'kind must be one of none|fade|rise|pan|pop|wipe|zoom|rotate|breathe.' }
+      return {
+        ok: true,
+        actions: [{
+          type: 'animateElements',
+          ids,
+          kind,
+          ...(num(args, 'duration') !== null ? { duration: clamp(num(args, 'duration')!, 0.2, 5) } : {}),
+          ...(num(args, 'delay') !== null ? { delay: clamp(num(args, 'delay')!, 0, 10) } : {}),
+          ...(enumVal(args, 'easing', ['linear', 'easeIn', 'easeOut', 'easeInOut', 'spring'] as const, '' as never) ? { easing: enumVal(args, 'easing', ['linear', 'easeIn', 'easeOut', 'easeInOut', 'spring'] as const, '' as never) } : {}),
+          ...(enumVal(args, 'direction', ['left', 'right', 'up', 'down'] as const, '' as never) ? { direction: enumVal(args, 'direction', ['left', 'right', 'up', 'down'] as const, '' as never) } : {}),
+        }],
+        observation: `Animation ${kind} queued on ${ids.length} element(s).`,
+      }
+    },
+  },
+  {
+    name: 'set_page_transition',
+    description: 'Set how the CURRENT page enters in playback: fade, slide, zoom, flip (or none).',
+    risk: 'write',
+    argsSpec: '{kind: "none"|"fade"|"slide"|"zoom"|"flip", duration?: 0.2-2s}',
+    sanitize: (args) => {
+      const kind = enumVal(args, 'kind', ['none', 'fade', 'slide', 'zoom', 'flip'] as const, '' as never)
+      if (!kind) return { ok: false, error: 'kind must be none|fade|slide|zoom|flip.' }
+      return { ok: true, actions: [{ type: 'setPageTransition', kind, ...(num(args, 'duration') !== null ? { duration: clamp(num(args, 'duration')!, 0.2, 2) } : {}) }], observation: `Page transition ${kind} queued.` }
+    },
+  },
+  {
+    name: 'delete_page',
+    description: 'Delete a page by 1-based number (default: current). Destructive — a non-empty page needs confirmed:true.',
+    risk: 'destructive',
+    argsSpec: '{page?: number, confirmed?: boolean}',
+    sanitize: (args) => {
+      const page = num(args, 'page')
+      if (page !== null && (!Number.isInteger(page) || page < 1 || page > 200)) return { ok: false, error: 'page must be an integer 1–200 (1-based).' }
+      return {
+        ok: true,
+        actions: [{ type: 'deletePage', ...(page !== null ? { page } : {}), ...(args.confirmed === true ? { confirmed: true } : {}) }],
+        observation: 'Page delete queued (the client confirms non-empty pages).',
+      }
+    },
+  },
+  {
+    name: 'set_brand_kit',
+    description: 'Save design tokens to the Brand Kit: colors[], headingFont, bodyFont. The kit then guides every later run.',
+    risk: 'write',
+    argsSpec: '{colors?: ["#RRGGBB"…], headingFont?: string, bodyFont?: string}',
+    sanitize: (args, ctx) => {
+      const colors = Array.isArray(args.colors)
+        ? args.colors.filter((c): c is string => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)).map((c) => c.toLowerCase()).slice(0, 10)
+        : []
+      const headingFont = str(args, 'headingFont', 60)
+      const bodyFont = str(args, 'bodyFont', 60)
+      if (headingFont && !ctx.fonts.has(headingFont)) return { ok: false, error: `Unknown headingFont "${headingFont}". Examples: ${[...ctx.fonts].slice(0, 6).join(', ')}.` }
+      if (bodyFont && !ctx.fonts.has(bodyFont)) return { ok: false, error: `Unknown bodyFont "${bodyFont}". Examples: ${[...ctx.fonts].slice(0, 6).join(', ')}.` }
+      if (!colors.length && !headingFont && !bodyFont) return { ok: false, error: 'Set at least one of colors[], headingFont, bodyFont.' }
+      return { ok: true, actions: [{ type: 'setBrandKit', ...(colors.length ? { colors } : {}), ...(headingFont ? { headingFont } : {}), ...(bodyFont ? { bodyFont } : {}) }], observation: 'Brand kit update queued.' }
+    },
+  },
+  {
+    name: 'resize_design',
+    description: 'Resize the whole canvas (all pages, elements re-laid out proportionally). Use when the brief demands other dimensions than the current page.',
+    risk: 'write',
+    argsSpec: '{width: 50-10000, height: 50-10000}',
+    sanitize: (args) => {
+      const width = num(args, 'width')
+      const height = num(args, 'height')
+      if (width === null || height === null || width < 50 || width > 10000 || height < 50 || height > 10000) {
+        return { ok: false, error: 'width and height must be 50–10000 px.' }
+      }
+      return { ok: true, actions: [{ type: 'resizeDesign', width: Math.round(width), height: Math.round(height) }], observation: `Canvas resize to ${Math.round(width)}×${Math.round(height)} queued.` }
+    },
+  },
+  {
+    name: 'mask_image',
+    description: 'Clip image elements to a shape: circle, rounded, star, polygon, heart, hexagon (or none to clear).',
+    risk: 'write',
+    argsSpec: '{ids: string[], mask: "none"|"circle"|"rounded"|"star"|"polygon"|"heart"|"hexagon", sides?: 3-12}',
+    sanitize: (args, ctx) => {
+      const { ids, error } = idList(args, ctx)
+      if (error) return { ok: false, error }
+      if (!ids.length) return { ok: false, error: 'ids must include at least one IMAGE element id.' }
+      const mask = enumVal(args, 'mask', ['none', 'circle', 'rounded', 'star', 'polygon', 'heart', 'hexagon'] as const, '' as never)
+      if (!mask) return { ok: false, error: 'mask must be none|circle|rounded|star|polygon|heart|hexagon.' }
+      return { ok: true, actions: [{ type: 'maskImage', ids, mask, ...(mask === 'polygon' && num(args, 'sides') !== null ? { sides: clamp(num(args, 'sides')!, 3, 12) } : {}) }], observation: `Mask ${mask} queued on ${ids.length} image(s).` }
+    },
+  },
+  {
+    name: 'adjust_image',
+    description: 'Adjust image elements: brightness, contrast, saturation (−100..100) or a filter preset.',
+    risk: 'write',
+    argsSpec: '{ids: string[], brightness?: -100..100, contrast?: -100..100, saturation?: -100..100, filter?: string|"none"}',
+    sanitize: (args, ctx) => {
+      const { ids, error } = idList(args, ctx)
+      if (error) return { ok: false, error }
+      if (!ids.length) return { ok: false, error: 'ids must include at least one IMAGE element id.' }
+      const adj = (k: string): number | null => {
+        const v = num(args, k)
+        if (v === null) return null
+        if (v < -100 || v > 100) throw new Error(`${k} must be −100..100; you sent ${v}.`)
+        return Math.round(v)
+      }
+      try {
+        const patch: Record<string, unknown> = {}
+        for (const k of ['brightness', 'contrast', 'saturation']) {
+          const v = adj(k)
+          if (v !== null) patch[k] = v
+        }
+        const filter = str(args, 'filter', 40)
+        if (filter) patch.filter = filter
+        if (!Object.keys(patch).length) return { ok: false, error: 'Set at least one of brightness, contrast, saturation, filter.' }
+        return { ok: true, actions: [{ type: 'adjustImage', ids, ...patch }], observation: `Image adjustments queued on ${ids.length} image(s).` }
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : 'Bad image adjustments.' }
+      }
+    },
+  },
+  {
+    name: 'measure_text',
+    description: 'REAL text metrics (canvas measureText): returns the pixel width of a string at a given font/size — use before finalizing headings so nothing clips. The 0.6×size estimate is only a fallback.',
+    risk: 'read',
+    argsSpec: '{text: string, fontSize: 6-400, fontFamily?: string, bold?: boolean, lineHeight?: number}',
+    sanitize: (args, ctx) => {
+      const text = str(args, 'text', 200)
+      if (!text) return { ok: false, error: 'text is required.' }
+      const fontSize = num(args, 'fontSize')
+      if (fontSize === null || fontSize < 6 || fontSize > 400) return { ok: false, error: 'fontSize must be 6–400.' }
+      const fontFamily = str(args, 'fontFamily', 60) || 'Poppins'
+      if (!ctx.fonts.has(fontFamily)) return { ok: false, error: `Unknown fontFamily "${fontFamily}". Examples: ${[...ctx.fonts].slice(0, 6).join(', ')}.` }
+      return {
+        ok: true,
+        actions: [{ type: 'measureText', text, fontSize, fontFamily, bold: args.bold === true, ...(num(args, 'lineHeight') !== null ? { lineHeight: num(args, 'lineHeight')! } : {}) }],
+        observation: 'Measuring text with real font metrics.',
+      }
+    },
+  },
+  {
+    name: 'set_text_spans',
+    description: 'Rich-text: style PARTS of a text element. Spans must concatenate EXACTLY to the element text. [{text, bold?, italic?, underline?, strike?, color?}]',
+    risk: 'write',
+    argsSpec: '{ids: string[], spans: [{text: string, bold?: boolean, italic?: boolean, color?: "#RRGGBB"}]}',
+    sanitize: (args, ctx) => {
+      const { ids, error } = idList(args, ctx)
+      if (error) return { ok: false, error }
+      if (!ids.length) return { ok: false, error: 'ids must include at least one TEXT element id.' }
+      const spans = Array.isArray(args.spans) ? args.spans.filter((s) => !!s && typeof s === 'object' && typeof (s as { text?: unknown }).text === 'string').slice(0, 20) : []
+      if (!spans.length) return { ok: false, error: 'spans must be a non-empty array of {text, bold?, italic?, color?}.' }
+      return { ok: true, actions: [{ type: 'setTextSpans', ids, spans }], observation: 'Rich-text styling queued (validated against the element text).' }
+    },
+  },
+  {
+    name: 'export_design',
+    description: 'Export the current page as PNG or JPG — downloads in the browser. Use when the user asks to save/export.',
+    risk: 'write',
+    argsSpec: '{format?: "png"|"jpg"}',
+    sanitize: (args) => {
+      const format = enumVal(args, 'format', ['png', 'jpg'] as const, 'png' as never)
+      return { ok: true, actions: [{ type: 'exportDesign', format }], observation: `Export (${format}) queued — the download starts on the user's machine.` }
+    },
+  },
+  {
+    name: 'add_stock_video',
+    description: 'Search licensed stock video (Pexels/Pixabay) and place the best match on the canvas.',
+    risk: 'write',
+    argsSpec: '{query: string}',
+    sanitize: (args) => {
+      const query = str(args, 'query', 120).trim()
+      if (query.length < 3) return { ok: false, error: 'query must describe the footage (min 3 chars).' }
+      return { ok: true, actions: [{ type: 'addStockVideo', query }], observation: `Stock video search queued for "${query}".` }
+    },
+  },
+  {
+    name: 'validate_brief',
+    description: 'Validate the run against the Design Brief Contract using REAL page state: required texts verbatim, required colors, dimensions. Returns the unmet items — run before claiming done.',
+    risk: 'read',
+    argsSpec: '{}',
+    sanitize: () => ({ ok: true, actions: [{ type: '__validateBrief' }], observation: 'Brief validation queued (computed on the client against the live document).' }),
+  },
+
+  // ── destructive ────────────────────────────────────────────
+  {
     name: 'delete_elements',
+
     description: 'DELETE elements by id. Destructive: needs the user confirmation gate.',
     risk: 'destructive',
     argsSpec: '{ids: string[]}',

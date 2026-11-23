@@ -9,6 +9,9 @@
 import {
   createImageElement,
   createPluginElement,
+  createShapeElement,
+  createStickerElement,
+  createTableElement,
   createTextElement,
   type AnyElement,
   type Background,
@@ -95,19 +98,84 @@ export async function applyDesignAction(action: DesignAction, caller?: ActionCal
       const text = String(action.text ?? '').slice(0, 400).trim()
       if (!text) return 'Nothing to add'
       const fontSize = Math.min(300, Math.max(8, Number(action.fontSize) || 48))
+      // v0.27 (agent): explicit geometry wins over the y-band default —
+      // the agent computes exact boxes; the chip path keeps the band
       const yMode = action.y === 'top' ? 0.08 : action.y === 'bottom' ? 0.78 : 0.4
+      const hasX = Number.isFinite(Number(action.x))
+      const hasY = typeof action.y === 'number' && Number.isFinite(action.y)
       const el = createTextElement({
         text,
         fontSize,
         bold: action.bold === true,
-        width: Math.round(width * 0.8),
-        x: Math.round(width * 0.1),
-        y: Math.round(height * yMode),
+        width: Math.round(Math.min(width * 1.5, Math.max(40, Number(action.width) || width * 0.8))),
+        x: Math.round(hasX ? Math.max(-width, Math.min(width, Number(action.x))) : width * 0.1),
+        y: Math.round(hasY ? Math.max(-height, Math.min(height, Number(action.y))) : height * yMode),
       })
       el.align = (action.align as 'left' | 'center' | 'right') ?? 'center'
+      if (typeof action.font === 'string' && action.font) el.fontFamily = action.font
       if (typeof action.color === 'string' && HEX.test(action.color)) el.fill = action.color
       useEditorStore.getState().addElement(el)
       return 'Text added — fully editable'
+    }
+
+    // v0.27 (agent): addShape — the agent's add_shape tool compiles here.
+    case 'addShape': {
+      const shape = String(action.shape ?? '')
+      const w = Number(action.width) || 0
+      const h = Number(action.height) || 0
+      const x = Number(action.x)
+      const y = Number(action.y)
+      if (!['rect', 'ellipse', 'triangle', 'star', 'line'].includes(shape)) return 'Unknown shape'
+      if (!Number.isFinite(x) || !Number.isFinite(y) || w < 4 || h < 4) return 'Bad geometry'
+      const el = createShapeElement(shape as 'rect', {
+        x: Math.round(x),
+        y: Math.round(y),
+        width: Math.round(w),
+        height: Math.round(h),
+        ...(typeof action.fill === 'string' && HEX.test(action.fill) ? { fill: action.fill } : {}),
+        ...(Number.isFinite(Number(action.cornerRadius)) ? { cornerRadius: Math.round(Number(action.cornerRadius)) } : {}),
+        ...(Number.isFinite(Number(action.rotation)) ? { rotation: Number(action.rotation) } : {}),
+      })
+      useEditorStore.getState().addElement(el)
+      return `${shape} added`
+    }
+
+    // v0.27 (agent): addSticker — one emoji glyph as a canvas sticker.
+    case 'addSticker': {
+      const emoji = String(action.emoji ?? '').trim().slice(0, 8)
+      if (!emoji) return 'Nothing to add'
+      const size = Math.min(400, Math.max(24, Number(action.size) || 96))
+      const x = Number.isFinite(Number(action.x)) ? Number(action.x) : width / 2 - size / 2
+      const y = Number.isFinite(Number(action.y)) ? Number(action.y) : height / 2 - size / 2
+      const el = createStickerElement(emoji, {
+        x: Math.round(x),
+        y: Math.round(y),
+        width: size,
+        height: size,
+      })
+      useEditorStore.getState().addElement(el)
+      return `Sticker ${emoji} added`
+    }
+
+    // v0.27 (agent): addTable — header + rows on a clamped grid.
+    case 'addTable': {
+      const header = Array.isArray(action.header) ? action.header.map((c) => String(c).slice(0, 60)).slice(0, 6) : []
+      const rows = Array.isArray(action.rows)
+        ? action.rows.slice(0, 12).map((r: unknown[]) => (Array.isArray(r) ? r.map((c: unknown) => String(c).slice(0, 60)) : []))
+        : []
+      if (!header.length || !rows.length) return 'Table needs header and rows'
+      const tableWidth = Math.min(width, Math.max(160, Number(action.width) || width * 0.8))
+      const el = createTableElement({
+        x: Math.round(Number.isFinite(Number(action.x)) ? Number(action.x) : (width - tableWidth) / 2),
+        y: Math.round(Number.isFinite(Number(action.y)) ? Number(action.y) : height * 0.3),
+        width: Math.round(tableWidth),
+        header,
+        rows: rows.length,
+        cols: header.length,
+        cells: rows.flat().map((text) => ({ text: String(text ?? '') })),
+      })
+      useEditorStore.getState().addElement(el)
+      return `Table ${header.length}×${rows.length + 1} added`
     }
 
     // v0.13 (P3): plugin panels may add images — the §4.3 whitelist
@@ -546,6 +614,9 @@ function balanceLayout(): string {
 export function describeAction(action: DesignAction): string {
   switch (action.type) {
     case 'addText': return `Add text: “${String(action.text ?? '').slice(0, 40)}${String(action.text ?? '').length > 40 ? '…' : ''}”`
+    case 'addShape': return `Add ${String(action.shape ?? 'shape')}`
+    case 'addSticker': return `Add sticker ${String(action.emoji ?? '')}`
+    case 'addTable': return `Add table (${(action.header as string[] | undefined)?.length ?? 0} cols)`
     case 'addImage': return `Add image (${String(action.src ?? '').startsWith('data:') ? 'embedded' : 'media library'})`
     case 'addPluginElement': return `Add ${String(action.kind ?? 'plugin')} element`
     case 'updatePluginElementData': return `Update ${action.ids?.length ?? 0} plugin element${(action.ids?.length ?? 0) === 1 ? '' : 's'}`

@@ -21,12 +21,13 @@ const getSessionUser = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/auth/session', () => ({ getSessionUser }))
 
 const readAnonToken = vi.hoisted(() => vi.fn())
+const anonHashMock = vi.hoisted(() => vi.fn((): string | null => null))
 vi.mock('@/lib/auth/anon', () => ({
   readAnonToken,
   newAnonToken: () => 'fresh-token',
   anonKeyHash: (t: string) => `hash(${t})`,
   setAnonCookie: vi.fn(),
-  anonHashFrom: () => null,
+  anonHashFrom: anonHashMock,
 }))
 
 import { NextRequest } from 'next/server'
@@ -65,6 +66,9 @@ function get(opts: { user?: unknown; url?: string } = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // default: no anon cookie (individual tests override for browser
+  // attribution scenarios — and MUST see this reset between tests)
+  anonHashMock.mockReturnValue(null)
 })
 
 describe('GET /api/designs (v0.9.2 pagination)', () => {
@@ -93,9 +97,23 @@ describe('GET /api/designs (v0.9.2 pagination)', () => {
     expect(body.nextCursor).toBeNull()
   })
 
-  it('keeps ownership isolation when a cursor is present (regression)', async () => {
-    // user A paginating must still be scoped to (ownerless OR own) —
-    // the cursor filter must not replace the ownership filter.
+  it('v0.26.1 privacy: signed-in user with an anon cookie sees own + own-browser + legacy — never foreign ownerless work', async () => {
+    dbMock.design.findMany.mockResolvedValue([])
+    anonHashMock.mockReturnValue('hash(my-browser)')
+    await get({ user: USER_A })
+    const where = dbMock.design.findMany.mock.calls[0][0].where
+    expect(where.AND[0].OR).toEqual([
+      { ownerId: 'user-a' },
+      { ownerId: null, anonKey: 'hash(my-browser)' },
+      { ownerId: null, anonKey: null },
+    ])
+    // and NOT a bare { ownerId: null } clause (the old leak)
+    expect(JSON.stringify(where.AND[0])).not.toMatch(/"ownerId":null,"anonKey":(?!)/)
+  })
+
+  it('keeps ownership isolation when a cursor is present (regression)', async () => {    // user A paginating must still be scoped to (own + own-browser
+    // ownerless + legacy ownerless) — the cursor filter must not replace
+    // the ownership filter.
     dbMock.design.findMany.mockResolvedValue([])
     await get({
       user: USER_A,
@@ -104,19 +122,28 @@ describe('GET /api/designs (v0.9.2 pagination)', () => {
     const where = dbMock.design.findMany.mock.calls[0][0].where
     expect(where.AND).toHaveLength(2)
     const scope = where.AND[0]
-    expect(scope.OR).toEqual([{ ownerId: null }, { ownerId: 'user-a' }])
+    // v0.26.1 privacy fix: signed-in users no longer see FOREIGN
+    // browser-attributed ownerless designs — own account rows, rows
+    // attributed to their own browser, and legacy rows only.
+    expect(scope.OR).toEqual([
+      { ownerId: 'user-a' },
+      { ownerId: null, anonKey: null },
+    ])
     const keyset = where.AND[1]
     expect(keyset.OR[0]).toEqual({ updatedAt: { lt: new Date('2026-10-01T00:00:00.000Z') } })
   })
 
-  it('scopes anonymous visitors to ownerless designs (with and without cursor)', async () => {
+  it('scopes anonymous visitors to own-browser + legacy ownerless designs (with and without cursor)', async () => {
     dbMock.design.findMany.mockResolvedValue([])
     await get()
-    expect(dbMock.design.findMany.mock.calls[0][0].where.AND).toEqual([{ ownerId: null }])
+    // no anon cookie in this test harness → only legacy rows
+    expect(dbMock.design.findMany.mock.calls[0][0].where.AND).toEqual([
+      { OR: [{ ownerId: null, anonKey: null }] },
+    ])
 
     await get({ url: 'http://canvix.test/api/designs?cursor=2026-10-01T00:00:00.000Z' })
     const withCursor = dbMock.design.findMany.mock.calls[1][0].where
-    expect(withCursor.AND[0]).toEqual({ ownerId: null })
+    expect(withCursor.AND[0]).toEqual({ OR: [{ ownerId: null, anonKey: null }] })
     expect(withCursor.AND[1].OR[0]).toEqual({ updatedAt: { lt: new Date('2026-10-01T00:00:00.000Z') } })
   })
 
@@ -125,7 +152,9 @@ describe('GET /api/designs (v0.9.2 pagination)', () => {
     const res = await get({ url: 'http://canvix.test/api/designs?cursor=not-a-date' })
     expect(res.status).toBe(200)
     // no keyset filter was added
-    expect(dbMock.design.findMany.mock.calls[0][0].where.AND).toEqual([{ ownerId: null }])
+    expect(dbMock.design.findMany.mock.calls[0][0].where.AND).toEqual([
+      { OR: [{ ownerId: null, anonKey: null }] },
+    ])
   })
 
   it('orders by (updatedAt desc, id desc) for stable keyset paging', async () => {

@@ -94,10 +94,33 @@ async function __canvix_get(req: NextRequest) {
     // Compose scoping + keyset via AND — never spread two `OR` keys into
     // the same object (the second would silently replace the first and
     // leak private designs to other accounts).
+    //
+    // v0.26.1 privacy fix: signed-in users used to see EVERY ownerless
+    // design on the deployment ({ ownerId: null }) — on a public instance
+    // that filled the dashboard with strangers' anonymous work. Scoping
+    // is now:
+    //   · the account's own designs, plus
+    //   · ownerless designs attributed to THIS browser (anonKey match —
+    //     your pre-login work still appears after you sign in), plus
+    //   · legacy ownerless rows (anonKey null, pre-attribution) — the
+    //     deliberate self-hoster migration path, still claimable.
+    // Foreign browser-attributed work stays reachable only via share
+    // links (unchanged — see README "Link access").
+    // Anonymous callers keep the same rule keyed on their anon cookie.
+    const myHash = anonHashFrom(req)
     const filters: Prisma.DesignWhereInput[] = [
-      user
-        ? { OR: [{ ownerId: null }, { ownerId: user.id }] }
-        : { ownerId: null },
+      {
+        OR: [
+          // signed-in: the account's own designs (anonymous: skipped)
+          ...(user ? [{ ownerId: user.id }] : []),
+          // ownerless rows attributed to THIS browser — omitted entirely
+          // when there is no anon cookie (Prisma treats `anonKey: undefined`
+          // as "no filter", which would match every ownerless row)
+          ...(myHash ? [{ ownerId: null, anonKey: myHash }] : []),
+          // legacy pre-attribution rows — the self-hoster migration path
+          { ownerId: null, anonKey: null },
+        ],
+      },
     ]
     if (cursor && !Number.isNaN(Date.parse(cursor))) {
       filters.push({
@@ -134,7 +157,7 @@ async function __canvix_get(req: NextRequest) {
     const hasMore = designs.length > DESIGNS_PAGE_SIZE
     const page = hasMore ? designs.slice(0, DESIGNS_PAGE_SIZE) : designs
     const last = page[page.length - 1]
-    const myHash = anonHashFrom(req)
+    // myHash is computed above (scoped the query) — reuse it for the flags
     const out = page.map(({ anonKey, ...d }) => ({
       ...d,
       claimable: d.ownerId === null && (anonKey === null || anonKey === myHash),

@@ -126,11 +126,14 @@ test.describe('BYO-MCP: personal tokens (v0.25)', () => {
     expect(names).not.toContain('Owned by someone else')
     expect(names).not.toContain('e2e mcp commons')
 
-    // 3. get_design on a foreign id → not-found (no enumeration)
+    // 3. get_design on a foreign id → not-found (no enumeration).
+    // fail() answers with PLAIN TEXT ("Design "…" was not found."), not
+    // JSON — assert on the text itself (that IS the security property).
     const foreign = await mcpCall(request, key, 'tools/call', { name: 'get_design', arguments: { design_id: 'd_e2e_mcp_other' } })
     expect(foreign.status).toBe(200)
-    const foreignPayload = JSON.parse(foreign.body.result.content[0].text)
-    expect(foreignPayload.error).toBeTruthy()
+    const foreignText = foreign.body.result.content[0].text as string
+    expect(foreignText).toContain('not found')
+    expect(foreignText).not.toContain('Owned by someone else') // no data leak in the error
 
     // get_design on own design works
     const own = await mcpCall(request, key, 'tools/call', { name: 'get_design', arguments: { design_id: 'd_e2e_mcp_mine' } })

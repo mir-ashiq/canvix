@@ -70,6 +70,7 @@ interface ApiKeyRow {
 const API_SCOPE_OPTIONS = [
   { id: 'designs:read', label: 'designs:read', hint: 'List and read your designs over the REST API' },
   { id: 'designs:write', label: 'designs:write', hint: 'Create and update your designs (reserved — not enforced by any endpoint yet)' },
+  { id: 'mcp', label: 'mcp', hint: 'Connect AI agents (Claude, Cursor…) to YOUR designs via the MCP endpoint — tools are scoped to your account' },
 ] as const
 
 const SLOT_OPTIONS = [

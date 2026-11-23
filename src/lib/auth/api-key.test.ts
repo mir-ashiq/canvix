@@ -55,7 +55,15 @@ describe('scope parsing', () => {
   })
 
   it("'all' expands to every current scope", () => {
-    expect(parseScopes('all')).toEqual(['designs:read', 'designs:write'])
+    expect(parseScopes('all')).toEqual(['designs:read', 'designs:write', 'mcp'])
+  })
+
+  it("'mcp' (BYO-MCP, v0.25) parses as a first-class scope", () => {
+    expect(parseScopes('mcp')).toEqual(['mcp'])
+    expect(parseScopes('designs:read,mcp')).toEqual(['designs:read', 'mcp'])
+    expect(hasScope('mcp', 'mcp')).toBe(true)
+    expect(hasScope('all', 'mcp')).toBe(true) // long-lived automation keys age forward
+    expect(hasScope('designs:read', 'mcp')).toBe(false) // read-only keys cannot drive agents
   })
 
   it('rejects unknown scopes, malformed input and empty lists', () => {
@@ -149,7 +157,8 @@ describe('authenticateApiKey', () => {
     const r = await authenticateApiKey(reqWith(`Bearer ${t}`) as never, db)
     expect(r).toMatchObject({
       ok: true,
-      user: { id: 'u1', username: 'alice', keyId: 'k1', scopes: ['designs:read', 'designs:write'] },
+      // 'all' now includes the mcp scope (v0.25) — keys age forward
+      user: { id: 'u1', username: 'alice', keyId: 'k1', scopes: ['designs:read', 'designs:write', 'mcp'] },
     })
   })
 

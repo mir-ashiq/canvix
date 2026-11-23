@@ -11,7 +11,8 @@ import { FONTS } from '@/lib/editor-utils'
 import { isImageFilterId } from '@/lib/image-filters'
 import { exportPageToSVG } from '@/lib/svg-export'
 import { magicAnimatePage, clearPageAnimations } from '@/lib/animations'
-import { hasProvider, getClientForSlot, recordUsage, rateLimit } from '@/lib/ai/provider'
+import { hasProvider, getClientForSlot, getClientForSlotForUser, recordUsage, rateLimit } from '@/lib/ai/provider'
+import type { McpAuth } from './server'
 import {
   createTextElement,
   createShapeElement,
@@ -140,15 +141,30 @@ function isHttpsUrl(u: unknown): u is string {
 
 const AGENT_ACTOR = 'agent:mcp'
 
-async function getDesign(designId: string) {
+/** Owner scoping for the BYO-MCP user rail (v0.25).
+ *  Null = operator rail (unscoped, historical). */
+export type OwnerScope = { ownerId: string } | null
+
+/**
+ * Fetch one design the caller may act on. Operator rail: any design
+ * (historical). User rail: the key owner's own designs only — a
+ * user token can never read or mutate someone else's work, even by
+ * guessing ids (same isolation the v1 REST rail enforces).
+ */
+async function getDesign(designId: string, scope: OwnerScope = null) {
   const design = await db.design.findUnique({ where: { id: designId } })
   if (!design || design.deletedAt) return null
+  if (scope && design.ownerId !== scope.ownerId) return null
   return design
 }
 
-async function saveDesign(designId: string, pages: PageData[]): Promise<void> {
-  await db.design.update({
-    where: { id: designId },
+async function saveDesign(designId: string, pages: PageData[], scope: OwnerScope = null): Promise<void> {
+  // user rail: the write is re-scoped at the DB (updateMany + ownerId)
+  // so an id swap between getDesign and save can never leak a write
+  // onto someone else's design; 0 rows updated = silently no-op.
+  const where = scope ? { id: designId, ownerId: scope.ownerId } : { id: designId }
+  await db.design.updateMany({
+    where,
     data: {
       pages: pages as unknown as object,
       updatedAt: new Date(),
@@ -280,10 +296,23 @@ function originOf(req: Pick<NextRequest, 'headers'>): string {
 export interface ToolDeps {
   /** only headers are used (origin resolution for edit URLs) */
   req: Pick<NextRequest, 'headers'>
+  /**
+   * v0.25 (BYO-MCP): who is calling. 'operator' keeps the historical
+   * unscoped view (CANVIX_MCP_TOKEN); 'user' scopes every design read
+   * and write to the key owner's own rows — the same footprint the v1
+   * REST rail gives a cvx_ key. Defaults to operator so existing
+   * callers (tests, older deployments) behave exactly as before.
+   */
+  auth?: McpAuth
 }
 
 export function buildTools(deps: ToolDeps): ToolDef[] {
   const origin = originOf(deps.req)
+  // user rail: tools only see/modify the owner's designs; designs the
+  // agent creates are attributed to the owner (ownerId) so they land
+  // in the owner's dashboard, not the anonymous commons.
+  const ownerFilter = deps.auth?.kind === 'user' && deps.auth.userId ? { ownerId: deps.auth.userId } : undefined
+  const asOwner = ownerFilter ? { ownerId: deps.auth!.userId! } : {}
 
   // ── discovery ─────────────────────────────────────────────
 
@@ -337,7 +366,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
     handler: async (args) => {
       const query = asString(args.query, '').toLowerCase()
       const designs = await db.design.findMany({
-        where: { deletedAt: null },
+        where: ownerFilter ? { deletedAt: null, ...ownerFilter } : { deletedAt: null },
         select: { id: true, name: true, width: true, height: true, updatedAt: true, pages: true },
         take: 40,
         orderBy: { updatedAt: 'desc' },
@@ -369,7 +398,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
     },
     handler: async (args) => {
       const id = asString(args.design_id)
-      const design = await getDesign(id)
+      const design = await getDesign(id, ownerFilter ?? null)
       if (!design) return fail(`Design "${id}" was not found.`)
       const pages = parsePages(design)
       return ok({
@@ -401,7 +430,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
       required: ['design_id'],
     },
     handler: async (args) => {
-      const design = await getDesign(asString(args.design_id))
+      const design = await getDesign(asString(args.design_id), ownerFilter ?? null)
       if (!design) return fail('Design not found.')
       const pages = parsePages(design)
       return ok({
@@ -442,6 +471,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
             height: template.height,
             pages: (pages.length ? pages : [createPage()]) as object,
             source: `template:${template.slug}`,
+            ...asOwner,
           },
         })
         return ok({ design_id: design.id, name, width: design.width, height: design.height, fromTemplate: template.slug, editUrl: editUrl(design.id, origin) })
@@ -449,7 +479,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
       const width = clamp(asInt(args.width, 1080), 40, 8000)
       const height = clamp(asInt(args.height, 1080), 40, 8000)
       const design = await db.design.create({
-        data: { name, width, height, pages: [createPage()] as unknown as object, source: 'mcp' },
+        data: { name, width, height, pages: [createPage()] as unknown as object, source: 'mcp', ...asOwner },
       })
       return ok({ design_id: design.id, name, width, height, pageCount: 1, editUrl: editUrl(design.id, origin) })
     },
@@ -472,12 +502,21 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
     handler: async (args) => {
       const query = asString(args.query).slice(0, 2000)
       if (query.length < 4) return fail('Provide a design brief ("query"), e.g. "Instagram post for a coffee shop launch — warm palette".')
-      const ctx = await getClientForSlot('text')
+      // BYO-MCP: user tokens resolve the OWNER's BYOK providers first
+      // (their keys pay for the generation); operator tokens keep the
+      // instance-wide chain, exactly as before.
+      const authUserId = deps.auth?.kind === 'user' ? deps.auth.userId : null
+      const ctx = authUserId
+        ? await getClientForSlotForUser('text', authUserId)
+        : await getClientForSlot('text')
       if (!ctx) {
         await recordUsage('assistant', 'local', false).catch(() => undefined)
         return fail(
-          'generate_design requires an AI provider configured on the server (add one in /admin, set ZAI_API_KEY, or ship a .z-ai-config file). ' +
-            'Without a provider you can still create designs from templates: list_templates → create_design → add_text/add_shape.'
+          authUserId
+            ? 'generate_design needs an AI provider: save your own in Settings → AI providers (bring your own key), or ask the operator to configure one. ' +
+              'Without a provider you can still create designs from templates: list_templates → create_design → add_text/add_shape.'
+            : 'generate_design requires an AI provider configured on the server (add one in /admin, set ZAI_API_KEY, or ship a .z-ai-config file). ' +
+              'Without a provider you can still create designs from templates: list_templates → create_design → add_text/add_shape.'
         )
       }
       const rl = rateLimit('mcp-generate', deps.req, 6, 60)
@@ -508,7 +547,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
         const spec = normalizeGeneratedDesign(parsed, width, height)
         const name = (asString(args.name, '') || asString(parsed.name, 'Generated design')).slice(0, 80) || 'Generated design'
         const design = await db.design.create({
-          data: { name, width: spec.width, height: spec.height, pages: spec.pages as unknown as object, source: 'ai:mcp' },
+          data: { name, width: spec.width, height: spec.height, pages: spec.pages as unknown as object, source: 'ai:mcp', ...asOwner },
         })
         await recordUsage('assistant', 'zai', true)
         return ok({
@@ -535,13 +574,13 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
     designId: string,
     fn: (pages: PageData[], width: number, height: number) => { pages: PageData[]; summary: Record<string, unknown> } | null
   ): Promise<ToolResult> {
-    const design = await getDesign(designId)
+    const design = await getDesign(designId, ownerFilter ?? null)
     if (!design) return fail(`Design "${designId}" was not found.`)
     const pages = parsePages(design)
     if (!pages.length) return fail('This design has no pages yet — call it once via the editor (or create_design from a template) so a page exists.')
     const result = fn(pages, design.width, design.height)
     if (!result) return fail('Nothing to change — check your arguments (page index, element id…).')
-    await saveDesign(designId, result.pages)
+    await saveDesign(designId, result.pages, ownerFilter ?? null)
     return ok({ ok: true, design_id: designId, ...result.summary })
   }
 
@@ -1024,7 +1063,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
     handler: async (args) => {
       const designId = asString(args.design_id)
       const format = asEnum(args.format, ['svg', 'png', 'json'] as const, 'svg')
-      const design = await getDesign(designId)
+      const design = await getDesign(designId, ownerFilter ?? null)
       if (!design) return fail(`Design "${designId}" was not found.`)
       const pages = parsePages(design)
       if (!pages.length) return fail('This design has no pages yet — add elements first.')
@@ -1096,7 +1135,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
       const designId = asString(args.design_id)
       const body = asString(args.body).slice(0, 500)
       if (!body.trim()) return fail('body must not be empty.')
-      const design = await getDesign(designId)
+      const design = await getDesign(designId, ownerFilter ?? null)
       if (!design) return fail(`Design "${designId}" was not found.`)
       const pages = parsePages(design)
       const pageIndex = clamp(asInt(args.page, 0), 0, Math.max(0, pages.length - 1))
@@ -1138,7 +1177,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
       required: ['design_id'],
     },
     handler: async (args) => {
-      const design = await getDesign(asString(args.design_id))
+      const design = await getDesign(asString(args.design_id), ownerFilter ?? null)
       if (!design) return fail('Design not found.')
       const comments = await db.comment.findMany({
         where: { designId: design.id },
@@ -1193,11 +1232,16 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
         return fail('Provide a PNG/JPEG/WebP dataURL screenshot in `image`.')
       }
       if (image.length > 8 * 1024 * 1024) return fail('Screenshot too large — max ~6 MB.')
-      const ctx = await getClientForSlot('vision')
+      // BYO-MCP: user tokens resolve the owner's BYOK vision slot first
+      const visionAuthUserId = deps.auth?.kind === 'user' ? deps.auth.userId : null
+      const ctx = visionAuthUserId ? await getClientForSlotForUser('vision', visionAuthUserId) : await getClientForSlot('vision')
       if (!ctx) {
         return fail(
-          'vision_ground requires a vision-slot provider configured on the server (add one in /admin). ' +
-            'Without vision you can still read design structure with get_design_content.',
+          visionAuthUserId
+            ? 'vision_ground needs a vision-capable provider: save your own in Settings → AI providers (bring your own key), or ask the operator to configure one. ' +
+              'Without vision you can still read design structure with get_design_content.'
+            : 'vision_ground requires a vision-slot provider configured on the server (add one in /admin). ' +
+              'Without vision you can still read design structure with get_design_content.',
         )
       }
       const rl = rateLimit('mcp-vision', deps.req, 6, 60)
@@ -1260,12 +1304,20 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
     description: 'Report server capabilities: Canvix version, AI provider availability, and how the server is secured.',
     inputSchema: { type: 'object', properties: {} },
     handler: async () => {
+      // user rail: BYOK first, then the instance chain — the same
+      // resolution generate_design uses, so the report is honest.
+      const authUserId = deps.auth?.kind === 'user' ? deps.auth.userId : null
+      const aiAvailable = authUserId ? (await getClientForSlotForUser('text', authUserId)) !== null : await hasProvider()
       return ok({
         server: 'canvix',
         version: SERVER_VERSION,
-        aiProvider: (await hasProvider()) ? 'available (generate_design works)' : 'not configured (generate_design unavailable; all other tools work)',
+        aiProvider: aiAvailable
+          ? 'available (generate_design works)'
+          : authUserId
+            ? 'not configured — save your own key in Settings → AI providers (bring your own key), or ask the operator to add one; all other tools work'
+            : 'not configured (generate_design unavailable; all other tools work)',
         transport: 'streamable-http (stateless)',
-        auth: 'bearer token via CANVIX_MCP_TOKEN',
+        auth: authUserId ? `personal API key (user: ${deps.auth?.username ?? 'you'}) — tools are scoped to your own designs` : 'bearer token via CANVIX_MCP_TOKEN',
       })
     },
   }

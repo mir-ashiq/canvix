@@ -386,6 +386,24 @@ export async function getClientForSlot(slot: AiSlot): Promise<ProviderContext | 
   }
 }
 
+/**
+ * v0.25 (BYO-MCP): the user-aware client constructor. The user's own
+ * BYOK providers resolve FIRST, then the instance chain — so a
+ * user-token MCP call pays with the owner's keys, not the
+ * operator's. Identical to getClientForSlot for userId === null.
+ */
+export async function getClientForSlotForUser(slot: AiSlot, userId: string | null): Promise<ProviderContext | null> {
+  const resolved = await resolveSlotForUser(slot, userId)
+  if (!resolved) return null
+  try {
+    const zai = await makeClient(resolved.baseUrl, resolved.apiKey)
+    return { zai, model: resolved.model, label: resolved.label, source: resolved.source }
+  } catch (err) {
+    console.error(`[ai] provider initialization failed (${slot}, user rail)`, err)
+    return null
+  }
+}
+
 /** Legacy helper — the text-slot client (MCP generate_design, older tests). */
 export async function getZAI(): Promise<import('z-ai-web-dev-sdk').default | null> {
   return (await getClientForSlot('text'))?.zai ?? null

@@ -7,6 +7,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **BYO-MCP — personal MCP tokens (v0.25)** — the MCP endpoint now has a
+  second auth rail that needs zero operator setup: any signed-in user
+  mints an API key with the new **`mcp`** scope (Settings → Profile &
+  AI keys, or one click on the dashboard's *AI agents (MCP)* card) and
+  uses that `cvx_…` token as the Bearer on `POST /api/mcp`. The token
+  rides the existing API-key machinery — sha256-stored, shown exactly
+  once, revocable, and `'all'`-scoped keys age forward automatically.
+  Security footprint mirrors the v1 REST rail exactly: user-token tools
+  see and modify **only the owner's designs** (every `getDesign` read
+  is scoped, `saveDesign` re-checks ownership at the DB via
+  `updateMany` so an id-swap between load and save can never leak a
+  write, `search_designs` filters by owner, `create_design`/
+  `generate_design` attribute new designs to the owner, and the
+  anonymous commons is invisible — a foreign design is a flat
+  not-found, no enumeration). AI tools are BYOK-aware on the user
+  rail: `generate_design` and `vision_ground` resolve the **owner's
+  saved providers first** (`getClientForSlotForUser`), so agent work
+  pays with the user's keys — the operator's AI is never consumed —
+  and `get_capabilities`/`initialize` honestly describe the rail and
+  scoping. The operator token (`CANVIX_MCP_TOKEN`) is unchanged:
+  unscoped, historical behaviour, same endpoint. The dashboard card
+  now shows both paths (personal token recommended; server token for
+  self-hosters) and `OPTIONS /api/mcp` reports `user-tokens` when no
+  operator token exists. Tests: 20 new unit tests
+  (`src/lib/mcp/byo-mcp.test.ts` — auth matrix, scope parsing, tool
+  isolation, rail honesty) + e2e `tests/e2e/byo-mcp.spec.ts`
+  (create → initialize → scoped search/get → scope-missing rejection →
+  revocation) — full suite 1465 green.
+
 - **Docker self-hosting (WP1: deployment & API trust)** — the
   one-command self-host the roadmap promised: `cp
   .env.docker.example .env`, set `POSTGRES_PASSWORD`, `docker

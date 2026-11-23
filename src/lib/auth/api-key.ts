@@ -21,7 +21,11 @@ import { createHash, randomBytes } from 'node:crypto'
 import type { NextRequest, NextResponse } from 'next/server'
 
 export const API_KEY_PREFIX = 'cvx_'
-export const API_KEY_SCOPES = ['designs:read', 'designs:write'] as const
+// v0.25: 'mcp' unlocks the MCP endpoint (/api/mcp) for the key owner —
+// BYO-MCP. The scope rides the same key machinery (one token, many
+// rails): a key with 'mcp' authorizes JSON-RPC calls scoped to the
+// owner's own designs, exactly like the REST rail is scoped.
+export const API_KEY_SCOPES = ['designs:read', 'designs:write', 'mcp'] as const
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number]
 
 /** New raw key token: cvx_ + 256-bit base64url. */

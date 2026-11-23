@@ -872,24 +872,45 @@ comment, export.
 
 ### Enable it
 
+Two rails, pick either (or both):
+
+**Personal token — any signed-in user, no server setup (v0.25 “BYO-MCP”).**
+Works on canvix.app and any instance where you have an account: open
+**Settings → Profile & AI keys**, create an API key with the **`mcp`** scope
+(or click “Create my MCP token” on the dashboard's *AI agents (MCP)* card), and
+use that token as the Bearer. Tools are **scoped to your own designs** — the
+same footprint your API key has on the REST rail — and AI generation
+(`generate_design`, `vision_ground`) resolves **your BYOK providers first**,
+so your agents pay with your keys, never the operator's.
+
+```bash
+# no server changes needed — the token is a cvx_… API key you mint yourself
+```
+
+**Server token — operators, unscoped (historical).**
+
 ```bash
 # 1. set a secret on the server (openssl rand -hex 24)
 CANVIX_MCP_TOKEN=your-long-random-secret
 # 2. restart Canvix — the dashboard "AI agents (MCP)" card flips to Enabled
 ```
 
+The server token sees every design on the instance; personal tokens only see
+the owner's. Revoking a personal token (Settings → API keys) cuts the agent's
+access immediately.
+
 ### Connect a client
 
 Endpoint: `https://your-canvix.example.com/api/mcp` (Streamable HTTP, stateless).
 Client config (Claude Desktop / Cursor / any MCP client that supports remote
-HTTP servers):
+HTTP servers) — with a personal token:
 
 ```json
 {
   "mcpServers": {
     "canvix": {
       "url": "https://your-canvix.example.com/api/mcp",
-      "headers": { "Authorization": "Bearer <CANVIX_MCP_TOKEN>" }
+      "headers": { "Authorization": "Bearer cvx_…your-personal-token" }
     }
   }
 }

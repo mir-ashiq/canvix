@@ -410,9 +410,97 @@ export async function applyDesignAction(action: DesignAction, caller?: ActionCal
       return msg
     }
 
+    case 'fixOverlaps': {
+      const msg = fixOverlaps()
+      return msg
+    }
+
     default:
       return 'Unsupported action'
   }
+}
+
+/** v0.26: separate overlapping elements + pull off-canvas elements back.
+ *  Deterministic geometry pass over the current page:
+ *  1. Off-canvas boxes snap back inside the safe margin.
+ *  2. True overlaps (both boxes substantive, neither a text-on-card
+ *     pattern — the text-inside-frame composition is legitimate) get
+ *     pushed apart along the axis with the smallest required shift,
+ *     iterating until stable (or a bounded pass count).
+ *  All moves ride the ordinary updateElements store action → one undo
+ *  step each, collab ops included. */
+function fixOverlaps(): string {
+  const s = useEditorStore.getState()
+  const page = s.pages[s.currentPage]
+  if (!page) return 'No page to fix'
+  const { width, height } = s
+  const margin = Math.round(Math.min(width, height) * 0.04)
+  // working copies (mutated, then committed in one batch at the end)
+  const boxes = flatElements(page.elements)
+    .filter((e) => !e.locked)
+    .map((e) => ({ id: e.id, type: e.type, x: e.x, y: e.y, w: e.width, h: e.height }))
+  if (!boxes.length) return 'Nothing to fix'
+
+  let moved = 0
+
+  // 1. off-canvas → clamp back inside the safe area
+  for (const b of boxes) {
+    const nx = Math.min(Math.max(b.x, margin), Math.max(margin, width - margin - b.w))
+    const ny = Math.min(Math.max(b.y, margin), Math.max(margin, height - margin - b.h))
+    if (nx !== b.x || ny !== b.y) {
+      b.x = nx
+      b.y = ny
+      moved++
+    }
+  }
+
+  // 2. iterative overlap separation (max 4 sweeps)
+  const overlapArea = (a: typeof boxes[number], b: typeof boxes[number]) => {
+    const ix = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
+    const iy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
+    return ix > 0 && iy > 0 ? ix * iy : 0
+  }
+  const smallArea = (a: typeof boxes[number], b: typeof boxes[number]) => Math.min(a.w * a.h, b.w * b.h)
+
+  for (let sweep = 0; sweep < 4; sweep++) {
+    let touched = false
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i]
+        const b = boxes[j]
+        const inter = overlapArea(a, b)
+        if (inter <= 0) continue
+        const small = smallArea(a, b)
+        if (small <= 0 || inter / small < 0.1) continue // touching edges are fine
+        // skip the legitimate text-on-card composition: one box mostly
+        // inside the other AND the smaller is a text element
+        const smaller = a.w * a.h <= b.w * b.h ? a : b
+        if (inter / small > 0.55 && smaller.type === 'text') continue
+
+        // push apart along the cheaper axis (smallest shift), then clamp
+        const shiftX = Math.min(a.x + a.w - b.x, b.x + b.w - a.x) + 12
+        const shiftY = Math.min(a.y + a.h - b.y, b.y + b.h - a.y) + 12
+        if (shiftX <= shiftY) {
+          // a goes left, b goes right (keep order stable)
+          a.x = Math.max(margin, a.x - shiftX / 2)
+          b.x = Math.min(width - margin - b.w, b.x + shiftX / 2)
+        } else {
+          a.y = Math.max(margin, a.y - shiftY / 2)
+          b.y = Math.min(height - margin - b.h, b.y + shiftY / 2)
+        }
+        touched = true
+        moved++
+      }
+    }
+    if (!touched) break
+  }
+
+  if (!moved) return 'No overlaps or off-canvas elements found — the layout is clean'
+
+  // commit: one update per element (undo-friendly, collab-synced)
+  const update = useEditorStore.getState().updateElements
+  for (const b of boxes) update([b.id], { x: Math.round(b.x), y: Math.round(b.y) })
+  return `Layout fixed — ${moved} placement${moved > 1 ? 's' : ''} adjusted (overlaps separated, everything back on the page). Ctrl+Z to undo.`
 }
 
 /** Deterministic layout balance: margins, centering, spacing (no AI needed). */
@@ -477,6 +565,7 @@ export function describeAction(action: DesignAction): string {
     case 'suggestPalette': return 'Use this palette'
     case 'translate': return `Translate to ${action.language}`
     case 'magicAnimate': return 'Magic Animate this page'
+    case 'fixOverlaps': return 'Fix overlaps & off-canvas elements'
     case 'balanceLayout':
     case 'magicLayout': return 'Balance the layout'
     default: return action.type

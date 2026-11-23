@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Bot, Loader2, Plus, Send, Sparkles, User, Wand2 } from 'lucide-react'
+import { Bot, Loader2, Play, Send, Sparkles, User, Wand2, Zap } from 'lucide-react'
 import type { AnyElement, TextElement } from '@/lib/types'
 import { useEditorStore } from '@/store/editor-store'
 import { AppHeader, type AppPanelProps } from './registry'
@@ -14,16 +14,31 @@ interface Turn {
   content: string
   actions?: DesignAction[]
   done?: { index: number; msg: string }
+  /** v0.26: actions this turn ran automatically (marks chips as done) */
+  autoRan?: boolean
 }
 
 const SUGGESTIONS = [
   'Make this design more modern',
   'Move the title to the top',
   'Change all heading colors to purple',
+  'Fix anything that overlaps',
   'Make the layout more balanced',
   'Add a CTA button text',
-  'Magic animate this page',
 ]
+
+/** v0.26: the auto-apply preference — persisted per browser. Default ON:
+ *  the assistant now executes its actions right away (the Canva Magic
+ *  Studio behaviour) instead of making the user click each chip. */
+const AUTO_APPLY_KEY = 'canvix-assistant-auto-apply'
+function readAutoApply(): boolean {
+  try {
+    const v = localStorage.getItem(AUTO_APPLY_KEY)
+    return v === null ? true : v === '1'
+  } catch {
+    return true
+  }
+}
 
 /** Flatten elements (groups included). */
 function flatElements(els: AnyElement[], out: AnyElement[] = []): AnyElement[] {
@@ -84,6 +99,12 @@ export function AssistantApp({ onClose }: AppPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const { configured: aiConfigured, loaded: aiLoaded } = useAICapabilities()
   const canUndo = useEditorStore((s) => s.past.length > 0)
+  // v0.26: auto-apply (default on) — flipped by the toggle in the header.
+  // localStorage is read lazily in the state ctor (client components
+  // render on the server first, so SSR falls back to `true` and the
+  // client picks the stored value on hydration — same pattern as a
+  // media-query hook).
+  const [autoApply, setAutoApply] = useState(() => readAutoApply())
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -104,7 +125,24 @@ export function AssistantApp({ onClose }: AppPanelProps) {
       })
       const data = (await res.json()) as { reply?: string; actions?: DesignAction[]; error?: string; code?: string }
       if (!res.ok || !data.reply) throw new Error(data.error ?? 'The assistant could not answer.')
-      setTurns((ts) => [...ts, { role: 'assistant', content: data.reply!, actions: data.actions ?? [] }])
+      const actions = data.actions ?? []
+      const turnIndex = turns.length + 1 // index this new turn will occupy
+      setTurns((ts) => [...ts, { role: 'assistant', content: data.reply!, actions, autoRan: autoApply && actions.length > 0 }])
+      // v0.26: execute every returned action immediately when auto-apply
+      // is on — sequentially, so multi-action plans compose in order
+      if (autoApply && actions.length) {
+        void (async () => {
+          for (let j = 0; j < actions.length; j++) {
+            let msg: string
+            try {
+              msg = await applyDesignAction(actions[j])
+            } catch (e) {
+              msg = e instanceof Error ? e.message : 'Action failed'
+            }
+            setTurns((ts) => ts.map((t, i) => (i === turnIndex ? { ...t, done: { index: j, msg } } : t)))
+          }
+        })()
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Something went wrong.'
       // v0.23.1: assistant failures are often "no text-slot key" — nudge
@@ -115,7 +153,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
     }
   }
 
-  /** Execute one attached action (undoable via Ctrl+Z). */
+  /** Execute one attached action manually (undoable via Ctrl+Z). */
   const runAction = async (turnIndex: number, actionIndex: number, action: DesignAction) => {
     let msg: string
     try {
@@ -128,9 +166,35 @@ export function AssistantApp({ onClose }: AppPanelProps) {
 
   const empty = turns.length === 0 && !busy
 
+  const toggleAutoApply = () => {
+    const next = !autoApply
+    setAutoApply(next)
+    try {
+      localStorage.setItem(AUTO_APPLY_KEY, next ? '1' : '0')
+    } catch {
+      /* storage unavailable — session-only preference */
+    }
+  }
+
   return (
     <div className="flex flex-col">
-      <AppHeader icon={Bot} title="Canvix AI assistant" onClose={onClose} />
+      <AppHeader icon={Bot} title="Canvix AI assistant" onClose={onClose}>
+        {/* v0.26: auto-apply toggle — on = actions run the moment they arrive */}
+        <button
+          onClick={toggleAutoApply}
+          className={cn(
+            'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10.5px] font-bold transition-colors',
+            autoApply
+              ? 'border-[#02C0CC]/40 bg-[#02C0CC]/15 text-[#7BE8EC]'
+              : 'border-white/12 bg-white/[0.04] text-white/55 hover:text-white/80'
+          )}
+          title={autoApply ? 'Auto-apply ON — actions run automatically. Click to review them manually instead.' : 'Auto-apply OFF — click each action to run it. Click to enable auto-apply.'}
+          aria-pressed={autoApply}
+          data-testid="assistant-auto-apply"
+        >
+          <Zap size={11} /> Auto-apply {autoApply ? 'on' : 'off'}
+        </button>
+      </AppHeader>
 
       {/* AI provider missing — honest notice */}
       {aiLoaded && !aiConfigured && (
@@ -176,15 +240,20 @@ export function AssistantApp({ onClose }: AppPanelProps) {
                 {t.content}
               </div>
 
-              {/* action chips */}
+              {/* action chips — v0.26: with auto-apply on these arrive
+                  already-applied (chips show the result); with it off they
+                  stay clickable run buttons */}
               {t.actions && t.actions.length > 0 && (
                 <div className="mt-1.5 space-y-1">
+                  <div className="text-[10px] font-semibold text-white/35 uppercase tracking-wide">
+                    {t.autoRan ? 'Applied automatically' : 'Click to apply'}
+                  </div>
                   {t.actions.map((a, j) => {
                     const done = t.done?.index === j
                     return (
                       <div key={j} className="flex gap-1.5">
                         <button
-                          disabled={done}
+                          disabled={done || t.autoRan}
                           onClick={() => void runAction(i, j, a)}
                           className={cn(
                             'flex-1 flex items-center gap-2 rounded-xl border px-2.5 py-2 text-left text-[11px] font-semibold transition-colors',
@@ -193,9 +262,9 @@ export function AssistantApp({ onClose }: AppPanelProps) {
                               : 'border-[#7630D7]/40 bg-[#7630D7]/15 text-white hover:bg-[#7630D7]/30 cursor-pointer'
                           )}
                         >
-                          <Wand2 size={12} className="shrink-0" />
+                          {done ? <Sparkles size={12} className="shrink-0" /> : <Wand2 size={12} className="shrink-0" />}
                           <span className="min-w-0 truncate">{done ? t.done?.msg : describeAction(a)}</span>
-                          {!done && <Plus size={11} className="ml-auto shrink-0" />}
+                          {!done && !t.autoRan && <Play size={11} className="ml-auto shrink-0" />}
                         </button>
                       </div>
                     )

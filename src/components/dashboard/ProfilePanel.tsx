@@ -118,10 +118,12 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
     }
   }, [])
 
-  // Load when the dialog opens. The fetch is kicked off in a microtask
-  // so the effect body itself never calls setState synchronously
-  // (react-hooks/set-state-in-effect — same pattern as useDesigns);
-  // load() only sets state after its awaits resolve anyway.
+  // Load when the dialog opens. v0.26 perf: when the account-menu hover
+  // already warmed the request (in-flight or HTTP-cached), the fetch rides
+  // the same connection — and keep the PREVIOUS data visible during a
+  // reload instead of flashing a spinner on every open. The fetch is
+  // kicked off in a microtask so the effect body itself never calls
+  // setState synchronously (react-hooks/set-state-in-effect).
   useEffect(() => {
     if (!open) return
     void Promise.resolve().then(() => load())

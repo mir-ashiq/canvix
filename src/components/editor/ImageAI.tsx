@@ -43,17 +43,53 @@ function providerReason(detail?: string): string {
 
 /** Normalise an element src into something the AI service can consume:
  *  dataURLs and absolute http(s) URLs pass through; relative paths
- *  (bundled /photos/*.jpg) are fetched and converted to dataURLs. */
+ *  (bundled /photos/*.jpg) are fetched and converted to dataURLs.
+ *  v0.26: a 20 s timeout replaces the old unbounded fetch — a stalled
+ *  remote (or a CSP/CORS block) now surfaces an error toast instead of
+ *  hanging the tool at "Decoding image…" forever. */
 async function toSendableImage(src: string): Promise<string> {
   if (src.startsWith('data:') || /^https?:\/\//.test(src)) return src
-  const res = await fetch(src)
-  if (!res.ok) throw new Error('Could not load the image')
-  const blob = await res.blob()
-  return await new Promise<string>((resolve, reject) => {
-    const fr = new FileReader()
-    fr.onload = () => resolve(String(fr.result))
-    fr.onerror = () => reject(new Error('Could not read the image'))
-    fr.readAsDataURL(blob)
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 20_000)
+  try {
+    const res = await fetch(src, { signal: ctrl.signal })
+    if (!res.ok) throw new Error('Could not load the image')
+    const blob = await res.blob()
+    return await new Promise<string>((resolve, reject) => {
+      const fr = new FileReader()
+      fr.onload = () => resolve(String(fr.result))
+      fr.onerror = () => reject(new Error('Could not read the image'))
+      fr.readAsDataURL(blob)
+    })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error('Loading the image timed out — check your connection and try again.')
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** v0.26: decode with a hard timeout. `new Image()` + onload can hang
+ *  indefinitely on corrupted/oversized remote sources (the brush eraser
+ *  used to sit at "Decoding image…" forever); this always settles. */
+function loadImage(src: string, timeoutMs = 15_000): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image()
+    const timer = setTimeout(() => {
+      img.src = ''
+      reject(new Error('Decoding the image timed out — try a different image.'))
+    }, timeoutMs)
+    img.onload = () => {
+      clearTimeout(timer)
+      resolve(img)
+    }
+    img.onerror = () => {
+      clearTimeout(timer)
+      reject(new Error('Could not decode the image (it may be CORS-blocked) — try re-uploading it.'))
+    }
+    img.src = src
   })
 }
 
@@ -208,6 +244,8 @@ export function BgRemoverPopover({ el }: { el: ImageElement }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [phase, setPhase] = useState<'idle' | 'model' | 'removing' | 'provider'>('idle')
+  /** v0.26: 0–100 for the local engine's download/compute progress */
+  const [progress, setProgress] = useState(0)
   const [engine, setEngine] = useState<ImageToolsEngine>('provider')
   const [error, setError] = useState('')
 
@@ -222,20 +260,30 @@ export function BgRemoverPopover({ el }: { el: ImageElement }) {
     }
   }
 
-  /** The on-device path — ONNX segmentation cut-out. */
+  /** The on-device path — ONNX segmentation cut-out. v0.26: real progress
+   *  (model download % / compute phases) instead of a frozen "Loading…" —
+   *  the first use downloads ~40 MB, and users need to see it moving. */
   const runDevice = async () => {
     const update = useEditorStore.getState().updateElements
     setPhase('model')
+    setProgress(0)
     const { removeBackground } = await import('@imgly/background-removal')
     const sendable = await toSendableImage(el.src)
     const blob = await (await fetch(sendable)).blob()
     setPhase('removing')
     const result = await removeBackground(blob, {
       output: { format: 'image/png' },
-      progress: (key) => {
-        if (key === 'fetch:network' || key.startsWith('fetch:')) setPhase('model')
+      progress: (key, current, total) => {
+        if (key.startsWith('fetch:')) {
+          setPhase('model')
+          if (total > 0) setProgress(Math.round((current / total) * 100))
+        } else if (key.startsWith('compute:')) {
+          setPhase('removing')
+          setProgress(Math.round((current / Math.max(1, total)) * 100))
+        }
       },
     })
+    setProgress(100)
     const dataUrl = await blobToDataURL(result)
     const dims = await imageSize(dataUrl)
     const newHeight = Math.max(4, Math.round(el.width * (dims.h / Math.max(1, dims.w))))
@@ -330,6 +378,25 @@ export function BgRemoverPopover({ el }: { el: ImageElement }) {
             {error}
           </p>
         )}
+        {/* v0.26: live progress for the local engine (model download / compute) */}
+        {busy && engine === 'device' && (
+          <div className="mb-2.5" data-testid="bg-remover-progress">
+            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#02C0CC] to-[#7630D7] transition-[width] duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <div className="mt-1 text-[10px] text-white/50">
+              {phase === 'model' ? `Downloading model… ${progress}% (first use only, ~40 MB)` : `Removing background… ${progress}%`}
+            </div>
+          </div>
+        )}
+        {busy && engine === 'provider' && (
+          <div className="mb-2.5 text-[10px] text-white/50 flex items-center gap-1.5">
+            <Loader2 size={11} className="animate-spin" /> Sending the image to the AI provider — larger images can take up to a minute…
+          </div>
+        )}
         <Button className="btn-cv w-full h-9 text-[12px]" onClick={() => void run()} disabled={busy}>
           {busy ? <Loader2 size={13} className="animate-spin" /> : 'Remove background'}
         </Button>
@@ -393,10 +460,22 @@ export function MagicEraserPopover({ el }: { el: ImageElement }) {
   )
 }
 
-/** Canva "Image Upscaler / enhancer" — one-click AI photo enhance. */
+/** Canva "Image Upscaler / enhancer" — one-click AI photo enhance.
+ *  v0.26: shows elapsed time while the provider works — big photos can
+ *  take 30 s+, and a bare spinner with no signal reads as "stuck". */
 export function EnhanceButton({ el }: { el: ImageElement }) {
   const [busy, setBusy] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    if (!busy) return
+    // no sync setState in the effect body — the tick callback is the
+    // only setter, and `run()` resets elapsed before flipping busy
+    const started = Date.now()
+    const t = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 1000)
+    return () => clearInterval(t)
+  }, [busy])
   const run = async () => {
+    setElapsed(0)
     setBusy(true)
     const ok = await runImageAI(el, { mode: 'enhance' }, (msg) =>
       toast({ title: 'Enhance image', description: msg, variant: 'destructive' })
@@ -405,9 +484,101 @@ export function EnhanceButton({ el }: { el: ImageElement }) {
     if (ok) toast({ title: 'Image enhanced', description: 'Sharper, cleaner photo swapped in. Ctrl+Z to undo.' })
   }
   return (
-    <button className={btnBase} onClick={() => void run()} disabled={busy} title="Enhance image — sharpen & clean up with AI" aria-label="Enhance image">
+    <button className={btnBase} onClick={() => void run()} disabled={busy} title="Enhance image — sharpen & clean up with AI" aria-label="Enhance image" data-testid="enhance-button">
       {busy ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-      <span className="text-[12px] hidden lg:inline">{busy ? 'Enhancing…' : 'Enhance'}</span>
+      <span className="text-[12px] hidden lg:inline">{busy ? `Enhancing… ${elapsed}s` : 'Enhance'}</span>
+      {busy && <span className="text-[12px] lg:hidden">{elapsed}s</span>}
+    </button>
+  )
+}
+
+/** ── v0.26: "Auto adjust" — instant, local histogram auto-correction ──
+ *  Canva's one-click "Auto" in the Adjust panel. Pure pixel math on a
+ *  downscaled sample (fast on any image, no provider, no model): a
+ *  percentile stretch on the luma histogram + gentle saturation lift.
+ *  Writes ordinary brightness/contrast/saturation element props, so it
+ *  stays undoable, animatable and export-safe like a manual adjust. */
+export function AutoAdjustButton({ el, ids }: { el: ImageElement; ids: string[] }) {
+  const [busy, setBusy] = useState(false)
+  const run = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const sendable = await toSendableImage(el.src)
+      const img = await loadImage(sendable)
+      // sample at most ~200px on the long edge — enough for a histogram
+      const s = Math.min(1, 200 / Math.max(img.naturalWidth, img.naturalHeight))
+      const w = Math.max(2, Math.round(img.naturalWidth * s))
+      const h = Math.max(2, Math.round(img.naturalHeight * s))
+      const c = document.createElement('canvas')
+      c.width = w
+      c.height = h
+      const ctx = c.getContext('2d', { willReadFrequently: true })
+      if (!ctx) throw new Error('Canvas is unavailable')
+      ctx.drawImage(img, 0, 0, w, h)
+      const data = ctx.getImageData(0, 0, w, h).data
+      // luma histogram + saturation stats
+      const hist = new Array<number>(256).fill(0)
+      let satSum = 0
+      let n = 0
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i]
+        const g = data[i + 1]
+        const b = data[i + 2]
+        const luma = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b)
+        hist[luma]++
+        const mx = Math.max(r, g, b)
+        const mn = Math.min(r, g, b)
+        if (mx > 0) satSum += (mx - mn) / mx
+        n++
+      }
+      // 1st/99th percentile stretch → brightness/contrast in the element's
+      // -100..100 scale (0.5% clip on each end, like photo editors)
+      const loTarget = n * 0.005
+      const hiTarget = n * 0.995
+      let acc = 0
+      let lo = 0
+      let hi = 255
+      for (let v = 0; v < 256; v++) {
+        acc += hist[v]
+        if (acc <= loTarget) lo = v
+        if (acc <= hiTarget) hi = v
+      }
+      // map [lo, hi] → [0, 255]: brightness shifts the midpoint, contrast
+      // scales the span — both clamped to the panel's -100..100 range
+      const mid = (lo + hi) / 2
+      const brightness = Math.round(Math.max(-100, Math.min(100, ((128 - mid) / 128) * 60)))
+      const span = Math.max(16, hi - lo)
+      const contrast = Math.round(Math.max(-100, Math.min(100, ((255 / span - 1) * 100) / 1.6)))
+      const avgSat = n > 0 ? satSum / n : 0
+      const saturation = Math.round(Math.max(0, Math.min(100, (0.32 - avgSat) * 160)))
+      const update = useEditorStore.getState().updateElements
+      update(ids, { brightness, contrast, saturation })
+      toast({
+        title: 'Auto-adjusted',
+        description: `Brightness ${brightness >= 0 ? '+' : ''}${brightness}, contrast ${contrast >= 0 ? '+' : ''}${contrast}, saturation ${saturation >= 0 ? '+' : ''}${saturation}. Ctrl+Z to undo.`,
+      })
+    } catch (e) {
+      toast({
+        title: 'Auto adjust',
+        description: e instanceof Error ? e.message : 'Could not analyze this image.',
+        variant: 'destructive',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <button
+      className={btnBase}
+      onClick={() => void run()}
+      disabled={busy}
+      title="Auto adjust — instant brightness, contrast & saturation correction"
+      aria-label="Auto adjust image"
+      data-testid="auto-adjust-button"
+    >
+      {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+      <span className="text-[12px] hidden lg:inline">{busy ? 'Adjusting…' : 'Auto'}</span>
     </button>
   )
 }
@@ -418,15 +589,9 @@ export function EnhanceButton({ el }: { el: ImageElement }) {
  *  download. This is the universal path: VibesAI-class edit providers
  *  only edit images they generated themselves (422 otherwise). */
 
-/** dataURL → HTMLImageElement (decoded) */
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new window.Image()
-    img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('Could not decode the image'))
-    img.src = src
-  })
-}
+/** dataURL → HTMLImageElement (decoded) — v0.26: the guarded variant
+ *  above (with timeout) replaced the raw onload promise; kept only as
+ *  the load step shared by the dialog paths. */
 
 /** Raster bytes → ImageData. TS's ImageData ctor wants
  *  Uint8ClampedArray<ArrayBuffer>; a fresh copy satisfies it on every
@@ -644,12 +809,15 @@ export function BrushEraserDialog({ el }: { el: ImageElement }) {
   const lastPt = useRef<{ x: number; y: number } | null>(null)
   /** display geometry, set when the image decodes */
   const [disp, setDisp] = useState<{ w: number; h: number } | null>(null)
+  /** v0.26: surface decode failures instead of sitting on the hint forever */
+  const [decodeError, setDecodeError] = useState<string | null>(null)
 
   // (re)draw the base image whenever the dialog opens / element changes
   useEffect(() => {
     if (!open || !baseRef.current || !maskRef.current) return
     let cancelled = false
     setPainted(false)
+    setDecodeError(null)
     ;(async () => {
       try {
         const sendable = await toSendableImage(el.src)
@@ -674,8 +842,9 @@ export function BrushEraserDialog({ el }: { el: ImageElement }) {
         bctx.clearRect(0, 0, w, h)
         bctx.drawImage(img, 0, 0, w, h)
         mctx.clearRect(0, 0, w, h)
-      } catch {
-        /* decode failure leaves disp null → the hint stays visible */
+      } catch (err) {
+        /* decode failure → show the reason, not an eternal hint */
+        if (!cancelled) setDecodeError(err instanceof Error ? err.message : 'Could not decode the image.')
       }
     })()
     return () => {
@@ -834,8 +1003,25 @@ export function BrushEraserDialog({ el }: { el: ImageElement }) {
               lastPt.current = null
             }}
           />
-          {!disp && (
-            <div className="flex items-center justify-center h-56 text-[12px] text-white/45">Decoding image…</div>
+          {!disp && !decodeError && (
+            <div className="flex items-center justify-center h-56 text-[12px] text-white/45">
+              <Loader2 size={13} className="animate-spin mr-2" /> Decoding image…
+            </div>
+          )}
+          {decodeError && (
+            <div className="flex flex-col items-center justify-center h-56 gap-2 text-[12px] text-[#FF8A8A] px-6 text-center" data-testid="brush-eraser-decode-error" role="alert">
+              {decodeError}
+              <button
+                className="text-[11px] font-semibold text-white/70 hover:text-white underline underline-offset-2"
+                onClick={() => {
+                  // nudge the effect to re-run by toggling open off/on
+                  setOpen(false)
+                  setTimeout(() => setOpen(true), 60)
+                }}
+              >
+                Try again
+              </button>
+            </div>
           )}
         </div>
         <div className="flex items-center gap-3 mt-1">

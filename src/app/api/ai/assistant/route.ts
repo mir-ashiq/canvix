@@ -58,6 +58,8 @@ export type DesignAction =
   | { type: 'setBackground'; kind: 'solid' | 'gradient'; from: string; to?: string; angle?: number }
   | { type: 'alignElements'; ids: string[]; mode: 'left' | 'cx' | 'right' | 'top' | 'cy' | 'bottom' }
   | { type: 'distributeElements'; ids: string[]; axis: 'x' | 'y' }
+  /** v0.26: nudge overlapping elements apart / pull off-canvas elements back in */
+  | { type: 'fixOverlaps' }
   | { type: 'addPage' }
   | { type: 'duplicatePage' }
   | { type: 'generateImage'; prompt: string }
@@ -197,6 +199,7 @@ function sanitizeActions(input: unknown): DesignAction[] {
       case 'magicAnimate':
       case 'magicLayout':
       case 'balanceLayout':
+      case 'fixOverlaps': // v0.26 — no parameters; operates on the current page
         out.push({ type })
         break
       case 'generateImage': {
@@ -248,6 +251,46 @@ async function __canvix_post(req: NextRequest) {
       .join('\n')
 
     const selection = (d.selectedIds ?? []).slice(0, 20)
+
+    // ── v0.26 spatial awareness: precomputed overlap + bounds analysis ──
+    // Text elements over their own background/frame pairs are usual in
+    // design (that's composition, not a bug), so a pair only counts as an
+    // overlap when BOTH boxes are substantive and neither contains the
+    // other's center (the "text sits on a card" pattern). Keep it compact —
+    // this is model context, not a debug dump.
+    const boxes = els
+      .filter((e) => Number.isFinite(e.x) && Number.isFinite(e.y) && (e.width ?? 0) > 0 && (e.height ?? 0) > 0)
+      .map((e) => ({ id: e.id, type: e.type, x: e.x!, y: e.y!, w: e.width ?? 0, h: e.height ?? 0 }))
+    const overlaps: string[] = []
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i]
+        const b = boxes[j]
+        const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x))
+        const iy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y))
+        const inter = ix * iy
+        if (inter <= 0) continue
+        const minArea = Math.min(a.w * a.h, b.w * b.h)
+        if (minArea > 0 && inter / minArea > 0.55) {
+          // one box mostly inside the other — the text-on-card pattern,
+          // only report when the SMALLER element is not a text box
+          const smallerIsText = (a.w * a.h <= b.w * b.h ? a : b).type === 'text'
+          if (smallerIsText) continue
+        }
+        if (minArea > 0 && inter / minArea > 0.08) {
+          overlaps.push(`${a.type}#${a.id} × ${b.type}#${b.id} (${Math.round((inter / minArea) * 100)}% of the smaller)`)
+        }
+        if (overlaps.length >= 12) break
+      }
+      if (overlaps.length >= 12) break
+    }
+    const pw = Number(d.width) || 0
+    const ph = Number(d.height) || 0
+    const offCanvas = boxes
+      .filter((b) => pw > 0 && ph > 0 && (b.x < -8 || b.y < -8 || b.x + b.w > pw + 8 || b.y + b.h > ph + 8))
+      .slice(0, 8)
+      .map((b) => `${b.type}#${b.id} @(${Math.round(b.x)},${Math.round(b.y)}) ${Math.round(b.w)}x${Math.round(b.h)} outside the ${pw}x${ph} page`)
+
     const designContext = [
       `Design: "${d.name ?? 'Untitled'}" — ${d.width ?? '?'}x${d.height ?? '?'}px (${d.templateType ?? 'custom'}), ${d.pageCount ?? 1} page(s), currently editing page ${(d.currentPageIndex ?? 0) + 1}.`,
       `Selected element ids: ${selection.length ? selection.join(', ') : 'none'}.`,
@@ -255,10 +298,12 @@ async function __canvix_post(req: NextRequest) {
       elementSummary || '(empty page)',
       `Colors in use: ${(d.colorsInUse ?? []).slice(0, 12).join(', ') || 'none'}`,
       `Fonts in use: ${(d.fontsInUse ?? []).slice(0, 8).join(', ') || 'none'}`,
+      `Overlapping element pairs (spatial analysis): ${overlaps.length ? overlaps.join('; ') : 'none detected'}`,
+      `Off-canvas elements (partly outside the page): ${offCanvas.length ? offCanvas.join('; ') : 'none detected'}`,
     ].join('\n')
 
     const system =
-      'You are the Canvix AI assistant 2.0 — a design-aware copilot embedded in a graphic-design editor ' +
+      'You are the Canvix AI assistant — a design-aware copilot embedded in a graphic-design editor ' +
       '(similar to Canva AI). You understand the CURRENT design: its elements, colors, typography, layout and page size. ' +
       'You help users improve their design through STRUCTURED EDITOR ACTIONS, not code.\n\n' +
       'Respond ONLY with a JSON object: {"reply": string, "actions": DesignAction[]}\n\n' +
@@ -274,19 +319,26 @@ async function __canvix_post(req: NextRequest) {
       '- {"type":"setBackground","kind":"solid|gradient","from":"#hex","to":"#hex","angle":deg}\n' +
       '- {"type":"alignElements","ids":[...],"mode":"left|cx|right|top|cy|bottom"}\n' +
       '- {"type":"distributeElements","ids":[...],"axis":"x|y"}\n' +
+      '- {"type":"fixOverlaps"} — automatically separates overlapping elements and pulls off-canvas elements back onto the page (v0.26)\n' +
       '- {"type":"addPage"} / {"type":"duplicatePage"}\n' +
       '- {"type":"generateImage","prompt":str} — generates an AI image and adds it\n' +
       '- {"type":"suggestPalette","colors":["#hex",...3-5]}\n' +
       '- {"type":"translate","language":str}\n' +
       '- {"type":"magicAnimate"} — one-click tasteful animations\n' +
       '- {"type":"balanceLayout"} / {"type":"magicLayout"} — improve spacing/alignment/balance\n\n' +
+      'SPATIAL AWARENESS (v0.26): the context includes each element\'s box `@(x,y) WxH` on a page of the given size, ' +
+      'plus a precomputed list of overlapping pairs and off-canvas elements. USE IT:\n' +
+      '- When elements overlap unintentionally or sit off the page edge, prefer {"type":"fixOverlaps"} (it handles both).\n' +
+      '- For precise fixes, use updateElements/moveElements with exact pixel coordinates that respect the page bounds and avoid other elements\' boxes.\n' +
+      '- When the user asks to "move X next to Y", compute coordinates from the listed boxes (e.g. below Y: y = Y.y + Y.height + 24).\n' +
+      'If the context says overlaps/offCanvas lists are empty, the layout is already clean — do not emit fixOverlaps.\n\n' +
       'RULES:\n' +
       '1. Only reference element ids that exist in the provided context. Use the ids of SELECTED elements when the user says "this/these/the title".\n' +
       '2. "Make this more modern" → setFont (heading font), maybe setTextColor + balanceLayout. "Move the title to the top" → moveElements {to:"top"} on the title id.\n' +
       '3. "Change all heading colors to purple" → setHeadingsColor. "Replace the background" → setBackground (or generateImage when they want a photo).\n' +
       '4. "Add a CTA" → addText with bold + short text. "Instagram-ready" → suggest a 1080x1350 resize + magicAnimate in the reply (resize is manual).\n' +
       '5. Create a second variation → duplicatePage + updateElements recolor on the duplicated page is NOT possible (actions apply to the current page) — explain instead.\n' +
-      '6. At most 3 actions per reply, only when clearly useful. Empty array otherwise.\n' +
+      '6. At most 3 actions per reply, only when clearly useful. Empty array otherwise. Actions are applied automatically (v0.26) — only emit them when the user clearly asked for a change; otherwise describe the plan in "reply" and emit [].\n' +
       '7. Never invent element ids. Never output code. Plain text in "reply".'
 
     const history = (body.history ?? [])
@@ -294,11 +346,14 @@ async function __canvix_post(req: NextRequest) {
       .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
       .map((m) => ({ role: m.role, content: m.content.slice(0, 1000) }))
 
+    // v0.26 fix: the system prompt + design context used to ride as TWO
+    // extra `assistant` messages (pre-API-normalization leftovers) — most
+    // OpenAI-compatible providers ignore instructions that arrive as
+    // assistant turns. They are now a single proper system message.
     const completion = await ctx.zai.chat.completions.create({
       model: ctx.model,
       messages: [
-        { role: 'assistant', content: system },
-        { role: 'assistant', content: `Current design context:\n${designContext}` },
+        { role: 'system', content: `${system}\n\nCurrent design context:\n${designContext}` },
         ...history,
         { role: 'user', content: message },
       ],

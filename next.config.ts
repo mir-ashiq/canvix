@@ -28,7 +28,15 @@ const CSP_REPORT_ONLY = [
   // thumbnails, blob: covers canvas exports
   "img-src 'self' data: blob: https:",
   "media-src 'self' data: blob:",
-  "connect-src 'self' blob: data:",
+  // connect-src (v0.26 AI-tools fix): the two remote hosts are load-bearing
+  // for the AI image tools —
+  //   - https://staticimgly.com — the on-device BG-Remover engine downloads
+  //     its ONNX model from there on first use (a CSP block makes the
+  //     removal hang forever with "Loading model…")
+  //   - https://images.pexels.com + https://pixabay.com — stock photos are
+  //     inserted by remote URL; the AI tools (brush eraser, magic eraser,
+  //     upscale, alt-text) fetch those bytes client-side to build dataURLs
+  "connect-src 'self' blob: data: https://staticimgly.com https://images.pexels.com https://pixabay.com",
   "worker-src 'self' blob:",
   // embed cards (YouTube, Maps, …) frame out over TLS; enforcement
   // will tighten this to the embed allowlist

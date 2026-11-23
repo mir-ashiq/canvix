@@ -1,9 +1,15 @@
 'use client'
 
-import { useRef, useState, ReactNode } from 'react'
+import { useRef, useState, ReactNode, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 
-/** shared anchored popover for the context toolbar (canva .cv-pop style) */
+/** shared anchored popover for the context toolbar (canva .cv-pop style).
+ *  v0.26 reliability fix: the position is now computed at OPEN time inside
+ *  a layout effect (after the trigger re-renders with data-active), not
+ *  inside the click handler — the old code could read a null/stale rect
+ *  (e.g. right after selection changes re-mount the toolbar), leaving
+ *  `pos` null so the popover silently never appeared ("Mask/Adjust do
+ *  nothing on click"). It also clamps inside the viewport every time. */
 export function ToolbarPopover({
   children,
   trigger,
@@ -19,21 +25,25 @@ export function ToolbarPopover({
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
-  const toggle = () => {
-    if (!open) {
+  // position (or reposition) whenever the popover is open — also keeps it
+  // on screen across window resizes while open
+  useEffect(() => {
+    if (!open) return
+    const place = () => {
       const r = ref.current?.getBoundingClientRect()
-      if (r) {
-        const x = Math.min(r.left, window.innerWidth - width - 12)
-        const y = r.bottom + 6 > window.innerHeight - 300 ? Math.max(8, r.top - 306) : r.bottom + 6
-        setPos({ x, y })
-      }
+      if (!r) return
+      const x = Math.max(8, Math.min(r.left, window.innerWidth - width - 12))
+      const y = r.bottom + 6 > window.innerHeight - 300 ? Math.max(8, r.top - 306) : r.bottom + 6
+      setPos({ x, y })
     }
-    setOpen(!open)
-  }
+    place()
+    window.addEventListener('resize', place)
+    return () => window.removeEventListener('resize', place)
+  }, [open, width])
 
   return (
     <div ref={ref} className="relative shrink-0">
-      <span onClick={toggle}>{trigger(open)}</span>
+      <span onClick={() => setOpen((v) => !v)}>{trigger(open)}</span>
       {open && pos && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} onContextMenu={(e) => { e.preventDefault(); setOpen(false) }} />

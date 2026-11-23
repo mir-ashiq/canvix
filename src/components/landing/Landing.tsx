@@ -20,6 +20,11 @@ import {
   BadgeCheck,
   Heart,
   Star,
+  Users,
+  Bot,
+  Server,
+  ChevronDown,
+  Check,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { Logo } from '@/components/logo'
@@ -112,7 +117,7 @@ const FEATURES = [
   {
     icon: Download,
     title: 'Export anywhere',
-    text: 'Download crisp PNG and JPG files up to 3× resolution. Your designs, your files — no watermarks, ever.',
+    text: 'PNG, JPG, WebP, SVG, PDF, PPTX, even GIF and video — crisp up to 3× resolution. No watermarks, ever.',
   },
   {
     icon: Smartphone,
@@ -126,6 +131,30 @@ const FEATURES = [
   },
 ]
 
+/** v0.26: the three big differentiators — real-time collab, AI with your
+ *  own key, and one-command self-hosting. Each maps to something the
+ *  commercial tools charge for or lock away. */
+const BIG_FEATURES = [
+  {
+    icon: Users,
+    title: 'Real-time collaboration',
+    text: 'Invite anyone with a link and design together live — cursors, selections and edits sync instantly. No seat pricing, no viewer limits, no “upgrade to invite more editors”.',
+    accent: 'from-[#02C0CC] to-[#0090AA]',
+  },
+  {
+    icon: Bot,
+    title: 'AI that works for you',
+    text: 'A design-aware assistant that fixes overlaps and balances layouts automatically, background remover, magic eraser, auto-adjust and more. Bring your own API key — or run the local on-device engines with zero setup.',
+    accent: 'from-[#7630D7] to-[#9B6BFF]',
+  },
+  {
+    icon: Server,
+    title: 'Self-host in one command',
+    text: 'Your designs live in your own Postgres. One docker compose command and the whole platform — editor, collab, templates — runs on your hardware, forever.',
+    accent: 'from-[#FF5C8A] to-[#FF8A5C]',
+  },
+]
+
 const TEMPLATE_SHOWCASE = [
   { label: 'Instagram post', from: '#FF5C8A', to: '#FFB84C', icon: Instagram, title: 'MEGA SALE' },
   { label: 'Story', from: '#B8E986', to: '#7ED957', icon: Instagram, title: 'NEW DROP' },
@@ -134,6 +163,51 @@ const TEMPLATE_SHOWCASE = [
   { label: 'Thumbnail', from: '#0D1117', to: '#161B22', icon: Video, title: 'TOP 10 AI' },
   { label: 'Logo', from: '#FFFFFF', to: '#F4F5F7', icon: BadgeCheck, title: 'NOVA', dark: true },
 ]
+
+/** v0.26: short FAQ answering the questions new visitors actually ask. */
+const FAQ = [
+  {
+    q: 'Is it really free? What’s the catch?',
+    a: 'Really free, MIT licensed. There is no paid tier — no watermarks, no export limits, no locked elements. The hosted instance at canvix.app is the same code you can self-host.',
+  },
+  {
+    q: 'Do I need an account?',
+    a: 'No. You can open the editor and start designing immediately. Accounts are free and optional — they just keep your designs private and sync-able across devices.',
+  },
+  {
+    q: 'How does the AI work without spying on me?',
+    a: 'Every AI feature has an on-device engine that runs entirely in your browser. The provider-backed engines run server-side, and you can plug in your own API key so your work never spends anyone else’s quota.',
+  },
+  {
+    q: 'Can AI agents use Canvix?',
+    a: 'Yes — Canvix ships an MCP server. Connect Claude, Cursor or any MCP client to your account and let the agent create and edit designs for you, scoped to your designs only.',
+  },
+  {
+    q: 'What formats can I export?',
+    a: 'PNG, JPG, WebP, SVG, PDF, PPTX, GIF and video — at up to 3× resolution, with no watermarks on any of them.',
+  },
+  {
+    q: 'How do I self-host it?',
+    a: 'git clone, one docker compose command, done. Designs are stored in your own Postgres database; everything else runs statelessly in the container.',
+  },
+]
+
+function FaqItem({ q, a, defaultOpen = false }: { q: string; a: string; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="rounded-2xl border border-black/8 bg-white overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span className="text-[15px] font-bold">{q}</span>
+        <ChevronDown size={17} className={`shrink-0 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && <p className="px-5 pb-5 text-sm text-muted-foreground leading-relaxed">{a}</p>}
+    </div>
+  )
+}
 
 export function Landing() {
   const goDashboard = useAppStore((s) => s.goDashboard)
@@ -149,7 +223,9 @@ export function Landing() {
           </button>
           <div className="hidden md:flex items-center gap-1 text-sm font-medium text-muted-foreground">
             <a href="#features" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">Features</a>
+            <a href="#collab" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">Collaborate</a>
             <a href="#templates" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">Templates</a>
+            <a href="#faq" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">FAQ</a>
             <a href="#opensource" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">Open source</a>
           </div>
           <div className="flex items-center gap-2">
@@ -174,11 +250,12 @@ export function Landing() {
         {/* ── Hero ── */}
         <section className="relative overflow-hidden">
           <div className="absolute inset-0 bg-brand-gradient-soft" aria-hidden="true" />
-          <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full blur-3xl opacity-20 bg-[#7D2AE8]" aria-hidden="true" />
-          <div className="absolute -bottom-40 -left-32 h-96 w-96 rounded-full blur-3xl opacity-20 bg-[#00C4CC]" aria-hidden="true" />
+          {/* aurora blobs — subtle, GPU-cheap */}
+          <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full blur-3xl opacity-20 bg-[#7D2AE8] animate-float" aria-hidden="true" />
+          <div className="absolute -bottom-40 -left-32 h-96 w-96 rounded-full blur-3xl opacity-20 bg-[#00C4CC] animate-float" style={{ animationDelay: '2s' }} aria-hidden="true" />
           <div className="relative mx-auto max-w-7xl px-4 sm:px-6 pt-16 pb-20 sm:pt-24 sm:pb-28 text-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-1.5 text-xs font-semibold text-[#7D2AE8] shadow-sm animate-fade-up">
-              <Sparkles size={14} /> Free forever · No account needed · MIT licensed
+              <Sparkles size={14} /> Free forever · No account needed · MIT licensed · Self-hostable
             </div>
             <h1 className="mt-6 text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.05] animate-fade-up delay-100">
               Design anything.
@@ -187,7 +264,8 @@ export function Landing() {
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-base sm:text-lg text-muted-foreground animate-fade-up delay-200">
               Canvix is the open-source design tool for social posts, presentations, posters, logos and
-              more. Drag, drop, export — right in your browser, on any device.
+              more — with real-time collaboration and AI that works for you, not against you.
+              Drag, drop, export — right in your browser, on any device.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 animate-fade-up delay-300">
               <Button size="lg" className="btn-brand-gradient rounded-full px-8 text-base h-12 gap-2" onClick={goDashboard}>
@@ -198,6 +276,14 @@ export function Landing() {
                   <Github size={18} /> Star on GitHub
                 </Button>
               </a>
+            </div>
+            {/* hero proof line */}
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground animate-fade-up delay-300">
+              {['No credit card, ever', 'No watermarks, ever', 'Export in 8 formats', 'Runs on your server too'].map((t) => (
+                <span key={t} className="inline-flex items-center gap-1.5">
+                  <Check size={13} className="text-[#12A594]" /> {t}
+                </span>
+              ))}
             </div>
             <div className="mt-14 sm:mt-20 animate-fade-up delay-300">
               <EditorMockup />
@@ -223,40 +309,71 @@ export function Landing() {
           </div>
         </section>
 
-        {/* ── Features ── */}
-        <section id="features" className="mx-auto max-w-7xl px-4 sm:px-6 py-20 sm:py-28">
-          <h2 className="text-center text-3xl sm:text-4xl font-extrabold tracking-tight">
-            Everything you need to <span className="text-brand-gradient">create</span>
-          </h2>
-          <p className="mt-4 text-center text-muted-foreground max-w-2xl mx-auto">
-            A serious editor, not a toy. Canvix packs the features people actually use from
-            commercial design tools — minus the price tag.
-          </p>
-          <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {FEATURES.map((f) => (
+        {/* ── Big differentiators: collab / AI / self-host ── */}
+        <section id="collab" className="mx-auto max-w-7xl px-4 sm:px-6 py-20 sm:py-28">
+          <div className="text-center">
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+              What the paid tools charge for,{' '}
+              <span className="text-brand-gradient">Canvix gives away</span>
+            </h2>
+            <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
+              The features that cost the most elsewhere — collaboration seats, AI credits, team
+              workspaces — are core parts of Canvix, free and open.
+            </p>
+          </div>
+          <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-5">
+            {BIG_FEATURES.map((f) => (
               <div
                 key={f.title}
-                className="group rounded-2xl border border-black/8 bg-white p-6 hover:shadow-lg hover:shadow-black/5 hover:border-[#00C4CC]/40 transition-all"
+                className="group rounded-3xl border border-black/8 bg-white p-7 hover:shadow-xl hover:shadow-black/5 transition-all hover:-translate-y-1"
               >
-                <div className="h-11 w-11 rounded-xl flex items-center justify-center bg-brand-gradient-soft text-[#7D2AE8] group-hover:scale-105 transition-transform">
-                  <f.icon size={20} />
+                <div className={`h-12 w-12 rounded-2xl flex items-center justify-center text-white shadow-lg bg-gradient-to-br ${f.accent} group-hover:scale-105 transition-transform`}>
+                  <f.icon size={22} />
                 </div>
-                <h3 className="mt-4 font-bold">{f.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{f.text}</p>
+                <h3 className="mt-5 text-lg font-bold">{f.title}</h3>
+                <p className="mt-2.5 text-sm text-muted-foreground leading-relaxed">{f.text}</p>
               </div>
             ))}
           </div>
         </section>
 
+        {/* ── Features grid ── */}
+        <section id="features" className="bg-[#FAFAFC] border-y border-black/5">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 py-20 sm:py-28">
+            <h2 className="text-center text-3xl sm:text-4xl font-extrabold tracking-tight">
+              Everything you need to <span className="text-brand-gradient">create</span>
+            </h2>
+            <p className="mt-4 text-center text-muted-foreground max-w-2xl mx-auto">
+              A serious editor, not a toy. Canvix packs the features people actually use from
+              commercial design tools — minus the price tag.
+            </p>
+            <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {FEATURES.map((f) => (
+                <div
+                  key={f.title}
+                  className="group rounded-2xl border border-black/8 bg-white p-6 hover:shadow-lg hover:shadow-black/5 hover:border-[#00C4CC]/40 transition-all"
+                >
+                  <div className="h-11 w-11 rounded-xl flex items-center justify-center bg-brand-gradient-soft text-[#7D2AE8] group-hover:scale-105 transition-transform">
+                    <f.icon size={20} />
+                  </div>
+                  <h3 className="mt-4 font-bold">{f.title}</h3>
+                  <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{f.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* ── Templates ── */}
-        <section id="templates" className="bg-[#FAFAFC] border-y border-black/5 py-20 sm:py-28">
+        <section id="templates" className="py-20 sm:py-28">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="text-center">
               <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
                 Start from a <span className="text-brand-gradient">template</span>
               </h2>
               <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-                Sized and styled for every platform. Open one, tweak everything.
+                Sized and styled for every platform. Open one, tweak everything — every template is
+                free, forever.
               </p>
             </div>
             <div className="mt-12 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -284,8 +401,22 @@ export function Landing() {
             </div>
             <div className="mt-10 text-center">
               <Button variant="outline" className="rounded-full px-6 gap-2" onClick={goDashboard}>
-                Browse all templates <ArrowRight size={16} />
+                Browse all 366 templates <ArrowRight size={16} />
               </Button>
+            </div>
+          </div>
+        </section>
+
+        {/* ── FAQ (v0.26) ── */}
+        <section id="faq" className="bg-[#FAFAFC] border-y border-black/5 py-20 sm:py-28">
+          <div className="mx-auto max-w-3xl px-4 sm:px-6">
+            <h2 className="text-center text-3xl sm:text-4xl font-extrabold tracking-tight">
+              Questions, <span className="text-brand-gradient">answered</span>
+            </h2>
+            <div className="mt-10 space-y-3">
+              {FAQ.map((f, i) => (
+                <FaqItem key={f.q} q={f.q} a={f.a} defaultOpen={i === 0} />
+              ))}
             </div>
           </div>
         </section>
@@ -340,6 +471,22 @@ export function Landing() {
             </div>
           </div>
         </section>
+
+        {/* ── Final CTA (v0.26) ── */}
+        <section className="relative overflow-hidden border-t border-black/5">
+          <div className="absolute inset-0 bg-brand-gradient-soft" aria-hidden="true" />
+          <div className="relative mx-auto max-w-3xl px-4 sm:px-6 py-20 sm:py-24 text-center">
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+              Your next design is <span className="text-brand-gradient">one click away</span>
+            </h2>
+            <p className="mt-4 text-muted-foreground">
+              No signup, no credit card, no watermark. Open the editor and start creating right now.
+            </p>
+            <Button size="lg" className="btn-brand-gradient rounded-full px-10 text-base h-13 gap-2 mt-8 py-3.5" onClick={goDashboard}>
+              Start designing <ArrowRight size={18} />
+            </Button>
+          </div>
+        </section>
       </main>
 
       {/* ── Footer ── */}
@@ -357,7 +504,7 @@ export function Landing() {
             </a>
             <a href="https://github.com/mir-ashiq/canvix#-ai--development-disclosure" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">AI Disclosure</a>
             <a href="#features" className="hover:text-foreground transition-colors">Features</a>
-            <a href="#templates" className="hover:text-foreground transition-colors">Templates</a>
+            <a href="#faq" className="hover:text-foreground transition-colors">FAQ</a>
           </div>
         </div>
       </footer>

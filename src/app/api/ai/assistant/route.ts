@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withProvider } from '@/lib/ai/provider'
 import { withLogging } from '@/lib/observability'
 
+// ─────────────────────────────────────────────────────────────
+// DEPRECATED (v0.27): the Canvix AI panel now speaks to
+// /api/ai/agent — the multi-step design agent with streaming steps,
+// tool budgets and a destructive-action confirm gate
+// (docs/AGENT-ARCHITECTURE.md). This single-shot endpoint keeps
+// working for external scripts and older clients, but it receives no
+// new features. New integrations should use /api/ai/agent.
+// ─────────────────────────────────────────────────────────────
+
 export const runtime = 'nodejs'
 export const maxDuration = 60
 

@@ -62,30 +62,36 @@ function newRunId(): string {
 }
 
 async function __canvix_post(req: NextRequest) {
-  const body = (await req.json().catch(() => ({}))) as AgentBody
+  const body = (await req.json().catch(() => ({}))) as AgentBody & {
+    confirm?: { tool: string; ok: boolean }
+    ack?: { ok: boolean; message?: string; design?: AgentDesignCtx }
+  }
   const message = (body.message ?? '').trim().slice(0, 2000)
 
   // side-channel: an in-flight run's ack / confirmation / refreshed
-  // context rides a ?bridge=<runId> POST with no `message`
+  // context rides a ?bridge=<runId> POST with no `message`. NOTE: the
+  // body was parsed ONCE above — a second req.json() would throw
+  // (the stream is consumed), which is why the bridge reads the same
+  // parsed object instead of re-reading the request. The bridge POSTs
+  // are handled BEFORE withProvider on purpose: they are same-origin
+  // by construction (the panel only ever POSTs to its own run id) and
+  // MUST NOT consume the assistant feature's rate-limit budget — a
+  // long run's 8 acks + the run itself would otherwise blow 12/min.
   const bridgeId = req.nextUrl.searchParams.get('bridge')
   if (bridgeId && !message) {
     const bridge = bridges.get(bridgeId)
     if (!bridge) return new Response(JSON.stringify({ error: 'Unknown or finished run.' }), { status: 404 })
-    const ackBody = (await req.json().catch(() => ({}))) as {
-      confirm?: { tool: string; ok: boolean }
-      ack?: { ok: boolean; message?: string; design?: AgentDesignCtx }
-    }
-    if (ackBody.confirm) {
-      const pending = bridge.confirms.get(ackBody.confirm.tool)
+    if (body.confirm) {
+      const pending = bridge.confirms.get(body.confirm.tool)
       if (pending) {
-        pending(ackBody.confirm.ok)
-        bridge.confirms.delete(ackBody.confirm.tool)
+        pending(body.confirm.ok)
+        bridge.confirms.delete(body.confirm.tool)
       }
     }
-    if (ackBody.ack) {
-      if (ackBody.ack.design) bridge.latestDesign = ackBody.ack.design
+    if (body.ack) {
+      if (body.ack.design) bridge.latestDesign = body.ack.design
       const resolve = bridge.acks.shift()
-      resolve?.({ ok: ackBody.ack.ok, message: ackBody.ack.message, design: ackBody.ack.design })
+      resolve?.({ ok: body.ack.ok, message: body.ack.message, design: body.ack.design })
     }
     return new Response(JSON.stringify({ ok: true }), { status: 200 })
   }
@@ -277,6 +283,10 @@ async function __canvix_post(req: NextRequest) {
         'Content-Type': 'text/event-stream; charset=utf-8',
         'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',
+        // same as the collab stream: disable nginx proxy buffering so
+        // live agent steps arrive as they happen, not in one lump when
+        // the run finishes
+        'X-Accel-Buffering': 'no',
         'X-Agent-Run': runId,
       },
     }) as unknown as import('next/server').NextResponse

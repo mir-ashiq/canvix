@@ -114,6 +114,28 @@ The security headers (CSP, HSTS, X-Frame-Options…) ship from
 `next.config.ts` on every route. HSTS only starts counting once the
 host is served over TLS. Nothing Canvix-side needs changing.
 
+**Streaming endpoints (real-time collaboration, the AI agent):** the
+collab SSE stream and the agent run stream already send
+`X-Accel-Buffering: no`, which disables response buffering on nginx
+and most nginx-based proxies (Caddy, Traefik and plain `proxy_pass`
+setups do not buffer by default). If you use a custom nginx config
+with `proxy_buffering on` forced globally, live agent steps and
+collaboration cursors will arrive in one lump when the request
+finishes — either honor `X-Accel-Buffering` (the default) or add
+`proxy_buffering off` for `/api/ai/agent` and `/api/collab/`. If you
+clamp proxy timeouts, keep the agent's read timeout at **120 s or
+more** (its runs are capped at 90 s server-side).
+
+**Existing databases / migration errors:** migrations apply
+automatically on boot (see `docker-entrypoint.sh`). A database that
+predates the migration system (created via the old `prisma db push`
+flow) is detected and baselined automatically. If boot logs show
+`migrate deploy failed`, open `/api/health` — it names the exact
+missing tables and the fix. To run migrations as a separate job
+instead of on boot (multi-replica setups), set `CANVIX_RUN_MIGRATIONS=0`
+and run `docker compose exec app /opt/migrate/node_modules/.bin/prisma
+migrate deploy --schema /app/prisma/schema.prisma` once per upgrade.
+
 ## Operations
 
 - **Backup / restore** — the one-command `pg_dump` story, restore

@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { requireAdmin, isAdminUser, adminSource } from '@/lib/admin/guard'
 import { providersSummary } from '@/lib/ai/provider'
 import { fillDays, sumSeries, dayKey, type DayPoint } from '@/lib/admin/series'
-import { APP_VERSION, withLogging } from '@/lib/observability'
+import { APP_VERSION, APP_BUILD_COMMIT, withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -118,6 +118,7 @@ async function __canvix_get(req: NextRequest) {
 
     return NextResponse.json({
       version: APP_VERSION,
+      build: APP_BUILD_COMMIT || undefined,
       dbLatencyMs,
       totals: {
         users,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { describeDatabaseUrl } from '@/lib/db-url'
-import { APP_VERSION } from '@/lib/observability'
+import { APP_VERSION, APP_BUILD_COMMIT, APP_BUILD_TIME } from '@/lib/observability'
 import { withLogging } from '@/lib/observability'
 
 // GET /api/health — one-shot setup diagnostics.
@@ -155,7 +155,7 @@ async function __canvix_get(req: NextRequest) {
         comments: n(comments),
       },
       db: { latencyMs: dbLatencyMs },
-      app: { version: APP_VERSION, uptimeSec: Math.round(process.uptime()) },
+      app: { version: APP_VERSION, commit: APP_BUILD_COMMIT, builtAt: APP_BUILD_TIME, uptimeSec: Math.round(process.uptime()) },
     },
     {
       headers: {

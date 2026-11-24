@@ -1,4 +1,6 @@
 import type { NextConfig } from "next";
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 // ─────────────────────────────────────────────────────────────────
 // Security headers + CSP baseline (v0.12.1, roadmap H3 — see
@@ -61,7 +63,25 @@ const securityHeaders = [
   { key: "Content-Security-Policy-Report-Only", value: CSP_REPORT_ONLY },
 ];
 
+// v0.29.1: build identity, baked in at build time. The VPS runs the
+// standalone server as plain `node` — npm_package_version is absent
+// there, which is why the admin panel's version showed "unknown".
+// Next inlines these `env` values into both server and client bundles.
+const pkgVersion = (() => {
+  try { return JSON.parse(readFileSync("package.json", "utf8")).version ?? "dev"; }
+  catch { return "dev"; }
+})();
+const buildCommit = (() => {
+  try { return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); }
+  catch { return "nogit"; }
+})();
+const buildTime = new Date().toISOString();
 const nextConfig: NextConfig = {
+  env: {
+    CANVIX_APP_VERSION: String(pkgVersion),
+    CANVIX_BUILD_COMMIT: buildCommit,
+    CANVIX_BUILD_TIME: buildTime,
+  },
   output: "standalone",
   async headers() {
     return [

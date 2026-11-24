@@ -15,6 +15,7 @@ interface AiDayPoint extends DayPoint {
 }
 interface Overview {
   version: string
+  build?: string
   dbLatencyMs: number
   totals: {
     users: number
@@ -190,7 +191,7 @@ export function AdminOverview() {
         <Card title="Instance">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <dt className="text-muted-foreground">Canvix version</dt>
-            <dd className="text-right font-medium tabular-nums">{data.version}</dd>
+            <dd className="text-right font-medium tabular-nums">{data.version}{data.build ? <span className="text-muted-foreground"> · {data.build}</span> : null}</dd>
             <dt className="text-muted-foreground">Database latency</dt>
             <dd className="text-right font-medium tabular-nums">{data.dbLatencyMs} ms</dd>
             <dt className="text-muted-foreground">AI providers</dt>

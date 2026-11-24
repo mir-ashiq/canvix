@@ -22,8 +22,17 @@
 
 import type { NextRequest } from 'next/server'
 
-/** The app version answering requests — from package.json at build time. */
-export const APP_VERSION = process.env.npm_package_version ?? 'unknown'
+/** The app version answering requests. Baked at build time via
+ *  next.config `env` (v0.29.1) so the standalone `node` deploy on the
+ *  VPS reports a real version — npm_package_version only exists when
+ *  npm itself starts the process, which is why the admin panel used
+ *  to show "unknown" there. */
+export const APP_VERSION =
+  process.env.CANVIX_APP_VERSION || process.env.npm_package_version || 'unknown'
+/** Short git commit the bundle was built from ('' when unknown). */
+export const APP_BUILD_COMMIT = process.env.CANVIX_BUILD_COMMIT || ''
+/** ISO build timestamp ('' when unknown). */
+export const APP_BUILD_TIME = process.env.CANVIX_BUILD_TIME || ''
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 

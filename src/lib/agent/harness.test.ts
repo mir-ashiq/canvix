@@ -25,6 +25,7 @@ import { describe, it, expect } from 'vitest'
 import { parseAgentTurn, sseLine, AGENT_GUARDS, AGENT_PROTOCOL_VERSION, type AgentEvent } from './protocol'
 import { AGENT_TOOL_MAP, AGENT_TOOLS, type ToolContext, type SanitizeResult } from './tools'
 import { runAgentLoop, toolsForMode, loopSystemPrompt } from './loop'
+import { auditDesign, contrastRatio } from './audit'
 import { heuristicMode, parseMode, modeAllowsWrites, MODE_TOOL_RISK } from './router'
 import { DESIGN_SKILLS, selectSkills, skillsPromptSection } from './skills'
 import { extractBrief, validateBrief, briefPromptSection, FORMAT_PRESETS, type DesignBrief } from './brief'
@@ -263,6 +264,64 @@ describe('harness · tool matrix', () => {
   it('read tools are exactly the state/measure/validate set', () => {
     const reads = AGENT_TOOLS.filter((t) => t.risk === 'read').map((t) => t.name)
     expect(reads.sort()).toEqual(['get_page_state', 'goto_page', 'measure_text', 'validate_brief'])
+  })
+
+  it('CASE G: quality audit — one self-critique fix round before done is accepted', async () => {
+    const events: AgentEvent[] = []
+    let auditCalls = 0
+    // model: bg → text → attempt done (audit finds low contrast) → fix
+    // fill → done (audit clean, accepted)
+    const { chat } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('add_text', { text: 'Dark text on dark bg', fontSize: 40, color: '#111122' }),
+      done('Poster complete'),
+      turn('add_text', { text: 'Fixed headline', fontSize: 40, color: '#FFFFFF' }),
+      done('Poster complete, contrast fixed'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'create',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+      auditDesign: async () => {
+        auditCalls++
+        return auditCalls === 1
+          ? ['Low contrast: text "Dark text on dark bg" #111122 on background #090B1A is 1.0:1 (needs 3:1) — change the text fill.']
+          : []
+      },
+    })
+    // 3 tool turns; the first done was rejected by the audit gate
+    expect(result.toolCalls).toBe(3)
+    expect(auditCalls).toBe(2)
+    expect(events.some((e) => e.type === 'observation' && e.message.includes('QUALITY AUDIT'))).toBe(true)
+    const finalEvent = events[events.length - 1]
+    expect(finalEvent?.type).toBe('done')
+    expect(String((finalEvent as { verification?: string }).verification ?? '')).toContain('Quality audit passed')
+  })
+
+  it('CASE H: audit residue is disclosed, never looped — a second failing audit still accepts done', async () => {
+    const events: AgentEvent[] = []
+    const { chat } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('add_text', { text: 'Still dark', fontSize: 40, color: '#111122' }),
+      done('Done attempt 1'),
+      done('Done attempt 2 — unfixable, disclosed'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'create',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+      // the audit NEVER clears — the run must still terminate honestly
+      auditDesign: async () => ['Low contrast: text "Still dark" #111122 on #090B1A is 1.0:1 (needs 3:1)'],
+    })
+    expect(result.toolCalls).toBe(2)
+    expect(events.filter((e) => e.type === 'done').length).toBe(1)
+    const finalEvent = events[events.length - 1] as { type: string; summary?: string }
+    expect(finalEvent.type).toBe('done')
+    expect(String(finalEvent.summary)).toContain('disclosed')
   })
 })
 
@@ -905,5 +964,46 @@ describe('harness · wire format + context', () => {
     expect(s).toContain('[SELECTED]')
     expect(s).toContain('BRAND KIT')
     expect(s).toContain('3 page(s)')
+  })
+})
+
+describe('audit heuristics (v0.29)', () => {
+  it('WCAG contrast math — white on black ≈ 21:1, dark on dark < 1.2:1', () => {
+    expect(Math.round(contrastRatio('#FFFFFF', '#000000'))).toBe(21)
+    expect(contrastRatio('#111122', '#090B1A')).toBeLessThan(1.2)
+    expect(contrastRatio('not-a-color', '#000000')).toBe(0)
+  })
+
+  it('auditDesign flags low contrast, overflow, tiny text, overlaps and off-canvas', () => {
+    const issues = auditDesign({
+      width: 1080,
+      height: 1080,
+      background: '#090B1A',
+      elements: [
+        { id: 'a1', type: 'text', text: 'Dark headline', fill: '#111122', fontSize: 48, x: 0, y: 0, width: 600, height: 90 },
+        { id: 'a2', type: 'text', text: 'A'.repeat(80), fill: '#FFFFFF', fontSize: 48, x: 0, y: 200, width: 600, height: 90 },
+        { id: 'a3', type: 'text', text: 'tiny', fill: '#FFFFFF', fontSize: 10, x: 0, y: 400, width: 200, height: 30 },
+      ],
+      overlaps: ['headline × subline'],
+      offCanvas: ['cta runs past the right edge'],
+      colorsInUse: ['#090B1A', '#111122'],
+    })
+    const joined = issues.join('\n')
+    expect(joined).toContain('Low contrast')
+    expect(joined).toContain('may overflow')
+    expect(joined).toContain('under 14')
+    expect(joined).toContain('overlap')
+    expect(joined).toContain('outside the canvas')
+  })
+
+  it('auditDesign falls back to the dominant color when background is absent; clean canvas → no issues', () => {
+    const issues = auditDesign({
+      width: 1080,
+      height: 1080,
+      elements: [{ id: 'b1', type: 'text', text: 'Dark', fill: '#111122', fontSize: 48, x: 0, y: 0, width: 600, height: 90 }],
+      colorsInUse: ['#090B1A'],
+    })
+    expect(issues.join('\n')).toContain('Low contrast')
+    expect(auditDesign({ width: 1080, height: 1080, background: '#FFFFFF', elements: [{ id: 'c1', type: 'text', text: 'OK', fill: '#111111', fontSize: 32, x: 0, y: 0, width: 300, height: 60 }] })).toEqual([])
   })
 })

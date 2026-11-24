@@ -12,6 +12,7 @@ import { fontFamilies } from '@/lib/agent/tools'
 import { serializeDesignContext, type AgentDesignCtx } from '@/lib/agent/context'
 import { heuristicMode, parseMode, ROUTER_SYSTEM, modeAllowsWrites, MODE_TOOL_RISK } from '@/lib/agent/router'
 import { runAgentLoop, toolsForMode } from '@/lib/agent/loop'
+import { auditDesign as runDesignAudit } from '@/lib/agent/audit'
 import { selectSkills } from '@/lib/agent/skills'
 import { extractBrief } from '@/lib/agent/brief'
 
@@ -131,13 +132,41 @@ async function __canvix_post(req: NextRequest) {
       .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
       .map((m) => ({ role: m.role, content: m.content.slice(0, 800) }))
 
+    // v0.29: guaranteed-JSON turns. response_format {type:'json_object'}
+    // passes through the SDK to any OpenAI-compatible gateway (verified
+    // live on NVIDIA NIM: zero malformed turns). ZAI_JSON_MODE=auto (the
+    // default) drops the param for the rest of the run if the gateway
+    // rejects it, so every OpenAI-ish endpoint keeps working; 'on' fails
+    // loudly instead of silently degrading.
+    const jsonModePref = (process.env.ZAI_JSON_MODE ?? 'auto').trim().toLowerCase()
+    let jsonModeLive = jsonModePref !== 'off'
+    const rawCreate = ctx.zai.chat.completions.create as unknown as (
+      body: Record<string, unknown>,
+    ) => Promise<{ choices: { message?: { content?: unknown } }[] }>
     const chat = async (msgs: { role: 'system' | 'user' | 'assistant'; content: string }[]) => {
-      const completion = await ctx.zai.chat.completions.create({
+      const base: Record<string, unknown> = {
         ...(ctx.model ? { model: ctx.model } : {}),
         messages: msgs,
         thinking: { type: 'disabled' },
-      })
-      return String(completion.choices[0]?.message?.content ?? '')
+      }
+      const callJson = (withJson: boolean) =>
+        rawCreate(withJson ? { ...base, response_format: { type: 'json_object' } } : base)
+      try {
+        const completion = await callJson(jsonModeLive)
+        return String(completion.choices[0]?.message?.content ?? '')
+      } catch (e) {
+        const msg = String((e as Error | undefined)?.message ?? e)
+        if (
+          jsonModeLive &&
+          jsonModePref === 'auto' &&
+          /(?:\b(?:400|404|422)\b|response_format|json_object|unknown field|not supported|unsupported)/i.test(msg)
+        ) {
+          jsonModeLive = false // remember for the whole run
+          const completion = await callJson(false)
+          return String(completion.choices[0]?.message?.content ?? '')
+        }
+        throw e
+      }
     }
 
     // ── 1. classify the mode (heuristic first, model when unsure) ──
@@ -275,6 +304,8 @@ async function __canvix_post(req: NextRequest) {
                   setTimeout(() => resolve({ ok: true, message: 'ack timeout — assumed applied' }), 60_000)
                 }),
               refreshedContext: () => bridge.latestDesign,
+              // v0.29: audit the freshest design snapshot the panel acked
+              auditDesign: () => runDesignAudit(bridge.latestDesign ?? design),
               validateBriefOnClient: async () => {
                 // consume an early answer first, then wait for a live one
                 if (bridge.pendingBriefResult) {

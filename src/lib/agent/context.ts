@@ -49,6 +49,10 @@ export interface AgentDesignCtx {
   offCanvas?: string[]
   /** one-line summaries of the OTHER pages */
   otherPages?: string[]
+  /** v0.29: page background hex (solid backgrounds) — enables the
+   *  contrast part of the quality audit; optional, older clients simply
+   *  omit it and the audit falls back to the dominant in-use color. */
+  background?: string
 }
 
 /** Element summary line — compact but geometry-complete. */

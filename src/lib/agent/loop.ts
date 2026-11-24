@@ -45,6 +45,10 @@ export interface LoopDeps {
   mode: AgentMode
   /** the run's brief contract (extracted by the route) */
   brief?: DesignBrief | null
+  /** v0.29: local quality audit of the latest design snapshot
+   *  (contrast/overlap/overflow heuristics). The loop runs ONE
+   *  auto-fix round on its findings before accepting done. */
+  auditDesign?: () => string[] | Promise<string[]>
   /** skills pre-selected by the route (or auto-selected here) */
   skills?: DesignSkill[]
   /** emitted (by the route) as SSE lines */
@@ -189,6 +193,8 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
   let lastProgressAt = started
   let lastUsageAt = started
   let briefValidated = false
+  /** v0.29: quality-audit fix rounds already used (max 1 per run) */
+  let auditRounds = 0
   /** done turns rejected by the brief gate — a model that keeps
    *  claiming completion without fixing the unmet items must not
    *  loop forever (LangChain's "declare it blocked" pattern). */
@@ -315,6 +321,42 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         if (v?.satisfied) {
           briefValidated = true
           verification = 'Brief contract validated against the live canvas — all mandatory items present.'
+        }
+      }
+      // QUALITY AUDIT (v0.29): self-critique before the run is
+      // accepted — local heuristics only, no extra model calls.
+      // Exactly ONE fix round: done is then accepted with the residue
+      // DISCLOSED (audit → fix → re-audit → honest outcome), never looped.
+      if ((mode === 'create' || mode === 'improve') && deps.auditDesign) {
+        let issues: string[] = []
+        try {
+          issues = (await deps.auditDesign()) ?? []
+        } catch {
+          /* audit is best-effort — never block completion on it */
+        }
+        if (issues.length && auditRounds === 0) {
+          auditRounds += 1
+          const list = issues.map((i) => `· ${i}`).join('\n')
+          emit({
+            v: AGENT_PROTOCOL_VERSION,
+            type: 'observation',
+            stepIndex: steps,
+            message: `QUALITY AUDIT — ${issues.length} fixable issue(s) found:\n${list}`,
+          })
+          messages.push({
+            role: 'user',
+            content: `QUALITY AUDIT before completion — the canvas has these fixable problems:\n${list}\nFix them now with concrete tool calls (contrast: change the text fill; overflow: reduce fontSize, shorten text or widen the box; overlap/off-canvas: move or resize), then emit done again with an updated summary.`,
+          })
+          continue
+        }
+        if (!issues.length) {
+          verification = verification
+            ? `${verification} Quality audit passed: contrast, spacing and bounds clean.`
+            : 'Quality audit passed: contrast, spacing and bounds clean.'
+        } else if (auditRounds > 0) {
+          verification = verification
+            ? `${verification} Quality audit still reports ${issues.length} issue(s) after the fix round — disclosed, not blocking.`
+            : `Quality audit still reports ${issues.length} issue(s) after the fix round — disclosed, not blocking.`
         }
       }
       emit({ v: AGENT_PROTOCOL_VERSION, type: 'done', summary, steps, toolCalls, verification })

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withProvider, DEFAULT_VISION_MODEL } from '@/lib/ai/provider'
+import { visionChatWithRetry } from '@/lib/ai/vision-retry'
 import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
@@ -44,8 +45,8 @@ async function __canvix_post(req: NextRequest) {
   }
 
   return withProvider('alt-text', req, { limit: 20, windowSec: 60 }, async (ctx) => {
-    const completion = await ctx.zai.chat.completions.createVision({
-      model: ctx.model ?? DEFAULT_VISION_MODEL,
+    const completion = await visionChatWithRetry((visionRetryModel) => ctx.zai.chat.completions.createVision({
+      model: visionRetryModel ?? ctx.model ?? DEFAULT_VISION_MODEL,
       messages: [
         {
           role: 'system',
@@ -63,7 +64,7 @@ async function __canvix_post(req: NextRequest) {
         },
       ],
       thinking: { type: 'disabled' },
-    })
+    }), ctx.model)
 
     const raw = completion.choices[0]?.message?.content ?? ''
     const alt = normalizeAltText(raw)

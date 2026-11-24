@@ -1,0 +1,670 @@
+// ─────────────────────────────────────────────────────────────
+// Design engine · compositions (Phase A).
+//
+// Deterministic block builders. The inversion the architecture
+// analysis proposes: the brief validator's structural definitions,
+// read as constructors. A feature-card is "N semi-transparent card
+// rects with one to three texts each" — buildFeatureCards EMITS
+// exactly that, correct by construction instead of checked after
+// the fact.
+//
+// Every builder returns two layers: backdrops (may sit under
+// content — the intentional-overlap channel) and content (mutually
+// disjoint, individually in-canvas). Text wraps at the box width
+// under the plan-route estimate (~0.62 × fontSize per char) and
+// shrinks until the wrapped line count fits the band; user-required
+// copy is NEVER truncated — the element carries the full string, and
+// when it cannot fit even wrapped at the floor size, the compile
+// check fails honestly instead.
+// ─────────────────────────────────────────────────────────────
+
+import {
+  createShapeElement,
+  createTextElement,
+  type AnyElement,
+} from '@/lib/types'
+import type { BlockNode, ContentRole, ContentSlot } from '@/lib/design-spec/types'
+import type { ExpandedPalette } from './palette'
+import { onColor } from './palette'
+import type { AssignedTypography } from './typography'
+import { gridInRect, stackInRect, type Rect } from './layout'
+
+export interface BuildContext {
+  rect: Rect
+  palette: ExpandedPalette
+  type: AssignedTypography
+  canvas: { width: number; height: number }
+}
+
+export interface ComposedElements {
+  /** decorative layers — under content, may overlap it intentionally */
+  backdrops: AnyElement[]
+  /** the real content — mutually disjoint by construction */
+  content: AnyElement[]
+  /** local, non-fatal notes for the compile report */
+  warnings: string[]
+}
+
+/** Plan-route text estimate convention (conservative). */
+export function estimateTextWidth(text: string, fontSize: number): number {
+  return text.length * 0.62 * fontSize
+}
+
+/** Greedy word-wrap under the plan-route estimate. Splits on spaces
+ * only — the text itself is never altered (the exact-text contract:
+ * the element keeps the FULL string; the renderer wraps it). A word
+ * wider than the box stays on its own line and fails honestly. */
+export function wrapLines(text: string, width: number, fontSize: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let line = ''
+  for (const w of words) {
+    const candidate = line ? `${line} ${w}` : w
+    if (!line || estimateTextWidth(candidate, fontSize) <= width) line = candidate
+    else {
+      lines.push(line)
+      line = w
+    }
+  }
+  if (line) lines.push(line)
+  return lines.length ? lines : ['']
+}
+
+/** Shrink-to-fit: largest size ≤ start that fits maxW, floored at
+ * minSize. Never touches the text itself. */
+export function fitFontSize(text: string, maxW: number, start: number, minSize: number): number {
+  let size = Math.max(minSize, Math.round(start))
+  while (size > minSize && estimateTextWidth(text, size) > maxW) size -= 2
+  return size
+}
+
+/** Wrap-to-fit: the size whose wrapped line count fits maxH, between
+ * start and floor. Returns the size and its line count. */
+function wrapFontSize(
+  text: string,
+  maxW: number,
+  maxH: number,
+  start: number,
+  floor: number,
+  lineHeight: number,
+): { size: number; lines: string[] } {
+  let size = Math.max(floor, Math.round(start))
+  let lines = wrapLines(text, maxW, size)
+  while (size > floor && lines.length * Math.round(size * lineHeight) > maxH) {
+    size -= 2
+    lines = wrapLines(text, maxW, size)
+  }
+  return { size, lines }
+}
+
+const ROLE_STACK_ORDER: ContentRole[] = ['headline', 'subline', 'cta', 'tagline', 'body', 'label']
+
+function stackOrder(slot: ContentSlot): number {
+  const i = ROLE_STACK_ORDER.indexOf(slot.role)
+  return i === -1 ? ROLE_STACK_ORDER.length : i
+}
+
+/** Hero: headline + subline + CTA chip, stacked in the band.
+ * Emits an accent underline (backdrop) between headline and subline. */
+export function buildHero(block: BlockNode, ctx: BuildContext): ComposedElements {
+  const { palette, type, canvas } = ctx
+  const slots = [...block.content].sort((a, b) => stackOrder(a) - stackOrder(b))
+  const warnings: string[] = []
+  const backdrops: AnyElement[] = []
+  const content: AnyElement[] = []
+
+  const subRects = stackInRect(ctx.rect, slots.map((s) => s.role))
+  const headlineBoost = Math.round(canvas.height * 0.075)
+
+  slots.forEach((slot, i) => {
+    const rect = subRects[i]
+    if (slot.role === 'cta') {
+      // CTA chip: accent pill + centered text with guarded contrast
+      const start = Math.max(type.sizes.cta, 24)
+      const size = fitFontSize(slot.text, rect.width * 0.82, start, 20)
+      const textW = Math.min(rect.width, estimateTextWidth(slot.text, size) + size * 0.8)
+      const chipH = Math.max(44, Math.round(size * 2.1))
+      const chipW = Math.min(rect.width, textW + chipH * 0.7)
+      const chipX = rect.x + (rect.width - chipW) / 2
+      const chipY = rect.y + (rect.height - chipH) / 2
+      const chipFill = palette.roles.accent
+      const chipText = onColor(chipFill)
+      // chip = container (backdrop layer, sits UNDER its text — the
+      // intentional-overlap channel); the text stays content
+      backdrops.push(
+        createShapeElement('rect', {
+          x: Math.round(chipX),
+          y: Math.round(chipY),
+          width: Math.round(chipW),
+          height: Math.round(chipH),
+          fill: chipFill,
+          cornerRadius: Math.round(chipH / 2),
+        }),
+      )
+      content.push(
+        createTextElement({
+          text: slot.text,
+          x: Math.round(chipX),
+          y: Math.round(chipY + (chipH - size * 1.3) / 2),
+          width: Math.round(chipW),
+          height: Math.round(size * 1.3),
+          fontSize: size,
+          fontFamily: type.families.body,
+          bold: true,
+          fill: chipText,
+          align: 'center',
+        }),
+      )
+      return
+    }
+
+    const isHeadline = slot.role === 'headline' || slot.role === 'tagline'
+    const lineHeight = isHeadline ? 1.15 : 1.3
+    const startSize = isHeadline ? Math.max(type.sizes.headline, headlineBoost) : type.sizes[slot.role] ?? type.sizes.body
+    // wrap-to-fit: shrink while the wrapped line count exceeds the
+    // band height; the element keeps the FULL text (exact-text
+    // contract) and its box grows to the wrapped height, capped at
+    // the band — an impossible fit still fails the textFits check
+    const { size, lines } = wrapFontSize(
+      slot.text,
+      rect.width,
+      rect.height,
+      startSize,
+      isHeadline ? 28 : 18,
+      lineHeight,
+    )
+    const fill = isHeadline ? palette.roles.ink : palette.roles.inkSoft
+    const h = Math.min(rect.height, Math.round(lines.length * size * lineHeight))
+    content.push(
+      createTextElement({
+        text: slot.text,
+        x: Math.round(rect.x),
+        y: Math.round(rect.y + (rect.height - h) / 2),
+        width: Math.round(rect.width),
+        height: h,
+        fontSize: size,
+        fontFamily: isHeadline ? type.families.heading : type.families.body,
+        bold: isHeadline,
+        fill,
+        align: 'center',
+        ...(isHeadline ? { lineHeight: 1.15 } : {}),
+      }),
+    )
+
+    if (isHeadline && i === 0 && subRects.length > 1) {
+      // accent underline in the band gap — decorative backdrop
+      const gapY = rect.y + rect.height
+      const nextY = subRects[i + 1].y
+      if (nextY - gapY >= 14) {
+        backdrops.push(
+          createShapeElement('rect', {
+            x: Math.round(rect.x + rect.width * 0.28),
+            y: Math.round(gapY + 8),
+            width: Math.round(rect.width * 0.44),
+            height: 6,
+            fill: palette.roles.accentSoft,
+            cornerRadius: 3,
+          }),
+        )
+      }
+    }
+  })
+
+  if (slots.length > ROLE_STACK_ORDER.length) warnings.push('hero band is dense — consider fewer slots')
+  return { backdrops, content, warnings }
+}
+
+/** Feature cards: N semi-transparent card rects, one to three texts
+ * each — emitted exactly in the brief validator's shape. */
+export function buildFeatureCards(block: BlockNode, ctx: BuildContext): ComposedElements {
+  const { palette, type } = ctx
+  const warnings: string[] = []
+  const backdrops: AnyElement[] = []
+  const content: AnyElement[] = []
+
+  const count = Math.max(1, Math.min(6, block.count ?? Math.max(1, block.content.length)))
+  const cells = gridInRect(ctx.rect, count, { columns: 3, gap: 28, minCellWidth: 160, minCellHeight: 110 })
+  if (cells.some((c) => c.width < 160 || c.height < 110)) {
+    warnings.push(`feature-cards band too small for ${count} cards — minimum 160x110 not met`)
+  }
+
+  const cardFill = palette.roles.surface
+  const cardText = onColor(cardFill)
+  cells.forEach((cell, i) => {
+    const slot = block.content[i]
+    const label = slot?.text ?? `Feature ${i + 1}`
+    backdrops.push(
+      createShapeElement('rect', {
+        x: Math.round(cell.x),
+        y: Math.round(cell.y),
+        width: Math.round(cell.width),
+        height: Math.round(cell.height),
+        fill: cardFill,
+        cornerRadius: 20,
+        opacity: 0.92,
+      }),
+    )
+    const pad = Math.round(cell.width * 0.1)
+    const boxW = cell.width - pad * 2
+    const boxH = cell.height - pad * 2
+    const { size, lines } = wrapFontSize(label, boxW, boxH, type.sizes.body, 16, 1.3)
+    const h = Math.min(boxH, Math.round(lines.length * size * 1.3))
+    content.push(
+      createTextElement({
+        text: label,
+        x: Math.round(cell.x + pad),
+        y: Math.round(cell.y + (cell.height - h) / 2),
+        width: Math.round(boxW),
+        height: h,
+        fontSize: size,
+        fontFamily: type.families.body,
+        bold: true,
+        fill: cardText,
+        align: 'center',
+      }),
+    )
+  })
+
+  return { backdrops, content, warnings }
+}
+
+/** Stat row: N big-number/label pairs in a grid — the numbers band
+ * of a professional poster (impact metrics, dates, prices). Slots
+ * arrive as alternating value/caption pairs: role 'headline' is the
+ * value, role 'label' its caption; a trailing bare value is
+ * tolerated. Every cell reserves the MAX wrapped-line count so the
+ * accent underlines and captions share one baseline (a wrapping
+ * value must never shift its column's rhythm — found by the VLM
+ * critique of the acceptance run). */
+export function buildStatRow(block: BlockNode, ctx: BuildContext): ComposedElements {
+  const { palette, type } = ctx
+  const warnings: string[] = []
+  const backdrops: AnyElement[] = []
+  const content: AnyElement[] = []
+
+  const slots = block.content
+  const count = Math.max(1, Math.min(6, block.count ?? Math.ceil(slots.length / 2)))
+  const cells = gridInRect(ctx.rect, count, { columns: 3, gap: 24, minCellWidth: 150, minCellHeight: 96 })
+  if (cells.some((c) => c.width < 150 || c.height < 96)) {
+    warnings.push(`stat-row band too small for ${count} stats — minimum 150x96 not met`)
+  }
+
+  // pass 1: fit each value; pass 2 places them on a shared baseline
+  const fitted: { cell: Rect; valueText: string; captionText?: string; size: number; lines: string[] }[] = []
+
+  cells.forEach((cell, i) => {
+    const value = slots[2 * i]
+    const caption = slots[2 * i + 1]
+    const valueText = value?.text ?? `${(i + 1) * 25}+`
+    const captionText = caption?.text
+
+    // value: big, bold, ink — wrap-aware, shrunk to fit the cell
+    const { size, lines } = wrapFontSize(valueText, cell.width, cell.height * 0.6, Math.max(type.sizes.headline, 48), 24, 1.15)
+    fitted.push({ cell, valueText, captionText, size, lines })
+  })
+
+  const uniformLineH = Math.max(...fitted.map((f) => Math.round(f.size * 1.15)))
+  const uniformValueH = Math.max(...fitted.map((f) => f.lines.length)) * uniformLineH
+
+  for (const { cell, valueText, captionText, size, lines } of fitted) {
+    const valueY = cell.y + Math.round(cell.height * 0.12)
+    const valueH = Math.min(Math.round(cell.height * 0.6), Math.round(lines.length * size * 1.15))
+    content.push(
+      createTextElement({
+        text: valueText,
+        x: Math.round(cell.x),
+        y: valueY,
+        width: Math.round(cell.width),
+        height: valueH,
+        fontSize: size,
+        fontFamily: type.families.heading,
+        bold: true,
+        fill: palette.roles.ink,
+        align: 'center',
+        lineHeight: 1.15,
+      }),
+    )
+
+    // accent underline under the value — at the UNIFORM baseline
+    const underlineY = valueY + uniformValueH + 6
+    if (underlineY + 4 <= cell.y + cell.height) {
+      backdrops.push(
+        createShapeElement('rect', {
+          x: Math.round(cell.x + cell.width * 0.36),
+          y: underlineY,
+          width: Math.round(cell.width * 0.28),
+          height: 4,
+          fill: palette.roles.accentSoft,
+          cornerRadius: 2,
+        }),
+      )
+    }
+
+    if (captionText) {
+      const capStart = type.sizes.label ?? type.sizes.body
+      const cap = wrapFontSize(captionText, cell.width, Math.round(cell.height * 0.28), capStart, 14, 1.3)
+      const capH = Math.min(Math.round(cell.height * 0.28), Math.round(cap.lines.length * cap.size * 1.3))
+      content.push(
+        createTextElement({
+          text: captionText,
+          x: Math.round(cell.x),
+          y: Math.round(cell.y + cell.height - capH - Math.round(cell.height * 0.06)),
+          width: Math.round(cell.width),
+          height: capH,
+          fontSize: cap.size,
+          fontFamily: type.families.body,
+          fill: palette.roles.inkSoft,
+          align: 'center',
+        }),
+      )
+    }
+  }
+
+  return { backdrops, content, warnings }
+}
+
+/** A visual frame: the deterministic stand-in a real image/asset
+ * fills at the app layer (image sourcing is an app-layer tool, not
+ * engine math). Aspect-locked 4:3. */
+function visualFrame(band: Rect, captionH: number): { frame: Rect; warns: string[] } {
+  const warns: string[] = []
+  const frameMaxH = band.height - captionH - Math.round(band.height * 0.08)
+  const frameW = Math.min(band.width * 0.72, Math.round(frameMaxH * (4 / 3)))
+  const frameH = Math.round(frameW * 0.75)
+  if (frameW < 120 || frameH < 90) warns.push('visual band too small for a 4:3 frame — consider more weight')
+  return {
+    frame: {
+      x: Math.round(band.x + (band.width - frameW) / 2),
+      y: Math.round(band.y + (band.height - captionH - frameH) / 2),
+      width: Math.round(frameW),
+      height: frameH,
+    },
+    warns,
+  }
+}
+
+/** Mockup: one centered visual frame with an optional caption slot
+ * (role 'label' or 'body'). */
+export function buildMockup(block: BlockNode, ctx: BuildContext): ComposedElements {
+  const { palette, type } = ctx
+  const warnings: string[] = []
+  const backdrops: AnyElement[] = []
+  const content: AnyElement[] = []
+
+  const band = ctx.rect
+  const captionSlot = block.content.find((s) => s.role === 'label' || s.role === 'body')
+  const captionH = captionSlot ? Math.round(band.height * 0.18) : 0
+  const { frame, warns } = visualFrame(band, captionH)
+  warnings.push(...warns)
+
+  // thin accent frame behind, surface card in front (two-rect border)
+  backdrops.push(
+    createShapeElement('rect', {
+      x: frame.x - 6,
+      y: frame.y - 6,
+      width: frame.width + 12,
+      height: frame.height + 12,
+      fill: palette.roles.accentSoft,
+      cornerRadius: 26,
+      opacity: 0.6,
+    }),
+  )
+  backdrops.push(
+    createShapeElement('rect', {
+      x: frame.x,
+      y: frame.y,
+      width: frame.width,
+      height: frame.height,
+      fill: palette.roles.surface,
+      cornerRadius: 20,
+      opacity: 0.95,
+    }),
+  )
+  // the placeholder mark: a slim centered glyph bar (deterministic)
+  backdrops.push(
+    createShapeElement('rect', {
+      x: Math.round(frame.x + frame.width * 0.44),
+      y: Math.round(frame.y + frame.height / 2 - 14),
+      width: Math.round(frame.width * 0.12),
+      height: 28,
+      fill: palette.roles.accentSoft,
+      cornerRadius: 4,
+    }),
+  )
+
+  if (captionSlot && captionH > 0) {
+    const cap = wrapFontSize(captionSlot.text, frame.width, captionH, type.sizes.label ?? type.sizes.body, 14, 1.3)
+    const h = Math.min(captionH, Math.round(cap.lines.length * cap.size * 1.3))
+    content.push(
+      createTextElement({
+        text: captionSlot.text,
+        x: frame.x,
+        y: Math.round(frame.y + frame.height + 12),
+        width: frame.width,
+        height: h,
+        fontSize: cap.size,
+        fontFamily: type.families.body,
+        fill: palette.roles.inkSoft,
+        align: 'center',
+      }),
+    )
+  }
+
+  return { backdrops, content, warnings }
+}
+
+/** Timeline: a horizontal route — a baseline with N stops, each a
+ * dot with a value above and a caption below. Slots arrive as
+ * alternating value/caption pairs (same convention as stat-row).
+ * The classic schedule/journey band of event posters. */
+export function buildTimeline(block: BlockNode, ctx: BuildContext): ComposedElements {
+  const { palette, type } = ctx
+  const warnings: string[] = []
+  const backdrops: AnyElement[] = []
+  const content: AnyElement[] = []
+
+  const slots = block.content
+  const count = Math.max(2, Math.min(6, block.count ?? Math.ceil(slots.length / 2)))
+  const cells = gridInRect(ctx.rect, count, { columns: count, gap: 12, minCellWidth: 120, minCellHeight: 80 })
+  if (cells.length < count) warnings.push(`timeline band fits only ${cells.length} of ${count} stops`)
+
+  const midY = ctx.rect.y + Math.round(ctx.rect.height / 2)
+  const firstCx = cells.length ? cells[0].x + Math.round(cells[0].width / 2) : ctx.rect.x
+  const last = cells[cells.length - 1] ?? ctx.rect
+  const lastCx = last.x + Math.round(last.width / 2)
+
+  // the route: one baseline through all stops (accent-soft)
+  backdrops.push(
+    createShapeElement('rect', {
+      x: firstCx,
+      y: midY - 2,
+      width: Math.max(0, lastCx - firstCx),
+      height: 4,
+      fill: palette.roles.accentSoft,
+      cornerRadius: 2,
+    }),
+  )
+
+  cells.forEach((cell, i) => {
+    const value = slots[2 * i]
+    const caption = slots[2 * i + 1]
+    const cx = cell.x + Math.round(cell.width / 2)
+    // the stop dot, ON the baseline
+    backdrops.push(
+      createShapeElement('ellipse', {
+        x: cx - 7,
+        y: midY - 7,
+        width: 14,
+        height: 14,
+        fill: palette.roles.accent,
+      }),
+    )
+    if (value?.text) {
+      const v = wrapFontSize(value.text, cell.width, Math.round(cell.height * 0.42), Math.max(type.sizes.subline, 20), 14, 1.2)
+      const vH = Math.min(Math.round(cell.height * 0.42), Math.round(v.lines.length * v.size * 1.2))
+      content.push(
+        createTextElement({
+          text: value.text,
+          x: Math.round(cell.x),
+          y: Math.round(midY - 16 - vH),
+          width: Math.round(cell.width),
+          height: vH,
+          fontSize: v.size,
+          fontFamily: type.families.heading,
+          bold: true,
+          fill: palette.roles.ink,
+          align: 'center',
+        }),
+      )
+    }
+    if (caption?.text) {
+      const c = wrapFontSize(caption.text, cell.width, Math.round(cell.height * 0.34), type.sizes.label ?? type.sizes.body, 12, 1.25)
+      const cH = Math.min(Math.round(cell.height * 0.34), Math.round(c.lines.length * c.size * 1.25))
+      content.push(
+        createTextElement({
+          text: caption.text,
+          x: Math.round(cell.x),
+          y: midY + 16,
+          width: Math.round(cell.width),
+          height: cH,
+          fontSize: c.size,
+          fontFamily: type.families.body,
+          fill: palette.roles.inkSoft,
+          align: 'center',
+        }),
+      )
+    }
+  })
+
+  return { backdrops, content, warnings }
+}
+
+/** Gallery: a 2- or 3-up grid of visual frames with optional short
+ * captions — the storyboard band (photos the app layer fills). */
+export function buildGallery(block: BlockNode, ctx: BuildContext): ComposedElements {
+  const { palette, type } = ctx
+  const warnings: string[] = []
+  const backdrops: AnyElement[] = []
+  const content: AnyElement[] = []
+
+  const slots = block.content
+  const count = Math.max(2, Math.min(3, block.count ?? 2))
+  const cells = gridInRect(ctx.rect, count, { columns: count, gap: 16, minCellWidth: 140, minCellHeight: 100 })
+  if (cells.length < count) warnings.push(`gallery band fits only ${cells.length} of ${count} frames`)
+
+  cells.forEach((cell, i) => {
+    const caption = slots[i]?.text
+    const captionH = caption ? Math.round(cell.height * 0.22) : 0
+    // accent border behind, surface card front (two-rect border)
+    backdrops.push(
+      createShapeElement('rect', {
+        x: cell.x - 4,
+        y: cell.y - 4,
+        width: cell.width + 8,
+        height: cell.height - captionH + 8,
+        fill: palette.roles.accentSoft,
+        cornerRadius: 14,
+        opacity: 0.55,
+      }),
+    )
+    backdrops.push(
+      createShapeElement('rect', {
+        x: cell.x,
+        y: cell.y,
+        width: cell.width,
+        height: Math.max(40, cell.height - captionH),
+        fill: palette.roles.surface,
+        cornerRadius: 10,
+        opacity: 0.95,
+      }),
+    )
+    if (caption) {
+      const cap = wrapFontSize(caption, cell.width, captionH, type.sizes.label ?? type.sizes.body, 12, 1.25)
+      const h = Math.min(captionH, Math.round(cap.lines.length * cap.size * 1.25))
+      content.push(
+        createTextElement({
+          text: caption,
+          x: Math.round(cell.x),
+          y: Math.round(cell.y + cell.height - h),
+          width: Math.round(cell.width),
+          height: h,
+          fontSize: cap.size,
+          fontFamily: type.families.body,
+          fill: palette.roles.inkSoft,
+          align: 'center',
+        }),
+      )
+    }
+  })
+
+  return { backdrops, content, warnings }
+}
+
+/** Footer: one short closing line (venue, credits, contact) over a
+ * hairline divider — the poster's sign-off band. */
+export function buildFooter(block: BlockNode, ctx: BuildContext): ComposedElements {
+  const { palette, type } = ctx
+  const warnings: string[] = []
+  const backdrops: AnyElement[] = []
+  const content: AnyElement[] = []
+
+  const slot = block.content[0]
+  const text = slot?.text
+  if (!text) {
+    warnings.push('footer block without content — emitted an empty band')
+    return { backdrops, content, warnings }
+  }
+
+  const band = ctx.rect
+  // hairline divider across the top of the band
+  backdrops.push(
+    createShapeElement('rect', {
+      x: band.x + Math.round(band.width * 0.1),
+      y: band.y,
+      width: Math.round(band.width * 0.8),
+      height: 2,
+      fill: palette.roles.accentSoft,
+      cornerRadius: 1,
+    }),
+  )
+  const start = Math.min(type.sizes.label ?? type.sizes.body, 22)
+  const f = wrapFontSize(text, Math.round(band.width * 0.9), Math.round(band.height * 0.8), start, 12, 1.3)
+  const h = Math.min(Math.round(band.height * 0.8), Math.round(f.lines.length * f.size * 1.3))
+  content.push(
+    createTextElement({
+      text,
+      x: Math.round(band.x + band.width * 0.05),
+      y: Math.round(band.y + (band.height - h) / 2) + 6,
+      width: Math.round(band.width * 0.9),
+      height: h,
+      fontSize: f.size,
+      fontFamily: type.families.body,
+      fill: palette.roles.inkSoft,
+      align: 'center',
+    }),
+  )
+
+  return { backdrops, content, warnings }
+}
+
+/** Dispatch: every declared block kind has a dedicated builder —
+ * the design vocabulary is engine-owned, one kind at a time. */
+export function buildBlock(block: BlockNode, ctx: BuildContext): ComposedElements {
+  switch (block.kind) {
+    case 'feature-cards':
+      return buildFeatureCards(block, ctx)
+    case 'stat-row':
+      return buildStatRow(block, ctx)
+    case 'mockup':
+      return buildMockup(block, ctx)
+    case 'timeline':
+      return buildTimeline(block, ctx)
+    case 'gallery':
+      return buildGallery(block, ctx)
+    case 'footer':
+      return buildFooter(block, ctx)
+    case 'hero':
+    default:
+      return buildHero(block, ctx)
+  }
+}

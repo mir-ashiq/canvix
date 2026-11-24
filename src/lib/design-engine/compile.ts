@@ -1,0 +1,261 @@
+// ─────────────────────────────────────────────────────────────
+// Design engine · compile (Phase A).
+//
+// DesignSpec → real editor pages. Pure, deterministic (ids are
+// compile-scoped counters — same spec in, byte-identical pages
+// out), and honest: the compile result carries a CHECK REPORT with
+// the same discipline the v0.29.4 agent loop ships — every user
+// requirement is verified and every failure is named, never
+// silently degraded.
+//
+// Checks:
+//   exactTexts   user-required slots appear character-for-character
+//                (NFC-normalized equality — NOT case-insensitive
+//                substring; the hardening over the brief checker)
+//   colors       every seed/pinned hex appears on the page
+//   inCanvas     every element rect inside the canvas
+//   overlap      content elements are mutually disjoint (backdrops
+//                may sit under content — the declared channel)
+//   textFits     every text element fits its box WRAP-AWARE: no
+//                wrapped line wider than the box, wrapped line count
+//                within the box height; required copy is never
+//                truncated to achieve this — an unfit required text
+//                FAILS
+//   contrast     WCAG ≥ 4.5 for ink/inkSoft on the background, CTA
+//                text on its chip, card text on the card surface
+// ─────────────────────────────────────────────────────────────
+
+import { createShapeElement, type AnyElement, type PageData } from '@/lib/types'
+import { asHex, type DesignSpec } from '@/lib/design-spec/types'
+import { expandPalette, onColor, type ExpandedPalette } from './palette'
+import { assignTypeScale, type AssignedTypography } from './typography'
+import { bandLayout, isInCanvas, rectsOverlap, type Rect } from './layout'
+import { buildBlock, estimateTextWidth, wrapLines } from './compositions'
+import { contrast } from '@/lib/theme'
+
+const MIN_TEXT_CONTRAST = 4.5
+
+export interface ExactTextCheck {
+  text: string
+  found: boolean
+}
+export interface ColorCheck {
+  hex: string
+  found: boolean
+}
+export interface ContrastCheck {
+  pair: string
+  ratio: number
+  ok: boolean
+}
+
+export interface CompileChecks {
+  exactTexts: ExactTextCheck[]
+  colors: ColorCheck[]
+  inCanvas: boolean
+  noUnintendedOverlap: boolean
+  textFits: boolean
+  contrast: ContrastCheck[]
+  passed: boolean
+  failures: string[]
+}
+
+export interface CompileResult {
+  pages: PageData[]
+  checks: CompileChecks
+  /** non-fatal notes (palette defaults, pending builders, density) */
+  warnings: string[]
+  palette: ExpandedPalette
+  typography: AssignedTypography
+}
+
+/** NFKC-free exact comparison: NFC normalization both sides, then
+ * strict equality. Case/whitespace differences are FAILURES here.
+ * Exported for the test matrix — this is the hardened contract the
+ * agent brief checker's case-insensitive substring does not give. */
+export function exactEquals(a: string, b: string): boolean {
+  return a.normalize('NFC') === b.normalize('NFC')
+}
+
+function eqHex(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase()
+}
+
+function elementRect(el: AnyElement): Rect {
+  return { x: el.x, y: el.y, width: el.width, height: el.height }
+}
+
+/**
+ * Compile a spec into pages. Always returns a result — a failed
+ * check set is part of the result, not an exception (the caller
+ * decides whether to ship, fix, or disclose).
+ */
+export function compileSpec(spec: DesignSpec): CompileResult {
+  const warnings: string[] = []
+  const palette = expandPalette(spec.palette)
+  warnings.push(...palette.warnings)
+  const typography = assignTypeScale(spec.typography, spec.palette.mood, spec.format.width)
+  if (typography.warning) warnings.push(typography.warning)
+
+  const backdrops: AnyElement[] = []
+  const content: AnyElement[] = []
+  let id = 0
+  const nextId = () => `spec_${++id}`
+
+  for (const placed of bandLayout(spec.blocks, spec.format)) {
+    const composed = buildBlock(placed.block, {
+      rect: placed.rect,
+      palette,
+      type: typography,
+      canvas: spec.format,
+    })
+    warnings.push(...composed.warnings)
+    backdrops.push(...composed.backdrops)
+    content.push(...composed.content)
+  }
+
+  // ── seed guarantee (found by the real-model acceptance run) ──
+  // A required seed can be assigned a palette role (e.g. accent) and
+  // still never reach the page when no composition draws that role —
+  // the model path dropped its second seed exactly this way. The
+  // palette module's contract says required colors "always appear on
+  // the page"; the compiler makes that true, placing the color
+  // SEMANTICALLY first: (1) the hero accent underline — a real
+  // headline-emphasis device — is recolored to the missing seed;
+  // (2) only when no underline exists does a deterministic decorative
+  // band land on the bottom edge (backdrop layer, overlap-safe).
+  // Both placements are disclosed in warnings.
+  const carried = (hex: string) =>
+    eqHex(palette.roles.background, hex) ||
+    [...backdrops, ...content].some(
+      (el) => 'fill' in el && typeof el.fill === 'string' && eqHex(el.fill, hex),
+    )
+  const isUnderline = (el: AnyElement): el is AnyElement & { fill: string } =>
+    el.type === 'rect' && 'fill' in el && typeof el.fill === 'string' && el.fill === palette.roles.accentSoft && el.height <= 8
+  for (const hex of [...new Set([...spec.palette.seeds, ...Object.values(spec.palette.pinned ?? {})])]) {
+    const clean = asHex(hex, '')
+    if (clean !== '' && !carried(clean)) {
+      const underline = backdrops.find(isUnderline)
+      if (underline) {
+        underline.fill = clean
+        warnings.push(
+          `seed #${clean.slice(1).toUpperCase()} carried by no element — placed as headline emphasis (seed guarantee)`,
+        )
+      } else {
+        const bandHeight = Math.min(48, Math.max(12, Math.round(spec.format.height * 0.025)))
+        backdrops.push(
+          createShapeElement('rect', {
+            x: 0,
+            y: spec.format.height - bandHeight,
+            width: spec.format.width,
+            height: bandHeight,
+            fill: clean,
+            cornerRadius: 0,
+          }),
+        )
+        warnings.push(
+          `seed #${clean.slice(1).toUpperCase()} carried by no element — decorative band emitted (seed guarantee)`,
+        )
+      }
+    }
+  }
+
+  // z-order: backdrops first, content above — array order IS z-order
+  const elements = [...backdrops, ...content].map((el) => ({ ...el, id: nextId() }))
+  const page: PageData = {
+    id: 'spec_page_1',
+    background: { type: 'solid', color: palette.roles.background },
+    elements,
+  }
+
+  // ── the check report ──
+  const failures: string[] = []
+  const textEls = elements.filter(
+    (el): el is AnyElement & { text: string; fontSize: number; lineHeight?: number } => el.type === 'text',
+  )
+
+  const exactTexts = spec.blocks
+    .flatMap((b) => b.content)
+    .filter((s) => s.source === 'user-required')
+    .map((slot) => {
+      const found = textEls.some((el) => exactEquals(el.text, slot.text))
+      if (!found) failures.push(`required text missing or altered: "${slot.text}"`)
+      return { text: slot.text, found }
+    })
+
+  const requiredHexes = [...spec.palette.seeds, ...Object.values(spec.palette.pinned ?? {})]
+  const colors = [...new Set(requiredHexes)].map((hex) => {
+    const found =
+      eqHex(palette.roles.background, hex) ||
+      elements.some((el) => 'fill' in el && typeof el.fill === 'string' && eqHex(el.fill, hex))
+    if (!found) failures.push(`required color #${hex.slice(1).toUpperCase()} not used anywhere on the page`)
+    return { hex, found }
+  })
+
+  const inCanvas = elements.every((el) => isInCanvas(elementRect(el), spec.format))
+  if (!inCanvas) failures.push('an element sits outside the canvas')
+
+  const noUnintendedOverlap = content
+    .map(elementRect)
+    .every((a, i, list) => list.every((b, j) => i === j || !rectsOverlap(a, b)))
+  if (!noUnintendedOverlap) failures.push('content elements overlap (unintended)')
+
+  // wrap-aware: a text element fits when no wrapped line exceeds its
+  // width AND the wrapped line count fits its box height (the same
+  // greedy wrap the compositions use — the renderer wraps the element
+  // at its width, so this is the honest single-line-estimate upgrade)
+  const textFits = textEls.every((el) => {
+    const lines = wrapLines(el.text, el.width, el.fontSize)
+    const lineHeight = el.lineHeight ?? 1.3
+    return (
+      lines.every((ln) => estimateTextWidth(ln, el.fontSize) <= el.width + 1) &&
+      lines.length * Math.round(el.fontSize * lineHeight) <= el.height + 2
+    )
+  })
+  if (!textFits) {
+    const offender = textEls.find((el) => {
+      const lines = wrapLines(el.text, el.width, el.fontSize)
+      const lineHeight = el.lineHeight ?? 1.3
+      return (
+        lines.some((ln) => estimateTextWidth(ln, el.fontSize) > el.width + 1) ||
+        lines.length * Math.round(el.fontSize * lineHeight) > el.height + 2
+      )
+    })
+    failures.push(`text does not fit its box even wrapped: "${offender?.text.slice(0, 40)}" (required copy is never truncated)`)
+  }
+
+  const contrastPairs: { pair: string; ratio: number }[] = [
+    { pair: `ink on background`, ratio: contrast(palette.roles.ink, palette.roles.background) },
+    { pair: `inkSoft on background`, ratio: contrast(palette.roles.inkSoft, palette.roles.background) },
+  ]
+  if (elements.some((el) => el.type === 'rect' && el.fill === palette.roles.accent && 'cornerRadius' in el)) {
+    contrastPairs.push({ pair: 'cta text on accent chip', ratio: contrast(onColor(palette.roles.accent), palette.roles.accent) })
+  }
+  if (elements.some((el) => el.type === 'rect' && el.fill === palette.roles.surface)) {
+    contrastPairs.push({ pair: 'card text on surface', ratio: contrast(onColor(palette.roles.surface), palette.roles.surface) })
+  }
+  const contrastChecks = contrastPairs.map((p) => ({
+    ...p,
+    ok: p.ratio >= MIN_TEXT_CONTRAST,
+  }))
+  for (const c of contrastChecks) {
+    if (!c.ok) failures.push(`contrast ${c.pair} = ${c.ratio.toFixed(2)} (< ${MIN_TEXT_CONTRAST})`)
+  }
+
+  return {
+    pages: [page],
+    checks: {
+      exactTexts,
+      colors,
+      inCanvas,
+      noUnintendedOverlap,
+      textFits,
+      contrast: contrastChecks,
+      passed: failures.length === 0,
+      failures,
+    },
+    warnings,
+    palette,
+    typography,
+  }
+}

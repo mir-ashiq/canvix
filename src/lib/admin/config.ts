@@ -62,6 +62,10 @@ export const AI_FEATURES = [
   'themeGeneration', // AI palette/font theme, applied design-wide
   'altText', // accessibility alt text for images (vision slot)
   'videoGeneration', // text-to-video via the video slot
+  // v0.30 (DesignAgent, Phase B):
+  'designAgent', // autonomous one-prompt design generation: plan →
+  // compile → self-correct → visual verify (text slot plans; the
+  // vision slot powers the advisory critique when configured)
 ] as const
 export type AiFeature = (typeof AI_FEATURES)[number]
 
@@ -130,6 +134,7 @@ export const DEFAULT_FEATURES: StoredFeatures = {
   themeGeneration: true,
   altText: true,
   videoGeneration: true,
+  designAgent: true,
 }
 
 export const DEFAULT_SETTINGS: StoredSettings = {

@@ -5,6 +5,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — FOSS United funding application (v0.29.5)
+
+- **`funding.json` rewritten for the FOSS United project-grant
+  application** (fundingjson.org v1.1.0, schema-validated): four
+  milestone plans in INR — M1 baseline & harness ₹1,30,000 · M2
+  design-output correctness ₹1,20,000 · M3 grounded visual review
+  ₹1,20,000 · M4 community & final report ₹1,30,000 — **₹5,00,000
+  total, one-time, six months**. Corrects the entity email
+  (imseldrith@gmail.com — the manifest previously carried a stale
+  address), points the project `webpageUrl` at https://canvix.app, and
+  replaces the superseded USD 7,000 three-plan draft. The grants
+  directory auto-refreshes from this manifest weekly; no duplicate
+  application is submitted.
+- **`CANVIX-FOSS-UNITED-PROPOSAL.md`** — the complete evidence-based
+  grant proposal (22 sections: capabilities, deployment proof,
+  self-reported adoption labeled as such, budget with the recorded
+  ₹5,40,000 → ₹5,00,000 revision, milestone acceptance criteria,
+  risks, sustainability, reporting commitments).
+- **`FUNDING-SCOPE-MATRIX.md`** — the FOSS United × NLnet × unfunded
+  × shipped allocation ledger proving no hour or deliverable is
+  billed to two funders; funded commits will carry
+  `Grant: FOSSUnited M#` trailers.
+- **`public/.well-known/funding-manifest-urls`** — the cross-domain
+  ownership-verification file for canvix.app (served and verified
+  locally; the manifest's `wellKnown` property is deliberately
+  withheld until the file is live in production).
+- README funding section rewritten (was: "three milestones, USD
+  7,000 total"); the AI-disclosure test-wall figures updated to the
+  current 1,575 unit tests / 39 e2e specs.
+- `docs/FUNDING-VALIDATION.md` and `docs/FUNDING-INQUIRY-DRAFT.md`
+  (validation report + status-inquiry email draft).
+
 ### Fixed
 
 - **Agent v0.29.3 — the failed CANVIX poster run, root-caused and

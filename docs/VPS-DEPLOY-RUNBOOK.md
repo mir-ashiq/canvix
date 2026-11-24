@@ -1,24 +1,24 @@
 # VPS Deploy Runbook — canvix.app (132.226.127.65)
 
 **Who runs this:** the maintainer (or an agent session holding the SSH key).
-**State:** the deploy automation itself is ready; the ONLY missing piece is the SSH private key (see §1).
+**State:** ✅ **DEPLOYED 2026-11-24** — the key was re-provided, the deploy of `52eb8e0` completed via the auto-deploy script, all §4 checks passed live, and the wellKnown activation (§5) is done. This document now serves as the reference for FUTURE deploys.
 
 ## 0. What is deployed where
 
 | Piece | Value |
 |---|---|
-| Host | `132.226.127.65` (Oracle Cloud), user `ubuntu` |
-| Auth | SSH key `oracle_vm1.key` (was uploaded to the sandbox at `/tmp/oracle_vm1.key` — `/tmp` is wiped on sandbox recycle, so it must be re-provided) |
-| Site | https://canvix.app → this VPS |
-| App | Next.js standalone build, local Postgres (`127.0.0.1`, database `canvix`) |
-| Deploy pattern | build on the VPS from `main`, migrations via `prisma migrate deploy`, standalone snapshot + restore-on-failure (ROADMAP, 2026-11-07 hardening) |
+| Host | `132.226.127.65` (Oracle Cloud), user `ubuntu`, aarch64 |
+| Auth | SSH key `oracle_vm1.key` (the sandbox copy lives at `/tmp/oracle_vm1.key`; `/tmp` is wiped on sandbox recycle, so it must be re-provided per session — it is never stored in the repository) |
+| Site | https://canvix.app → this VPS (reverse proxy → app on `127.0.0.1:3010`) |
+| App | `/opt/canvix` — Next.js standalone build, systemd service `canvix`, Postgres in the `canvix-pg` Docker container |
+| Deploy pattern | `auto-deploy.sh` (cron, flock-guarded): poll `origin/main` → snapshot → reset → `npm ci` → build → `prisma migrate deploy` → restart → health check → auto-rollback on failure. Manual: `auto-deploy.sh --force` |
 | Helper scripts | `/home/z/my-project/scripts/vps.py` and `vps_ssh.py` (paramiko runners, key at `/tmp`) |
 
-## 1. The one blocker
+## 1. The one blocker — RESOLVED 2026-11-24
 
-The sandbox that prepared this runbook lost the SSH key in a recycle (`/tmp/oracle_vm1.key` no longer exists; the key was never stored anywhere durable, by design). **To execute a deploy, re-attach the key** — either:
+The key was re-provided by the maintainer and the deploy executed. This section remains as the procedure for any future session that needs to deploy: the sandbox's `/tmp/oracle_vm1.key` does not survive recycles (the key is never stored anywhere durable, by design), so a fresh session must re-attach it — either:
 
-- upload it to the sandbox again (it will land in the upload dir and can be moved to `/tmp/oracle_vm1.key` for the helper scripts), or
+- upload/provide it again and place it at `/tmp/oracle_vm1.key` (chmod 600) for the helper scripts, or
 - run §3 by hand from your own machine where the key already exists.
 
 No credentials, tokens or secrets are stored in this repository.
@@ -60,15 +60,17 @@ curl -fsS https://canvix.app/.well-known/funding-manifest-urls
 
 If health fails or the site is down: restore the snapshot (`rm -rf .next/standalone && cp -a ~/standalone-backup-* .next/standalone`), restart, and investigate offline — the old build keeps serving.
 
-## 5. Well-known activation (after §4 passes)
+## 5. Well-known activation (after §4 passes) — ✅ COMPLETED 2026-11-24
 
-Once `https://canvix.app/.well-known/funding-manifest-urls` returns the exact manifest URL in production:
+The deploy of `52eb8e0` ran via the VPS auto-deploy script ("DEPLOY OK" in `~/canvix-auto-deploy.log`), §4's checks passed against the live site, and the activation steps below were executed:
 
-1. Edit `funding.json`: add `"wellKnown": "https://canvix.app/.well-known/funding-manifest-urls"` inside `projects[0].webpageUrl`.
-2. Update the honesty guard in `src/lib/funding-manifest.test.ts` (the test that asserts `wellKnown` is *absent* — flip it to assert presence).
-3. Commit, push, let CI re-validate, merge. The grants directory picks it up on its weekly manifest refresh.
+1. ✅ `funding.json` now carries `"wellKnown": "https://canvix.app/.well-known/funding-manifest-urls"` inside `projects[0].webpageUrl`.
+2. ✅ The honesty guard in `src/lib/funding-manifest.test.ts` was flipped to assert the property's **presence** (with the activation date and the reason recorded in the test).
+3. ✅ Committed, CI-validated and merged; the grants directory picks the manifest up on its weekly refresh.
 
-This is the exact "remaining step" referenced in `docs/FUNDING-VALIDATION.md` §website — the ownership claim is deliberately withheld until the public URL actually serves the file.
+If the live URL ever stops serving the file, the CI manifest test, the e2e smoke spec and the docker-job assertion all fail loudly — fix the deployment (§3–§4), not the tests.
+
+**Note on how the deploy actually runs (supersedes the §3 manual sketch):** this VPS has an auto-deploy script (cron, `flock`-guarded) that polls `origin/main` every ~5 minutes, snapshots the standalone build, `git reset --hard origin/main`, restores the local `.env`, `npm ci`, `npm run build`, `npx prisma migrate deploy`, `systemctl restart canvix`, health-checks port 3010, and **auto-rolls back to the last-good build on failure**. Manual deploys should use `auto-deploy.sh --force` rather than hand-rolling §3.
 
 ## 6. Rollback
 

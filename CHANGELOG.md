@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added — FOSS United funding application (v0.29.5)
 
+- **Website ownership verification ACTIVATED (2026-11-24):** after the
+  VPS deploy of `52eb8e0`, `https://canvix.app/.well-known/funding-manifest-urls`
+  went live (200, exact manifest-URL body), and the manifest now carries
+  `wellKnown` on the project `webpageUrl` — the claim is no longer
+  withheld. The honesty-guard unit test was flipped to assert its
+  presence, and the validation report records the live verification.
 - **`funding.json` rewritten for the FOSS United project-grant
   application** (fundingjson.org v1.1.0, schema-validated): four
   milestone plans in INR — M1 baseline & harness ₹1,30,000 · M2

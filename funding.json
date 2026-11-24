@@ -17,7 +17,8 @@
       "name": "Canvix",
       "description": "Free and open-source graphic design platform — a self-hostable, browser-based editor with a 366-template library, real-time collaboration, and local exports to PNG, JPG, SVG, vector PDF, PPTX, GIF and video. MIT-licensed: every feature free, no watermarks, no paywalls, and try-without-account. The AI layer is modular and provider-independent (text, vision, image and video capability slots with bring-your-own-key), and AI-assisted designs remain native, editable elements rather than flattened images — so machine help still produces real design work. One-command Docker self-hosting makes it infrastructure any school, nonprofit or small organization can run itself. This grant funds design-output correctness (exact text and colors, reliable geometry), reproducible design-quality evaluation, and open creator education for the next six months.",
       "webpageUrl": {
-        "url": "https://canvix.app"
+        "url": "https://canvix.app",
+        "wellKnown": "https://canvix.app/.well-known/funding-manifest-urls"
       },
       "repositoryUrl": {
         "url": "https://github.com/mir-ashiq/canvix"

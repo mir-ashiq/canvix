@@ -94,10 +94,15 @@ describe('funding.json — fundingjson.org v1.1.0 contract', () => {
     expect(lines).toEqual(['https://raw.githubusercontent.com/mir-ashiq/canvix/refs/heads/main/funding.json'])
   })
 
-  it('wellKnown ownership claim is withheld until production serves the file (honesty guard)', () => {
-    // When canvix.app/.well-known/funding-manifest-urls is verified live,
-    // flip this to 'include' — see docs/FUNDING-VALIDATION.md §website.
+  it('wellKnown ownership claim is ACTIVE and points at the live verification file (activated 2026-11-24)', () => {
+    // Activation history: the claim was withheld until
+    // https://canvix.app/.well-known/funding-manifest-urls served the exact
+    // manifest URL in production — verified live on 2026-11-24 (deploy 52eb8e0)
+    // before this property was added. If this ever breaks, production stopped
+    // serving the file: fix the deployment, not the test.
     const p = (manifest.projects as Record<string, unknown>[])[0]
-    expect((p.webpageUrl as Record<string, unknown>).wellKnown).toBeUndefined()
+    expect((p.webpageUrl as Record<string, unknown>).wellKnown).toBe(
+      'https://canvix.app/.well-known/funding-manifest-urls',
+    )
   })
 })

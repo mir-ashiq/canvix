@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getClientForSlot } from '@/lib/ai/provider'
 import { withLogging } from '@/lib/observability'
+import { critiqueWithVision } from '@/lib/agent/vision'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -28,12 +29,6 @@ interface VisionBody {
   stateSummary?: string // the serialized structured state
 }
 
-const SYSTEM =
-  'You are a meticulous design critic looking at a REAL screenshot of a graphic-design canvas. ' +
-  'Report only what you can actually see in the image. Never invent or assume elements that are not visible; ' +
-  'if something cannot be determined from the image, say "cannot determine". ' +
-  'Reply ONLY with JSON: {"findings": [{"severity": "P0"|"P1"|"P2"|"P3", "issue": "what is wrong (concrete, visual)", "fix": "the specific change to make"}], "overall": "one sentence verdict"}\n' +
-  'P0 = broken/unreadable/missing required content; P1 = major (weak hierarchy, poor contrast, crowding); P2 = minor (spacing, balance); P3 = polish.'
 
 async function __canvix_post(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as VisionBody
@@ -59,63 +54,20 @@ async function __canvix_post(req: NextRequest) {
     )
   }
 
-  const brief = body.brief ?? {}
-  const requiredTexts = (brief.requiredTexts ?? []).map((t) => t.text).filter(Boolean)
-  const requiredColors = (brief.requiredColors ?? []).map((c) => c.hex).filter(Boolean)
-
-  const userText = [
-    'Critique this canvas screenshot for design quality and brief compliance.',
-    requiredTexts.length ? `Required exact texts (verify they appear VERBATIM and are readable): ${requiredTexts.map((t) => `"${t}"`).join(', ')}.` : '',
-    requiredColors.length ? `Required colors (verify they are visibly used): ${requiredColors.join(', ')}.` : '',
-    body.stateSummary ? `Structured element state for cross-checking (ground truth for ids/positions):\n${body.stateSummary.slice(0, 4000)}` : '',
-    'Check: readability of every text at this scale, contrast of text on its background, alignment and spacing consistency, visual hierarchy (is the headline dominant?), accidental overlaps or clipped content, dead space, and overall professional impression.',
-    'Reply with the JSON findings now.',
-  ]
-    .filter(Boolean)
-    .join('\n')
-
+  // v0.29.3: the critique engine lives in src/lib/agent/vision.ts and is
+  // shared with the agent LOOP (pre-completion round) — one prompt, one
+  // honesty contract, no drift between the two paths.
   try {
-    const completion = await vision.zai.chat.completions.create({
-      ...(vision.model ? { model: vision.model } : {}),
-      messages: [
-        { role: 'system', content: SYSTEM },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: userText },
-            { type: 'image_url', image_url: { url: image } },
-          ] as unknown as string,
-        },
-      ],
-      thinking: { type: 'disabled' },
+    const client = vision.zai as unknown as Parameters<typeof critiqueWithVision>[0]
+    const result = await critiqueWithVision(client, image, {
+      brief: body.brief ?? undefined,
+      stateSummary: body.stateSummary,
+      model: vision.model,
     })
-    const raw = String(completion.choices[0]?.message?.content ?? '')
-    // robust parse — the model may fence or add prose
-    const cleaned = raw.replace(/```(?:json)?/gi, '').trim()
-    const start = cleaned.indexOf('{')
-    const end = cleaned.lastIndexOf('}')
-    if (start === -1 || end <= start) {
+    if (!result) {
       return NextResponse.json({ error: 'The vision model returned no parseable critique.' }, { status: 502 })
     }
-    let parsed: { findings?: unknown; overall?: unknown }
-    try {
-      parsed = JSON.parse(cleaned.slice(start, end + 1))
-    } catch {
-      return NextResponse.json({ error: 'The vision model returned malformed critique JSON.' }, { status: 502 })
-    }
-    const findings = (Array.isArray(parsed.findings) ? parsed.findings : [])
-      .filter((f) => !!f && typeof f === 'object')
-      .map((f) => {
-        const fo = f as { severity?: unknown; issue?: unknown; fix?: unknown }
-        const sev = ['P0', 'P1', 'P2', 'P3'].includes(String(fo.severity)) ? (String(fo.severity) as 'P0') : 'P2'
-        return {
-          severity: sev,
-          issue: String(fo.issue ?? '').slice(0, 400) || 'unspecified issue',
-          fix: fo.fix === undefined ? undefined : String(fo.fix).slice(0, 400),
-        }
-      })
-      .slice(0, 12)
-    return NextResponse.json({ available: true, findings, overall: String(parsed.overall ?? '').slice(0, 400) })
+    return NextResponse.json({ available: true, findings: result.findings.slice(0, 12), overall: result.note })
   } catch (err) {
     const message = err instanceof Error ? err.message.slice(0, 150) : 'vision call failed'
     return NextResponse.json({ error: `Visual critique failed: ${message}` }, { status: 502 })

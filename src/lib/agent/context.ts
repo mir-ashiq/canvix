@@ -23,11 +23,18 @@ export interface AgentElementCtx {
   height?: number
   text?: string
   fill?: string
+  /** v0.29.3: border color (glassmorphism/feature-card validation) */
+  stroke?: string
   fontSize?: number
   bold?: boolean
   fontFamily?: string
   name?: string
   locked?: boolean
+  /** v0.29.3: client-measured rendered text width in px (canvas
+   *  measureText — the same metrics the renderer uses). Present when
+   *  a v0.29.3+ panel built the context; the audit's overflow check
+   *  uses it instead of the glyph-average estimate. */
+  measuredWidth?: number
 }
 
 export interface AgentDesignCtx {
@@ -51,7 +58,8 @@ export interface AgentDesignCtx {
   otherPages?: string[]
   /** v0.29: page background hex (solid backgrounds) — enables the
    *  contrast part of the quality audit; optional, older clients simply
-   *  omit it and the audit falls back to the dominant in-use color. */
+   *  omit it and the audit falls back to per-text backdrops only.
+   *  v0.29.3: NEVER guessed — the audit uses only this real field. */
   background?: string
 }
 
@@ -62,7 +70,9 @@ function elementLine(e: AgentElementCtx, selected: boolean): string {
   if (selected) parts.push('[SELECTED]')
   if (e.text) parts.push(`text="${e.text.slice(0, 60).replace(/\n/g, ' ')}"`)
   if (e.fill) parts.push(e.fill)
+  if (e.stroke) parts.push(`border:${e.stroke}`)
   if (e.fontSize) parts.push(`${Math.round(e.fontSize)}px`)
+  if (e.measuredWidth && e.text) parts.push(`measured:${Math.round(e.measuredWidth)}px`)
   if (e.bold) parts.push('bold')
   if (e.fontFamily) parts.push(e.fontFamily)
   if (Number.isFinite(e.x) && Number.isFinite(e.y)) {
@@ -78,6 +88,7 @@ export function serializeDesignContext(d: AgentDesignCtx): string {
   const selected = new Set(d.selectedIds ?? [])
   const lines: string[] = [
     `Design: "${d.name ?? 'Untitled'}" — ${d.width ?? '?'}x${d.height ?? '?'}px (${d.templateType ?? 'custom'}), ${d.pageCount ?? 1} page(s), editing page ${(d.currentPageIndex ?? 0) + 1}.`,
+    `Page background: ${d.background ?? '(not solid — not reported)'}. Elements are listed bottom-to-top (later = in front).`,
     `Selection: ${selected.size ? [...selected].join(', ') : 'none'}.`,
   ]
   if (d.brand && ((d.brand.colors?.length ?? 0) > 0 || d.brand.headingFont)) {

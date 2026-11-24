@@ -22,11 +22,25 @@ export interface BriefConstraint {
   tier: 'mandatory' | 'preference' | 'optional'
 }
 
+/** A composite design deliverable the user named explicitly (v0.29.3):
+ *  "a realistic editor mockup", "3 feature cards", "glassmorphism".
+ *  These are REQUIREMENTS, not decoration — the validator checks that
+ *  the corresponding native, editable elements actually exist. */
+export interface RequiredFeature extends BriefConstraint {
+  kind: 'editor-mockup' | 'feature-cards' | 'glassmorphism'
+  /** for feature-cards: how many cards the user asked for */
+  count?: number
+  /** human label for prompts and unmet messages */
+  label: string
+}
+
 export interface DesignBrief {
   /** exact strings the user quoted or demanded — checked verbatim */
   requiredTexts: (BriefConstraint & { text: string; role?: string })[]
   /** exact hex colors — checked case-insensitively against the page */
   requiredColors: (BriefConstraint & { hex: string; role?: string })[]
+  /** composite deliverables (mockup, cards, glassmorphism) */
+  requiredFeatures?: RequiredFeature[]
   /** canvas dimensions in px */
   dimensions?: BriefConstraint & { width: number; height: number }
   /** detected platform/format ("instagram-post", "story", "poster"…) */
@@ -103,10 +117,33 @@ export function extractBrief(message: string, pageWidth?: number, pageHeight?: n
       requiredTexts.push({ tier: 'mandatory', text })
     }
   }
-  // "headline X", "say Y", "text Z" unquoted patterns → mandatory too
-  for (const mm of m.matchAll(/\b(?:headline|title|heading|saying|text|tagline|copy|cta)\s*(?:should\s*(?:be|say|read)|:|=|is|says|reads)?\s*[“"']?([A-Z][^.\n“"']{2,80})[”"']?/gi)) {
-    const text = mm[1].trim()
-    if (text && !seen.has(text.toLowerCase())) {
+  // "headline: X", "title = Y", "tagline should read Z" unquoted
+  // patterns → mandatory too.
+  //
+  // v0.29.3 REGRESSION GUARD (found on the failed CANVIX production
+  // run): the old pattern had an OPTIONAL separator and the /i flag,
+  // so "Exact text only:" matched as keyword "text" + capture
+  // "only:" — manufacturing a FAKE mandatory string that the agent
+  // then placed on the canvas as a real requirement. Three guards now:
+  //   1. the separator (:, =, "should be/say/read", "is", …) is
+  //      REQUIRED between the keyword and the payload;
+  //   2. the payload must START WITH A CAPITAL LETTER (matched with
+  //      a case-sensitive test — real headlines do);
+  //   3. known instruction words ("only", "exactly", …) are never
+  //      valid payloads. Quoted strings already captured above win.
+  const UNQUOTED_RE =
+    /\b(?:headline|title|heading|saying|tagline|copy|cta|text)\s*(?::|=|should\s+(?:be|say|read)|is|says|reads)?\s*[\"'\u201c\u201d]?([^\n\"'\u201c\u201d.]{2,80})[\"'\u201c\u201d]?/gi
+  const STOPWORDS = new Set(['only', 'exactly', 'verbatim', 'character', 'characters', 'word', 'words', 'list', 'following', 'these', 'below', 'above', 'here'])
+  for (const mm of m.matchAll(UNQUOTED_RE)) {
+    const text = mm[1].trim().replace(/[,;:]\s*$/, '')
+    if (!text) continue
+    const first = text.split(/\s+/)[0].toLowerCase().replace(/[^a-z]/g, '')
+    if (STOPWORDS.has(first)) continue
+    // payload must start with a capital letter (case-sensitive)
+    if (!/^[A-Z]/.test(text)) continue
+    // a quoted list after the keyword is the payload — never also
+    // capture the prose between keyword and the first quote
+    if (!seen.has(text.toLowerCase())) {
       seen.add(text.toLowerCase())
       requiredTexts.push({ tier: 'mandatory', text, role: 'heading' })
     }
@@ -121,6 +158,37 @@ export function extractBrief(message: string, pageWidth?: number, pageHeight?: n
       seenHex.add(hex)
       requiredColors.push({ tier: 'mandatory', hex })
     }
+  }
+
+  // composite deliverables the user NAMED — these are requirements,
+  // not decoration (v0.29.3: "realistic editor mockup", "3 feature
+  // cards", "glassmorphism" became verifiable contract fields)
+  const requiredFeatures: RequiredFeature[] = []
+  const lowerText = m.toLowerCase()
+  if (/\bmockup\b/i.test(m)) {
+    requiredFeatures.push({
+      tier: 'mandatory',
+      kind: 'editor-mockup',
+      label: 'a realistic editor mockup (a large native panel containing inner UI elements)',
+    })
+  }
+  const cardCount = lowerText.match(/(\d+|three|two|four|five)\s*(?:feature\s*)?cards?\b/)
+  if (cardCount) {
+    const words: Record<string, number> = { two: 2, three: 3, four: 4, five: 5 }
+    const n = /^\d+$/.test(cardCount[1]) ? Number(cardCount[1]) : (words[cardCount[1]] ?? 2)
+    requiredFeatures.push({
+      tier: 'mandatory',
+      kind: 'feature-cards',
+      count: Math.min(Math.max(n, 1), 8),
+      label: `${Math.min(Math.max(n, 1), 8)} feature cards (semi-transparent native rect + text)`,
+    })
+  }
+  if (/\bglassmorphism\b|\bfrosted\s+glass\b/i.test(m)) {
+    requiredFeatures.push({
+      tier: 'mandatory',
+      kind: 'glassmorphism',
+      label: 'glassmorphism (semi-transparent rgba fills with visible borders)',
+    })
   }
 
   // explicit dimensions
@@ -166,6 +234,7 @@ export function extractBrief(message: string, pageWidth?: number, pageHeight?: n
   return {
     requiredTexts,
     requiredColors,
+    ...(requiredFeatures.length ? { requiredFeatures } : {}),
     dimensions,
     format,
     designType,
@@ -187,8 +256,101 @@ export interface BriefValidationResult {
   checked: {
     text: { text: string; found: boolean }[]
     color: { hex: string; found: boolean }[]
+    features?: { label: string; found: boolean }[]
     dimensions?: { width: number; height: number; match: boolean }
   }
+}
+
+/** Minimal element shape the feature validator needs — the client
+ *  sends this alongside texts/colors (v0.29.3). */
+export interface BriefElementLike {
+  type: string
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+  fill?: string
+  stroke?: string
+  text?: string
+}
+
+/** Parse "#RRGGBB" or "rgba(r,g,b,a)" → {r,g,b,a} (a defaults 1); null unparseable.
+ *  Exported for the audit's effective-background math (shared color model). */
+export function parseColor(c: unknown): { r: number; g: number; b: number; a: number } | null {
+  if (typeof c !== 'string') return null
+  const s = c.trim()
+  const hex = /^#?([0-9a-f]{6})$/i.exec(s)
+  if (hex) {
+    const n = parseInt(hex[1], 16)
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, a: 1 }
+  }
+  const rgx =
+    /^rgba?\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})(?:[\s,/]+([\d.]+%?))?\s*\)$/i.exec(s)
+  if (rgx) {
+    const a = rgx[4] === undefined ? 1 : rgx[4].endsWith('%') ? Number(rgx[4].slice(0, -1)) / 100 : Number(rgx[4])
+    return { r: Number(rgx[1]), g: Number(rgx[2]), b: Number(rgx[3]), a: Math.min(Math.max(a || 0, 0), 1) }
+  }
+  return null
+}
+
+/** Element center inside another's bounds (with tolerance). */
+function centerInside(el: BriefElementLike, host: BriefElementLike): boolean {
+  const cx = (el.x ?? 0) + (el.width ?? 0) / 2
+  const cy = (el.y ?? 0) + (el.height ?? 0) / 2
+  return (
+    cx >= (host.x ?? 0) && cx <= (host.x ?? 0) + (host.width ?? 0) &&
+    cy >= (host.y ?? 0) && cy <= (host.y ?? 0) + (host.height ?? 0)
+  )
+}
+
+/** Structural validation of the composite deliverables (v0.29.3).
+ *  Heuristics on purpose — a FALSE PASS here hides a missing
+ *  deliverable; a false failure only costs one extra build step. */
+function validateFeatures(
+  features: RequiredFeature[],
+  els: BriefElementLike[],
+): { label: string; found: boolean }[] {
+  const rects = els.filter((e) => e.type === 'rect' && (e.width ?? 0) > 0 && (e.height ?? 0) > 0)
+  const texts = els.filter((e) => e.type === 'text' && e.text)
+  const out: { label: string; found: boolean }[] = []
+
+  for (const f of features) {
+    if (f.kind === 'editor-mockup') {
+      // a large panel with ≥3 inner elements, at least one non-text
+      // (toolbar/canvas chrome) — built from native elements
+      const found = rects.some((r) => {
+        if ((r.width ?? 0) < 160 || (r.height ?? 0) < 110) return false
+        const inner = els.filter((e) => e !== r && centerInside(e, r))
+        return inner.length >= 3 && inner.some((e) => e.type !== 'text')
+      })
+      out.push({ label: f.label, found })
+    } else if (f.kind === 'feature-cards') {
+      // semi-transparent or stroked rects, each carrying 1-2 texts
+      const need = f.count ?? 2
+      const cards = rects.filter((r) => {
+        const w = r.width ?? 0
+        const h = r.height ?? 0
+        if (w < 80 || h < 60 || w > 640 || h > 640) return false
+        const fill = parseColor(r.fill)
+        const semi = fill !== null && fill.a <= 0.92
+        const stroked = typeof r.stroke === 'string' && r.stroke.trim().length > 0
+        if (!semi && !stroked) return false
+        const inside = texts.filter((t) => centerInside(t, r))
+        return inside.length >= 1 && inside.length <= 3
+      })
+      out.push({ label: f.label, found: cards.length >= need })
+    } else if (f.kind === 'glassmorphism') {
+      // ≥2 semi-transparent elements with visible structure (fill
+      // alpha 0.03–0.6); a border on at least one
+      const glass = els.filter((e) => {
+        const fill = parseColor(e.fill)
+        return fill !== null && fill.a >= 0.03 && fill.a <= 0.6
+      })
+      const bordered = glass.some((e) => typeof e.stroke === 'string' && e.stroke.trim().length > 0)
+      out.push({ label: f.label, found: glass.length >= 2 && bordered })
+    }
+  }
+  return out
 }
 
 /** Validate a brief against REAL page state (post-apply, refreshed).
@@ -201,6 +363,9 @@ export function validateBrief(
     colors: string[]
     width: number
     height: number
+    /** flattened page elements — enables feature validation (optional
+     *  so older callers keep working) */
+    elements?: BriefElementLike[]
   },
 ): BriefValidationResult {
   const unmet: string[] = []
@@ -223,6 +388,13 @@ export function validateBrief(
       if (!found) unmet.push(`Required color #${c.hex.slice(1).toUpperCase()} not used anywhere on the page`)
       return { hex: c.hex, found }
     })
+  let features: BriefValidationResult['checked']['features']
+  if (brief.requiredFeatures?.length && state.elements?.length) {
+    features = validateFeatures(brief.requiredFeatures, state.elements)
+    for (const f of features) {
+      if (!f.found) unmet.push(`Required element missing: ${f.label} — build it from NATIVE elements (rect panels, semi-transparent fills, borders, text).`)
+    }
+  }
   let dimensions: BriefValidationResult['checked']['dimensions']
   if (brief.dimensions && brief.dimensions.tier === 'mandatory') {
     const match = state.width === brief.dimensions.width && state.height === brief.dimensions.height
@@ -231,7 +403,7 @@ export function validateBrief(
       unmet.push(`Canvas must be ${brief.dimensions.width}×${brief.dimensions.height} (currently ${state.width}×${state.height})`)
     }
   }
-  return { satisfied: unmet.length === 0, unmet, checked: { text, color, dimensions } }
+  return { satisfied: unmet.length === 0, unmet, checked: { text, color, features, dimensions } }
 }
 
 /** Compact one-line serialization for the system prompt. */
@@ -247,6 +419,10 @@ export function briefPromptSection(brief: DesignBrief): string {
   }
   if (brief.requiredColors.length) {
     parts.push(`· EXACT colors (use these hex values verbatim): ${brief.requiredColors.map((c) => c.hex.toUpperCase()).join(' ')}`)
+  }
+  if (brief.requiredFeatures?.length) {
+    parts.push(`· REQUIRED ELEMENTS (build these as real native, editable elements — they are deliverables, not decoration): ${brief.requiredFeatures.map((f) => f.label).join('; ')}`)
+    parts.push('· COLOR USAGE RULE: required colors must appear as the page background, text fills, or panel/card fills and borders — NEVER as bare decorative strips or bars with no content on them.')
   }
   if (brief.restrictions.length) parts.push(`· Restrictions: ${brief.restrictions.join('; ')}`)
   if (brief.notes.length) parts.push(`· Notes: ${brief.notes.join('; ')}`)

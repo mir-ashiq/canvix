@@ -1,3 +1,7 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- CommonJS
+   by design: a plain-Node acceptance script (node scripts/designspec-render.cjs),
+   kept .cjs so it runs without a build step; the repo's ESM/TS lint
+   rules must not forbid require() here. Scoped to this one file. */
 // ─────────────────────────────────────────────────────────────
 // DesignSpec browser render proof (Phase A acceptance).
 //
@@ -9,7 +13,7 @@
 //     character-for-character and every required hex color
 //   · records element counts and writes render-checks.json
 //
-// Usage: node scripts/designspec-render.mjs <artifactDir> <label>
+// Usage: node scripts/designspec-render.cjs <artifactDir> <label>
 // Run from the repo root. Requires scripts/designspec-browser-bundle.js
 // (bun build scripts/designspec-browser-entry.ts --outfile ...).
 // ─────────────────────────────────────────────────────────────

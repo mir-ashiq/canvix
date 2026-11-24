@@ -268,11 +268,187 @@ export function buildFeatureCards(block: BlockNode, ctx: BuildContext): Composed
   return { backdrops, content, warnings }
 }
 
-/** Dispatch: hero + feature-cards have dedicated builders today;
- * other kinds compile through the generic hero stack with a warning
- * (Phase C gives each kind its own builder). */
+/** Stat row: N big-number/label pairs in a grid — the numbers band
+ * of a professional poster (impact metrics, dates, prices). Slots
+ * arrive as alternating value/caption pairs: role 'headline' is the
+ * value, role 'label' its caption; a trailing bare value is
+ * tolerated. Each value carries a small accent underline — the
+ * emphasis device the seed-guarantee machinery prefers. */
+export function buildStatRow(block: BlockNode, ctx: BuildContext): ComposedElements {
+  const { palette, type } = ctx
+  const warnings: string[] = []
+  const backdrops: AnyElement[] = []
+  const content: AnyElement[] = []
+
+  const slots = block.content
+  const count = Math.max(1, Math.min(6, block.count ?? Math.ceil(slots.length / 2)))
+  const cells = gridInRect(ctx.rect, count, { columns: 3, gap: 24, minCellWidth: 150, minCellHeight: 96 })
+  if (cells.some((c) => c.width < 150 || c.height < 96)) {
+    warnings.push(`stat-row band too small for ${count} stats — minimum 150x96 not met`)
+  }
+
+  // pass 1: fit each value; pass 2 places them on a shared baseline
+  const fitted: { cell: Rect; valueText: string; captionText?: string; size: number; lines: string[] }[] = []
+
+  cells.forEach((cell, i) => {
+    const value = slots[2 * i]
+    const caption = slots[2 * i + 1]
+    const valueText = value?.text ?? `${(i + 1) * 25}+`
+    const captionText = caption?.text
+
+    // value: big, bold, ink — wrap-aware, shrunk to fit the cell
+    const { size, lines } = wrapFontSize(valueText, cell.width, cell.height * 0.6, Math.max(type.sizes.headline, 48), 24, 1.15)
+    fitted.push({ cell, valueText, captionText, size, lines })
+  })
+
+  // uniform value block across the row (found by the VLM critique of
+  // the acceptance run: a wrapping value shifted its underline below
+  // the one-line values' — every cell now reserves the max line
+  // count, so underlines and captions share one baseline)
+  const uniformLineH = Math.max(...fitted.map((f) => Math.round(f.size * 1.15)))
+  const uniformValueH = Math.max(...fitted.map((f) => f.lines.length)) * uniformLineH
+
+  for (const { cell, valueText, captionText, size, lines } of fitted) {
+    const valueY = cell.y + Math.round(cell.height * 0.12)
+    const valueH = Math.min(Math.round(cell.height * 0.6), Math.round(lines.length * size * 1.15))
+    content.push(
+      createTextElement({
+        text: valueText,
+        x: Math.round(cell.x),
+        y: valueY,
+        width: Math.round(cell.width),
+        height: valueH,
+        fontSize: size,
+        fontFamily: type.families.heading,
+        bold: true,
+        fill: palette.roles.ink,
+        align: 'center',
+        lineHeight: 1.15,
+      }),
+    )
+
+    // accent underline under the value — at the UNIFORM baseline
+    const underlineY = valueY + uniformValueH + 6
+    if (underlineY + 4 <= cell.y + cell.height) {
+      backdrops.push(
+        createShapeElement('rect', {
+          x: Math.round(cell.x + cell.width * 0.36),
+          y: underlineY,
+          width: Math.round(cell.width * 0.28),
+          height: 4,
+          fill: palette.roles.accentSoft,
+          cornerRadius: 2,
+        }),
+      )
+    }
+
+    if (captionText) {
+      const capStart = type.sizes.label ?? type.sizes.body
+      const cap = wrapFontSize(captionText, cell.width, Math.round(cell.height * 0.28), capStart, 14, 1.3)
+      const capH = Math.min(Math.round(cell.height * 0.28), Math.round(cap.lines.length * cap.size * 1.3))
+      content.push(
+        createTextElement({
+          text: captionText,
+          x: Math.round(cell.x),
+          y: Math.round(cell.y + cell.height - capH - Math.round(cell.height * 0.06)),
+          width: Math.round(cell.width),
+          height: capH,
+          fontSize: cap.size,
+          fontFamily: type.families.body,
+          fill: palette.roles.inkSoft,
+          align: 'center',
+        }),
+      )
+    }
+  }
+
+  return { backdrops, content, warnings }
+}
+
+/** Mockup: a centered rounded visual frame — the deterministic
+ * stand-in a real image/asset fills at the app layer (image sourcing
+ * is an app-layer tool, not engine math). A thin accent frame sits
+ * behind a surface card, and an optional caption slot renders under
+ * the frame. The frame keeps a 4:3 aspect within the band. */
+export function buildMockup(block: BlockNode, ctx: BuildContext): ComposedElements {
+  const { palette, type } = ctx
+  const warnings: string[] = []
+  const backdrops: AnyElement[] = []
+  const content: AnyElement[] = []
+
+  const band = ctx.rect
+  const captionSlot = block.content.find((s) => s.role === 'label' || s.role === 'body')
+  const captionH = captionSlot ? Math.round(band.height * 0.18) : 0
+  const frameMaxH = band.height - captionH - Math.round(band.height * 0.08)
+  const frameW = Math.min(band.width * 0.72, Math.round(frameMaxH * (4 / 3)))
+  const frameH = Math.round(frameW * 0.75)
+  const frameX = Math.round(band.x + (band.width - frameW) / 2)
+  const frameY = Math.round(band.y + (band.height - captionH - frameH) / 2)
+  if (frameW < 180 || frameH < 120) warnings.push('mockup band too small for a 4:3 frame — consider more weight')
+
+  // thin accent frame behind, surface card in front (two-rect border)
+  backdrops.push(
+    createShapeElement('rect', {
+      x: frameX - 6,
+      y: frameY - 6,
+      width: frameW + 12,
+      height: frameH + 12,
+      fill: palette.roles.accentSoft,
+      cornerRadius: 26,
+      opacity: 0.6,
+    }),
+  )
+  backdrops.push(
+    createShapeElement('rect', {
+      x: frameX,
+      y: frameY,
+      width: frameW,
+      height: frameH,
+      fill: palette.roles.surface,
+      cornerRadius: 20,
+      opacity: 0.95,
+    }),
+  )
+  // the placeholder mark: a slim centered glyph bar (deterministic)
+  backdrops.push(
+    createShapeElement('rect', {
+      x: Math.round(frameX + frameW * 0.44),
+      y: Math.round(frameY + frameH / 2 - 14),
+      width: Math.round(frameW * 0.12),
+      height: 28,
+      fill: palette.roles.accentSoft,
+      cornerRadius: 4,
+    }),
+  )
+
+  if (captionSlot && captionH > 0) {
+    const cap = wrapFontSize(captionSlot.text, frameW, captionH, type.sizes.label ?? type.sizes.body, 14, 1.3)
+    const h = Math.min(captionH, Math.round(cap.lines.length * cap.size * 1.3))
+    content.push(
+      createTextElement({
+        text: captionSlot.text,
+        x: frameX,
+        y: Math.round(frameY + frameH + 12),
+        width: frameW,
+        height: h,
+        fontSize: cap.size,
+        fontFamily: type.families.body,
+        fill: palette.roles.inkSoft,
+        align: 'center',
+      }),
+    )
+  }
+
+  return { backdrops, content, warnings }
+}
+
+/** Dispatch: hero, feature-cards, stat-row and mockup have dedicated
+ * builders; other kinds compile through the generic hero stack with a
+ * warning (Phase C gives each kind its own builder). */
 export function buildBlock(block: BlockNode, ctx: BuildContext): ComposedElements {
   if (block.kind === 'feature-cards') return buildFeatureCards(block, ctx)
+  if (block.kind === 'stat-row') return buildStatRow(block, ctx)
+  if (block.kind === 'mockup') return buildMockup(block, ctx)
   if (block.kind !== 'hero') {
     const composed = buildHero(block, ctx)
     return { ...composed, warnings: [...composed.warnings, `kind '${block.kind}' compiled with the generic stack — dedicated builder pending Phase C`] }

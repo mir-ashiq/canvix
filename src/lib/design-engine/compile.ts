@@ -23,8 +23,8 @@
 //                text on its chip, card text on the card surface
 // ─────────────────────────────────────────────────────────────
 
-import type { AnyElement, PageData } from '@/lib/types'
-import type { DesignSpec } from '@/lib/design-spec/types'
+import { createShapeElement, type AnyElement, type PageData } from '@/lib/types'
+import { asHex, type DesignSpec } from '@/lib/design-spec/types'
 import { expandPalette, onColor, type ExpandedPalette } from './palette'
 import { assignTypeScale, type AssignedTypography } from './typography'
 import { bandLayout, isInCanvas, rectsOverlap, type Rect } from './layout'
@@ -110,6 +110,40 @@ export function compileSpec(spec: DesignSpec): CompileResult {
     warnings.push(...composed.warnings)
     backdrops.push(...composed.backdrops)
     content.push(...composed.content)
+  }
+
+  // ── seed guarantee (found by the real-model acceptance run) ──
+  // A required seed can be assigned a palette role (e.g. accent) and
+  // still never reach the page when no composition draws that role —
+  // the model path dropped its second seed exactly this way. The
+  // palette module's contract says required colors "always appear on
+  // the page"; the compiler makes that true: a required hex carried
+  // by neither the background nor an element fill gets a
+  // deterministic decorative band on the bottom edge. Backdrop layer
+  // — behind content, so overlap semantics are unaffected.
+  const carried = (hex: string) =>
+    eqHex(palette.roles.background, hex) ||
+    [...backdrops, ...content].some(
+      (el) => 'fill' in el && typeof el.fill === 'string' && eqHex(el.fill, hex),
+    )
+  for (const hex of [...new Set([...spec.palette.seeds, ...Object.values(spec.palette.pinned ?? {})])]) {
+    const clean = asHex(hex, '')
+    if (clean !== '' && !carried(clean)) {
+      const bandHeight = Math.min(48, Math.max(12, Math.round(spec.format.height * 0.025)))
+      backdrops.push(
+        createShapeElement('rect', {
+          x: 0,
+          y: spec.format.height - bandHeight,
+          width: spec.format.width,
+          height: bandHeight,
+          fill: clean,
+          cornerRadius: 0,
+        }),
+      )
+      warnings.push(
+        `seed #${clean.slice(1).toUpperCase()} carried by no element — decorative band emitted (seed guarantee)`,
+      )
+    }
   }
 
   // z-order: backdrops first, content above — array order IS z-order

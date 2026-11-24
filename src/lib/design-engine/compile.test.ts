@@ -17,6 +17,7 @@ import { parseSpecResponse } from '@/lib/design-spec/parse'
 import { compileSpec, exactEquals } from './compile'
 import { fitFontSize } from './compositions'
 import type { AnyElement, TextElement } from '@/lib/types'
+import type { DesignSpec } from '@/lib/design-spec/types'
 
 const V0293_POSTER_PROMPT =
   'Make a 1080x1080 poster with navy #090B1A background, purple #8B5CF6 and cyan #22D3EE accents, saying "Design Beyond Limits", "Create Smarter. Design Faster." and "Try Canvix Free"'
@@ -167,5 +168,48 @@ describe('fitFontSize', () => {
     const size = fitFontSize('A '.repeat(60), 500, 96, 28)
     expect(size).toBeGreaterThanOrEqual(28)
     expect(size).toBeLessThan(96)
+  })
+})
+
+describe('seed guarantee: required colors reach the page without accent-using compositions', () => {
+  // Found by the real-model acceptance run (a planner spec with two
+  // seeds and a hero carrying no CTA slot): the accent seed was
+  // assigned a role but never drawn, and the color check failed. The
+  // palette contract — required colors always appear — must hold for
+  // every composition mix, so the compiler emits a fallback band.
+  const spec: DesignSpec = {
+    version: 'v2',
+    name: 'seed guarantee',
+    format: { width: 1080, height: 1350 },
+    palette: { seeds: ['#1B5E20', '#F9A825'], mood: 'warm' },
+    typography: {},
+    blocks: [
+      {
+        kind: 'hero',
+        weight: 1,
+        content: [{ role: 'headline', source: 'user-required', text: 'Seed Guarantee' }],
+        overlap: 'none',
+      },
+    ],
+  }
+  const result = compileSpec(spec)
+  const page = result.pages[0]
+
+  it('both required seeds appear on the page', () => {
+    for (const c of result.checks.colors) expect(c.found, c.hex).toBe(true)
+    // darkest seed → page background (not an element fill; case preserved)
+    expect(page.background).toEqual({ type: 'solid', color: '#1B5E20' })
+    const fills = page.elements
+      .map((el) => ('fill' in el && typeof el.fill === 'string' ? el.fill.toLowerCase() : ''))
+      .filter(Boolean)
+    expect(fills).toContain('#f9a825') // fallback band
+  })
+
+  it('the fallback band is a backdrop: in-canvas, overlap-safe, deterministic, disclosed', () => {
+    expect(result.checks.inCanvas).toBe(true)
+    expect(result.checks.noUnintendedOverlap).toBe(true)
+    expect(result.warnings.join(' ')).toMatch(/seed guarantee/)
+    const again = compileSpec(spec)
+    expect(JSON.stringify(again.pages)).toBe(JSON.stringify(result.pages))
   })
 })

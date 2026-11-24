@@ -41,8 +41,8 @@
       {
         "guid": "to-be-confirmed",
         "type": "bank",
-        "address": "Indian bank transfer — account details to be shared securely after grant approval",
-        "description": "Public placeholder channel: this manifest intentionally carries no private financial data. The concrete account details will be provided directly to FOSS United administrators upon approval, and this channel will then be updated in the open."
+        "address": "Indian bank transfer — details exchanged securely with the grant administrator after approval",
+        "description": "Placeholder channel: this manifest intentionally carries no private financial data. Payment details are exchanged securely with the grant administrator after approval and are never published in this public repository; only the channel's non-sensitive fields remain public."
       }
     ],
     "plans": [

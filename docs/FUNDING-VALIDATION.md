@@ -47,8 +47,8 @@
 | File content | ✅ `public/.well-known/funding-manifest-urls` contains exactly `https://raw.githubusercontent.com/mir-ashiq/canvix/refs/heads/main/funding.json` (asserted by unit test) |
 | Dev-server serving | ✅ `curl http://localhost:3000/.well-known/funding-manifest-urls` → 200 + exact content (verified against the running dev server) |
 | e2e (dev) | ✅ new smoke spec fetches the route and compares the body — 5/5 passing locally; runs in the CI e2e job |
-| Production standalone serving | ✅ new assertion step added to the CI **docker** job (the real production container); will prove it on this PR's CI run |
-| **Live at https://canvix.app** | ⏳ **NOT YET VERIFIED — pending VPS deploy** (the deploy is blocked on the SSH key, see `docs/VPS-DEPLOY-RUNBOOK.md` §1). The manifest's `wellKnown` property is **deliberately withheld** until the public URL returns the file; the exact remaining step is runbook §5 |
+| Production standalone serving | ✅ CI **docker** job asserts the production container serves the file — green on PR #86 |
+| **Live at https://canvix.app** | ✅ **VERIFIED 2026-11-24** — `GET https://canvix.app/.well-known/funding-manifest-urls` → **200**, body exactly `https://raw.githubusercontent.com/mir-ashiq/canvix/refs/heads/main/funding.json` (deploy `52eb8e0`, VPS auto-deploy "DEPLOY OK", service active, health green, 366 templates). **The `wellKnown` property is now ACTIVATED in the manifest** — pointing at the live URL — with the honesty-guard test flipped to assert its presence |
 
 ## 5. Application status (FOSS United)
 
@@ -67,7 +67,8 @@
 
 ## 7. Honest limitations
 
-1. The live canvix.app well-known verification and the VPS deploy await the SSH key (runbook §1).
+1. ~~The live canvix.app well-known verification and the VPS deploy await the SSH key~~ **RESOLVED 2026-11-24**: the VPS deploy ran (auto-deploy of `52eb8e0`, "DEPLOY OK"), the public URL serves the verification file (200 + exact content), and the `wellKnown` claim is activated. The runbook (`docs/VPS-DEPLOY-RUNBOOK.md`) remains the reference for future deploys.
 2. The FOSS United review status is unknown — no public signal exists; the inquiry draft is the path.
 3. The official directory validator accepted the manifest, but the grants directory's weekly refresh is the update mechanism with a reported (not SLA-backed) weekly cadence.
 4. Adoption figures in the proposal are self-reported and dated (labeled as such there).
+5. The verification file is served with `Content-Type: application/octet-stream` (Next's static default for extensionless files). The fundingjson.org spec specifies plain text, one URL per line — the body is exactly that; no directory-side content-type requirement is documented, and the official validator accepts the manifest. If a stricter consumer ever appears, add an explicit `text/plain` route.

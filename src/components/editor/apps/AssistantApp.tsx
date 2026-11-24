@@ -34,6 +34,7 @@ import { useAICapabilities } from '@/hooks/use-ai-capabilities'
 import type { AgentEvent, AgentMode } from '@/lib/agent/protocol'
 import { validateBrief, type DesignBrief } from '@/lib/agent/brief'
 import { heuristicMode, MODE_TOOL_RISK } from '@/lib/agent/router'
+import { contrastBetween } from '@/lib/agent/audit'
 
 // ── types ────────────────────────────────────────────────────
 
@@ -97,6 +98,25 @@ function flatElements(els: AnyElement[], out: AnyElement[] = []): AnyElement[] {
 function buildDesignContext() {
   const s = useEditorStore.getState()
   const page = s.pages[s.currentPage]
+  // v0.29.3: real text metrics — the same canvas measureText the
+  // renderer and the measure_text tool use. The audit's overflow
+  // check consumes measuredWidth instead of a glyph-average guess.
+  let measureCtx: CanvasRenderingContext2D | null = null
+  const measureText = (t: TextElement): number | undefined => {
+    try {
+      if (!measureCtx) {
+        const c = document.createElement('canvas')
+        measureCtx = c.getContext('2d')
+      }
+      if (!measureCtx) return undefined
+      measureCtx.font = `${t.bold ? 'bold ' : ''}${Math.max(6, Math.round(t.fontSize))}px ${t.fontFamily || 'Poppins'}`
+      const single = t.text.split('\n')[0] ?? ''
+      if (!single) return undefined
+      return Math.round(measureCtx.measureText(single).width)
+    } catch {
+      return undefined
+    }
+  }
   const elements = (page?.elements ?? []).slice(0, 80).map((el) => {
     const base: Record<string, unknown> = {
       id: el.id,
@@ -114,8 +134,14 @@ function buildDesignContext() {
       base.fontSize = Math.round(t.fontSize)
       base.bold = t.bold
       base.fontFamily = t.fontFamily
+      const w = measureText(t)
+      if (w !== undefined) base.measuredWidth = w
     } else if ('fill' in el) {
       base.fill = (el as { fill: string }).fill
+    }
+    if ('stroke' in el && typeof (el as { stroke?: unknown }).stroke === 'string') {
+      const stroke = (el as { stroke: string }).stroke
+      if (stroke.trim()) base.stroke = stroke
     }
     if (el.name) base.name = el.name.slice(0, 30)
     return base
@@ -123,9 +149,12 @@ function buildDesignContext() {
   const texts = flatElements(page?.elements ?? []).filter((e) => e.type === 'text') as TextElement[]
 
   // spatial analysis (v0.26 logic, client-computed for the agent context)
+  // v0.29.3: text-on-card layering is INTENTIONAL — a pair is only an
+  // overlap problem when the text is NOT readable on the shape: not
+  // contained, or the contrast against the shape fill is too low.
   const boxes = (page?.elements ?? [])
     .filter((e) => (e.width ?? 0) > 0 && (e.height ?? 0) > 0)
-    .map((e) => ({ id: e.id, type: e.type, x: e.x, y: e.y, w: e.width, h: e.height }))
+    .map((e) => ({ id: e.id, type: e.type, x: e.x, y: e.y, w: e.width, h: e.height, fill: 'fill' in e ? String((e as { fill?: unknown }).fill ?? '') : '' }))
   const overlaps: string[] = []
   for (let i = 0; i < boxes.length && overlaps.length < 12; i++) {
     for (let j = i + 1; j < boxes.length && overlaps.length < 12; j++) {
@@ -136,8 +165,16 @@ function buildDesignContext() {
       const inter = ix * iy
       const minArea = Math.min(a.w * a.h, b.w * b.h)
       if (minArea > 0 && inter / minArea > 0.08) {
-        const smaller = a.w * a.h <= b.w * a.h ? a : b
-        if (inter / minArea > 0.55 && smaller.type === 'text') continue // text-on-card
+        const smaller = a.w * a.h <= b.w * b.h ? a : b
+        const bigger = smaller === a ? b : a
+        if (smaller.type === 'text') {
+          // text vs its card: contained + readable = fine layering
+          const contained = inter / minArea > 0.7
+          if (contained) {
+            const readable = contrastBetween(smaller.fill, bigger.fill) >= 3
+            if (readable || isSemiTransparent(bigger.fill)) continue
+          }
+        }
         overlaps.push(`${a.type}#${a.id} × ${b.type}#${b.id} (${Math.round((inter / minArea) * 100)}%)`)
       }
     }
@@ -152,6 +189,18 @@ function buildDesignContext() {
     s.brand && (s.brand.colors?.length || s.brand.headingFont)
       ? { colors: s.brand.colors, headingFont: s.brand.headingFont, bodyFont: s.brand.bodyFont }
       : null
+
+  // v0.29.3: the REAL page background — the audit's contrast math and
+  // strip detection read this field; it is never guessed server-side.
+  const bg = page?.background
+  let backgroundHex: string | undefined
+  if (bg?.type === 'solid' && /^#?[0-9a-f]{6}$/i.test(bg.color)) {
+    backgroundHex = bg.color.startsWith('#') ? bg.color.toLowerCase() : `#${bg.color}`.toLowerCase()
+  } else if (bg?.type === 'gradient' && /^#?[0-9a-f]{6}$/i.test(bg.from)) {
+    // gradient: report the top-of-list stop; per-text backdrops still
+    // handle cards, and the audit treats it as the page base
+    backgroundHex = bg.from.startsWith('#') ? bg.from.toLowerCase() : `#${bg.from}`.toLowerCase()
+  }
 
   return {
     name: s.designName,
@@ -173,6 +222,7 @@ function buildDesignContext() {
     brand,
     overlaps,
     offCanvas,
+    ...(backgroundHex ? { background: backgroundHex } : {}),
     otherPages: s.pages
       .filter((_, i) => i !== s.currentPage)
       .slice(0, 8)
@@ -180,9 +230,21 @@ function buildDesignContext() {
   }
 }
 
+/** rgba/semi-transparent fill → the element is a glass layer, not a
+ *  solid occluder (text on it is intentional layering). */
+function isSemiTransparent(fill: string): boolean {
+  const m = /^rgba?\(\s*\d{1,3}[\s,]+\d{1,3}[\s,]+\d{1,3}(?:[\s,/]+([\d.]+%?))?\s*\)/i.exec(String(fill).trim())
+  if (!m) return false
+  if (m[1] === undefined) return false
+  const a = m[1].endsWith('%') ? Number(m[1].slice(0, -1)) / 100 : Number(m[1])
+  return Number.isFinite(a) && a <= 0.85
+}
+
 /** Client-side brief validation against the LIVE document (Phase 5).
  *  Pure — reads the store, returns the validation shape the loop
- *  expects on the bridge. */
+ *  expects on the bridge.
+ *  v0.29.3: flattened elements ride along so composite deliverables
+ *  (editor mockup, feature cards, glassmorphism) validate structurally. */
 function computeBriefValidation(brief: DesignBrief): { satisfied: boolean; unmet: string[] } {
   const s = useEditorStore.getState()
   const page = s.pages[s.currentPage]
@@ -202,11 +264,22 @@ function computeBriefValidation(brief: DesignBrief): { satisfied: boolean; unmet
     colors.add(page.background.from.toLowerCase())
     colors.add(page.background.to.toLowerCase())
   }
+  const elements = els.slice(0, 120).map((e) => ({
+    type: e.type,
+    x: Math.round(e.x),
+    y: Math.round(e.y),
+    width: Math.round(e.width),
+    height: Math.round(e.height),
+    ...( 'fill' in e && typeof (e as { fill?: unknown }).fill === 'string' ? { fill: (e as { fill: string }).fill } : {}),
+    ...('stroke' in e && typeof (e as { stroke?: unknown }).stroke === 'string' ? { stroke: (e as { stroke: string }).stroke } : {}),
+    ...(e.type === 'text' ? { text: (e as TextElement).text } : {}),
+  }))
   const result = validateBrief(brief, {
     texts,
     colors: [...colors],
     width: s.width,
     height: s.height,
+    elements,
   })
   return { satisfied: result.satisfied, unmet: result.unmet }
 }
@@ -402,6 +475,20 @@ export function AssistantApp({ onClose }: AppPanelProps) {
           case 'usage':
             setLiveUsage({ turns: event.turns, toolCalls: event.toolCalls, elapsedMs: event.elapsedMs, modelCalls: event.modelCalls })
             break
+          case 'capture': {
+            // v0.29.3: the loop asks for the REAL rendered canvas
+            // BEFORE completion — same capture pipeline the export and
+            // the post-run critique use. Answer on the bridge; a
+            // failure answers null (the loop discloses honestly).
+            try {
+              const { captureStage } = await import('@/components/editor/canvas/canvas-bridge')
+              const dataUrl = await captureStage({ pixelScale: 0.5, mimeType: 'image/jpeg', quality: 0.7 })
+              await bridgePost({ capture: { image: dataUrl } })
+            } catch {
+              await bridgePost({ capture: null })
+            }
+            break
+          }
           case 'compact':
             collectedSteps.push({
               index: collectedSteps.length,

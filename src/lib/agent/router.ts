@@ -57,6 +57,43 @@ export function heuristicMode(message: string): { mode: AgentMode; confidence: '
   if (!m) return { mode: 'discuss', confidence: 'low' }
   const lower = m.toLowerCase()
 
+  // v0.29.4 (user report: "ask him anything and it starts building"):
+  // greetings and chitchat must NEVER fall through to the model
+  // router, where a provider with a bias can invent a build task out
+  // of "hi" or "thanks". Pure conversation → discuss, no model call.
+  const words = lower.replace(/[^a-z0-9\s']/g, ' ').split(/\s+/).filter(Boolean)
+  const GREETINGS = new Set([
+    'hi', 'hey', 'hello', 'yo', 'hiya', 'howdy', 'hallo', 'hola',
+    'thanks', 'thank', 'thx', 'ty', 'cheers', 'ok', 'okay', 'k', 'cool',
+    'nice', 'great', 'awesome', 'perfect', 'good', 'bye', 'cya', 'test',
+    'ping', 'wassup', 'namaste', 'salam', 'sup', 'goodbye', 'morning',
+    'evening', 'afternoon', 'welcome', 'alright', 'right',
+  ])
+  const CHITCHAT = new Set([
+    'there', 'you', 'so', 'much', 'very', 'again', 'a', 'the', 'to',
+    'too', 'man', 'dude', 'bro', 'yeah', 'yep', 'nope', 'lol', 'wow',
+    'haha', 'hehe', 'um', 'uh', 'well', 'now', 'then', 'and', 'for',
+  ])
+  const hasGreeting = words.some((w) => GREETINGS.has(w))
+  if (hasGreeting && words.length > 0 && words.length <= 5 && words.every((w) => GREETINGS.has(w) || CHITCHAT.has(w))) {
+    return { mode: 'discuss', confidence: 'high' }
+  }
+
+  // v0.29.3 (found on the failed CANVIX production prompt): an obvious
+  // BUILD brief must win over the product-discuss guard below. The
+  // prompt "Create a premium 1080×1080 promo poster for CANVIX … 3
+  // feature cards …" mentions the brand ("canvix") and the word
+  // "feature" — both discuss-guard triggers — even though it is a
+  // creation request for a poster ABOUT the product. Artifact noun +
+  // build verb + not a question → create, full stop.
+  const artifactNoun =
+    /\b(poster|flyer|menu|logo|banner|thumbnail|deck|presentation|slide|campaign|invitation|infographic|card|graphic|advert|ad|cover|header|brochure|certificate|resume|newsletter)\b/
+  const buildVerb = /\b(design|create|make|build|generate|add|produce)\b/
+  const asksQuestion = /\?\s*$/.test(m) || /^(how|why|what|when|which|who)\b/i.test(m)
+  if (artifactNoun.test(lower) && buildVerb.test(lower) && !asksQuestion) {
+    return { mode: 'create', confidence: 'high' }
+  }
+
   // discuss: about the tool/product itself, not the user's design
   const productWords = /\b(canvix|the (app|editor|product|repo|codebase)|your (architecture|agent|tools?)|this project|github)\b/
   const asksAboutProduct = productWords.test(lower) && /\b(how (does|do|is|are)|why|bug|broken|error|architecture|implemented|feature|work)s?\b/.test(lower)
@@ -89,8 +126,8 @@ export function heuristicMode(message: string): { mode: AgentMode; confidence: '
 
   // create: build briefs. Artifact nouns make intent unambiguous —
   // "make a poster" is create even though "make" is also a surgical
-  // edit verb ("make the title bold")
-  const artifactNoun = /\b(poster|flyer|menu|logo|banner|thumbnail|deck|presentation|slide|campaign|invitation|infographic|card|graphic|advert|ad|cover|header|brochure|certificate|resume|newsletter)\b/
+  // edit verb ("make the title bold"). (artifactNoun is declared in
+  // the v0.29.3 create-first guard at the top of this function.)
   if (artifactNoun.test(lower) && m.split(/\s+/).length >= 2) return { mode: 'create', confidence: 'high' }
   const createSignals = [
     /\b(design|create|make|build|generate)\b.*\b(a|an|me|the|some)\b/,

@@ -25,11 +25,12 @@ import { describe, it, expect } from 'vitest'
 import { parseAgentTurn, sseLine, AGENT_GUARDS, AGENT_PROTOCOL_VERSION, type AgentEvent } from './protocol'
 import { AGENT_TOOL_MAP, AGENT_TOOLS, type ToolContext, type SanitizeResult } from './tools'
 import { runAgentLoop, toolsForMode, loopSystemPrompt } from './loop'
-import { auditDesign, contrastRatio } from './audit'
+import { auditDesign, contrastBetween } from './audit'
 import { heuristicMode, parseMode, modeAllowsWrites, MODE_TOOL_RISK } from './router'
 import { DESIGN_SKILLS, selectSkills, skillsPromptSection } from './skills'
 import { extractBrief, validateBrief, briefPromptSection, FORMAT_PRESETS, type DesignBrief } from './brief'
 import { serializeDesignContext, contextValidIds, type AgentDesignCtx } from './context'
+import type { VisionCritiqueResult } from './vision'
 import type { AgentMode } from './protocol'
 
 // ── fixtures ─────────────────────────────────────────────────
@@ -105,7 +106,7 @@ describe('harness · tool matrix', () => {
       'duplicate_elements', 'group_elements', 'ungroup_elements', 'reorder_layers',
       'animate_elements', 'set_page_transition', 'delete_page', 'set_brand_kit', 'resize_design',
       'mask_image', 'adjust_image', 'measure_text', 'set_text_spans', 'export_design',
-      'add_stock_video', 'validate_brief',
+      'add_stock_video', 'validate_brief', 'plan_layout',
     ]
     for (const t of AGENT_TOOLS) expect(covered, `add harness cases for new tool "${t.name}"`).toContain(t.name)
     expect(covered).toHaveLength(AGENT_TOOLS.length)
@@ -261,9 +262,9 @@ describe('harness · tool matrix', () => {
     const destructive = AGENT_TOOLS.filter((t) => t.risk === 'destructive').map((t) => t.name)
     expect(destructive.sort()).toEqual(['clear_page', 'delete_elements', 'delete_page'])
   })
-  it('read tools are exactly the state/measure/validate set', () => {
+  it('read tools are exactly the state/measure/validate/plan set', () => {
     const reads = AGENT_TOOLS.filter((t) => t.risk === 'read').map((t) => t.name)
-    expect(reads.sort()).toEqual(['get_page_state', 'goto_page', 'measure_text', 'validate_brief'])
+    expect(reads.sort()).toEqual(['get_page_state', 'goto_page', 'measure_text', 'plan_layout', 'validate_brief'])
   })
 
   it('CASE G: quality audit — one self-critique fix round before done is accepted', async () => {
@@ -504,8 +505,8 @@ describe('harness · brief contract', () => {
 // ═════════════════════════════════════════════════════════════
 
 describe('harness · skills engine', () => {
-  it('ten skills ship, each with a complete playbook', () => {
-    expect(DESIGN_SKILLS).toHaveLength(10)
+  it('thirteen skills ship, each with a complete playbook', () => {
+    expect(DESIGN_SKILLS).toHaveLength(13)
     for (const s of DESIGN_SKILLS) {
       expect(s.id).toBeTruthy()
       expect(s.playbook.principles.length).toBeGreaterThanOrEqual(4)
@@ -1016,9 +1017,9 @@ describe('harness · wire format + context', () => {
 
 describe('audit heuristics (v0.29)', () => {
   it('WCAG contrast math — white on black ≈ 21:1, dark on dark < 1.2:1', () => {
-    expect(Math.round(contrastRatio('#FFFFFF', '#000000'))).toBe(21)
-    expect(contrastRatio('#111122', '#090B1A')).toBeLessThan(1.2)
-    expect(contrastRatio('not-a-color', '#000000')).toBe(0)
+    expect(Math.round(contrastBetween('#FFFFFF', '#000000'))).toBe(21)
+    expect(contrastBetween('#111122', '#090B1A')).toBeLessThan(1.2)
+    expect(contrastBetween('not-a-color', '#000000')).toBe(0)
   })
 
   it('auditDesign flags low contrast, overflow, tiny text, overlaps and off-canvas', () => {
@@ -1037,20 +1038,469 @@ describe('audit heuristics (v0.29)', () => {
     })
     const joined = issues.join('\n')
     expect(joined).toContain('Low contrast')
-    expect(joined).toContain('may overflow')
+    expect(joined).toContain('overflows its box')
     expect(joined).toContain('under 14')
     expect(joined).toContain('overlap')
     expect(joined).toContain('outside the canvas')
   })
 
-  it('auditDesign falls back to the dominant color when background is absent; clean canvas → no issues', () => {
+  it('v0.29.3: no page background → NO fabricated dominant-color backdrop; clean canvas → no issues', () => {
+    // the failed production run audited contrast against a GUESSED
+    // "first hex in colorsInUse" — the wrong backdrop produced wrong
+    // findings. The audit now needs the REAL page background (or a
+    // card behind the text); unknown backdrop → no page-level
+    // contrast claims at all.
     const issues = auditDesign({
       width: 1080,
       height: 1080,
       elements: [{ id: 'b1', type: 'text', text: 'Dark', fill: '#111122', fontSize: 48, x: 0, y: 0, width: 600, height: 90 }],
       colorsInUse: ['#090B1A'],
     })
-    expect(issues.join('\n')).toContain('Low contrast')
+    expect(issues.join('\n')).not.toContain('Low contrast')
+    // with the real background present, the same text IS flagged
+    const flagged = auditDesign({
+      width: 1080,
+      height: 1080,
+      background: '#090B1A',
+      elements: [{ id: 'b1', type: 'text', text: 'Dark', fill: '#111122', fontSize: 48, x: 0, y: 0, width: 600, height: 90 }],
+    })
+    expect(flagged.join('\n')).toContain('Low contrast')
     expect(auditDesign({ width: 1080, height: 1080, background: '#FFFFFF', elements: [{ id: 'c1', type: 'text', text: 'OK', fill: '#111111', fontSize: 32, x: 0, y: 0, width: 300, height: 60 }] })).toEqual([])
+  })
+})
+
+
+// ═════════════════════════════════════════════════════════════
+// v0.29.3 REGRESSION SUITE — the failed CANVIX production run
+// (1080×1080 promo poster: "only:" phantom requirement, decorative
+// color strips, text clipped/obscured, vision critique after the
+// fact, "Music Festival" summary, reactive add/move loops)
+// ═════════════════════════════════════════════════════════════
+
+const CANVIX_PROMPT =
+  'Create a premium 1080×1080 promo poster for CANVIX. Exact text only: \u201cCANVIX\u201d, \u201cDesign Beyond Limits.\u201d, \u201cYour imagination. Our canvas.\u201d, \u201cAI-Powered Design\u201d, \u201c366+ Templates\u201d, \u201cStart Creating Free\u201d, \u201ccanvix.app\u201d. Use #090B1A, #8B5CF6, #22D3EE, #F8FAFC, #A1A1AA. Add a realistic editor mockup, 3 feature cards, glassmorphism, strong spacing, no clipping, no overlaps, no decorative lines over text. Use native editable elements. Fix issues before finishing.'
+
+describe('v0.29.3 · brief extraction (the "only:" bug)', () => {
+  it('the EXACT failed production prompt yields the seven user strings — and never "only:"', () => {
+    const brief = extractBrief(CANVIX_PROMPT, 1080, 1080)
+    expect(brief.requiredTexts.map((t) => t.text)).toEqual([
+      'CANVIX',
+      'Design Beyond Limits.',
+      'Your imagination. Our canvas.',
+      'AI-Powered Design',
+      '366+ Templates',
+      'Start Creating Free',
+      'canvix.app',
+    ])
+    expect(brief.requiredTexts.some((t) => t.text === 'only:')).toBe(false)
+    expect(brief.requiredColors.map((c) => c.hex)).toEqual(['#090b1a', '#8b5cf6', '#22d3ee', '#f8fafc', '#a1a1aa'])
+    expect(brief.dimensions).toEqual({ tier: 'mandatory', width: 1080, height: 1080 })
+  })
+
+  it('"Exact text only:" never manufactures a requirement — the instruction tail is not content', () => {
+    for (const msg of [
+      'Exact text only: "A", "B"',
+      'Text only: hello world',
+      'exact TEXT ONLY: "X"',
+      'Copy: only the best will do', // keyword+separator, payload starts lowercase → ignored
+    ]) {
+      const brief = extractBrief(msg, 1080, 1080)
+      expect(brief.requiredTexts.some((t) => /only/i.test(t.text))).toBe(false)
+    }
+  })
+
+  it('unquoted headline patterns still extract when a real separator exists', () => {
+    const brief = extractBrief('headline: Summer Sale Blast', 1080, 1080)
+    expect(brief.requiredTexts.map((t) => t.text)).toContain('Summer Sale Blast')
+    const brief2 = extractBrief('title = "Night Market"', 1080, 1080)
+    expect(brief2.requiredTexts.map((t) => t.text)).toContain('Night Market')
+  })
+
+  it('composite deliverables become mandatory contract fields', () => {
+    const brief = extractBrief(CANVIX_PROMPT, 1080, 1080)
+    const kinds = brief.requiredFeatures?.map((f) => f.kind)
+    expect(kinds).toContain('editor-mockup')
+    expect(kinds).toContain('glassmorphism')
+    const cards = brief.requiredFeatures?.find((f) => f.kind === 'feature-cards')
+    expect(cards?.count).toBe(3)
+  })
+
+  it('feature validation: a structurally-correct poster passes; a bare canvas fails with fix guidance', () => {
+    const brief = extractBrief(CANVIX_PROMPT, 1080, 1080)
+    const good = validateBrief(brief, {
+      texts: ['CANVIX', 'Design Beyond Limits.', 'Your imagination. Our canvas.', 'AI-Powered Design', '366+ Templates', 'Start Creating Free', 'canvix.app'],
+      colors: ['#090b1a', '#8b5cf6', '#22d3ee', '#f8fafc', '#a1a1aa'],
+      width: 1080,
+      height: 1080,
+      elements: [
+        { type: 'rect', x: 80, y: 80, width: 420, height: 280, fill: 'rgba(248,250,252,0.08)', stroke: 'rgba(139,92,246,0.35)' },
+        { type: 'rect', x: 100, y: 100, width: 300, height: 24, fill: '#8B5CF6' },
+        { type: 'rect', x: 100, y: 140, width: 180, height: 90, fill: 'rgba(34,211,238,0.2)' },
+        { type: 'text', x: 120, y: 250, width: 200, height: 30, text: 'Layer 1', fill: '#F8FAFC' },
+        { type: 'rect', x: 560, y: 420, width: 200, height: 140, fill: 'rgba(248,250,252,0.1)', stroke: 'rgba(139,92,246,0.3)' },
+        { type: 'text', x: 580, y: 470, width: 160, height: 24, text: 'AI-Powered Design', fill: '#F8FAFC' },
+        { type: 'rect', x: 560, y: 600, width: 200, height: 140, fill: 'rgba(248,250,252,0.1)', stroke: 'rgba(34,211,238,0.3)' },
+        { type: 'text', x: 580, y: 650, width: 160, height: 24, text: '366+ Templates', fill: '#F8FAFC' },
+        { type: 'rect', x: 80, y: 600, width: 200, height: 140, fill: 'rgba(248,250,252,0.1)', stroke: 'rgba(139,92,246,0.3)' },
+        { type: 'text', x: 100, y: 650, width: 160, height: 24, text: 'Start Creating Free', fill: '#22D3EE' },
+      ],
+    })
+    expect(good.satisfied).toBe(true)
+    expect(good.unmet).toEqual([])
+    expect(good.checked.features?.every((f) => f.found)).toBe(true)
+
+    const bad = validateBrief(brief, {
+      texts: ['CANVIX'],
+      colors: ['#090b1a'],
+      width: 1080,
+      height: 1080,
+      elements: [{ type: 'rect', x: 0, y: 0, width: 1080, height: 40, fill: '#8B5CF6' }],
+    })
+    expect(bad.satisfied).toBe(false)
+    expect(bad.unmet.some((u) => u.includes('editor mockup'))).toBe(true)
+    expect(bad.unmet.some((u) => u.includes('feature cards'))).toBe(true)
+    expect(bad.unmet.some((u) => u.includes('glassmorphism'))).toBe(true)
+  })
+})
+
+describe('v0.29.3 · router (the discuss misroute)', () => {
+  it('the EXACT failed prompt routes to create — brand name + "feature cards" must not trigger the product-discuss guard', () => {
+    const h = heuristicMode(CANVIX_PROMPT)
+    expect(h.mode).toBe('create')
+    expect(h.confidence).toBe('high')
+  })
+
+  it('product questions still route to discuss/explain', () => {
+    expect(heuristicMode('Why is the Canvix agent broken?').mode).toBe('discuss')
+    expect(heuristicMode('How does the poster feature work?').mode).not.toBe('create')
+  })
+})
+
+describe('v0.29.3 · audit geometry (structural ≠ rendered)', () => {
+  it('text on a glass card is judged against the CARD, not the page — intentional layering is preserved', () => {
+    const issues = auditDesign({
+      width: 1080,
+      height: 1080,
+      background: '#090B1A',
+      elements: [
+        // white text on a white-glass card over dark navy: the old
+        // page-bg math called this 1.0:1 — wrong backdrop
+        { id: 'card', type: 'rect', x: 100, y: 100, width: 400, height: 200, fill: 'rgba(248,250,252,0.08)' },
+        { id: 't1', type: 'text', x: 120, y: 150, width: 360, height: 60, text: 'Glass card text', fontSize: 32, fill: '#F8FAFC' },
+      ],
+    })
+    expect(issues.join('\n')).not.toContain('Low contrast')
+  })
+
+  it('dark text on a light card IS flagged — the card is the real backdrop', () => {
+    const issues = auditDesign({
+      width: 1080,
+      height: 1080,
+      background: '#090B1A',
+      elements: [
+        { id: 'card', type: 'rect', x: 100, y: 100, width: 400, height: 200, fill: '#F8FAFC' },
+        { id: 't1', type: 'text', x: 120, y: 150, width: 360, height: 60, text: 'Dark on light card', fontSize: 32, fill: '#090B1A' },
+      ],
+    })
+    expect(issues.join('\n')).not.toContain('Low contrast') // 15:1+ — correct
+    const dark = auditDesign({
+      width: 1080,
+      height: 1080,
+      background: '#F8FAFC',
+      elements: [
+        { id: 'card', type: 'rect', x: 100, y: 100, width: 400, height: 200, fill: 'rgba(248,250,252,0.9)' },
+        { id: 't1', type: 'text', x: 120, y: 150, width: 360, height: 60, text: 'Faint on glass', fontSize: 32, fill: '#94A3B8' },
+      ],
+    })
+    expect(dark.join('\n')).toContain('Low contrast')
+  })
+
+  it('an opaque shape ABOVE a text that covers it is reported as obscured — present is not visible', () => {
+    const issues = auditDesign({
+      width: 1080,
+      height: 1080,
+      background: '#090B1A',
+      elements: [
+        { id: 't1', type: 'text', x: 100, y: 100, width: 400, height: 60, text: 'CANVIX', fontSize: 48, fill: '#F8FAFC' },
+        { id: 'bar', type: 'rect', x: 0, y: 90, width: 1080, height: 40, fill: '#8B5CF6' }, // ABOVE, covers most of the text
+      ],
+    })
+    expect(issues.join('\n')).toContain('covered by')
+  })
+
+  it('a decorative strip is the ONLY use of a required color → flagged, not accepted as compliance', () => {
+    const issues = auditDesign(
+      {
+        width: 1080,
+        height: 1080,
+        background: '#090B1A',
+        elements: [
+          { id: 's1', type: 'text', x: 100, y: 100, width: 400, height: 60, text: 'CANVIX', fontSize: 48, fill: '#F8FAFC' },
+          { id: 'strip', type: 'rect', x: 20, y: 20, width: 1040, height: 40, fill: '#A1A1AA' },
+        ],
+      },
+      { requiredColors: [{ hex: '#a1a1aa', tier: 'mandatory' }] },
+    )
+    expect(issues.join('\n')).toContain('bare decorative strip')
+    // the same color as a TEXT fill is real usage — no flag
+    const ok = auditDesign(
+      {
+        width: 1080,
+        height: 1080,
+        background: '#090B1A',
+        elements: [{ id: 's1', type: 'text', x: 100, y: 100, width: 400, height: 60, text: 'Footer', fontSize: 24, fill: '#A1A1AA' }],
+      },
+      { requiredColors: [{ hex: '#a1a1aa', tier: 'mandatory' }] },
+    )
+    expect(ok.join('\n')).not.toContain('strip')
+  })
+
+  it('overflow uses the client-measured width when present (real metrics, not glyph averages)', () => {
+    const issues = auditDesign({
+      width: 1080,
+      height: 1080,
+      background: '#090B1A',
+      elements: [
+        // 14 chars at 72px: the 0.58-avg estimate says ~585px (fits);
+        // the REAL measured width is 900px → clips
+        { id: 't1', type: 'text', x: 60, y: 100, width: 600, height: 90, text: 'Start Creating Free', fontSize: 72, fill: '#F8FAFC', measuredWidth: 900 },
+      ],
+    })
+    expect(issues.join('\n')).toContain('measured 900px')
+    expect(issues.join('\n')).toContain('overflows its box')
+  })
+
+  it('unknown page background: no page-level contrast guesses — no fabricated backdrop', () => {
+    const issues = auditDesign({
+      width: 1080,
+      height: 1080,
+      elements: [{ id: 't1', type: 'text', x: 100, y: 100, width: 400, height: 60, text: 'Plain', fontSize: 32, fill: '#F8FAFC' }],
+    })
+    expect(issues.join('\n')).not.toContain('Low contrast')
+  })
+})
+
+describe('v0.29.3 · loop: vision critique BEFORE completion', () => {
+  it('P0 findings drive ONE bounded correction round, then re-capture verifies — done only then', async () => {
+    const events: AgentEvent[] = []
+    const critiques: string[] = []
+    const captures: string[] = []
+    const { chat, calls } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('add_text', { text: 'CANVIX', fontSize: 72, color: '#F8FAFC' }),
+      done('Poster complete'),
+      turn('move_elements', { ids: ['txt-1'], dx: 0, dy: 40 }),
+      done('Poster complete — fixed'),
+    ])
+    const critique = async (image: string): Promise<VisionCritiqueResult> => {
+      critiques.push(image)
+      return critiques.length === 1
+        ? { findings: [{ severity: 'P0', issue: 'Required text "CANVIX" is missing from the rendered canvas', fix: 'Add it verbatim' }], note: 'first pass' }
+        : { findings: [{ severity: 'P2', issue: 'minor spacing' }], note: 'second pass' }
+    }
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'create',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+      captureCanvas: async () => {
+        captures.push('shot')
+        return 'data:image/png;base64,AAA'
+      },
+      critique,
+    })
+    expect(critiques).toHaveLength(2) // initial + verification
+    expect(captures).toHaveLength(2)
+    expect(result.toolCalls).toBe(3) // the correction applied a 4th tool call
+    // the correction message reached the model
+    expect(calls.some((c) => c.some((m) => m.content.includes('VISION CRITIQUE of the RENDERED canvas')))).toBe(true)
+    const finalEvent = events[events.length - 1] as { type: string; verification?: string }
+    expect(finalEvent.type).toBe('done')
+    expect(String(finalEvent.verification)).toMatch(/PASSED|no P0 defects/)
+    expect(result.findings?.some((f) => f.severity === 'P0')).toBe(false)
+  })
+
+  it('P0 defects that SURVIVE the correction round block a success claim — summary says INCOMPLETE', async () => {
+    const events: AgentEvent[] = []
+    const { chat } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      done('Poster complete'),
+      turn('update_elements', { ids: ['txt-1'], fill: '#F8FAFC' }),
+      done('Poster complete — attempted'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'create',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+      captureCanvas: async () => 'data:image/png;base64,AAA',
+      critique: async (): Promise<VisionCritiqueResult> => ({ findings: [{ severity: 'P0', issue: 'CANVIX still clipped to "Start Cr"' }], note: 'still broken' }),
+    })
+    const finalEvent = events[events.length - 1] as { type: string; summary?: string; verification?: string }
+    expect(finalEvent.type).toBe('done')
+    expect(String(finalEvent.summary)).toContain('INCOMPLETE')
+    expect(String(finalEvent.verification)).toContain('NOT visually verified')
+    expect(String(finalEvent.verification)).toContain('P0')
+    expect(result.summary).toContain('INCOMPLETE')
+  })
+
+  it('no capture (timeout) → disclosed as unverified, never silently skipped', async () => {
+    const events: AgentEvent[] = []
+    const { chat } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      done('Poster complete'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'create',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+      captureCanvas: async () => null,
+      critique: async () => ({ findings: [], note: 'never called' }),
+    })
+    expect(String(result.verification)).toContain('UNAVAILABLE')
+    expect(String(result.verification)).toContain('NOT verified')
+  })
+
+  it('no vision model configured → honest disclosure, no critique call', async () => {
+    const { chat } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      done('Poster complete'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'create',
+      emit: () => {},
+      awaitApply: async () => ({ ok: true }),
+      captureCanvas: async () => 'data:image/png;base64,AAA',
+      critique: async () => null,
+    })
+    expect(String(result.verification)).toContain('unavailable')
+  })
+})
+
+describe('v0.29.3 · loop: planning + fail-closed acks', () => {
+  it('plan_layout streams a plan event and sets the execution frame', async () => {
+    const events: AgentEvent[] = []
+    const { chat } = scriptedChat([
+      turn('plan_layout', {
+        background: '#090B1A',
+        sections: [
+          { name: 'headline', y: 60, height: 140, contains: 'CANVIX' },
+          { name: 'tagline', y: 220, height: 80, contains: 'Design Beyond Limits.' },
+        ],
+      }),
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      done('Done'),
+    ])
+    const result = await runAgentLoop({ chat, design, mode: 'create', emit: (e) => events.push(e), awaitApply: async () => ({ ok: true }) })
+    const planEvent = events.find((e) => e.type === 'plan') as { steps?: string[] } | undefined
+    expect(planEvent).toBeTruthy()
+    expect(planEvent?.steps?.join('\n')).toContain('headline')
+    expect(result.steps).toBe(2) // plan_layout + set_background each count as a step
+  })
+
+  it('plan_layout rejects stacked bands with actionable guidance', () => {
+    const tool = AGENT_TOOL_MAP.get('plan_layout')
+    expect(tool).toBeTruthy()
+    const res = tool!.sanitize(
+      {
+        sections: [
+          { name: 'a', y: 100, height: 200, contains: 'x' },
+          { name: 'b', y: 250, height: 200, contains: 'y' },
+        ],
+      },
+      ctx,
+    )
+    expect(res.ok).toBe(true)
+    expect(String((res as { observation?: string }).observation)).toContain('PLAN WARNINGS')
+  })
+
+  it('a failed (timed-out) apply ack tells the model the action was NOT applied — fail closed', async () => {
+    const { chat, calls } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      done('Wrapped up'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'create',
+      emit: () => {},
+      // v0.29.3 route semantics: timeout resolves ok:false
+      awaitApply: async () => ({ ok: false, message: 'ack timeout — the client did NOT confirm the apply' }),
+    })
+    expect(result.toolCalls).toBe(0) // the un-confirmed action never counts
+    expect(calls.some((c) => c.some((m) => m.content.includes('NOT confirm the apply') || m.content.includes('was not verified as changed')))).toBe(true)
+  })
+})
+
+
+// ═════════════════════════════════════════════════════════════
+// v0.29.4 REGRESSION — "ask him anything and it builds sunset"
+// ═════════════════════════════════════════════════════════════
+
+describe('v0.29.4 · greetings and chitchat never trigger a build', () => {
+  it.each(['hi', 'hey there', 'thanks!', 'ok cool', 'hello', 'test', 'thank you so much', 'yo!'])(
+    '"%s" routes to discuss with HIGH confidence — no model router call, no invented build task',
+    (msg) => {
+      const h = heuristicMode(msg)
+      expect(h.mode).toBe('discuss')
+      expect(h.confidence).toBe('high')
+    },
+  )
+
+  it('a REAL build brief still routes to create after the greeting guard', () => {
+    expect(heuristicMode(CANVIX_PROMPT).mode).toBe('create')
+    expect(heuristicMode('make me a poster for a pizza place').mode).toBe('create')
+  })
+
+  it('longer conversational messages are not hijacked by the greeting guard', () => {
+    // not pure greeting → falls through to the normal ladder (edit here)
+    expect(['edit', 'discuss', 'create']).toContain(heuristicMode('make the title bold').mode)
+  })
+})
+
+describe('v0.29.4 · new skills (glassmorphism, mockups, accessibility)', () => {
+  it('the failed CANVIX prompt selects glassmorphism + mockups alongside the poster skill', () => {
+    const skills = selectSkills(CANVIX_PROMPT, 'create')
+    const ids = skills.map((s) => s.id)
+    expect(ids).toContain('poster-design')
+    expect(ids).toContain('glassmorphism-ui')
+    expect(ids).toContain('realistic-mockups')
+  })
+
+  it('accessibility asks select the accessibility skill', () => {
+    const ids = selectSkills('improve the contrast and accessibility of this design', 'improve').map((s) => s.id)
+    expect(ids).toContain('visual-accessibility')
+  })
+
+  it('the glassmorphism playbook teaches rgba fill + border + contrast on the composited backdrop', () => {
+    const glass = DESIGN_SKILLS.find((s) => s.id === 'glassmorphism-ui')
+    expect(glass).toBeTruthy()
+    const text = JSON.stringify(glass!.playbook)
+    expect(text).toContain('rgba')
+    expect(text.toLowerCase()).toContain('composited')
+    expect(text.toLowerCase()).toContain('contrast')
+  })
+
+  it('the mockup playbook requires a composite, never one empty rectangle', () => {
+    const mock = DESIGN_SKILLS.find((s) => s.id === 'realistic-mockups')
+    expect(mock).toBeTruthy()
+    const text = JSON.stringify(mock!.playbook)
+    expect(text).toContain('title bar')
+    expect(text).toContain('sidebar')
+    expect(text.toLowerCase()).toContain('composite')
+    // the exact structural floor the brief validator enforces
+    expect(text).toContain('160×110')
+  })
+
+  it('skillsPromptSection discloses the selected new skills', () => {
+    const section = skillsPromptSection(selectSkills(CANVIX_PROMPT, 'create'))
+    expect(section).toContain('Skill: Glassmorphism')
+    expect(section).toContain('Skill: Realistic Product Mockups')
   })
 })

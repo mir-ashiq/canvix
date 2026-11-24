@@ -1,0 +1,171 @@
+// design-engine/compile.ts — the compile proof.
+//
+// Case 1 is the v0.29.3 failed production run (harness.test.ts line
+// 441): the CANVIX poster brief that motivated the agent-correctness
+// work. The pipeline must compile it end to end — brief extraction
+// (zero model calls) → spec → deterministic engine → real editor
+// pages — with EXACT text, EXACT colors, no clipping, no unintended
+// overlap, WCAG-cleared contrast, and fully editable native output.
+//
+// The scripted-planner pattern: no live model is needed because the
+// required copy and colors come from the brief itself — exactly
+// what a planner would emit for this prompt.
+import { describe, expect, it } from 'vitest'
+import { extractBrief } from '@/lib/agent/brief'
+import { specFromBrief } from '@/lib/design-spec/from-brief'
+import { parseSpecResponse } from '@/lib/design-spec/parse'
+import { compileSpec, exactEquals } from './compile'
+import { fitFontSize } from './compositions'
+import type { AnyElement, TextElement } from '@/lib/types'
+
+const V0293_POSTER_PROMPT =
+  'Make a 1080x1080 poster with navy #090B1A background, purple #8B5CF6 and cyan #22D3EE accents, saying "Design Beyond Limits", "Create Smarter. Design Faster." and "Try Canvix Free"'
+
+function textElements(els: AnyElement[]): TextElement[] {
+  return els.filter((el): el is TextElement => el.type === 'text')
+}
+
+describe('the v0.29.3 poster brief, compiled end to end', () => {
+  const brief = extractBrief(V0293_POSTER_PROMPT)
+  const spec = specFromBrief(brief)
+  const result = compileSpec(spec)
+  const page = result.pages[0]
+
+  it('all compile checks pass — no silent degradation', () => {
+    expect(result.checks.passed).toBe(true)
+    expect(result.checks.failures).toEqual([])
+  })
+
+  it('EXACT text: character-for-character, not case-insensitive substring', () => {
+    const texts = textElements(page.elements).map((el) => el.text)
+    expect(texts).toContain('Design Beyond Limits')
+    expect(texts).toContain('Create Smarter. Design Faster.')
+    expect(texts).toContain('Try Canvix Free')
+    // the hardened contract: case/whitespace variants FAIL (the old
+    // brief checker would accept 'DESIGN BEYOND LIMITS — really')
+    expect(exactEquals('Design Beyond Limits', 'DESIGN BEYOND LIMITS')).toBe(false)
+    expect(exactEquals('a\u0301', 'á')).toBe(true) // NFC equivalence holds
+    expect(exactEquals('Try Canvix Free', 'Try Canvix  Free')).toBe(false)
+    for (const c of result.checks.exactTexts) expect(c.found).toBe(true)
+  })
+
+  it('EXACT colors: all three required hexes on the page', () => {
+    expect(page.background).toEqual({ type: 'solid', color: '#090b1a' })
+    const fills = page.elements
+      .map((el) => ('fill' in el && typeof el.fill === 'string' ? el.fill.toLowerCase() : ''))
+      .filter(Boolean)
+    expect(fills).toContain('#8b5cf6')
+    expect(fills).toContain('#22d3ee')
+    for (const c of result.checks.colors) expect(c.found).toBe(true)
+  })
+
+  it('geometry: everything in-canvas, content mutually disjoint, text fits', () => {
+    expect(result.checks.inCanvas).toBe(true)
+    expect(result.checks.noUnintendedOverlap).toBe(true)
+    expect(result.checks.textFits).toBe(true)
+  })
+
+  it('contrast: WCAG ≥ 4.5 on every checked pair', () => {
+    for (const c of result.checks.contrast) {
+      expect(c.ok, `${c.pair} = ${c.ratio}`).toBe(true)
+    }
+  })
+
+  it('native, editable output: real factory elements with catalog fonts', () => {
+    expect(page.elements.length).toBeGreaterThanOrEqual(5) // headline, subline, chip, chip text, underline
+    for (const el of page.elements) {
+      expect(el.id).toMatch(/^spec_\d+$/)
+      expect(el.width).toBeGreaterThan(0)
+    }
+    for (const el of textElements(page.elements)) {
+      expect(['Poppins', 'Inter', 'Montserrat', 'Work Sans', 'Space Grotesk', 'Oswald', 'Lato', 'Raleway', 'Open Sans']).toContain(el.fontFamily)
+    }
+  })
+
+  it('deterministic: the same spec compiles byte-identically', () => {
+    const again = compileSpec(specFromBrief(extractBrief(V0293_POSTER_PROMPT)))
+    expect(JSON.stringify(again.pages)).toBe(JSON.stringify(result.pages))
+  })
+})
+
+describe('feature-cards: the validator definition, inverted into a builder', () => {
+  const r = parseSpecResponse(
+    JSON.stringify({
+      version: 'v2',
+      format: { width: 1280, height: 720 },
+      palette: { seeds: ['#101418'], mood: 'cool' },
+      typography: { scale: 1.25 },
+      blocks: [
+        {
+          kind: 'feature-cards',
+          count: 3,
+          content: [
+            { role: 'label', source: 'model', text: 'Fast' },
+            { role: 'label', source: 'model', text: 'Private' },
+            { role: 'label', source: 'model', text: 'Yours' },
+          ],
+        },
+      ],
+    }),
+  )
+  const result = r.ok ? compileSpec(r.spec) : null
+
+  it('emits N semi-transparent card rects, one to three texts each', () => {
+    expect(r.ok).toBe(true)
+    expect(result).not.toBeNull()
+    if (!result) return
+    expect(result.checks.passed).toBe(true)
+    const cards = result.pages[0].elements.filter(
+      (el) => el.type === 'rect' && 'opacity' in el && (el as { opacity: number }).opacity < 1,
+    )
+    expect(cards).toHaveLength(3)
+    const texts = textElements(result.pages[0].elements)
+    expect(texts).toHaveLength(3)
+    // each text sits inside a card (the validator's structural check)
+    for (const t of texts) {
+      const host = cards.some((c) =>
+        t.x >= c.x - 1 && t.y >= c.y - 1 && t.x + t.width <= c.x + c.width + 1 && t.y + t.height <= c.y + c.height + 1,
+      )
+      expect(host).toBe(true)
+    }
+  })
+})
+
+describe('honest failure: required copy is never truncated', () => {
+  const long = 'This required headline is intentionally far too long to fit a one-thousand-eighty pixel band even at the minimum floor size'
+  const r = parseSpecResponse(
+    JSON.stringify({
+      format: { width: 1080, height: 1080 },
+      blocks: [
+        {
+          kind: 'hero',
+          content: [
+            { role: 'headline', source: 'user-required', text: long },
+            { role: 'cta', source: 'user-required', text: 'Go' },
+          ],
+        },
+      ],
+    }),
+  )
+  const result = r.ok ? compileSpec(r.spec) : null
+
+  it('an unfixable required text fails the check instead of being cut', () => {
+    expect(r.ok).toBe(true)
+    if (!result) return
+    // the text survived INTACT — failure is reported, never truncated
+    const texts = textElements(result.pages[0].elements).map((el) => el.text)
+    expect(texts).toContain(long)
+    expect(result.checks.textFits).toBe(false)
+    expect(result.checks.passed).toBe(false)
+    expect(result.checks.failures.some((f) => f.includes('never truncated'))).toBe(true)
+  })
+})
+
+describe('fitFontSize', () => {
+  it('shrinks toward the floor but never below it', () => {
+    expect(fitFontSize('Short', 500, 96, 28)).toBe(96)
+    const size = fitFontSize('A '.repeat(60), 500, 96, 28)
+    expect(size).toBeGreaterThanOrEqual(28)
+    expect(size).toBeLessThan(96)
+  })
+})

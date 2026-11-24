@@ -56,6 +56,9 @@ interface RunBridge {
   acks: ((ack: { ok: boolean; message?: string; design?: AgentDesignCtx }) => void)[]
   /** brief validation result pushed by the client (Phase 5) */
   briefResult: ((r: { satisfied: boolean; unmet: string[] } | null) => void) | null
+  /** briefResult that arrived before the loop asked (the panel answers
+   *  immediately on seeing the action event) — consumed first */
+  pendingBriefResult: { satisfied: boolean; unmet: string[] } | null
   /** the latest context the client pushed (after applying actions) */
   latestDesign: AgentDesignCtx
   /** client-abort flag (Stop button closes the stream; the route
@@ -106,6 +109,9 @@ async function __canvix_post(req: NextRequest) {
       if (resolve) {
         bridge.briefResult = null
         resolve(body.briefResult)
+      } else if (body.briefResult) {
+        // early answer (loop not waiting yet) — queue it
+        bridge.pendingBriefResult = body.briefResult
       }
     }
     return new Response(JSON.stringify({ ok: true }), { status: 200 })
@@ -228,6 +234,7 @@ async function __canvix_post(req: NextRequest) {
             confirms: new Map(),
             acks: [],
             briefResult: null,
+            pendingBriefResult: null,
             latestDesign: design,
             aborted: false,
           }
@@ -268,8 +275,14 @@ async function __canvix_post(req: NextRequest) {
                   setTimeout(() => resolve({ ok: true, message: 'ack timeout — assumed applied' }), 60_000)
                 }),
               refreshedContext: () => bridge.latestDesign,
-              validateBriefOnClient: () =>
-                new Promise<{ satisfied: boolean; unmet: string[] } | null>((resolve) => {
+              validateBriefOnClient: async () => {
+                // consume an early answer first, then wait for a live one
+                if (bridge.pendingBriefResult) {
+                  const r = bridge.pendingBriefResult
+                  bridge.pendingBriefResult = null
+                  return r
+                }
+                return new Promise<{ satisfied: boolean; unmet: string[] } | null>((resolve) => {
                   bridge.briefResult = resolve
                   // the client answers on the bridge; give it a generous
                   // window, then fall back to null (no client validation
@@ -280,7 +293,8 @@ async function __canvix_post(req: NextRequest) {
                       resolve(null)
                     }
                   }, 30_000)
-                }),
+                })
+              },
             })
           } finally {
             bridges.delete(runId)

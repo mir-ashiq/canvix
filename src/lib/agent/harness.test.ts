@@ -703,8 +703,10 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       refreshedContext: () => design,
       validateBriefOnClient: async () => ({ satisfied: true, unmet: [] }),
     })
-    // every write tool applied except the declined clear_page
-    expect(result.toolCalls).toBe(valid.length - 1)
+    // every write tool applied except the declined clear_page; the
+    // validate_brief pseudo-action applies state without an ack and is
+    // not counted as a tool call (v0.28.1 live-eval fix)
+    expect(result.toolCalls).toBe(valid.length - 2)
     expect(declined).toBe(true)
     expect(result.summary).toBe('Sweep complete')
   })

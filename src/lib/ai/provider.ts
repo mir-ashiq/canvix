@@ -220,8 +220,17 @@ export function pickSlot(
   }
   // legacy chain: the single override / env / file answers every slot,
   // with the old ai.models ids still steering text/vision/image
+  // v0.28.1: env-level model ids — self-hosters pointing ZAI_BASE_URL at
+  // any OpenAI-compatible gateway (NVIDIA NIM, OpenRouter, vLLM, Ollama…)
+  // can pin per-slot models without a database. DB/models still win.
+  const envModelId =
+    slot === 'text' ? process.env.ZAI_TEXT_MODEL?.trim() :
+    slot === 'vision' ? process.env.ZAI_VISION_MODEL?.trim() :
+    slot === 'image' ? process.env.ZAI_IMAGE_MODEL?.trim() :
+    slot === 'imageEdit' ? process.env.ZAI_IMAGE_EDIT_MODEL?.trim() :
+    slot === 'video' ? process.env.ZAI_VIDEO_MODEL?.trim() : undefined
   const legacyModel =
-    slot === 'text' ? models.text : slot === 'vision' ? models.vision : slot === 'image' ? models.image : undefined
+    (slot === 'text' ? models.text : slot === 'vision' ? models.vision : slot === 'image' ? models.image : undefined) ?? envModelId
   if (legacy) return { baseUrl: legacy.baseUrl, apiKey: legacy.apiKey, model: legacyModel, source: 'db' }
   if (env.baseUrl && env.apiKey) {
     return {

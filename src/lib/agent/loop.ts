@@ -349,6 +349,40 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
     const args = (turn.args && typeof turn.args === 'object' && !Array.isArray(turn.args) ? turn.args : {}) as Record<string, unknown>
     const result = tool.sanitize(args, toolCtx)
 
+    // validate_brief is a read-only pseudo-action: the client answers
+    // on the bridge (briefResult), so there is NO apply/ack round
+    // trip — awaiting one dropped the client's early answer (found by
+    // the live NIM eval: 60s ack timeout + lost validation result)
+    if (toolName === 'validate_brief' && deps.validateBriefOnClient) {
+      emit({
+        v: AGENT_PROTOCOL_VERSION,
+        type: 'action',
+        stepIndex: steps,
+        callId: `call-${steps}-${Math.random().toString(36).slice(2, 8)}`,
+        risk: 'read',
+        tool: toolName,
+        actions: result.ok ? result.actions : [],
+      })
+      const v = await deps.validateBriefOnClient()
+      steps += 1
+      markProgress()
+      if (v) {
+        const msg = v.satisfied
+          ? 'BRIEF VALIDATION PASSED — every mandatory text, color and dimension is present on the canvas. You may emit done.'
+          : `BRIEF VALIDATION FAILED — unmet requirements:\n${v.unmet.map((u) => `· ${u}`).join('\n')}\nFix these now, then re-validate.`
+        emit({ v: AGENT_PROTOCOL_VERSION, type: 'observation', stepIndex: steps - 1, message: msg })
+        messages.push({ role: 'user', content: msg })
+        if (v.satisfied) {
+          briefValidated = true
+          verification = 'Brief contract validated against the live canvas.'
+        }
+      } else {
+        emit({ v: AGENT_PROTOCOL_VERSION, type: 'observation', stepIndex: steps - 1, message: 'Brief validation unavailable on this client.' })
+        messages.push({ role: 'user', content: 'Brief validation was unavailable (no client response). Verify the required items yourself with get_page_state before finishing.' })
+      }
+      continue
+    }
+
     // cycle detection: the identical call twice in a row is tolerated
     // (a legitimate retry), the THIRD consecutive identical attempt
     // wraps the run up BEFORE applying it — repeating the same
@@ -453,23 +487,6 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
       continue
     }
 
-    // validate_brief: the client computed the result against real state
-    if (toolName === 'validate_brief' && deps.validateBriefOnClient) {
-      const v = await deps.validateBriefOnClient()
-      if (v) {
-        messages.push({
-          role: 'user',
-          content: v.satisfied
-            ? 'BRIEF VALIDATION PASSED — every mandatory text, color and dimension is present on the canvas. You may emit done.'
-            : `BRIEF VALIDATION FAILED — unmet requirements:\n${v.unmet.map((u) => `· ${u}`).join('\n')}\nFix these now, then re-validate.`,
-        })
-        if (v.satisfied) {
-          briefValidated = true
-          verification = 'Brief contract validated against the live canvas.'
-        }
-      }
-      continue
-    }
 
     messages.push({ role: 'user', content: observationFor(toolName, result, true) })
 

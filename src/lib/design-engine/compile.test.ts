@@ -132,7 +132,7 @@ describe('feature-cards: the validator definition, inverted into a builder', () 
   })
 })
 
-describe('honest failure: required copy is never truncated', () => {
+describe('required copy: wraps to fit, and fails honestly when even wrapping cannot save it', () => {
   const long = 'This required headline is intentionally far too long to fit a one-thousand-eighty pixel band even at the minimum floor size'
   const r = parseSpecResponse(
     JSON.stringify({
@@ -150,15 +150,43 @@ describe('honest failure: required copy is never truncated', () => {
   )
   const result = r.ok ? compileSpec(r.spec) : null
 
-  it('an unfixable required text fails the check instead of being cut', () => {
+  it('a long required headline WRAPS inside its band instead of failing or being cut', () => {
     expect(r.ok).toBe(true)
     if (!result) return
-    // the text survived INTACT — failure is reported, never truncated
+    // the text survived INTACT as one element — wrapping never splits it
     const texts = textElements(result.pages[0].elements).map((el) => el.text)
     expect(texts).toContain(long)
-    expect(result.checks.textFits).toBe(false)
-    expect(result.checks.passed).toBe(false)
-    expect(result.checks.failures.some((f) => f.includes('never truncated'))).toBe(true)
+    expect(result.checks.textFits).toBe(true)
+    expect(result.checks.passed).toBe(true)
+    // the box grew to the wrapped height (multi-line), within the band
+    const headline = textElements(result.pages[0].elements).find((el) => el.text === long)
+    expect(headline?.height).toBeGreaterThan((headline?.fontSize ?? 0) * 1.15)
+  })
+
+  it('an unfixable required text (tiny canvas, already wrapped) still fails instead of being cut', () => {
+    const tiny = parseSpecResponse(
+      JSON.stringify({
+        format: { width: 200, height: 200 },
+        blocks: [
+          {
+            kind: 'hero',
+            content: [
+              { role: 'headline', source: 'user-required', text: long },
+              { role: 'cta', source: 'user-required', text: 'Go' },
+            ],
+          },
+        ],
+      }),
+    )
+    expect(tiny.ok).toBe(true)
+    if (!tiny.ok) return
+    const res = compileSpec(tiny.spec)
+    // intact — the failure is reported, never a truncation
+    const texts = textElements(res.pages[0].elements).map((el) => el.text)
+    expect(texts).toContain(long)
+    expect(res.checks.textFits).toBe(false)
+    expect(res.checks.passed).toBe(false)
+    expect(res.checks.failures.some((f) => f.includes('never truncated'))).toBe(true)
   })
 })
 
@@ -209,6 +237,52 @@ describe('seed guarantee: required colors reach the page without accent-using co
     expect(result.checks.inCanvas).toBe(true)
     expect(result.checks.noUnintendedOverlap).toBe(true)
     expect(result.warnings.join(' ')).toMatch(/seed guarantee/)
+    const again = compileSpec(spec)
+    expect(JSON.stringify(again.pages)).toBe(JSON.stringify(result.pages))
+  })
+})
+
+describe('seed guarantee placement: semantic before decorative', () => {
+  // The band is the LAST resort. When the hero emits its accent
+  // underline (a real headline-emphasis device), a missing required
+  // seed is placed there first — semantic assignment, not a bolt-on
+  // bar. Only compositions with no underline fall back to the band.
+  const spec: DesignSpec = {
+    version: 'v2',
+    name: 'semantic placement',
+    format: { width: 1080, height: 1350 },
+    palette: { seeds: ['#1B5E20', '#F9A825'], mood: 'warm' },
+    typography: {},
+    blocks: [
+      {
+        kind: 'hero',
+        weight: 1,
+        content: [
+          { role: 'headline', source: 'user-required', text: 'Headline For Emphasis' },
+          { role: 'subline', source: 'user-required', text: 'A subline below the headline' },
+        ],
+        overlap: 'none',
+      },
+    ],
+  }
+  const result = compileSpec(spec)
+  const page = result.pages[0]
+
+  it('the missing seed recolors the headline underline, not a band', () => {
+    expect(page.background).toEqual({ type: 'solid', color: '#1B5E20' })
+    const amberEls = page.elements.filter(
+      (el) => 'fill' in el && typeof el.fill === 'string' && el.fill.toLowerCase() === '#f9a825',
+    )
+    expect(amberEls.length).toBeGreaterThanOrEqual(1)
+    // an underline is a slim emphasis rect (≤ 8px); a band would be 12-48px
+    for (const el of amberEls) expect(el.height).toBeLessThanOrEqual(8)
+    expect(result.warnings.join(' ')).toMatch(/headline emphasis/)
+    for (const c of result.checks.colors) expect(c.found, c.hex).toBe(true)
+  })
+
+  it('the recolored underline stays a backdrop: in-canvas, overlap-safe, deterministic', () => {
+    expect(result.checks.inCanvas).toBe(true)
+    expect(result.checks.noUnintendedOverlap).toBe(true)
     const again = compileSpec(spec)
     expect(JSON.stringify(again.pages)).toBe(JSON.stringify(result.pages))
   })

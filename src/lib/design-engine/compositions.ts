@@ -10,11 +10,12 @@
 //
 // Every builder returns two layers: backdrops (may sit under
 // content — the intentional-overlap channel) and content (mutually
-// disjoint, individually in-canvas). Text is placed with the
-// plan-route width estimate (~0.62 × fontSize per char) and
-// shrink-to-fit; user-required copy is NEVER truncated — when it
-// cannot fit even at the floor size, the compile check fails
-// honestly instead.
+// disjoint, individually in-canvas). Text wraps at the box width
+// under the plan-route estimate (~0.62 × fontSize per char) and
+// shrinks until the wrapped line count fits the band; user-required
+// copy is NEVER truncated — the element carries the full string, and
+// when it cannot fit even wrapped at the floor size, the compile
+// check fails honestly instead.
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -49,12 +50,51 @@ export function estimateTextWidth(text: string, fontSize: number): number {
   return text.length * 0.62 * fontSize
 }
 
+/** Greedy word-wrap under the plan-route estimate. Splits on spaces
+ * only — the text itself is never altered (the exact-text contract:
+ * the element keeps the FULL string; the renderer wraps it). A word
+ * wider than the box stays on its own line and fails honestly. */
+export function wrapLines(text: string, width: number, fontSize: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let line = ''
+  for (const w of words) {
+    const candidate = line ? `${line} ${w}` : w
+    if (!line || estimateTextWidth(candidate, fontSize) <= width) line = candidate
+    else {
+      lines.push(line)
+      line = w
+    }
+  }
+  if (line) lines.push(line)
+  return lines.length ? lines : ['']
+}
+
 /** Shrink-to-fit: largest size ≤ start that fits maxW, floored at
  * minSize. Never touches the text itself. */
 export function fitFontSize(text: string, maxW: number, start: number, minSize: number): number {
   let size = Math.max(minSize, Math.round(start))
   while (size > minSize && estimateTextWidth(text, size) > maxW) size -= 2
   return size
+}
+
+/** Wrap-to-fit: the size whose wrapped line count fits maxH, between
+ * start and floor. Returns the size and its line count. */
+function wrapFontSize(
+  text: string,
+  maxW: number,
+  maxH: number,
+  start: number,
+  floor: number,
+  lineHeight: number,
+): { size: number; lines: string[] } {
+  let size = Math.max(floor, Math.round(start))
+  let lines = wrapLines(text, maxW, size)
+  while (size > floor && lines.length * Math.round(size * lineHeight) > maxH) {
+    size -= 2
+    lines = wrapLines(text, maxW, size)
+  }
+  return { size, lines }
 }
 
 const ROLE_STACK_ORDER: ContentRole[] = ['headline', 'subline', 'cta', 'tagline', 'body', 'label']
@@ -119,10 +159,22 @@ export function buildHero(block: BlockNode, ctx: BuildContext): ComposedElements
     }
 
     const isHeadline = slot.role === 'headline' || slot.role === 'tagline'
+    const lineHeight = isHeadline ? 1.15 : 1.3
     const startSize = isHeadline ? Math.max(type.sizes.headline, headlineBoost) : type.sizes[slot.role] ?? type.sizes.body
-    const size = fitFontSize(slot.text, rect.width, startSize, isHeadline ? 28 : 18)
+    // wrap-to-fit: shrink while the wrapped line count exceeds the
+    // band height; the element keeps the FULL text (exact-text
+    // contract) and its box grows to the wrapped height, capped at
+    // the band — an impossible fit still fails the textFits check
+    const { size, lines } = wrapFontSize(
+      slot.text,
+      rect.width,
+      rect.height,
+      startSize,
+      isHeadline ? 28 : 18,
+      lineHeight,
+    )
     const fill = isHeadline ? palette.roles.ink : palette.roles.inkSoft
-    const h = Math.round(size * 1.3)
+    const h = Math.min(rect.height, Math.round(lines.length * size * lineHeight))
     content.push(
       createTextElement({
         text: slot.text,
@@ -194,8 +246,9 @@ export function buildFeatureCards(block: BlockNode, ctx: BuildContext): Composed
     )
     const pad = Math.round(cell.width * 0.1)
     const boxW = cell.width - pad * 2
-    const size = fitFontSize(label, boxW, type.sizes.body, 16)
-    const h = Math.round(size * 1.3)
+    const boxH = cell.height - pad * 2
+    const { size, lines } = wrapFontSize(label, boxW, boxH, type.sizes.body, 16, 1.3)
+    const h = Math.min(boxH, Math.round(lines.length * size * 1.3))
     content.push(
       createTextElement({
         text: label,

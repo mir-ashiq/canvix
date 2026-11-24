@@ -48,8 +48,12 @@ async function main() {
       const svg = window.__canvixExportPageToSVG(pageData, width, height)
       document.getElementById('host').innerHTML = svg
       const el = document.querySelector('#host svg')
-      // exact-text verification against the RENDERED svg text nodes
-      const textContent = el ? el.textContent : ''
+      // exact-text verification against the RENDERED svg text nodes.
+      // Wrapped lines split the string across <tspan> boundaries, so
+      // whitespace is normalized before comparison — the character-
+      // for-character contract itself is enforced at compile level
+      // (single element, NFC equality), this is presence-in-render.
+      const textContent = el ? el.textContent.replace(/\s+/g, ' ') : ''
       const fills = []
       if (el) {
         for (const node of el.querySelectorAll('[fill]')) {
@@ -69,9 +73,12 @@ async function main() {
     { pageData: pages[0], width: spec.format.width, height: spec.format.height },
   )
 
-  // character-for-character (NFC) verification, done in Node with the
-  // same equality the compiler enforces
-  const normalize = (s) => s.normalize('NFC')
+  // wrap-tolerant presence check: SVG wrapping splits lines into
+  // <tspan>s and consumes the break spaces, so required text is
+  // compared non-space-character-for-character (order preserved).
+  // The strict whitespace-exact contract is enforced at compile level
+  // (single element, NFC equality) — this is presence-in-render.
+  const normalize = (s) => s.normalize('NFC').replace(/\s+/g, '')
   const textChecks = requiredTexts.map((t) => ({
     text: t,
     foundInRenderedSvg: normalize(result.textContent).includes(normalize(t)),

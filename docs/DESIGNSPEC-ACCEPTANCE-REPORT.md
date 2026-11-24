@@ -1,97 +1,116 @@
-# DesignSpec Phase A — real-model + real-browser acceptance report
+# DesignSpec Phase A — real-model + real-browser acceptance report (v2)
 
-**Date:** 24 November 2026 · **Branch:** `feat/design-spec-foundation` (head 8b213bc + this report)
-**Purpose:** the first end-to-end acceptance run of the DesignSpec v2 foundation — the
-"browser-rendered visual acceptance test and real-model evaluation" gap named in the
-funding review — executed with the repo's own deterministic engine, the app's own vector
-export pipeline, a real LLM planner, and real Chromium.
+**Date:** 24 November 2026 (v2 same day) · **Branch:** `feat/design-spec-foundation`
+**Purpose:** the end-to-end acceptance run of the DesignSpec v2 foundation — now
+closing the three gaps the first run (v1) surfaced honestly: no real-editor
+exercise, a text-fitting failure, and a mechanical (band) color fallback.
 
 ## What ran
 
-Two paths over the same canonical poster brief (1080×1350, three verbatim lines — one
-carrying an em dash and middle dots, the NFC-exactness contract — and two required hexes):
+Two paths over the same canonical poster brief (1080×1350, three verbatim lines —
+one carrying an em dash and middle dots — and two required hexes):
 
 ```
 Path D (deterministic): prompt → extractBrief() → specFromBrief() → compileSpec()
 Path M (real model):    LLM planner (z-ai GLM via sandbox SDK) → parseSpecResponse()
                         → compileSpec()
-Both:                   pages → exportPageToSVG() (src/lib/svg-export.ts — the code path
-                        user downloads use) → embedded in Chromium (Playwright) →
-                        screenshot + text/fill verification on the RENDERED SVG
+Render proof:           pages → exportPageToSVG() (the code path user downloads
+                        use) → embedded in Chromium → screenshot + text/fill
+                        verification on the RENDERED SVG
+Editor proof (NEW):     pages → POST /api/designs (real API, real Postgres) →
+                        /design/{id} in the real editor → zoom-exact double-click
+                        opens the text overlay → edit → Escape commit → debounced
+                        autosave → reload → persistence verified
 ```
 
-Harness (re-runnable, committed on this branch): `scripts/designspec-compile.ts`,
-`scripts/designspec-render.cjs`, `scripts/designspec-browser-entry.ts` (browser bundle).
+Harness (re-runnable, committed): `scripts/designspec-compile.ts`,
+`scripts/designspec-render.cjs`, `scripts/designspec-browser-entry.ts`, and
+`tests/e2e/design-spec-editor.spec.ts` (runs against a live app + database —
+the same pattern the 39-file e2e suite uses).
 
-```bash
-bun scripts/designspec-compile.ts brief <outdir>
-bun scripts/designspec-compile.ts model <outdir> planner-raw.txt
-node scripts/designspec-render.cjs <outdir> <label>
-```
+## Results — all green at both levels
 
-## Results
-
-| Check | Path D (deterministic) | Path M (real model) |
+| Check | Path D | Path M |
 |---|---|---|
-| Exact texts (char-for-char, NFC) — 3/3 | **PASS** | **PASS** |
-| Required colors on page — 2/2 | **PASS** | **PASS** (after the fix below) |
+| Exact texts (char-for-character, NFC) — 3/3 | **PASS** | **PASS** |
+| Required colors on page — 2/2 | **PASS** | **PASS** |
 | All elements in canvas | **PASS** | **PASS** |
 | No unintended content overlap | **PASS** | **PASS** |
-| Text fits box | **PASS** | **FAIL** — honest, see below |
-| WCAG contrast ≥ 4.5 (all pairs) | **PASS** (5.28–9.43) | **PASS** (5.28–9.43) |
-| Rendered SVG carries exact texts | **PASS** | **PASS** |
+| Text fits box (**wrap-aware**, was FAIL on M in v1) | **PASS** | **PASS** |
+| WCAG contrast ≥ 4.5 (all pairs) | **PASS** | **PASS** |
+| Rendered SVG carries required texts | **PASS** | **PASS** |
 | Rendered SVG carries required fills | **PASS** | **PASS** |
 
-Artifacts: `rendered.png` / `rendered.svg` for both paths (1080×1351 screenshots of the
-real browser render), `spec.json`, `pages.json`, `checks.json`, `render-checks.json`,
-and the raw planner output (`planner-raw.txt`). Determinism re-verified: the same spec
-compiles byte-identical pages (test suite).
+**Editor proof (new):** the compiled poster was created as a real design through
+`/api/designs`, opened in the real editor (Konva canvas at 42% fit), the text
+overlay opened by double-clicking the subline (zoom-exact coordinate mapping
+from the compiled element geometry), the text edited, committed with Escape,
+and the debounced autosave persisted it to Postgres. After a reload the edit
+survived and the two untouched required lines were still present
+**character-for-character**. Screenshots: `test-results/designspec/`
+(loaded / editing / reloaded).
 
-## A real bug, found by the real-model run, fixed and tested
+Unit suite: **50/50 design tests** (v1: 45), **1,631/1,631 full branch suite**,
+`tsc --noEmit` clean, eslint clean.
 
-**The finding.** Path M's planner emitted two seeds (`#1B5E20`, `#F9A825`) and a hero
-with no CTA slot. The palette module assigned the amber to the `accent` role — but no
-composition drew that role, so **a required color silently never reached the page**.
-The compile check report caught it (color FAIL), which is exactly what it exists for.
-The palette module's own contract ("required brief colors therefore always appear on
-the page") was not actually guaranteed — only role assignment was.
+## Improvement 1 — text reflow (the v1 honest failure, now fixed properly)
 
-**The fix.** `compileSpec()` now enforces the seed guarantee: any required hex carried
-by neither the background nor an element fill gets a deterministic decorative band on
-the bottom edge — a backdrop layer (behind content, so overlap semantics are
-unaffected), disclosed in `warnings` as "seed guarantee". Deterministic, in-canvas,
-overlap-safe.
+v1's model path failed `textFits`: a long model-written body line could not fit
+its box, and the engine correctly refused to truncate it. Phase A's fitter was
+single-line. The fix is wrap-aware composition:
 
-**The tests.** Two new cases in `compile.test.ts` (seed-guarantee describe): both seeds
-appear without accent-using compositions; the fallback band is a backdrop and the
-compile stays byte-identical. Suite: **47/47 passing** (45 prior + 2 new).
+- `wrapLines()` — greedy word-wrap under the plan-route width estimate; the
+  text itself is NEVER altered (the element keeps the full string — the
+  exact-text contract — and the renderer wraps it).
+- Compositions wrap-to-fit: font shrinks until the wrapped line count fits the
+  band; the element's box grows to the wrapped height, capped at the band.
+- The `textFits` check is wrap-aware too: no wrapped line wider than the box,
+  wrapped line count within the box height. A genuinely unfixable case (tiny
+  canvas, text too long even wrapped at floor size) still FAILS honestly with
+  the text intact — tested.
 
-## The honest failure: text fitting for long model copy
+The SVG render check was also upgraded honestly: SVG wrapping splits lines into
+`<tspan>`s and consumes break spaces, so render-level presence compares
+non-space characters in order; the strict whitespace-exact contract stays at
+compile level (single element, NFC equality).
 
-Path M's model-written body line ("Taste the finest apples from Kashmir's orchards…")
-does not fit its box, and the engine correctly **refuses to truncate required copy** —
-so `textFits` FAILS and `checks.passed` is false. This is the correct behavior, not a
-harness error: Phase A's fitter is single-line (estimateTextWidth), and model slots
-carry `maxWords` as a soft warning, not a cut. **Body-slot reflow/wrapping is exactly
-M2 scope in the pending FOSS United application ("design-output correctness")** — this
-run is the baseline measurement that milestone starts from, with a named, reproducible
-failure: a real planner's body copy overflows a single-line box.
+## Improvement 2 — semantic color placement (the band demoted to last resort)
+
+v1's seed guarantee emitted a decorative bottom-edge band when a required color
+wasn't drawn — mechanically correct, visually blunt. The placement is now
+semantic first:
+
+1. **Headline emphasis:** the hero's accent underline (a real design device)
+   is recolored to the missing seed. In the model path the amber `#F9A825`
+   now lands as the emphasis bar under the headline (pixel-verified: the only
+   amber on the rendered model poster, a 6px bar at y≈308).
+2. **Fallback band** only when no underline exists (e.g. a hero with a single
+   slot).
+
+Both placements are disclosed in `warnings`. Deterministic, in-canvas,
+overlap-safe, tested (underline case + band case + byte-identical recompiles).
 
 ## What this run deliberately did NOT exercise (no claims beyond it)
 
-- **No production AI provider.** The planner was z-ai GLM through the sandbox SDK —
-  a real model, but not Canvix's BYOK production path (user keys, provider adapters).
-  The spec-level contract it had to satisfy is the same one production providers face.
-- **No database or editor persistence.** The sandbox has no Postgres, so the
-  `/api/designs` route and the Konva editor stage were not driven; pages were rendered
-  through the export pipeline (`exportPageToSVG`) in Chromium instead.
-- **No wrapping/reflow, no vision-model review** (M2/M3 scope per the proposal).
-- Fonts render with browser fallbacks (SVG export uses font-family references by
-  design; viewers resolve them).
+- **No production AI provider.** The planner was z-ai GLM through the sandbox
+  SDK — a real model, but not Canvix's BYOK production path (user keys,
+  provider adapters). The spec-level contract it had to satisfy is the same one
+  production providers face.
+- **No Konva-stage pixel diff of the editor** (the editor proof verifies
+  document truth through the API + UI behavior; the render proof covers
+  pixels through the SVG pipeline).
+- **No vision-model review, no Devanagari/multi-script corpus** (M3 scope per
+  the proposal).
+- The editor e2e ran against a local Postgres 17 + `next dev` in this sandbox;
+  CI runs the same suite on every PR.
 
 ## Bottom line
 
-The Phase A foundation compiles a real-model spec into real, editable, spec-conformant
-pages rendered in a real browser — with the exact-text and color contracts verified at
-the pixel level, one genuine contract hole found and closed with tests, and the next
-milestone's work measured, named and reproducible rather than aspirational.
+The Phase A foundation now compiles a real-model spec into real, editable,
+spec-conformant pages — verified in a real browser AND created, edited, saved
+and reloaded through the real product with the exact-text contract intact
+across the roundtrip. Both v1 weaknesses that mattered (text fitting, band-only
+color fallback) are fixed with tests, and the third (no real-editor exercise)
+is closed with a persistent e2e spec. Remaining scope is exactly what the
+funding milestones fund: the production provider path, the multi-script brief
+corpus, and grounded visual review.

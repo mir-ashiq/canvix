@@ -16,9 +16,11 @@
 //   inCanvas     every element rect inside the canvas
 //   overlap      content elements are mutually disjoint (backdrops
 //                may sit under content — the declared channel)
-//   textFits     every text element fits its box at the plan-route
-//                width estimate; required copy is never truncated
-//                to achieve this — an unfit required text FAILS
+//   textFits     every text element fits its box WRAP-AWARE: no
+//                wrapped line wider than the box, wrapped line count
+//                within the box height; required copy is never
+//                truncated to achieve this — an unfit required text
+//                FAILS
 //   contrast     WCAG ≥ 4.5 for ink/inkSoft on the background, CTA
 //                text on its chip, card text on the card surface
 // ─────────────────────────────────────────────────────────────
@@ -28,7 +30,7 @@ import { asHex, type DesignSpec } from '@/lib/design-spec/types'
 import { expandPalette, onColor, type ExpandedPalette } from './palette'
 import { assignTypeScale, type AssignedTypography } from './typography'
 import { bandLayout, isInCanvas, rectsOverlap, type Rect } from './layout'
-import { buildBlock, estimateTextWidth } from './compositions'
+import { buildBlock, estimateTextWidth, wrapLines } from './compositions'
 import { contrast } from '@/lib/theme'
 
 const MIN_TEXT_CONTRAST = 4.5
@@ -117,32 +119,44 @@ export function compileSpec(spec: DesignSpec): CompileResult {
   // still never reach the page when no composition draws that role —
   // the model path dropped its second seed exactly this way. The
   // palette module's contract says required colors "always appear on
-  // the page"; the compiler makes that true: a required hex carried
-  // by neither the background nor an element fill gets a
-  // deterministic decorative band on the bottom edge. Backdrop layer
-  // — behind content, so overlap semantics are unaffected.
+  // the page"; the compiler makes that true, placing the color
+  // SEMANTICALLY first: (1) the hero accent underline — a real
+  // headline-emphasis device — is recolored to the missing seed;
+  // (2) only when no underline exists does a deterministic decorative
+  // band land on the bottom edge (backdrop layer, overlap-safe).
+  // Both placements are disclosed in warnings.
   const carried = (hex: string) =>
     eqHex(palette.roles.background, hex) ||
     [...backdrops, ...content].some(
       (el) => 'fill' in el && typeof el.fill === 'string' && eqHex(el.fill, hex),
     )
+  const isUnderline = (el: AnyElement): el is AnyElement & { fill: string } =>
+    el.type === 'rect' && 'fill' in el && typeof el.fill === 'string' && el.fill === palette.roles.accentSoft && el.height <= 8
   for (const hex of [...new Set([...spec.palette.seeds, ...Object.values(spec.palette.pinned ?? {})])]) {
     const clean = asHex(hex, '')
     if (clean !== '' && !carried(clean)) {
-      const bandHeight = Math.min(48, Math.max(12, Math.round(spec.format.height * 0.025)))
-      backdrops.push(
-        createShapeElement('rect', {
-          x: 0,
-          y: spec.format.height - bandHeight,
-          width: spec.format.width,
-          height: bandHeight,
-          fill: clean,
-          cornerRadius: 0,
-        }),
-      )
-      warnings.push(
-        `seed #${clean.slice(1).toUpperCase()} carried by no element — decorative band emitted (seed guarantee)`,
-      )
+      const underline = backdrops.find(isUnderline)
+      if (underline) {
+        underline.fill = clean
+        warnings.push(
+          `seed #${clean.slice(1).toUpperCase()} carried by no element — placed as headline emphasis (seed guarantee)`,
+        )
+      } else {
+        const bandHeight = Math.min(48, Math.max(12, Math.round(spec.format.height * 0.025)))
+        backdrops.push(
+          createShapeElement('rect', {
+            x: 0,
+            y: spec.format.height - bandHeight,
+            width: spec.format.width,
+            height: bandHeight,
+            fill: clean,
+            cornerRadius: 0,
+          }),
+        )
+        warnings.push(
+          `seed #${clean.slice(1).toUpperCase()} carried by no element — decorative band emitted (seed guarantee)`,
+        )
+      }
     }
   }
 
@@ -156,7 +170,9 @@ export function compileSpec(spec: DesignSpec): CompileResult {
 
   // ── the check report ──
   const failures: string[] = []
-  const textEls = elements.filter((el): el is AnyElement & { text: string; fontSize: number } => el.type === 'text')
+  const textEls = elements.filter(
+    (el): el is AnyElement & { text: string; fontSize: number; lineHeight?: number } => el.type === 'text',
+  )
 
   const exactTexts = spec.blocks
     .flatMap((b) => b.content)
@@ -184,10 +200,28 @@ export function compileSpec(spec: DesignSpec): CompileResult {
     .every((a, i, list) => list.every((b, j) => i === j || !rectsOverlap(a, b)))
   if (!noUnintendedOverlap) failures.push('content elements overlap (unintended)')
 
-  const textFits = textEls.every((el) => estimateTextWidth(el.text, el.fontSize) <= el.width + 1)
+  // wrap-aware: a text element fits when no wrapped line exceeds its
+  // width AND the wrapped line count fits its box height (the same
+  // greedy wrap the compositions use — the renderer wraps the element
+  // at its width, so this is the honest single-line-estimate upgrade)
+  const textFits = textEls.every((el) => {
+    const lines = wrapLines(el.text, el.width, el.fontSize)
+    const lineHeight = el.lineHeight ?? 1.3
+    return (
+      lines.every((ln) => estimateTextWidth(ln, el.fontSize) <= el.width + 1) &&
+      lines.length * Math.round(el.fontSize * lineHeight) <= el.height + 2
+    )
+  })
   if (!textFits) {
-    const offender = textEls.find((el) => estimateTextWidth(el.text, el.fontSize) > el.width + 1)
-    failures.push(`text does not fit its box: "${offender?.text.slice(0, 40)}" (required copy is never truncated — fix by reflow)`)
+    const offender = textEls.find((el) => {
+      const lines = wrapLines(el.text, el.width, el.fontSize)
+      const lineHeight = el.lineHeight ?? 1.3
+      return (
+        lines.some((ln) => estimateTextWidth(ln, el.fontSize) > el.width + 1) ||
+        lines.length * Math.round(el.fontSize * lineHeight) > el.height + 2
+      )
+    })
+    failures.push(`text does not fit its box even wrapped: "${offender?.text.slice(0, 40)}" (required copy is never truncated)`)
   }
 
   const contrastPairs: { pair: string; ratio: number }[] = [

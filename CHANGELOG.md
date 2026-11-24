@@ -5,6 +5,90 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Agent v0.29.3 — the failed CANVIX poster run, root-caused and
+  fixed end-to-end.** Reproduced from the production transcript (the
+  1080×1080 CANVIX promo prompt, 45 steps / 42 actions, P0 findings
+  after "success"): every class of failure below has a regression
+  test in `src/lib/agent/harness.test.ts` (86 tests total).
+  - `extractBrief` no longer manufactures phantom mandatory strings:
+    "Exact text only: …" produced the fake requirement `only:` (and
+    even a 300pt heading). The unquoted headline pattern now requires
+    a capitalized payload, rejects instruction stopwords ("only",
+    "exactly", …) and cannot cross quotes — the seven user strings
+    are preserved verbatim.
+  - Composite deliverables are contract fields, not decoration:
+    "a realistic editor mockup", "3 feature cards" and "glassmorphism"
+    extract into `requiredFeatures` and validate structurally (native
+    panel with inner elements; N semi-transparent rect+text cards;
+    rgba fills with borders) — the client's brief validation sends
+    element geometry so `validate_brief` checks them against the live
+    canvas.
+  - Structural compliance ≠ rendered compliance: the quality audit
+    computes each text's **effective backdrop** (z-order + rgba
+    compositing — intentional text-on-card layering is preserved, not
+    flagged), reports texts **obscured by opaque shapes above them**,
+    and uses the panel's **client-measured text widths** (canvas
+    measureText) instead of the 0.58×fontSize glyph-average estimate.
+    The page background is the ctx's real field only — never a
+    guessed dominant color.
+  - Required colors used **only as bare decorative strips** (thin
+    bars with nothing on them) are flagged: strips satisfied the
+    color check without being design.
+  - Brief-to-layout planning replaces the reactive add/move/fix
+    loop: `plan_layout` (read-risk pseudo-tool) reserves vertical
+    bands per section before building, the create-mode prompt
+    requires it, and the plan is streamed to the user.
+  - Grounded **vision critique runs BEFORE completion**, not after:
+    the loop asks the panel to screenshot the live canvas (the export
+    pipeline's `captureStage`, via the run bridge), critiques it with
+    the vision slot, feeds P0/P1 findings into ONE bounded correction
+    pass, re-captures and verifies. Unresolved P0 defects force an
+    `INCOMPLETE —` summary ("NOT visually verified"); a capture
+    timeout or unconfigured vision model is DISCLOSED, never silently
+    skipped.
+  - Action acks fail closed: a timed-out apply ack resolves
+    `ok:false` ("the client did NOT confirm the apply") instead of
+    "assumed applied" — the model is no longer told edits landed when
+    nobody confirmed them.
+  - The router no longer misroutes obvious build briefs to discuss:
+    "Create a premium … promo poster for CANVIX … 3 feature cards"
+    triggered the product-discuss guard on the words "canvix" and
+    "feature"; artifact-noun + build-verb + not-a-question now wins.
+  - Completion summaries are grounded: the document name (e.g.
+    "Music Festival") is declared a file name, not the deliverable;
+    the prompt separates "element exists" from "text is readable",
+    and the verification line reports brief/audit/vision outcomes
+    separately.
+  - File-configured providers no longer 401: `makeClient` dropped the
+    config-file's companion headers (X-Token / X-User-Id / X-Chat-Id),
+    so every provider resolved from `.z-ai-config` failed with
+    "missing X-Token header" the moment env pins were absent.
+
+  - v0.29.4 — chitchat can never start a build: greetings ("hi",
+    "thanks!", "ok cool"…) route to discuss with high confidence and
+    never reach the model router, where a provider with a bias could
+    invent a build task (and a canned aesthetic) out of pure
+    conversation. Real build briefs still route to create.
+  - v0.29.4 — three new design skills installed (research-grounded,
+    original text): **Glassmorphism & Layered Surfaces** (rgba fill +
+    visible border on the same native element, contrast checked
+    against the composited backdrop — NN/g and Axess Lab guidance),
+    **Realistic Product Mockups** (window chrome + toolbar + sidebar +
+    content as an 8–15-element native composite — one empty rectangle
+    is a placeholder, not a mockup), and **Visual Accessibility**
+    (WCAG floors, minimum type sizes, never meaning by color alone).
+    The failed CANVIX prompt now selects poster + glassmorphism +
+    mockups skills automatically.
+  - v0.29.4 — the system prompt now pins grounding and
+    verify-then-stop rules: the element list IS the live canvas
+    (never assume empty, never re-create, never invent imagery the
+    user did not ask for), and done is only allowed after the checks
+    actually ran — a check that cannot run is disclosed, not claimed.
+
+
+
 ### Added
 
 - **BYO-MCP — personal MCP tokens (v0.25)** — the MCP endpoint now has a

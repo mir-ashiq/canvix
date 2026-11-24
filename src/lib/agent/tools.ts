@@ -129,6 +129,64 @@ export const AGENT_TOOLS: AgentTool[] = [
       observation: 'Fresh page state attached as the next observation.',
     }),
   },
+  {
+    // v0.29.3: brief-to-layout planning. The model reserves the
+    // composition BEFORE building — the failed production runs
+    // placed text reactively (add → overlap → move → overlap…) for
+    // 40+ steps. A plan is displayed to the user and echoed back.
+    name: 'plan_layout',
+    description:
+      'Plan the composition before building: page background, sections with y-ranges and heights, and what each section contains. REQUIRED as the first call of a create run — reserve a vertical band per section (headline, tagline, features, mockup, CTA, footer) with ≥40px gaps so text never stacks.',
+    risk: 'read',
+    argsSpec: '{background?: "#RRGGBB", sections: [{name: string, y: number, height: number, contains: string}], notes?: string}',
+    sanitize: (args, ctx) => {
+      const sectionsRaw = args.sections
+      if (!Array.isArray(sectionsRaw) || sectionsRaw.length === 0) {
+        return { ok: false, error: '"sections" must be a non-empty array: [{name, y, height, contains}].' }
+      }
+      const lines: string[] = []
+      const H = ctx.height
+      for (const s of sectionsRaw.slice(0, 12)) {
+        if (!s || typeof s !== 'object') continue
+        const sec = s as Record<string, unknown>
+        const name = typeof sec.name === 'string' ? sec.name.trim().slice(0, 40) : ''
+        const y = num(sec as Record<string, unknown>, 'y')
+        const height = num(sec as Record<string, unknown>, 'height')
+        const contains = typeof sec.contains === 'string' ? sec.contains.trim().slice(0, 80) : ''
+        if (!name) return { ok: false, error: 'Each section needs a "name".' }
+        if (y === null || height === null || height <= 0) {
+          return { ok: false, error: `Section "${name}" needs numeric y and height (> 0).` }
+        }
+        lines.push(`${name}: y=${Math.round(y)} h=${Math.round(height)}${contains ? ` — ${contains}` : ''}`)
+      }
+      if (!lines.length) return { ok: false, error: '"sections" contained no usable entries.' }
+      const bg = hex(args, 'background')
+      if (bg) lines.unshift(`page background ${bg}`)
+      const notes = typeof args.notes === 'string' ? args.notes.trim().slice(0, 200) : ''
+      if (notes) lines.push(`notes: ${notes}`)
+      // sanity: sections inside the page, in order, not stacked
+      const sorted = [...sectionsRaw]
+        .map((s) => s as Record<string, unknown>)
+        .map((s) => ({ y: num(s, 'y') ?? 0, h: num(s, 'height') ?? 0 }))
+        .sort((a, b) => a.y - b.y)
+      const problems: string[] = []
+      if (sorted.length) {
+        const last = sorted[sorted.length - 1]
+        if (last.y + last.h > H * 1.02) problems.push(`the last section ends at y=${Math.round(last.y + last.h)} — beyond the ${H}px page`)
+        for (let i = 1; i < sorted.length; i++) {
+          if (sorted[i].y < sorted[i - 1].y + sorted[i - 1].h - 24) {
+            problems.push(`sections ${i} and ${i + 1} overlap or have <24px gap at y=${Math.round(sorted[i].y)}`)
+          }
+        }
+      }
+      const observation = `PLAN RECORDED (${lines.length} lines):\n${lines.join('\n')}${problems.length ? `\nPLAN WARNINGS: ${problems.join('; ')} — revise the bands before building.` : '\nBands verified non-overlapping.'}`
+      return {
+        ok: true,
+        actions: [{ type: '__planLayout', lines }],
+        observation,
+      }
+    },
+  },
 
   // ── add elements ───────────────────────────────────────────
   {

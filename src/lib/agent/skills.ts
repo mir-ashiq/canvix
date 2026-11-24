@@ -325,6 +325,103 @@ export const DESIGN_SKILLS: DesignSkill[] = [
       ],
     },
   },
+  {
+    // v0.29.4: the failed CANVIX production run asked for glassmorphism
+    // and got opaque rectangles — the concept had no skill behind it.
+    // Playbook informed by public craft standards (NN/g glassmorphism
+    // guidance; Axess Lab contrast rules): original Canvix text.
+    id: 'glassmorphism-ui',
+    name: 'Glassmorphism & Layered Surfaces',
+    description: 'Frosted-glass panels, translucent cards, depth layering — rgba fills with visible borders, native and editable.',
+    whenToUse: ['glassmorphism', 'glass', 'frosted', 'translucent', 'transparency', 'blur', 'frosted glass', 'glass panel'],
+    modes: ['create', 'improve', 'plan', 'edit'],
+    version: '1.0.0',
+    playbook: {
+      principles: [
+        'Glass = rgba fill + visible border, never a solid guess: fill "rgba(R,G,B,0.05–0.25)" over a dark or gradient page, border 1px "rgba(R,G,B,0.25–0.5)". Both are set on the SAME native element (add_shape then update_elements with stroke).',
+        'Contrast is the non-negotiable: text on glass is checked against the COMPOSITED backdrop (fill over page), not the page alone. White/near-white text on dark glass; dark text only on light glass ≥ 0.5 alpha. If 4.5:1 body / 3:1 large fails, raise the fill alpha before touching the text.',
+        'Keep glass surfaces SMALL and purposeful (cards, one hero panel, one nav bar) — never the whole canvas; large frosted areas read as fog, not depth.',
+        'One glass system per design: every panel uses the SAME fill alpha, border alpha and corner radius; consistency is what sells the material.',
+        'Rounded corners on every glass surface (16–28px at 1080-canvas scale); sharp glass reads as a bug.',
+        'Content sits INSIDE the glass with 24–32px padding on all sides — text touching a glass edge is a clipped composition error.',
+      ],
+      planning: [
+        'Set the page background first (solid dark or gradient) — glass is invisible on white pages.',
+        'Reserve each glass panel\'s bounding box in the layout plan before building; text and inner UI get their own elements on top.',
+        'Build order: background → glass panels → panel content (text, icons, inner bars) → decorative accents last.',
+        'For feature cards: one glass rect per card with its text centered inside — the card and the text are separate native elements (both editable later).',
+      ],
+      validation: [
+        'Every glass element has BOTH a semi-transparent fill AND a visible border (check via get_page_state: fill + stroke).',
+        'Text on every glass surface passes contrast against the composited backdrop.',
+        'All glass panels share the same alpha, border and radius system; no panel is fully opaque.',
+        'Nothing overflows its glass panel\'s bounds (measure_text for the card labels).',
+      ],
+    },
+  },
+  {
+    // v0.29.4: "realistic editor mockup" was delivered as one empty
+    // rectangle in the failed run. This skill is how it becomes a
+    // real, native, editable product UI composite.
+    id: 'realistic-mockups',
+    name: 'Realistic Product Mockups',
+    description: 'Editor/app/dashboard mockups built from native elements: window chrome, toolbar, sidebar, content area, buttons — believable at a glance, fully editable.',
+    whenToUse: ['mockup', 'mock up', 'editor mockup', 'app mockup', 'ui mockup', 'screenshot mockup', 'browser mockup', 'device mockup', 'dashboard mockup', 'wireframe'],
+    modes: ['create', 'improve', 'plan', 'edit'],
+    version: '1.0.0',
+    playbook: {
+      principles: [
+        'A believable mockup is a COMPOSITE: outer window (rounded rect, glass fill, border) + title bar (~28–36px tall with 3 dot buttons) + toolbar strip + sidebar (~15% width) + content area + 2–4 real content blocks. One empty rectangle is a placeholder, not a mockup.',
+        'Chrome proportions sell it: title bar dots are 8–12px circles spaced 8px apart; toolbar buttons are 24–40px rects with 8px gaps; sidebar items are 12–15px tall with 10px gaps. Everything inside 8–12px inset from the window edge.',
+        'The content area shows REAL content (a mini canvas with 2–3 shapes, text lines as light rects or actual text elements) — an empty gray box reads as a wireframe, not a product.',
+        'Keep the whole mockup on ONE z-order stack: window rect FIRST (bottom), chrome above it, content on top — build in that order so nothing hides.',
+        'Scale honestly: a mockup in a 1080 poster is 300–600px wide — its inner text uses 10–14px, chrome 8–12px. Micro text below 10px is noise; leave it out.',
+        'One mockup per poster is the hero; more than one competes with the headline.',
+      ],
+      planning: [
+        'Reserve the mockup\'s full bounding box in the layout plan (typically the visual center or lower-right band).',
+        'List the parts before building: window, title bar, dots, toolbar, buttons, sidebar, sidebar items, content blocks. 8–15 native elements total.',
+        'Build window → chrome → content in z-order; use the SAME corner radius on window and inner panels.',
+        'Give the mockup one accent-color detail (the primary button or selection highlight) so it ties into the poster\'s palette.',
+      ],
+      validation: [
+        'The mockup panel is ≥160×110 with ≥4 inner native elements (≥1 non-text) — a real composite, not one rect.',
+        'No inner element crosses the window\'s bounds; chrome respects the 8–12px inset.',
+        'Contrast for any readable inner text passes 3:1 against its immediate backdrop; decorative micro-blocks stay decorative.',
+        'The mockup reads as a product at 50% zoom (squint test) — clear title bar, clear toolbar, clear content.',
+      ],
+    },
+  },
+  {
+    // v0.29.4: the audit computes WCAG numbers; this skill teaches the
+    // model to design for them instead of fixing them after the fact.
+    id: 'visual-accessibility',
+    name: 'Visual Accessibility',
+    description: 'WCAG 2.x contrast, readable type sizes, color-blind-safe accents, focus-safe palettes — design everyone can read.',
+    whenToUse: ['accessib', 'wcag', 'contrast', 'readable', 'legible', 'color blind', 'colorblind', 'low vision', 'a11y'],
+    modes: ['create', 'improve', 'plan', 'review', 'edit'],
+    version: '1.0.0',
+    playbook: {
+      principles: [
+        'Contrast floors: 4.5:1 body text, 3:1 large text (≥24px or ≥18.66px bold) — against the text\'s ACTUAL backdrop (card fill composited over page), never a guessed page color.',
+        'Minimum type sizes: 14px floor on 1080-wide canvases (11px only for legal footnotes); body 16–20px; the poster headline 60–160px.',
+        'Never encode meaning by color alone: pair accent colors with weight, underline or position (the CTA pill shape, not just a tint).',
+        'Safe accent pairs for color-blind vision: blue/orange, teal/magenta, blue+yellow — avoid red/green-only distinctions.',
+        'Dark-mode text is off-white (#F4F5F7-class), never pure #FFF; large pure-white fields glare.',
+        'Opacity floors: text fill alpha ≥ 0.85; anything fainter is a watermark, not content.',
+      ],
+      planning: [
+        'Pick the background first, then derive text colors that clear the floors — not the reverse.',
+        'For every text/background pair in the plan, state the expected contrast tier (body/large) before placing elements.',
+        'Budget one high-contrast accent (≥3:1 vs background) for the single most important element (the CTA).',
+      ],
+      validation: [
+        'Every text element passes its contrast floor against its effective backdrop.',
+        'No text below 14px (except legal fine print at 11px).',
+        'The CTA is distinguishable by shape or position, not color alone.',
+      ],
+    },
+  },
 ]
 
 /** Router: match a user message + mode against skill metadata.

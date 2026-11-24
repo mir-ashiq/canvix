@@ -348,7 +348,11 @@ export async function providersSummary(): Promise<ProvidersSummary> {
 // ── SDK client construction ──────────────────────────────────
 
 /** Construct an SDK client directly from resolved config (server-side only). */
-export async function makeClient(baseUrl: string, apiKey: string): Promise<import('z-ai-web-dev-sdk').default> {
+export async function makeClient(
+  baseUrl: string,
+  apiKey: string,
+  headers?: Record<string, string>,
+): Promise<import('z-ai-web-dev-sdk').default> {
   const { default: ZAI } = await import('z-ai-web-dev-sdk')
   // v0.16.2 (A2): construct the SDK DIRECTLY with the resolved config.
   //
@@ -366,9 +370,30 @@ export async function makeClient(baseUrl: string, apiKey: string): Promise<impor
   // create()), but the shipped dist/index.js declares a plain public
   // `constructor(config)` — verified against the installed package.
   // Cast to a constructor signature; the runtime shape matches.
-  type ZAIConstructor = new (config: { baseUrl: string; apiKey: string }) => import('z-ai-web-dev-sdk').default
+  // v0.29.3: the SDK constructor also accepts token / userId / chatId
+  // and turns them into the X-Token / X-User-Id / X-Chat-Id headers the
+  // internal gateway requires (verified in the shipped dist). The
+  // config-FILE layer resolves those companion fields, but makeClient
+  // dropped them — every file-configured provider 401'd with "missing
+  // X-Token header" the moment env pins were absent. Pass them through.
+  type ZAIConstructor = new (config: {
+    baseUrl: string
+    apiKey: string
+    token?: string
+    userId?: string
+    chatId?: string
+  }) => import('z-ai-web-dev-sdk').default
   const Ctor = ZAI as unknown as ZAIConstructor
-  return new Ctor({ baseUrl, apiKey })
+  const token = headers?.['X-Token']?.trim()
+  const userId = headers?.['X-User-Id']?.trim()
+  const chatId = headers?.['X-Chat-Id']?.trim()
+  return new Ctor({
+    baseUrl,
+    apiKey,
+    ...(token ? { token } : {}),
+    ...(userId ? { userId } : {}),
+    ...(chatId ? { chatId } : {}),
+  })
 }
 
 /** A usable client plus the model id its slot wants (undefined = default). */
@@ -387,7 +412,7 @@ export async function getClientForSlot(slot: AiSlot): Promise<ProviderContext | 
   const resolved = await resolveSlot(slot)
   if (!resolved) return null
   try {
-    const zai = await makeClient(resolved.baseUrl, resolved.apiKey)
+    const zai = await makeClient(resolved.baseUrl, resolved.apiKey, resolved.headers)
     return { zai, model: resolved.model, label: resolved.label, source: resolved.source }
   } catch (err) {
     console.error(`[ai] provider initialization failed (${slot})`, err)
@@ -405,7 +430,7 @@ export async function getClientForSlotForUser(slot: AiSlot, userId: string | nul
   const resolved = await resolveSlotForUser(slot, userId)
   if (!resolved) return null
   try {
-    const zai = await makeClient(resolved.baseUrl, resolved.apiKey)
+    const zai = await makeClient(resolved.baseUrl, resolved.apiKey, resolved.headers)
     return { zai, model: resolved.model, label: resolved.label, source: resolved.source }
   } catch (err) {
     console.error(`[ai] provider initialization failed (${slot}, user rail)`, err)
@@ -639,7 +664,7 @@ export async function withProvider(
   let ctx: ProviderContext | null = null
   if (resolved) {
     try {
-      const zai = await makeClient(resolved.baseUrl, resolved.apiKey)
+      const zai = await makeClient(resolved.baseUrl, resolved.apiKey, resolved.headers)
       ctx = { zai, model: resolved.model, label: resolved.label, source: resolved.source }
     } catch (err) {
       console.error(`[ai] provider initialization failed (${slot}${user ? `, user ${user.username}` : ''})`, err)

@@ -93,6 +93,13 @@ export type AgentEvent =
   | { v: number; type: 'observation'; stepIndex: number; message: string }
   /** periodic run telemetry — turns, tool calls, wall ms, model calls */
   | { v: number; type: 'usage'; turns: number; toolCalls: number; elapsedMs: number; modelCalls: number }
+  /** v0.29.3: the loop asks the CLIENT to screenshot the live canvas
+   *  (the export pipeline's captureStage) mid-run, BEFORE completion —
+   *  the grounded vision critique runs on the real render, not the
+   *  model's imagination. The panel answers on the bridge with
+   *  {capture: {image}}; a timeout is answered with null and the run
+   *  DISCLOSES that visual verification was unavailable (fail-closed). */
+  | { v: number; type: 'capture'; purpose: string }
   /** the loop compacted older history — the panel may show "context trimmed" */
   | { v: number; type: 'compact'; fromMessages: number; toMessages: number }
   | { v: number; type: 'done'; summary: string; steps: number; toolCalls: number; verification?: string }

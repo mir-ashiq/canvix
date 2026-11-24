@@ -14,7 +14,9 @@ import { heuristicMode, parseMode, ROUTER_SYSTEM, modeAllowsWrites, MODE_TOOL_RI
 import { runAgentLoop, toolsForMode } from '@/lib/agent/loop'
 import { auditDesign as runDesignAudit } from '@/lib/agent/audit'
 import { selectSkills } from '@/lib/agent/skills'
-import { extractBrief } from '@/lib/agent/brief'
+import { extractBrief, type DesignBrief } from '@/lib/agent/brief'
+import { critiqueWithVision } from '@/lib/agent/vision'
+import { getClientForSlot } from '@/lib/ai/provider'
 
 export const runtime = 'nodejs'
 export const maxDuration = 800
@@ -60,6 +62,10 @@ interface RunBridge {
   /** briefResult that arrived before the loop asked (the panel answers
    *  immediately on seeing the action event) — consumed first */
   pendingBriefResult: { satisfied: boolean; unmet: string[] } | null
+  /** v0.29.3: canvas capture pushed by the client (the loop's
+   *  in-run vision critique) — resolves with the image dataURL or
+   *  null (timeout) */
+  capture: ((r: { image: string } | null) => void) | null
   /** the latest context the client pushed (after applying actions) */
   latestDesign: AgentDesignCtx
   /** client-abort flag (Stop button closes the stream; the route
@@ -75,11 +81,36 @@ function newRunId(): string {
   return `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+/** v0.29.3: one grounded vision critique of a REAL captured
+ *  screenshot — shared by the loop's pre-completion round. Resolves
+ *  null when the vision slot is unconfigured or the call fails (the
+ *  caller then discloses, never pretends). */
+async function critiqueRoute(
+  image: string,
+  brief: DesignBrief | null,
+  design: AgentDesignCtx,
+): Promise<{ findings: { severity: 'P0' | 'P1' | 'P2' | 'P3'; issue: string; fix?: string }[]; note: string } | null> {
+  if (!image.startsWith('data:image/')) return null
+  const vision = await getClientForSlot('vision')
+  if (!vision) return null
+  // same structural cast the route's chat fn uses — the SDK's typed
+  // create() accepts our body shape at runtime
+  const client = vision.zai as unknown as Parameters<typeof critiqueWithVision>[0]
+  return critiqueWithVision(client, image, {
+    brief: brief
+      ? { requiredTexts: brief.requiredTexts, requiredColors: brief.requiredColors }
+      : undefined,
+    stateSummary: serializeDesignContext(design),
+    model: vision.model,
+  })
+}
+
 async function __canvix_post(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as AgentBody & {
     confirm?: { tool: string; ok: boolean }
     ack?: { ok: boolean; message?: string; design?: AgentDesignCtx }
     briefResult?: { satisfied: boolean; unmet: string[] } | null
+    capture?: { image: string } | null
   }
   const message = (body.message ?? '').trim().slice(0, 2000)
 
@@ -113,6 +144,15 @@ async function __canvix_post(req: NextRequest) {
       } else if (body.briefResult) {
         // early answer (loop not waiting yet) — queue it
         bridge.pendingBriefResult = body.briefResult
+      }
+    }
+    // v0.29.3: the panel's mid-run canvas capture (dataURL screenshot
+    // taken with the export pipeline) for the loop's vision critique
+    if (body.capture !== undefined) {
+      const resolve = bridge.capture
+      if (resolve) {
+        bridge.capture = null
+        resolve(body.capture)
       }
     }
     return new Response(JSON.stringify({ ok: true }), { status: 200 })
@@ -264,6 +304,7 @@ async function __canvix_post(req: NextRequest) {
             acks: [],
             briefResult: null,
             pendingBriefResult: null,
+            capture: null,
             latestDesign: design,
             aborted: false,
           }
@@ -301,11 +342,41 @@ async function __canvix_post(req: NextRequest) {
               awaitApply: () =>
                 new Promise<{ ok: boolean; message?: string }>((resolve) => {
                   bridge.acks.push((ack) => resolve({ ok: ack.ok, message: ack.message }))
-                  setTimeout(() => resolve({ ok: true, message: 'ack timeout — assumed applied' }), 60_000)
+                  // v0.29.3 — FAIL CLOSED: a timed-out apply ack now
+                  // resolves ok:false. The old "ack timeout — assumed
+                  // applied" let the model believe edits landed when
+                  // the client never confirmed them, so it built on a
+                  // fiction and the completion summary described work
+                  // that was never applied. The model is told the
+                  // action was NOT applied; it can retry or finish
+                  // honestly.
+                  setTimeout(
+                    () => resolve({ ok: false, message: 'ack timeout — the client did NOT confirm the apply; the document was not verified as changed. Retry once, or verify with get_page_state.' }),
+                    60_000,
+                  )
                 }),
+              // v0.29.3: the loop's mid-run capture — the panel answers
+              // on the bridge with {capture: {image: dataUrl}}. A
+              // silent client resolves null and the run DISCLOSES that
+              // visual verification was unavailable (never pretends).
+              captureCanvas: () =>
+                new Promise<string | null>((resolve) => {
+                  bridge.capture = (r) => resolve(r?.image ?? null)
+                  setTimeout(() => {
+                    if (bridge.capture) {
+                      bridge.capture = null
+                      resolve(null)
+                    }
+                  }, 45_000)
+                }),
+              // v0.29.3: the grounded vision critique, BEFORE completion.
+              // Unconfigured vision slot → null → the loop discloses.
+              critique: (image) =>
+                critiqueRoute(image, brief, bridge.latestDesign ?? design).then((r) => r ?? null),
               refreshedContext: () => bridge.latestDesign,
               // v0.29: audit the freshest design snapshot the panel acked
-              auditDesign: () => runDesignAudit(bridge.latestDesign ?? design),
+              // (v0.29.3: the brief rides along for strip detection)
+              auditDesign: () => runDesignAudit(bridge.latestDesign ?? design, brief),
               validateBriefOnClient: async () => {
                 // consume an early answer first, then wait for a live one
                 if (bridge.pendingBriefResult) {

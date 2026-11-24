@@ -34,6 +34,7 @@ import { serializeDesignContext, contextValidIds, type AgentDesignCtx } from './
 import { MODE_PROMPTS, MODE_TOOL_RISK } from './router'
 import { skillsPromptSection, selectSkills, type DesignSkill } from './skills'
 import { briefPromptSection, type DesignBrief } from './brief'
+import type { VisionCritiqueResult } from './vision'
 
 /** The model client the loop needs — a thin callable so the loop is
  *  unit-testable without the SDK. */
@@ -49,6 +50,14 @@ export interface LoopDeps {
    *  (contrast/overlap/overflow heuristics). The loop runs ONE
    *  auto-fix round on its findings before accepting done. */
   auditDesign?: () => string[] | Promise<string[]>
+  /** v0.29.3: ask the CLIENT to screenshot the live canvas (the real
+   *  render) — resolved with a dataURL, or null on timeout/absence
+   *  (fail-closed: visual verification is then DISCLOSED as
+   *  unavailable, never silently skipped). */
+  captureCanvas?: () => Promise<string | null>
+  /** v0.29.3: grounded vision critique of a captured screenshot.
+   *  Null when no vision model is configured — the run says so. */
+  critique?: (image: string) => Promise<VisionCritiqueResult | null>
   /** skills pre-selected by the route (or auto-selected here) */
   skills?: DesignSkill[]
   /** emitted (by the route) as SSE lines */
@@ -59,7 +68,11 @@ export interface LoopDeps {
   signal?: { aborted: boolean; reason?: string }
   /** resolve a destructive tool's confirmation (route bridges the SSE pause) */
   awaitConfirm?: (tool: string) => Promise<boolean>
-  /** wait for the client's apply ack */
+  /** wait for the client's apply ack. v0.29.3: the route's
+   *  implementation FAILS CLOSED — a timed-out ack resolves
+   *  {ok:false} so the model is told the action was NOT applied
+   *  instead of being told it succeeded. (The undefined default
+   *  exists for the unit-test harness, which has no bridge.) */
   awaitApply?: () => Promise<{ ok: boolean; message?: string }>
   /** latest refreshed design context pushed by the client after applying */
   refreshedContext?: () => AgentDesignCtx
@@ -121,6 +134,19 @@ export function loopSystemPrompt(deps: {
     if (section) lines.push(section, '')
   }
 
+  if (mode === 'create' || mode === 'improve') {
+    lines.push(
+      'LAYOUT PLANNING (required first step):',
+      '· Call plan_layout FIRST with your composition: page background, sections with y-ranges, what each contains (headline band, tagline, feature cards row, mockup, CTA, footer).',
+      '· Reserve a vertical band per section with ≥40px gaps so nothing stacks or crowds; the brief texts each get their section.',
+      '· Set the page background EARLY with set_background (a required background color belongs there, not in strips).',
+      '· Build section by section after the plan. NEVER add bare decorative bars/strips just to include a required color — use colors as the page background, text fills, or real panel/card fills.',
+      '· A realistic editor mockup = a large native panel (rounded rect, glass fill, border) CONTAINING inner native elements (toolbar bar, sidebar, canvas area, buttons) — not one empty rectangle.',
+      '· Feature cards = one semi-transparent rect + its text per card. Glassmorphism = rgba fills with visible borders.',
+      '',
+    )
+  }
+
   const skillSection = skillsPromptSection(skills ?? [])
   if (skillSection) lines.push(skillSection, '')
 
@@ -137,6 +163,9 @@ export function loopSystemPrompt(deps: {
     '7. Args must match each tool spec exactly. On an error observation, fix the args and retry — the error message tells you what to change.',
     '8. Tools edit the CURRENT page only. To work on another page: goto_page {page: N}, then get_page_state — ids change with the page. add_page appends the LAST page.',
     '9. In review/explain mode, ground every claim in the state you read. Report missing items as missing — never describe them as present.',
+    '10. The document name in the context (e.g. "Music Festival") is just the FILE this request happens to run in — your summary describes what YOU BUILT FOR THIS REQUEST, never the document name. Distinguish "element exists" from "text is readable": only verified readable text counts as done.',
+    '11. GROUND IN THE LIVE DESIGN: the element list above IS the current canvas (bottom-to-top z-order; the page background line is real). Build on THAT state — never assume an empty canvas, never re-create what already exists, and never invent imagery or a topic the user did not ask for. If the state looks stale, call get_page_state before acting.',
+    '12. Verify-then-stop: before done, see what you actually built — get_page_state for structure, validate_brief for the contract, and (when the run critiques the captured canvas) the vision findings for what is REALLY visible. Fix what the checks report; only then finish. If a check cannot run, say so in the summary instead of claiming it passed.',
   )
   return lines.join('\n')
 }
@@ -195,6 +224,15 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
   let briefValidated = false
   /** v0.29: quality-audit fix rounds already used (max 1 per run) */
   let auditRounds = 0
+  /** v0.29.3: grounded vision passes already run (max 2 — initial
+   *  critique + verification after the correction round) */
+  let visionCritiques = 0
+  /** v0.29.3: vision-driven correction rounds used (max 1 per run) */
+  let visionCorrections = 0
+  /** findings from the LAST vision critique (surface in the result) */
+  let visionFindings: { severity: 'P0' | 'P1' | 'P2' | 'P3'; issue: string; fix?: string }[] | undefined
+  /** true when the final vision pass still saw P0 defects */
+  let visionBlocked = false
   /** done turns rejected by the brief gate — a model that keeps
    *  claiming completion without fixing the unmet items must not
    *  loop forever (LangChain's "declare it blocked" pattern). */
@@ -368,8 +406,81 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
             : `Quality audit still reports ${issues.length} issue(s) after the fix round — disclosed, not blocking.`
         }
       }
+
+      // ── VISION ROUND (v0.29.3): grounded critique of the REAL
+      // rendered canvas BEFORE completion is accepted. The failed
+      // production runs critiqued AFTER claiming success — P0
+      // findings ("CANVIX missing", clipped text, duplicates) could
+      // never influence the design. Bounded: one critique now, one
+      // correction round, one verification re-capture. A run whose
+      // final capture still shows P0 defects does NOT claim success.
+      if ((mode === 'create' || mode === 'improve') && deps.critique && visionCritiques < 2) {
+        const shot = deps.captureCanvas ? await deps.captureCanvas() : null
+        if (!shot) {
+          // fail-closed: no capture → visual quality is NOT verified,
+          // and the summary says so instead of implying it
+          verification = verification
+            ? `${verification} Visual critique UNAVAILABLE (canvas capture timed out or no client) — geometry checks only; visual quality NOT verified.`
+            : 'Visual critique UNAVAILABLE (canvas capture timed out or no client) — geometry checks only; visual quality NOT verified.'
+          visionCritiques = 2 // don't retry the capture path this run
+        } else {
+          visionCritiques += 1
+          const critique = await deps.critique(shot)
+          if (!critique) {
+            verification = verification
+              ? `${verification} Visual critique unavailable (no vision model configured or provider error) — geometry checks only; visual quality NOT verified.`
+              : 'Visual critique unavailable (no vision model configured or provider error) — geometry checks only; visual quality NOT verified.'
+            visionCritiques = 2
+          } else {
+            visionFindings = critique.findings
+            const critical = critique.findings.filter((f) => f.severity === 'P0' || f.severity === 'P1')
+            const emitList = critique.findings.map((f) => `${f.severity} ${f.issue}`).join('\n')
+            if (critical.length && visionCorrections === 0) {
+              // one bounded correction pass: feed the grounded P0/P1
+              // findings to the model, let it fix, then the NEXT done
+              // attempt re-captures and verifies (visionCritiques is
+              // already 1, so one more pass is allowed)
+              visionCorrections += 1
+              emit({
+                v: AGENT_PROTOCOL_VERSION,
+                type: 'observation',
+                stepIndex: steps,
+                message: `VISION CRITIQUE (grounded in the rendered canvas):\n${emitList}\nA correction pass for the P0/P1 findings follows; P2/P3 are advisory.`,
+              })
+              messages.push({
+                role: 'user',
+                content: `VISION CRITIQUE of the RENDERED canvas (a real screenshot — these are grounded findings, not guesses):\n${emitList}\nFix the P0 and P1 findings now with concrete tool calls (missing text → add it verbatim; clipped/hidden text → resize, move or reorder; duplicates → delete the extras; contrast → change fills). Do not restate your plan — act, then emit done again.`,
+              })
+              continue
+            }
+            // verification state after the final pass
+            const remainingP0 = critique.findings.filter((f) => f.severity === 'P0')
+            if (remainingP0.length) {
+              visionBlocked = true
+              verification = `NOT visually verified — ${remainingP0.length} P0 visual defect(s) remain on the rendered canvas:\n${remainingP0.map((f) => `· ${f.issue}`).join('\n')}\nThe design is NOT confirmed correct; the issues above need a follow-up.`
+              summary = `INCOMPLETE — P0 visual defects remain after the correction pass. ${summary}`
+            } else if (critical.length) {
+              verification = verification
+                ? `${verification} Visual critique: P1/P2/P3 findings remain (disclosed) — no P0 defects on the rendered canvas.`
+                : `Visual critique: P1/P2/P3 findings remain (disclosed) — no P0 defects on the rendered canvas.`
+            } else {
+              verification = verification
+                ? `${verification} Visual verification PASSED against the rendered canvas — all required content visibly readable.`
+                : 'Visual verification PASSED against the rendered canvas — all required content visibly readable.'
+            }
+          }
+        }
+      }
+
       emit({ v: AGENT_PROTOCOL_VERSION, type: 'done', summary, steps, toolCalls, verification })
-      return { summary, steps, toolCalls, findings: turn.findings, plan: turn.plan, verification }
+      return {
+        summary,
+        steps,
+        toolCalls,
+        findings: [...(turn.findings ?? []), ...(visionFindings ?? [])],
+        plan: turn.plan,
+        verification,
+      }
     }
 
     // ── a tool call ──────────────────────────────────────────
@@ -400,12 +511,29 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
     const args = (turn.args && typeof turn.args === 'object' && !Array.isArray(turn.args) ? turn.args : {}) as Record<string, unknown>
     const result = tool.sanitize(args, toolCtx)
 
+    // plan_layout (v0.29.3): read-only planning pseudo-tool — the
+    // plan is streamed to the user (the 'plan' event) and echoed as
+    // an observation. No apply/ack round trip: a plan changes nothing.
+    if (toolName === 'plan_layout' && result.ok) {
+      const planLines = (result.actions as { type: string; lines?: string[] }[])
+        .flatMap((a) => (a && a.type === '__planLayout' && Array.isArray(a.lines) ? a.lines : []))
+      const lines = planLines.length ? planLines : ['(model emitted an empty plan)']
+      emit({ v: AGENT_PROTOCOL_VERSION, type: 'plan', steps: lines })
+      emit({ v: AGENT_PROTOCOL_VERSION, type: 'observation', stepIndex: steps, message: result.observation })
+      steps += 1
+      markProgress()
+      messages.push({
+        role: 'user',
+        content: `${result.observation}\nNow execute the plan: set_background first, then build section by section. Adjust the plan as reality demands — the plan is a reservation of space, not a cage.`,
+      })
+      continue
+    }
+
     // validate_brief is a read-only pseudo-action: the client answers
     // on the bridge (briefResult), so there is NO apply/ack round
     // trip — awaiting one dropped the client's early answer (found by
     // the live NIM eval: 60s ack timeout + lost validation result)
-    if (toolName === 'validate_brief' && deps.validateBriefOnClient) {
-      emit({
+    if (toolName === 'validate_brief' && deps.validateBriefOnClient) {      emit({
         v: AGENT_PROTOCOL_VERSION,
         type: 'action',
         stepIndex: steps,

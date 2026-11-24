@@ -276,6 +276,10 @@ const FEATURE_SLOTS: Record<string, AiSlot> = {
   theme: 'text', // AI theme generation
   'alt-text': 'vision', // image alt text (vision slot — image understanding)
   video: 'video', // text-to-video generation
+  // v0.30 (DesignAgent, Phase B): the autonomous design pipeline
+  // plans on the text slot; its vision critique resolves separately
+  // inside the route (optional — disclosed as unavailable without it)
+  'design-agent': 'text',
 }
 
 /** Async probe — does THIS slot have a provider behind it? */
@@ -610,6 +614,8 @@ const FEATURE_FLAGS: Record<string, AiFeature> = {
   theme: 'themeGeneration',
   'alt-text': 'altText',
   video: 'videoGeneration',
+  // v0.30 (DesignAgent, Phase B):
+  'design-agent': 'designAgent',
 }
 
 export const FEATURE_DISABLED = {

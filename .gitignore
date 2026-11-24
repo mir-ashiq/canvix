@@ -90,3 +90,7 @@ mini-services/
 /test-results/
 /playwright-report/
 core
+
+# design-agent acceptance/benchmark artifacts (kept in download/, not the repo)
+/scripts/designspec-agent/
+/scripts/designspec-browser-bundle.js

@@ -353,6 +353,13 @@ export const AGENT_TOOLS: AgentTool[] = [
       }
       const patch: Record<string, unknown> = {}
       const p = patchRaw as Record<string, unknown>
+      // v0.29.2 (prod eval): models habitually spell the text colour
+      // `color` / `fontColor` / `textColor`. Map the aliases instead of
+      // striking — a rejected patch burned three strikes on canvix.app
+      // and killed an otherwise-complete design.
+      for (const alias of ['color', 'fontColor', 'textColor'] as const) {
+        if (p[alias] !== undefined && p.fill === undefined) p.fill = p[alias]
+      }
       for (const key of ['x', 'y', 'width', 'height', 'rotation', 'lineHeight', 'letterSpacing', 'curve'] as const) {
         if (p[key] !== undefined) {
           const v = num(p as Record<string, unknown>, key)
@@ -391,7 +398,12 @@ export const AGENT_TOOLS: AgentTool[] = [
       }
       if (p.align !== undefined) patch.align = enumVal(p as Record<string, unknown>, 'align', ['left', 'center', 'right'] as const, 'center')
       if (Object.keys(patch).length === 0) {
-        return { ok: false, error: 'patch is empty — set at least one supported property (see the tool spec).' }
+        const sent = Object.keys(p).filter((k) => k !== 'ids')
+        const valid = ['x', 'y', 'width', 'height', 'rotation', 'text', 'fill', 'fontSize', 'bold', 'italic', 'underline', 'strike', 'uppercase', 'align', 'lineHeight', 'letterSpacing', 'curve', 'flipH', 'flipV', 'brightness', 'contrast', 'saturation', 'locked', 'visible', 'opacity']
+        return {
+          ok: false,
+          error: `patch had no supported property. You sent: [${sent.join(', ')}]. Valid properties: [${valid.join(', ')}]. The text colour property is named fill.`,
+        }
       }
       return {
         ok: true,

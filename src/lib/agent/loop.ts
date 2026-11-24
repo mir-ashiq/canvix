@@ -236,6 +236,15 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
 
     // ── resource guards (machine protection, NOT product caps) ──
     if (strikes >= AGENT_GUARDS.strikes) {
+      // v0.29.2 (found on the PRODUCTION eval): striking out during the
+      // quality-audit fix round must not kill an otherwise-complete
+      // design. The canvas already passed the brief; the un-applied
+      // polish is disclosed instead of failing the whole run.
+      if (auditRounds > 0) {
+        const disclosed = `${summary || 'Done.'} Note: quality-audit polish could not be applied (${AGENT_GUARDS.strikes} invalid patch attempts) — the validated design is kept as-is.`.slice(0, 800)
+        emit({ v: AGENT_PROTOCOL_VERSION, type: 'done', summary: disclosed, steps, toolCalls, verification })
+        return { summary: disclosed, steps, toolCalls, verification }
+      }
       emit({
         v: AGENT_PROTOCOL_VERSION,
         type: 'error',

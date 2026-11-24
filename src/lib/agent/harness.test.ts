@@ -323,6 +323,53 @@ describe('harness · tool matrix', () => {
     expect(finalEvent.type).toBe('done')
     expect(String(finalEvent.summary)).toContain('disclosed')
   })
+
+  it('CASE I: striking out during the audit fix round discloses instead of failing', async () => {
+    const events: AgentEvent[] = []
+    // bg → text → done (audit finds issues) → 3 INVALID tool calls in
+    // the fix round → the run must END AS DONE with disclosure, not error
+    const { chat } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('add_text', { text: 'Dark text', fontSize: 40, color: '#111122' }),
+      done('Poster complete'),
+      turn('patch_things', { nope: true }),
+      turn('patch_things', { nope: true }),
+      turn('patch_things', { nope: true }),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'create',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+      auditDesign: async () => ['Low contrast: text "Dark text" #111122 on #090B1A is 1.0:1 (needs 3:1)'],
+    })
+    expect(result.toolCalls).toBe(2)
+    expect(events.filter((e) => e.type === 'error').length).toBe(0)
+    const finalEvent = events[events.length - 1] as { type: string; summary?: string }
+    expect(finalEvent.type).toBe('done')
+    expect(String(finalEvent.summary)).toContain('could not be applied')
+  })
+
+  it('CASE J: update_elements accepts the color alias models habitually send', async () => {
+    const events: AgentEvent[] = []
+    const { chat, calls } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('update_elements', { ids: ['txt-1'], patch: { color: '#FFFFFF' } }),
+      done('Fixed contrast'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'create',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    // the alias must sanitize cleanly (no strike observation, 2 tool calls)
+    expect(result.toolCalls).toBe(2)
+    expect(events.some((e) => e.type === 'observation' && /not a known tool|invalid/i.test(e.message ?? ''))).toBe(false)
+    expect(events[events.length - 1]?.type).toBe('done')
+  })
 })
 
 // ═════════════════════════════════════════════════════════════

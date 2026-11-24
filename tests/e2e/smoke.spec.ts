@@ -13,6 +13,18 @@ test.describe('Canvix smoke', () => {
     ).toBeVisible()
   })
 
+  test('serves the funding.json cross-domain verification file (v0.29.5)', async ({ request }) => {
+    // fundingjson.org ownership verification: canvix.app authorizes the
+    // repository manifest at /.well-known/funding-manifest-urls. Serving
+    // this correctly in every environment (dev, CI, Docker, VPS) is what
+    // lets the manifest later carry the wellKnown property honestly.
+    const res = await request.get('/.well-known/funding-manifest-urls')
+    expect(res.status()).toBe(200)
+    expect(await res.text()).toBe(
+      'https://raw.githubusercontent.com/mir-ashiq/canvix/refs/heads/main/funding.json',
+    )
+  })
+
   test('Start designing opens the dashboard', async ({ page }) => {
     await page.goto('/')
     await page.getByRole('button', { name: /start designing/i }).first().click()

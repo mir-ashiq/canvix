@@ -173,14 +173,39 @@ test.describe('Wave 2 — assets & templates', () => {
     await page.getByRole('button', { name: /start designing/i }).first().click()
     await expect(page.getByLabel('Create a design')).toBeVisible()
 
-    // dashboard template grid: 122 originals render in "All"
-    const cards = page.locator('section:has(h2:text("Templates")) [aria-label^="Open template"]')
-    await expect(cards.first()).toBeVisible()
-    const count = await cards.count()
-    expect(count).toBeGreaterThanOrEqual(100)
+    // v0.26 lazy mounting: every template in "All" owns a grid slot (a
+    // LazyCard wrapper div), but only cards near the viewport mount their
+    // button — mounting all ~370 Konva stages at once was seconds of jank.
+    // So the library SIZE is the slot count, and this test asserts both
+    // halves of the contract: the full listing is present in the DOM, and
+    // scrolling progressively mounts more of it.
+    const grid = page.locator('section:has(h2:text("Templates")) div.mt-4.grid')
+    await expect(grid).toBeVisible()
+    const slots = await grid.locator('> div').count()
+    expect(slots).toBeGreaterThanOrEqual(300)
 
-    // a computed variant exists: Aurora colourway of the first template
-    await expect(cards.filter({ hasText: '· Aurora' }).first()).toBeVisible()
-    await expect(cards.filter({ hasText: '· Ink' }).first()).toBeVisible()
+    // the mounted subset carries the open-template affordance…
+    const cards = grid.locator('[aria-label^="Open template"]')
+    await expect(cards.first()).toBeVisible()
+    const mounted = await cards.count()
+    expect(mounted).toBeGreaterThanOrEqual(12)
+
+    // …and lazy mounting is real: one wheel of scrolling mounts more
+    await page.mouse.wheel(0, 2400)
+    await page.waitForTimeout(500)
+    expect(await cards.count()).toBeGreaterThan(mounted)
+
+    // a computed variant exists: Aurora colourway of the first template.
+    // Variants are appended AFTER the 122 originals, so the viewport has
+    // to travel to them — LazyCard mounts rows as they approach (600 px
+    // rootMargin), which is exactly the user's scroll journey.
+    const aurora = cards.filter({ hasText: '· Aurora' })
+    const ink = cards.filter({ hasText: '· Ink' })
+    for (let i = 0; i < 40 && ((await aurora.count()) === 0 || (await ink.count()) === 0); i++) {
+      await page.mouse.wheel(0, 600)
+      await page.waitForTimeout(200)
+    }
+    await expect(aurora.first()).toBeVisible()
+    await expect(ink.first()).toBeVisible()
   })
 })

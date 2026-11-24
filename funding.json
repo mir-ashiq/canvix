@@ -5,8 +5,8 @@
     "type": "individual",
     "role": "maintainer",
     "name": "Ashiq Hussain Mir",
-    "email": "imsrenpsycho@gmail.com",
-    "description": "Solo maintainer of Canvix. Final-year student building the free, open-source design tool full-time around classes, and looking for a development runway to keep that pace through v1.0.",
+    "email": "imseldrith@gmail.com",
+    "description": "Solo maintainer of Canvix, a free and open-source graphic design platform, and a final-year computer-science student based in Jammu & Kashmir, India. Building Canvix full-time around classes since September 2026: 160+ commits, 156 test files (1,575 unit tests plus a 39-file Playwright end-to-end suite) and a live public deployment at canvix.app, all MIT-licensed. Requesting a six-month runway to deliver a design-output correctness, reproducible design-evaluation and creator-education program — a scope deliberately distinct from the pending NLnet application (deployment trust, collaboration scaling, mobile editing, sharing and v1.0 stabilization), so that no hour or deliverable is funded twice.",
     "webpageUrl": {
       "url": "https://github.com/mir-ashiq"
     }
@@ -15,9 +15,9 @@
     {
       "guid": "canvix",
       "name": "Canvix",
-      "description": "Free & open-source graphic design tool — a community-built Canva alternative. A browser-based drag-and-drop editor with a 366-template library, real-time collaboration, local exports (PNG, JPG, SVG, PDF, PPTX, GIF, video) and a modular AI layer split into text, vision, image and video capability slots that plug into any provider. MIT-licensed; every feature free forever, no watermarks, no paywalls.",
+      "description": "Free and open-source graphic design platform — a self-hostable, browser-based editor with a 366-template library, real-time collaboration, and local exports to PNG, JPG, SVG, vector PDF, PPTX, GIF and video. MIT-licensed: every feature free, no watermarks, no paywalls, and try-without-account. The AI layer is modular and provider-independent (text, vision, image and video capability slots with bring-your-own-key), and AI-assisted designs remain native, editable elements rather than flattened images — so machine help still produces real design work. One-command Docker self-hosting makes it infrastructure any school, nonprofit or small organization can run itself. This grant funds design-output correctness (exact text and colors, reliable geometry), reproducible design-quality evaluation, and open creator education for the next six months.",
       "webpageUrl": {
-        "url": "https://github.com/mir-ashiq/canvix"
+        "url": "https://canvix.app"
       },
       "repositoryUrl": {
         "url": "https://github.com/mir-ashiq/canvix"
@@ -39,39 +39,49 @@
     "channels": [
       {
         "guid": "to-be-confirmed",
-        "type": "other",
-        "address": "To be confirmed with the funder",
-        "description": "Placeholder payment channel. The concrete rail (bank transfer or payment provider) will be finalized together with the funding organization before any disbursement, and this manifest will be updated in the open."
+        "type": "bank",
+        "address": "Indian bank transfer — account details to be shared securely after grant approval",
+        "description": "Public placeholder channel: this manifest intentionally carries no private financial data. The concrete account details will be provided directly to FOSS United administrators upon approval, and this channel will then be updated in the open."
       }
     ],
     "plans": [
       {
-        "guid": "final-year-tuition",
+        "guid": "m1-baseline-and-harness",
         "status": "active",
-        "name": "Final-year tuition — full-time development runway",
-        "description": "Milestone 1 of 3 (USD 4,000). Covers final-year tuition so the maintainer can keep building Canvix at full-time pace instead of trading development hours for part-time work. Deliverable: sustained weekly release cadence through the academic year.",
-        "amount": 4000,
-        "currency": "USD",
+        "name": "Milestone 1 — Baseline & evaluation harness (Month 1)",
+        "description": "Publish the design-quality evaluation plan and a corpus of 20+ diverse briefs; record the current baseline with rendered screenshots, exact text/color comparisons and geometry analysis; set up the dedicated cross-browser test bench; open the public issue tracker and publish the first monthly progress report. Acceptance: evaluation plan, brief corpus, baseline report and tracker are live in the repository.",
+        "amount": 130000,
+        "currency": "INR",
         "frequency": "one-time",
         "channels": ["to-be-confirmed"]
       },
       {
-        "guid": "local-hardware-upgrade",
+        "guid": "m2-design-output-correctness",
         "status": "active",
-        "name": "Local hardware upgrade — faster build & test loops",
-        "description": "Milestone 2 of 3 (USD 2,000). RAM and CPU upgrade for the local dev machine. Direct effect: faster compiles and test runs — the 1,400+ unit tests and the Playwright e2e suite gate every release, so shorter loops mean shorter release cycles and faster security fixes.",
-        "amount": 2000,
-        "currency": "USD",
+        "name": "Milestone 2 — Design-output correctness (Months 2–3)",
+        "description": "Improve brief-to-design constraint handling: verified exact text and color preservation, reliable native editable-element generation, deterministic layout and geometry checks, and reproducible browser tests. Acceptance: the brief-contract suite runs in CI, and every failure documented in the Milestone 1 baseline is fixed with published before/after evidence.",
+        "amount": 120000,
+        "currency": "INR",
         "frequency": "one-time",
         "channels": ["to-be-confirmed"]
       },
       {
-        "guid": "v1-living-expenses",
+        "guid": "m3-grounded-visual-review",
         "status": "active",
-        "name": "Living expenses — ship Canvix v1.0",
-        "description": "Milestone 3 of 3 (USD 1,000). Living-expense support for the final push to v1.0: API stabilization, documentation, and the first stable, semver-committed release.",
-        "amount": 1000,
-        "currency": "USD",
+        "name": "Milestone 3 — Grounded visual review (Months 4–5)",
+        "description": "Reliable comparison of requested versus actual design elements, screenshot-based inspection where a vision model is available, explicit fallback behavior when it is not, and prevention of invented-element claims in completions. Acceptance: public before/after evaluation results across the brief corpus, every verification claim backed by captured evidence, and documented remaining limitations.",
+        "amount": 120000,
+        "currency": "INR",
+        "frequency": "one-time",
+        "channels": ["to-be-confirmed"]
+      },
+      {
+        "guid": "m4-community-final-report",
+        "status": "active",
+        "name": "Milestone 4 — Community, release & final report (Month 6)",
+        "description": "Release the evaluation toolkit openly; ship user documentation and tutorials plus contributor-onboarding material; hold at least two public community updates or online engagements across the grant period; publish final milestone evidence, a transparent expenditure summary and the final report. Acceptance: toolkit, documentation and final report are public; engagements have happened and are linked.",
+        "amount": 130000,
+        "currency": "INR",
         "frequency": "one-time",
         "channels": ["to-be-confirmed"]
       }

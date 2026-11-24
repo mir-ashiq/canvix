@@ -256,6 +256,16 @@ jobs:
           echo "landing: $CODE"
           [ "$CODE" = "200" ]
 
+      - name: Funding-manifest verification file serves (v0.29.5)
+        run: |
+          # fundingjson.org cross-domain ownership verification: the
+          # standalone PRODUCTION server must serve public/.well-known/
+          # statically (dev-mode serving is covered by the e2e smoke).
+          BODY=$(curl -fsS http://localhost:3000/.well-known/funding-manifest-urls 2>/dev/null)
+          echo "well-known: $BODY"
+          EXPECTED="https://raw.githubusercontent.com/mir-ashiq/canvix/refs/heads/main/funding.json"
+          [ "$BODY" = "$EXPECTED" ] || { echo "well-known file wrong or missing"; exit 1; }
+
       - name: Assert the stack is clean after down
         if: always()
         run: |

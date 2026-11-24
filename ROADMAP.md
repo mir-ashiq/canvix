@@ -1,8 +1,23 @@
 # Canvix Roadmap — where we are, what's next
 
-> **Status date:** 2026-11-14 · **Current release:** [v0.23.2](https://github.com/mir-ashiq/canvix/releases/tag/v0.23.2) · **Test posture:** 1411 unit tests (108 files) · 32 e2e specs · CI gates every PR (`lint-unit` incl. production build + `e2e`) · `npm audit` **0 vulnerabilities**.
+> **Status date:** 2026-11-24 · **Changelog state:** v0.29.5 · `package.json` 0.29.1 · **latest published GitHub release:** v0.23.1 · **Test posture:** 1,581 unit tests across 116 test files (verified full run, 24 Nov) · 38 e2e specs · CI gates every PR (`lint-unit` incl. production build + `e2e`) · `npm audit` **0 vulnerabilities**.
+>
+> **Version-numbering state (documented, not silently papered over):** the changelog records development through v0.29.5, `package.json` sits at 0.29.1, and the last tagged GitHub release is v0.23.1 — unreleased development has accumulated without tags. Tags follow `RELEASE-CHECKLIST.md`, not the changelog; the next tag is cut only when the checklist passes, not to make the numbers match.
 >
 > This is the living map of the project: the two planning eras (the original **v0.11.8 → v1.0 roadmap** and the **consolidation programme** that overtook it), exactly what shipped under each, what remains open, and the recommended order for finishing the job. The full research it synthesizes: `research/V0118-ROADMAP-RESEARCH.md` (the original decision record) and `docs/COMPETITIVE-ANALYSIS.md` (the wave plan + five-cluster reanalysis).
+
+---
+
+## 0. Current state — four tracks (2026-11-24)
+
+Where every active effort actually stands, in one place. The sections below remain the full record.
+
+| Track | State | Contents |
+|---|---|---|
+| **Shipped on `main`** | Deployed at canvix.app; tagged through v0.23.1, changelog at v0.29.5 | WP1 complete — scoped API keys (v0.24, PR #77) + Docker/compose self-hosting; auto-snapshots (v0.24); the v0.29.4 agent-correctness arc; v0.29.5 funding & trust documentation: SECURITY.md, GOVERNANCE.md, CODE_OF_CONDUCT.md, `funding.json` with **live wellKnown domain verification** (PR #87), the FOSS United proposal, and the grantee research record |
+| **Unmerged feature branch** | `feat/design-spec-foundation` — 3 commits ahead of `main`, **not** merged until reviewed | DesignSpec v2 (types, model-output parser, brief mapper), the deterministic design engine (palette/typography/layout/compositions/compile, 47 tests), a re-runnable **real-model + real-browser acceptance harness** (`scripts/designspec-compile.ts`, `scripts/designspec-render.cjs`), the seed-guarantee engine fix, and `docs/DESIGNSPEC-ACCEPTANCE-REPORT.md` — the technical foundation the FOSS United M1/M2 milestones build on |
+| **Pending funding — decision outstanding** | Submitted; **not awarded — never represent it as such** | **FOSS United project grant** (INR 5,00,000, milestones M1–M4, submitted 12 Nov 2026 via the funding.json mechanism): design-output correctness, reproducible design evaluation, creator education. **NLnet** (WP1–WP5, ~€12,600 labour-only): deployment trust, collaboration scale, mobile editing, sharing, v1.0 stabilization. The two scopes are deliberately disjoint — no hour or deliverable is funded twice |
+| **Unfunded development** | Proceeds on its own cadence | AI-provider track (vendor-SDK removal + direct OpenAI-compatible adapter, ~65 h — outside NLnet scope by its connectors policy), media GC, D8/D10 depth, Wave-5 remainder sequencing |
 
 ---
 

@@ -14,9 +14,20 @@ primary sources, for the pending Canvix application (INR 5,00,000, M1–M4, subm
 
 - 36 project grants disbursed 2020–2026, **INR 2,91,15,000 total** (recomputed from the
   per-grant list; matches the program page exactly).
-- Documented **cap: INR 6,00,000 per grant** (docs.fossunited.org/grants). Larger awards
+- **Two official sources conflict on the ceiling** (verified 24 Nov 2026): the grants
+  knowledge base says "maximum amount of funding available for each grant is ₹6 lakh",
+  while the Grants Thesis states "up to 15L (the highest possible grant amount)", a
+  "3L - 7 L (median grant size - disbursed over a year)" band, and <3L as infra grants.
+  The proposal's ₹3–7L band claim is therefore **supported by the thesis**. Larger awards
   (Zasper ₹9L, TinkerHub ₹60L) were **co-sponsored**, with industry partners (Zerodha)
   carrying the difference.
+- Thesis mechanics that matter for Canvix: ">3L — the funding disbursement will be
+  milestone/outcome based" (the M1–M4 structure matches the program's own rule);
+  milestones "should be publicised in the funding .json manifest under 'funding plans'"
+  (already satisfied); "We do not fund 'ideas' or 'project proposals'" (supports
+  Canvix's shipped-first framing); at least one community engagement per quarter is
+  expected (M4 commits to this); ~1 project application/month and a 25L grants budget
+  as of 2025.
 - **2026 cohort:** 11 grants, INR 31,55,000, median **INR 2,50,000**.
 - Program page: "32 disbursed, 4 ongoing"; >INR 3 crore disbursed across all tracks
   (projects + events + fellowships).
@@ -57,11 +68,16 @@ funded cohort.
    app stores, benchmarks, press, longevity). Canvix's usage numbers (≈173 registered
    users, 5,700 designs) are admin-observed — not independently checkable. This is the
    primary gap, and it is closable in weeks (public stats page, published benchmark).
-4. **Amount context:** 2026 median ₹2.5L, cap ₹6L. ₹5L is top-quartile for a project
-   ~2.5 months old at application; the cohort's large solo-maintainer grants went to
-   multi-year track records. The proposal's "median project-grant band ₹3–7 lakh" claim
-   **conflicts with the documented ₹6L cap** — correct it (₹5L sits within the cap, at
-   the level of 2026's infrastructure grants: VGLUG, Data For India).
+4. **Amount context (corrected 24 Nov after reading the Grants Thesis):** the thesis
+   documents a "3L - 7 L median grant size" band and "up to 15L" as the highest
+   possible grant — the proposal's ₹3–7 lakh median-band claim is **defensible**, and
+   ₹5L sits inside it. The knowledge base's ₹6L cap conflicts with the thesis ceiling;
+   cite the thesis tiers, not either cap. 2026's actual median was ₹2.5L, and ₹5L for
+   a project ~2.5 months old is top-quartile for its age — the amount is justified by
+   the itemized budget and milestone acceptance criteria, not by the median. The
+   thesis's ">3L → milestone/outcome based" disbursement rule validates the M1–M4
+   structure, and its requirement to publicise milestones as funding.json plans is
+   already satisfied.
 5. **Students do get funded — at small, precisely-scoped scale** (Surge: 2 CS students,
    ₹1.05L, 3 months). Large asks paired demonstrated longevity (Webminal) or
    co-sponsorship (Zasper).
@@ -80,22 +96,28 @@ transparency, scope hygiene (NLnet non-overlap), live deployment + self-hosting.
 **Weaker:** no third-party-verifiable adoption evidence (primary gap); project age
 ~2.5 months at application; no external contributors/community footprint (100%
 maintainer-authored commits); stale directory profile; no `funding.history` block;
-the ₹3–7L band claim; M2 reads as "fix every failure found" (unbounded — the cohort's
-funded milestones never commit to that); AI-assisted-development pledge may be stricter
-than the actual workflow.
+M2 reads as "fix every failure found" (unbounded — the cohort's funded milestones
+never commit to that); AI-assisted-development pledge may be stricter than the
+actual workflow. (The earlier "band claim conflicts with the ₹6L cap" weakness is
+withdrawn — see finding 4: the thesis documents the ₹3–7L median band.)
 
 ## 5. 30-day credibility plan (execution order)
 
 1. **Re-sync the directory profile** (Report link / grants@fossunited.org) — removes an
    active contradiction a reviewer can see. 30 min.
 2. **Reword the payment channel** (drop "updated in the open"; keep no-address pattern).
-3. **Fix the band claim** → "within the documented INR 6,00,000 cap; at the level of 2026's
-   comparable grants (VGLUG ₹5L, Data For India ₹5L)". 15 min.
+3. **Cite the thesis tiers in the proposal** — "inside the Grants Thesis median band
+   (₹3–7L), disbursed milestone/outcome-based exactly as the M1–M4 plans encode"; note
+   the knowledge-base ₹6L cap vs thesis ₹15L discrepancy only if asked. 15 min.
 4. **Publish a dated stats page** (registered users, designs, uptime) with methodology
    labels (registered ≠ active humans). 1–2 days.
 5. **Ship the poster compile proof + first public benchmark** (real-model end-to-end run,
    rendered + screenshotted, exact-text/color correctness scored) — mirrors the
-   benchmark-led evidence of Zasper/Surge. Foundation is on `feat/design-spec-foundation`.
+   benchmark-led evidence of Zasper/Surge. **DONE 24 Nov** on
+   `feat/design-spec-foundation` (64742db): both paths rendered in real Chromium through
+   the app's SVG export pipeline, exact texts and required colors verified at pixel
+   level, a real seed-guarantee bug found/fixed/tested (47/47), and the M2 baseline
+   failure named — see `docs/DESIGNSPEC-ACCEPTANCE-REPORT.md`.
 6. **Add `funding.history`** (self-funded infra costs, zero income) once real figures are
    tallied. 1 h.
 7. **Open community surfaces** (GitHub Discussions, good-first-issues, merge one external
@@ -110,7 +132,9 @@ carry none deliberately).
 ## 6. Sources (all fetched 24 Nov 2026)
 
 - https://fossunited.org/grants · /grants/projects · /grants/grantees · /grants/directory
-- https://docs.fossunited.org/grants (₹6L cap, eligibility)
+- https://fossunited.org/grants/thesis (amount tiers up to 15L, ₹3–7L median band,
+  milestone-based disbursement >3L, evaluation criteria, funding.json application mechanism)
+- https://docs.fossunited.org/grants (knowledge-base ₹6L cap, eligibility — conflicts with thesis)
 - https://fossunited.org/blog/organization/supporting-zasper (Zasper award, Zerodha 50%)
 - https://fundingjson.org/ (v1.1.0 spec)
 - Manifests: raw.githubusercontent.com/Blender3D/Webminal/master/funding.json ·
@@ -122,5 +146,8 @@ carry none deliberately).
 - Canvix baseline: repo `funding.json` + `CANVIX-FOSS-UNITED-PROPOSAL.md` @ 1e3a200
 
 **Known discrepancies:** Scrite ₹2.5L (official) vs ₹3L (own page) — unresolved, both
-recorded. Review criteria are not published — correlation observations in §3/§4 are
-interpretation, labeled as such.
+recorded. The thesis publishes evaluation questions (person before project; users and
+impact; differentiation in a crowded space; comparison with FOSS alternatives;
+salary-vs-infra framing; 5-year sustainability) — decision cadence and per-application
+outcomes are not published, so correlation observations in §3/§4 remain interpretation,
+labeled as such.

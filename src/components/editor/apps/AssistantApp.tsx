@@ -211,6 +211,11 @@ function buildDesignContext() {
     currentPageIndex: s.currentPage,
     selectedIds: s.selectedIds.slice(0, 20),
     elements,
+    // v0.32 (Unified Canvix AI): the design's STORED brief contract —
+    // an applied autonomous generation's verified requirements. The
+    // route merges it into the run's brief so refinement of the SAME
+    // design cannot silently drop a required text or color.
+    aiBrief: s.aiBrief ?? null,
     colorsInUse: [
       ...new Set(
         texts

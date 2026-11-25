@@ -613,8 +613,15 @@ export interface DesignRecord extends DesignSnapshot {
   createdAt: string
   updatedAt: string
   /** v0.9: true when the design belongs to another account — the editor
-   * switches to view-only (no saves; mutating APIs answer 403). */
+   *  switches to view-only (no saves; mutating APIs answer 403). */
   readOnly?: boolean
+  /** v0.32 (Unified Canvix AI): the stored brief contract — what an
+   *  applied autonomous generation was verified against. Present when
+   *  GET /api/designs/[id] found a provenance row; the editor keeps it
+   *  in the store and the chat agent merges it into every refinement
+   *  run on this design (continuation). Type-only import: no runtime
+   *  dependency on the agent module. */
+  aiProvenance?: import('./agent/brief').DesignBrief | null
 }
 
 export interface TemplateRecord extends DesignSnapshot {

@@ -14,6 +14,7 @@ import {
   type PageData,
 } from '@/lib/types'
 import type { TemplateDef } from '@/lib/templates'
+import type { DesignBrief } from '@/lib/agent/brief'
 import { magicRelayoutPages } from '@/lib/magic'
 import {
   clearPageAnimations,
@@ -150,6 +151,13 @@ interface EditorState {
   // v0.9: read-only mode — the open design belongs to another account;
   // autosave is disabled and the editor shows a view-only banner
   readOnly: boolean
+
+  // v0.32 (Unified Canvix AI): the design's stored brief contract (AI
+  // provenance) — hydrates from the design GET, set at DesignAgent
+  // Apply. Carried by the chat agent's design context so refinement
+  // runs on this design stay gated on the verified requirements.
+  aiBrief: DesignBrief | null
+  setAIBrief: (brief: DesignBrief | null) => void
 
   // lifecycle
   loadDesign: (d: DesignRecord) => void
@@ -321,6 +329,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   drawSize: 6,
   brand: DEFAULT_BRAND,
 
+  // v0.32 (Unified Canvix AI): the design's stored brief contract
+  // (AI provenance). Hydrated from the design GET when the editor
+  // opens; set when a DesignAgent run is applied. The chat agent's
+  // requests carry it so refinement runs stay gated on it.
+  aiBrief: null,
+
   // v0.5: collaboration runtime
   collaborators: [],
   collabStatus: 'offline',
@@ -357,6 +371,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       readOnly: d.readOnly === true,
       baseUpdatedAt: d.updatedAt ?? null,
       offlineRestored: false,
+      // v0.32: the stored brief contract rides the load — null for
+      // designs without AI provenance (behaviour unchanged)
+      aiBrief: d.aiProvenance ?? null,
     })
     // v0.10: seed the collab replay cursor from the server's current seq —
     // our freshly loaded document already contains every persisted edit,
@@ -435,6 +452,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({ designName: name, dirty: true })
     emit({ kind: 'design:rename', name: name.slice(0, 80) })
   },
+
+  // v0.32 (Unified Canvix AI): set/clear the design's stored brief
+  // contract. DesignAgent Apply sets it right after appending the
+  // pages (and persists it via /ai-provenance); loadDesign hydrates it
+  // from the design GET on open.
+  setAIBrief: (brief) => set({ aiBrief: brief }),
 
   pushHistory: () => {
     // v0.7: snapshots share structure — pages are never mutated in place,

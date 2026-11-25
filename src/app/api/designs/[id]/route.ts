@@ -11,6 +11,7 @@ import { getSessionUser } from '@/lib/auth/session'
 import { anonHashFrom } from '@/lib/auth/anon'
 import { recordActive } from '@/lib/admin/traffic'
 import { getSettings } from '@/lib/admin/config'
+import { getDesignProvenance } from '@/lib/design-provenance'
 
 // Normalise incoming pages payload (accepts object or legacy JSON string)
 // into a value suitable for the Postgres jsonb column.
@@ -43,11 +44,17 @@ async function __canvix_get(req: NextRequest, { params }: { params: Promise<{ id
     const maxEvent = await db.designEvent
       .aggregate({ where: { designId: id }, _max: { id: true } })
       .catch(() => null)
+    // v0.32 (Unified Canvix AI): the stored brief contract (provenance)
+    // rides the design load so the editor — and the chat agent through
+    // it — knows the requirements an applied autonomous generation was
+    // verified against. Null when the design has no AI provenance.
+    const aiProvenance = await getDesignProvenance(id).catch(() => null)
     return NextResponse.json({
       ...design,
       pages: design.pages ?? [],
       readOnly: !access.canEdit,
       seq: maxEvent ? Number(maxEvent._max.id ?? 0) : 0,
+      aiProvenance,
     })
   } catch (error) {
     console.error('GET /api/designs/[id] failed', error)

@@ -159,7 +159,7 @@ export function loopSystemPrompt(deps: {
     '3. Destructive tools (delete_elements, clear_page, delete_page on non-empty pages) need user confirmation — the system pauses and asks; do not repeat the call in the same turn.',
     '4. Keep 6% margins from page edges. Use measure_text for real text widths before finalizing headings — never rely on the 0.6×fontSize estimate for tight fits. Avoid overlaps; fix_overlaps resolves accidental ones.',
     '5. Prefer the BRAND KIT colors/fonts when one is given; the BRIEF always outranks it.',
-    '6. When the goal is achieved, verify via get_page_state (once) and validate_brief (create/improve runs), then emit {"done":true,"summary":"…"}. Never claim work you did not do; never claim completion while validate_brief reports unmet items.',
+    '6. When the goal is achieved, verify via get_page_state (once) and validate_brief (create/improve runs, and edit runs whose design carries a stored brief), then emit {"done":true,"summary":"…"}. Never claim work you did not do; never claim completion while validate_brief reports unmet items.',
     '7. Args must match each tool spec exactly. On an error observation, fix the args and retry — the error message tells you what to change.',
     '8. Tools edit the CURRENT page only. To work on another page: goto_page {page: N}, then get_page_state — ids change with the page. add_page appends the LAST page.',
     '9. In review/explain mode, ground every claim in the state you read. Report missing items as missing — never describe them as present.',
@@ -346,8 +346,12 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
     if (turn.done) {
       summary = String(turn.summary ?? '').slice(0, 800) || 'Done.'
       // BRIEF GATE (Phase 5): create/improve runs must validate
-      // against real client state before completion is accepted
-      if ((mode === 'create' || mode === 'improve') && brief && deps.validateBriefOnClient && !briefValidated) {
+      // against real client state before completion is accepted.
+      // v0.32 (Unified Canvix AI): an EDIT run that carries a brief
+      // (the design's stored provenance merged with this message) is
+      // gated too — a refinement may not finish while a requirement
+      // the design was verified against has gone missing.
+      if ((mode === 'create' || mode === 'improve' || (mode === 'edit' && brief)) && brief && deps.validateBriefOnClient && !briefValidated) {
         const v = await deps.validateBriefOnClient()
         if (v && !v.satisfied) {
           doneRejections += 1

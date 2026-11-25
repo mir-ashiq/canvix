@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getClientForSlot } from '@/lib/ai/provider'
+import { getClientForSlotForUser } from '@/lib/ai/provider'
 import { withLogging } from '@/lib/observability'
+import { getSessionUser } from '@/lib/auth/session'
 import { critiqueWithVision } from '@/lib/agent/vision'
 
 export const runtime = 'nodejs'
@@ -43,7 +44,20 @@ async function __canvix_post(req: NextRequest) {
   // the vision slot is a SEPARATE capability — resolve it directly
   // (withProvider resolves the text slot). When unconfigured, answer
   // honestly instead of falling back to a text model.
-  const vision = await getClientForSlot('vision')
+  // v0.32 (Unified Canvix AI): the resolution is user-first BYOK — the
+  // SAME chain every other AI capability rides. A signed-in user with
+  // their own vision provider now critiques with THEIR keys (matching
+  // how the design-agent route resolves its vision seam); anonymous
+  // requests resolve the instance chain exactly as before. This route
+  // is the shared verification path for BOTH agents' post-apply
+  // critique (the chat panel and the DesignAgent panel both land here).
+  let vision: Awaited<ReturnType<typeof getClientForSlotForUser>> = null
+  try {
+    const user = await getSessionUser(req)
+    vision = await getClientForSlotForUser('vision', user?.id ?? null)
+  } catch {
+    vision = null
+  }
   if (!vision) {
     return NextResponse.json(
       {

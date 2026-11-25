@@ -142,12 +142,34 @@ model Design {
   // soft delete (dashboard Trash) — null = live design
   deletedAt   DateTime?
   versions   DesignVersion[]
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  // v0.32 (Unified Canvix AI): the brief contract an autonomous
+  // generation was verified against, persisted on the applied design —
+  // chat-agent refinements of the SAME design merge it into their run
+  // brief so verified requirements survive refinement
+  provenance  DesignProvenance? @relation("DesignProvenance")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   @@index([ownerId])
   @@index([anonKey])
   @@index([folderId])
+}
+
+// ── v0.32 (Unified Canvix AI): design provenance ─────────────
+// One row per design (unique). `brief` is the normalized DesignBrief
+// JSON (src/lib/agent/brief.ts) — the exact texts/colors/features the
+// autonomous run was verified against; `prompt` and `outcome` keep the
+// audit trail of the run that produced it. Cascade: deleting a design
+// deletes its provenance (it is meaningless without the design).
+model DesignProvenance {
+  id        String   @id @default(cuid())
+  designId  String   @unique
+  design    Design   @relation("DesignProvenance", fields: [designId], references: [id], onDelete: Cascade)
+  prompt    String   @default("")
+  brief     Json     @default("{}")
+  outcome   String   @default("passed")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ── v0.14 (D6): dashboard folders ───────────────────────────

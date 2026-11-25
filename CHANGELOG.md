@@ -3,6 +3,40 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — Unified Canvix AI (create → verify → refine)
+
+> One engineering upgrade, four unifications — full write-up in
+> `docs/UNIFIED-AI-MILESTONE.md`, acceptance in
+> `src/lib/design-agent/continuation.test.ts`.
+
+### Added — design provenance (the contract that persists)
+
+- `DesignProvenance` model (migration `0013`): the brief an autonomous
+  generation was verified against, stored on the applied design; the
+  design GET returns it as `aiProvenance` and the editor hydrates it.
+- `PUT|GET /api/designs/[id]/ai-provenance` — edit-gated persistence
+  (same-origin, its own rate budget, flat 404 on foreign designs), plus
+  a live-DB e2e spec (`tests/e2e/unified-ai-provenance.spec.ts`).
+- `mergeBriefs` / `normalizeStoredBrief` (`src/lib/agent/brief.ts`): the
+  stored contract merges with every chat-agent run on that design —
+  union semantics, hostile input capped, dimensions dropped (the design
+  owns geometry after fit-pages).
+
+### Changed — the two agents share one foundation
+
+- **Shared provider resolution:** the agent vision path and the shared
+  verification route (`/api/ai/agent/vision`) now resolve the vision
+  slot USER-FIRST (BYOK), matching the text slot and the design-agent
+  route — a user's own vision provider serves their critiques.
+- **Shared validation:** the agent loop's done-gate fires for edit-mode
+  runs that carry a brief (the continuation case) — a refinement may
+  not finish while a requirement the design was verified against has
+  gone missing; enforcement is proven by test, not hoped for.
+- **Shared editing workflow:** DesignAgent Apply sets the design's
+  stored brief (and persists it best-effort) so natural-language
+  refinement of the same design keeps the contract, the context and
+  full editability (the same `applyDesignAction` executor).
+
 ## [0.31.0] — 2026-11-25
 
 > **Version reconciliation, stated not papered over:** this is the first

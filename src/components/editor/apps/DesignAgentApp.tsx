@@ -158,14 +158,35 @@ export function DesignAgentApp({ onClose }: AppPanelProps) {
     }
     const from = result.format ?? { width, height }
     const fit = fitPagesToCanvas(chosen, from, { width, height })
-    useEditorStore.getState().appendPages(fit.pages)
+    const store = useEditorStore.getState()
+    store.appendPages(fit.pages)
     setApplied(true)
+    // v0.32 (Unified Canvix AI — continuation): the applied pages carry
+    // their contract. The store brief makes every later chat-agent run
+    // on THIS design merge it (create→verify→refine on one design);
+    // the provenance PUT persists it across sessions/reloads. Both are
+    // best-effort AFTER the pages landed — a persistence hiccup never
+    // rolls the apply back, and the session brief still guards.
+    const brief = result.report?.brief ?? null
+    if (brief) store.setAIBrief(brief)
+    if (brief && store.designId && !store.readOnly) {
+      void fetch(`/api/designs/${store.designId}/ai-provenance`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, brief, outcome: result.outcome }),
+      }).catch(() => {
+        /* session brief still guards; reload loses the stored contract */
+        console.warn('[design-agent] provenance save failed')
+      })
+    }
     toast({
       title: `${chosen.length} page${chosen.length > 1 ? 's' : ''} added`,
       description:
-        fit.scale !== 1
-          ? `Rescaled from ${from.width}×${from.height} to fit the ${width}×${height} canvas — fully editable. Ctrl+Z removes them all.`
-          : 'Fully editable elements. Ctrl+Z removes them all.',
+        (fit.scale !== 1
+          ? `Rescaled from ${from.width}×${from.height} to fit the ${width}×${height} canvas — fully editable. `
+          : 'Fully editable elements. ') +
+        (brief ? 'The brief now guards chat-agent refinements of this design. ' : '') +
+        'Ctrl+Z removes them all.',
     })
   }
 

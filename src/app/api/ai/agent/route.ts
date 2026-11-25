@@ -14,9 +14,10 @@ import { heuristicMode, parseMode, ROUTER_SYSTEM, modeAllowsWrites, MODE_TOOL_RI
 import { runAgentLoop, toolsForMode } from '@/lib/agent/loop'
 import { auditDesign as runDesignAudit } from '@/lib/agent/audit'
 import { selectSkills } from '@/lib/agent/skills'
-import { extractBrief, type DesignBrief } from '@/lib/agent/brief'
+import { extractBrief, mergeBriefs, normalizeStoredBrief, type DesignBrief } from '@/lib/agent/brief'
 import { critiqueWithVision } from '@/lib/agent/vision'
-import { getClientForSlot } from '@/lib/ai/provider'
+import { getClientForSlotForUser } from '@/lib/ai/provider'
+import { getSessionUser } from '@/lib/auth/session'
 
 export const runtime = 'nodejs'
 export const maxDuration = 800
@@ -84,14 +85,20 @@ function newRunId(): string {
 /** v0.29.3: one grounded vision critique of a REAL captured
  *  screenshot — shared by the loop's pre-completion round. Resolves
  *  null when the vision slot is unconfigured or the call fails (the
- *  caller then discloses, never pretends). */
+ *  caller then discloses, never pretends).
+ *  v0.32 (Unified Canvix AI): the vision slot resolves USER-FIRST
+ *  (BYOK) — the same chain the text slot and the design-agent route
+ *  use. A signed-in user with their own vision provider critiques
+ *  with THEIR keys; anonymous requests resolve the instance chain
+ *  exactly as before. */
 async function critiqueRoute(
   image: string,
   brief: DesignBrief | null,
   design: AgentDesignCtx,
+  userId: string | null,
 ): Promise<{ findings: { severity: 'P0' | 'P1' | 'P2' | 'P3'; issue: string; fix?: string }[]; note: string } | null> {
   if (!image.startsWith('data:image/')) return null
-  const vision = await getClientForSlot('vision')
+  const vision = await getClientForSlotForUser('vision', userId)
   if (!vision) return null
   // same structural cast the route's chat fn uses — the SDK's typed
   // create() accepts our body shape at runtime
@@ -167,6 +174,15 @@ async function __canvix_post(req: NextRequest) {
   // up; the body streams through untouched.
   const wrapped = await withProvider('assistant', req, { limit: 20, windowSec: 60 }, async (ctx) => {
     const design: AgentDesignCtx = body.design ?? {}
+    // v0.32: the session user for the user-first vision resolution
+    // (the text slot already resolves BYOK-first inside withProvider —
+    // the vision seam now matches it, see critiqueRoute)
+    let userId: string | null = null
+    try {
+      userId = (await getSessionUser(req))?.id ?? null
+    } catch {
+      /* session hiccup — the instance chain answers */
+    }
     const history = (body.history ?? [])
       .slice(-12)
       .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
@@ -232,10 +248,22 @@ async function __canvix_post(req: NextRequest) {
     }
 
     // ── 2. extract the brief contract + pre-select skills ─────
-    const brief =
+    // v0.32 (Unified Canvix AI — continuation): a design with stored
+    // AI provenance (an applied autonomous generation) contributes its
+    // brief to EVERY run on that design. The stored contract merges
+    // with the freshly extracted one (union — requirements survive),
+    // and an edit-mode refinement on such a design is gated on the
+    // merged brief too: a refinement may not finish while a verified
+    // requirement has gone missing.
+    const storedBrief = normalizeStoredBrief(design.aiBrief)
+    const extracted =
       mode === 'create' || mode === 'improve'
         ? extractBrief(message, design.width, design.height)
         : null
+    const brief =
+      storedBrief && extracted
+        ? mergeBriefs(storedBrief, extracted)
+        : (storedBrief ?? extracted)
     const skills = selectSkills(
       message,
       mode,
@@ -371,8 +399,9 @@ async function __canvix_post(req: NextRequest) {
                 }),
               // v0.29.3: the grounded vision critique, BEFORE completion.
               // Unconfigured vision slot → null → the loop discloses.
+              // v0.32: user-first BYOK resolution (see critiqueRoute).
               critique: (image) =>
-                critiqueRoute(image, brief, bridge.latestDesign ?? design).then((r) => r ?? null),
+                critiqueRoute(image, brief, bridge.latestDesign ?? design, userId).then((r) => r ?? null),
               refreshedContext: () => bridge.latestDesign,
               // v0.29: audit the freshest design snapshot the panel acked
               // (v0.29.3: the brief rides along for strip detection)

@@ -14,6 +14,8 @@
 // server treats them as opaque-but-typed data.
 // ─────────────────────────────────────────────────────────────
 
+import type { DesignBrief } from './brief'
+
 export interface AgentElementCtx {
   id: string
   type: string
@@ -61,6 +63,13 @@ export interface AgentDesignCtx {
    *  omit it and the audit falls back to per-text backdrops only.
    *  v0.29.3: NEVER guessed — the audit uses only this real field. */
   background?: string
+  /** v0.32 (Unified Canvix AI): the design's STORED brief contract —
+   *  provenance persisted when an autonomous generation was applied to
+   *  this design. The client sends it with every request so a
+   *  refinement run (even in edit mode) is gated on the requirements
+   *  the original run was verified against. Optional: designs without
+   *  AI provenance behave exactly as before. */
+  aiBrief?: DesignBrief | null
 }
 
 /** Element summary line — compact but geometry-complete. */

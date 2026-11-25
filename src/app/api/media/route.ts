@@ -4,6 +4,7 @@ import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
 import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 import { getSessionUser } from '@/lib/auth/session'
 import { anonKeyHash, newAnonToken, readAnonToken, setAnonCookie } from '@/lib/auth/anon'
+import { canonicalMediaMime } from '@/lib/media/sniff'
 import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
@@ -23,7 +24,14 @@ const MAX_MEDIA_MB = Math.max(1, Number(process.env.CANVIX_MAX_MEDIA_MB ?? 32))
 // library needs server-side bytes (survive reload, follow the account,
 // sha256-deduped). Document embedding (data URLs) remains available to
 // plugins/legacy designs; new uploads land here.
-const ALLOWED_PREFIXES = ['audio/', 'video/', 'image/']
+//
+// v0.31 (CWE-79 fix): the allowlist is EXACT, not prefix-based. The
+// client-declared mime is canonicalized and must be one of the types
+// in src/lib/media/sniff.ts — image/svg+xml (and any HTML/XML shape)
+// is structurally rejected here, and finalize re-verifies the actual
+// bytes by magic numbers, so a file can never be served from this
+// origin as a type the origin did not prove it to be. See the
+// 2026-11-25 report (credit @hackchang) for the original vector.
 
 /** library quota — the bytes an attribution (account or anon cookie)
  *  may keep in the library. Self-hosters can raise it freely. */
@@ -38,14 +46,23 @@ async function __canvix_post(req: NextRequest) {
   if (!limit.ok) return rateLimitResponse(limit)
   try {
     const body = (await req.json().catch(() => ({}))) as { mime?: unknown; size?: unknown; name?: unknown }
-    const mime = typeof body.mime === 'string' ? body.mime.slice(0, 100) : ''
+    const declared = typeof body.mime === 'string' ? body.mime.slice(0, 100) : ''
     const size = Number(body.size)
     // v0.14 (D1): original filename for the library listing — strip
     // path fragments browsers sometimes send, cap hard
     const name = typeof body.name === 'string' ? body.name.split(/[\\/]/).pop()!.slice(0, 200) || null : null
 
-    if (!ALLOWED_PREFIXES.some((p) => mime.startsWith(p))) {
-      return NextResponse.json({ error: 'Only audio and video files are supported.' }, { status: 415 })
+    // v0.31 (CWE-79 fix): exact allowlist — the stored mime is the
+    // canonical server-side form, never the raw client string.
+    const mime = canonicalMediaMime(declared)
+    if (!mime) {
+      return NextResponse.json(
+        {
+          error:
+            'Unsupported file type. PNG, JPEG, GIF, WebP, AVIF and BMP images plus common audio and video files are supported; SVG and HTML are not.',
+        },
+        { status: 415 },
+      )
     }
     if (!Number.isFinite(size) || size <= 0 || size > MAX_MEDIA_MB * 1024 * 1024) {
       return NextResponse.json(

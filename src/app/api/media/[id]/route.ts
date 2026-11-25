@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { isSameOrigin, CSRF_REJECTED } from '@/lib/auth/csrf'
+import { anonKeyHash, readAnonToken } from '@/lib/auth/anon'
+import { getSessionUser } from '@/lib/auth/session'
+import { uploadBytesMatchMime, mayServeInline } from '@/lib/media/sniff'
 import { withLogging } from '@/lib/observability'
 
 export const runtime = 'nodejs'
@@ -11,8 +14,45 @@ export const maxDuration = 30
 // See POST /api/media for the protocol. The append is a single raw SQL
 // UPDATE with an offset guard (`octet_length(bytes) = $offset`) so a
 // retried or racing chunk can never corrupt the byte stream.
+//
+// v0.31 (CWE-79 hardening, per the 2026-11-25 report — credit
+// @hackchang): PATCH/PUT now require the upload's owner (session id
+// or anon cookie hash — the same attribution the library routes
+// enforce), finalize verifies the stored bytes against the declared
+// type by magic numbers, and GET serves anything not provably inert
+// as an opaque download with a sandboxing CSP.
 
 const MAX_CHUNK = 3 * 1024 * 1024 + 64 * 1024 // transport headroom over the client chunk size
+
+/** Hard headers for EVERY media response: nosniff plus a CSP that,
+ *  should the bytes ever be instantiated as a document, strips them
+ *  of script execution AND same-origin authority (sandbox = unique
+ *  origin — fetches stop carrying the victim's session cookie). */
+const MEDIA_SECURITY_HEADERS: Record<string, string> = {
+  'X-Content-Type-Options': 'nosniff',
+  'Content-Security-Policy': "default-src 'none'; sandbox",
+}
+
+/** The caller's attribution, in the row-comparable shape (same
+ *  resolution order as the library routes). */
+async function callerAttribution(req: NextRequest): Promise<{ ownerId: string | null; anonKey: string | null }> {
+  const user = await getSessionUser(req)
+  const token = readAnonToken(req)
+  return {
+    ownerId: user?.id ?? null,
+    anonKey: user ? null : token ? anonKeyHash(token) : null,
+  }
+}
+
+/** Attribution match — the caller must BE the row's owner. */
+function attributionMatches(
+  caller: { ownerId: string | null; anonKey: string | null },
+  row: { ownerId: string | null; anonKey: string | null },
+): boolean {
+  if (caller.ownerId) return caller.ownerId === row.ownerId
+  if (caller.anonKey) return row.anonKey !== null && caller.anonKey === row.anonKey
+  return false
+}
 
 /** PATCH /api/media/[id]?offset=<n> — append one chunk (raw body). */
 async function __canvix_patch(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -26,6 +66,16 @@ async function __canvix_patch(req: NextRequest, { params }: { params: Promise<{ 
     const chunk = new Uint8Array(await req.arrayBuffer())
     if (!chunk.length) return NextResponse.json({ error: 'Empty chunk.' }, { status: 400 })
     if (chunk.length > MAX_CHUNK) return NextResponse.json({ error: 'Chunk too large.' }, { status: 413 })
+
+    // v0.31: the uploader's attribution must match the row — a flat
+    // 404 (no existence oracle) mirrors the library routes.
+    const ownerRows = await db.$queryRawUnsafe<{ ownerId: string | null; anonKey: string | null }[]>(
+      `SELECT "ownerId", "anonKey" FROM "Media" WHERE id = $1 AND "finalizedAt" IS NULL`,
+      id,
+    )
+    if (!ownerRows.length || !attributionMatches(await callerAttribution(req), ownerRows[0]!)) {
+      return NextResponse.json({ error: 'Not found or already finalized.' }, { status: 404 })
+    }
 
     // offset-guarded append: the UPDATE only lands when the stored length
     // matches — a replayed/racing chunk is rejected instead of interleaved
@@ -74,12 +124,32 @@ async function __canvix_put(req: NextRequest, { params }: { params: Promise<{ id
     // attribution (account or anon cookie — never across accounts, so
     // one user's uploads can't be probed through another's), then keep
     // the row in the persistent uploads library.
-    const byteRows = await db.$queryRawUnsafe<{ bytes: Buffer; ownerId: string | null; anonKey: Buffer | null }[]>(
-      `SELECT bytes, "ownerId", "anonKey" FROM "Media" WHERE id = $1 AND "finalizedAt" IS NULL`,
+    const byteRows = await db.$queryRawUnsafe<
+      { bytes: Buffer; mime: string; ownerId: string | null; anonKey: string | null }[]
+    >(
+      `SELECT bytes, mime, "ownerId", "anonKey" FROM "Media" WHERE id = $1 AND "finalizedAt" IS NULL`,
       id,
     )
     if (!byteRows.length) return NextResponse.json({ error: 'Not found or already finalized.' }, { status: 404 })
-    const { ownerId, anonKey } = byteRows[0]
+    const { ownerId, anonKey } = byteRows[0]!
+
+    // v0.31: only the row's owner may finalize — flat 404, no oracle.
+    if (!attributionMatches(await callerAttribution(req), { ownerId, anonKey })) {
+      return NextResponse.json({ error: 'Not found or already finalized.' }, { status: 404 })
+    }
+
+    // v0.31 (CWE-79 fix): magic-byte verification — the bytes must
+    // prove they are what the row claims. A file declared image/png
+    // that actually carries SVG (or any other) content never becomes
+    // servable from this origin as an active document. The row stays
+    // unfinalized and is GC'd like any abandoned upload.
+    if (!uploadBytesMatchMime(new Uint8Array(byteRows[0]!.bytes), byteRows[0]!.mime)) {
+      return NextResponse.json(
+        { error: 'File contents do not match the declared type — the upload was rejected.' },
+        { status: 415 },
+      )
+    }
+
     const contentHash = createHash('sha256').update(byteRows[0].bytes).digest('hex')
 
     const dupe = await db.$queryRawUnsafe<{ id: string }[]>(
@@ -111,7 +181,15 @@ async function __canvix_put(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 /** GET /api/media/[id] — stream the bytes (Range-aware for <audio>/<video>
- * seeking). Finalized media only; immutable content-addressed by id. */
+ * seeking). Finalized media only; immutable content-addressed by id.
+ *
+ * v0.31 (CWE-79 fix): the stored mime is re-verified against the actual
+ * bytes on EVERY response — legacy rows stored before this hardening
+ * (or bytes that no longer match their claim) are served as
+ * application/octet-stream with Content-Disposition: attachment and a
+ * sandboxing CSP, so no media URL from this origin can ever instantiate
+ * attacker-controlled script. Verified raster images and audio/video
+ * containers are inert by construction in every embedding context. */
 async function __canvix_get(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   try {
@@ -121,8 +199,17 @@ async function __canvix_get(req: NextRequest, { params }: { params: Promise<{ id
     )
     if (!rows.length) return new Response('Not found', { status: 404 })
     const buf = rows[0].bytes
-    const mime = rows[0].mime || 'application/octet-stream'
+    const storedMime = rows[0].mime || 'application/octet-stream'
     const total = buf.length
+
+    // inline only what the bytes prove to be; everything else is an
+    // opaque download — belt-and-braces for rows predating the
+    // finalize-time verification (their bytes were never checked)
+    const inline = mayServeInline(new Uint8Array(buf), storedMime)
+    const contentType = inline ? storedMime : 'application/octet-stream'
+    const hardening: Record<string, string> = inline
+      ? MEDIA_SECURITY_HEADERS
+      : { ...MEDIA_SECURITY_HEADERS, 'Content-Disposition': 'attachment' }
 
     const range = req.headers.get('range')
     if (range) {
@@ -135,11 +222,12 @@ async function __canvix_get(req: NextRequest, { params }: { params: Promise<{ id
           return new Response(new Uint8Array(slice), {
             status: 206,
             headers: {
-              'Content-Type': mime,
+              'Content-Type': contentType,
               'Content-Length': String(slice.length),
               'Content-Range': `bytes ${start}-${end}/${total}`,
               'Accept-Ranges': 'bytes',
               'Cache-Control': 'public, max-age=31536000, immutable',
+              ...hardening,
             },
           })
         }
@@ -154,10 +242,11 @@ async function __canvix_get(req: NextRequest, { params }: { params: Promise<{ id
     return new Response(new Uint8Array(buf), {
       status: 200,
       headers: {
-        'Content-Type': mime,
+        'Content-Type': contentType,
         'Content-Length': String(total),
         'Accept-Ranges': 'bytes',
         'Cache-Control': 'public, max-age=31536000, immutable',
+        ...hardening,
       },
     })
   } catch (error) {

@@ -22,12 +22,18 @@ vi.mock('@/lib/observability', () => ({
   withLogging: (_name: string, fn: unknown) => fn,
 }))
 
+// v0.31: finalize resolves the caller's attribution — the dedupe
+// suite's rows belong to session user 'user-a'
+const getSessionUserMock = vi.hoisted(() => vi.fn(async (_req: unknown) => ({ id: 'user-a' })))
+vi.mock('@/lib/auth/session', () => ({ getSessionUser: getSessionUserMock }))
+
 import { createHash } from 'node:crypto'
 import { NextRequest } from 'next/server'
 import { PUT } from './[id]/route'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  getSessionUserMock.mockResolvedValue({ id: 'user-a' })
   mediaDelete.mockResolvedValue({ id: 'gone' })
   mediaUpdate.mockResolvedValue({ id: 'kept' })
 })
@@ -41,12 +47,18 @@ function putReq(id: string, expectedSize: number) {
 }
 
 const OWNER = { ownerId: 'user-a', anonKey: null }
-const BYTES = Buffer.from('pngbytes')
+// v0.31: finalize verifies magic bytes — 'pngbytes' would fail, so
+// the fixture is a real PNG header (12-byte signature)
+const BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
 
-function mockFinalizeQueries(bytes: Buffer, owner: { ownerId: string | null; anonKey: Buffer | null }, dupe: { id: string }[]) {
+function mockFinalizeQueries(
+  bytes: Buffer,
+  owner: { ownerId: string | null; anonKey: string | null },
+  dupe: { id: string }[],
+) {
   queryRaw
     .mockResolvedValueOnce([{ len: bytes.length }]) // length check
-    .mockResolvedValueOnce([{ bytes, ...owner }]) // bytes + attribution
+    .mockResolvedValueOnce([{ bytes, mime: 'image/png', ...owner }]) // bytes + attribution
     .mockResolvedValueOnce(dupe) // dedupe lookup
 }
 

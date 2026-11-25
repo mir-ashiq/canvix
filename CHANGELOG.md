@@ -3,25 +3,41 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] — Unified Canvix AI (create → verify → refine)
+## [Unreleased] — Unified Canvix AI (create → verify → refine) + the hardening pass
 
-> One engineering upgrade, four unifications — full write-up in
-> `docs/UNIFIED-AI-MILESTONE.md`, acceptance in
+> One engineering upgrade, four unifications, one external review
+> closed (4 findings) and ONE AI surface — full write-up in
+> `docs/UNIFIED-AI-MILESTONE.md` (the v0.32.1 section), acceptance in
 > `src/lib/design-agent/continuation.test.ts`.
 
-### Added — design provenance (the contract that persists)
+### Added — design provenance (the contract that persists, verified)
 
-- `DesignProvenance` model (migration `0013`): the brief an autonomous
-  generation was verified against, stored on the applied design; the
-  design GET returns it as `aiProvenance` and the editor hydrates it.
-- `PUT|GET /api/designs/[id]/ai-provenance` — edit-gated persistence
-  (same-origin, its own rate budget, NOT_YOUR_DESIGN on foreign
-  designs, flat 404 on missing ids), plus a live-DB e2e spec
-  (`tests/e2e/unified-ai-provenance.spec.ts`).
-- `mergeBriefs` / `normalizeStoredBrief` (`src/lib/agent/brief.ts`): the
-  stored contract merges with every chat-agent run on that design —
-  union semantics, hostile input capped, dimensions dropped (the design
-  owns geometry after fit-pages).
+- `DesignProvenance` model (migrations `0013` + `0014`): the brief an
+  autonomous generation was verified against, stored on the applied
+  design — with a SERVER-SIDE verification verdict (`verified`,
+  `verifiedAt`) that is re-checked on every design save and bound to
+  the saved document. The design GET returns it as `aiProvenance` and
+  the editor hydrates the brief (payload-vs-brief hydration bug fixed
+  with a regression test).
+- Contracts enter the store only through the **design save**: the
+  apply flow queues a pending contract and `PUT /api/designs/[id]`
+  persists + verifies it against the final saved pages. The
+  client-supplied `PUT /api/designs/[id]/ai-provenance` is REMOVED
+  (an authorized editor could previously store any brief with an
+  unearned `passed`); the GET stays.
+- `GET /api/designs/[id]/ai-provenance` + the design GET: link
+  viewers receive the shareable contract (brief, verification state)
+  but NEVER the original generation prompt — that ships only to
+  editors/owners (privacy hardening).
+- `mergeBriefs` / `normalizeStoredBrief` (`src/lib/agent/brief.ts`):
+  the stored contract merges with every chat-agent run on that design
+  — union semantics, dimensions dropped (the design owns geometry
+  after fit-pages). Restrictions and notes SURVIVE persistence;
+  over-limit briefs are REFUSED at save time (never stored truncated
+  or capped — no silent weakening).
+- Live-DB e2e (`tests/e2e/unified-ai-provenance.spec.ts`): the
+  apply→save flow, the strict server-side verdict, viewer privacy,
+  junk/over-limit refusals, missing-id 404s.
 
 ### Changed — the two agents share one foundation
 
@@ -29,14 +45,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   verification route (`/api/ai/agent/vision`) now resolve the vision
   slot USER-FIRST (BYOK), matching the text slot and the design-agent
   route — a user's own vision provider serves their critiques.
-- **Shared validation:** the agent loop's done-gate fires for edit-mode
-  runs that carry a brief (the continuation case) — a refinement may
-  not finish while a requirement the design was verified against has
-  gone missing; enforcement is proven by test, not hoped for.
+- **Shared validation (now EXACT):** `validateBrief` enforces strict
+  normalized equality for required texts — appended words,
+  re-capitalization, altered punctuation and missing spaces are
+  rejections, not matches. The agent loop's done-gate fires for
+  edit-mode runs that carry a brief (the continuation case), and the
+  chat agent reads the AUTHORITATIVE database brief (the design
+  context carries `designId`), so a client post cannot tamper with
+  what a run is gated on.
 - **Shared editing workflow:** DesignAgent Apply sets the design's
-  stored brief (and persists it best-effort) so natural-language
-  refinement of the same design keeps the contract, the context and
-  full editability (the same `applyDesignAction` executor).
+  brief and queues the pending contract (persisted + verified by the
+  next save) so natural-language refinement of the same design keeps
+  the contract, the context and full editability (the same
+  `applyDesignAction` executor).
+
+### Changed — ONE AI surface (the consolidation)
+
+- The six AI-branded apps (chat copilot, design agent, Magic Write,
+  AI image generator, AI design plan, AI theme) are now ONE **Canvix
+  AI** app with five mode tabs — Chat / Generate / Write / Image /
+  Theme (`UnifiedAIApp.tsx`; the tab contents are the original,
+  unchanged app components). The AI design plan PANEL is retired —
+  its describe → review → apply flow IS the Generate tab; the
+  `/api/ai/plan` route remains available as an API.
 
 ## [0.31.0] — 2026-11-25
 

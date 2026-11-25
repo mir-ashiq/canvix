@@ -18,6 +18,7 @@ import { extractBrief, mergeBriefs, normalizeStoredBrief, type DesignBrief } fro
 import { critiqueWithVision } from '@/lib/agent/vision'
 import { getClientForSlotForUser } from '@/lib/ai/provider'
 import { getSessionUser } from '@/lib/auth/session'
+import { getDesignProvenance } from '@/lib/design-provenance'
 
 export const runtime = 'nodejs'
 export const maxDuration = 800
@@ -80,6 +81,25 @@ const bridges = new Map<string, RunBridge>()
 /** tiny id for runs */
 function newRunId(): string {
   return `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** v0.32.1 (review P1): the stored brief, read AUTHORITATIVELY. When
+ *  the design context carries a design id, the persisted DB contract
+ *  (server-normalized, server-verified provenance) wins — a client
+ *  post cannot tamper with what the run is gated on. The posted
+ *  aiBrief is only the fallback (designs whose provenance is not yet
+ *  persisted, or a DB hiccup). */
+async function authoritativeStoredBrief(design: AgentDesignCtx): Promise<DesignBrief | null> {
+  if (design.designId) {
+    try {
+      const row = await getDesignProvenance(design.designId)
+      if (row) return row.brief
+    } catch {
+      /* fall through to the posted brief */
+    }
+  }
+  const posted = normalizeStoredBrief(design.aiBrief)
+  return posted ? posted.brief : null
 }
 
 /** v0.29.3: one grounded vision critique of a REAL captured
@@ -255,7 +275,12 @@ async function __canvix_post(req: NextRequest) {
     // and an edit-mode refinement on such a design is gated on the
     // merged brief too: a refinement may not finish while a verified
     // requirement has gone missing.
-    const storedBrief = normalizeStoredBrief(design.aiBrief)
+    // v0.32.1 (review P1): when the context carries the design id, the
+    // persisted DB contract is AUTHORITATIVE — server-normalized,
+    // server-verified — so a client post cannot tamper with what the
+    // run is gated on. The client-posted aiBrief stays as the fallback
+    // for designs whose provenance is not (yet) persisted.
+    const storedBrief = await authoritativeStoredBrief(design)
     const extracted =
       mode === 'create' || mode === 'improve'
         ? extractBrief(message, design.width, design.height)

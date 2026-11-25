@@ -41,6 +41,10 @@ export interface AgentElementCtx {
 
 export interface AgentDesignCtx {
   name?: string
+  /** v0.32.1: the open design's id — lets the route read the
+   *  AUTHORITATIVE stored brief from the database (server-verified
+   *  provenance) instead of trusting the client-posted copy. */
+  designId?: string | null
   width?: number
   height?: number
   templateType?: string

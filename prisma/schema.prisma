@@ -162,14 +162,21 @@ model Design {
 // audit trail of the run that produced it. Cascade: deleting a design
 // deletes its provenance (it is meaningless without the design).
 model DesignProvenance {
-  id        String   @id @default(cuid())
-  designId  String   @unique
-  design    Design   @relation("DesignProvenance", fields: [designId], references: [id], onDelete: Cascade)
-  prompt    String   @default("")
-  brief     Json     @default("{}")
-  outcome   String   @default("passed")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String    @id @default(cuid())
+  designId   String    @unique
+  design     Design    @relation("DesignProvenance", fields: [designId], references: [id], onDelete: Cascade)
+  prompt     String    @default("")
+  brief      Json      @default("{}")
+  outcome    String    @default("passed")
+  // v0.32.1 (review P1): server-side verification state. The design
+  // save re-validates the stored brief against the SAVED pages and
+  // flips this flag — stored provenance carries proof, not a client's
+  // claim. verifiedAt binds the proof to the document version it was
+  // checked against.
+  verified   Boolean   @default(false)
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
 
 // ── v0.14 (D6): dashboard folders ───────────────────────────

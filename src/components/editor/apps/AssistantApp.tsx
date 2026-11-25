@@ -204,6 +204,10 @@ function buildDesignContext() {
 
   return {
     name: s.designName,
+    // v0.32.1: the design id lets the route read the AUTHORITATIVE
+    // stored brief from the database — the posted aiBrief copy is
+    // only a fallback
+    designId: s.designId,
     width: s.width,
     height: s.height,
     templateType: (s as unknown as { templateType?: string }).templateType,

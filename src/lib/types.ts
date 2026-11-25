@@ -615,13 +615,25 @@ export interface DesignRecord extends DesignSnapshot {
   /** v0.9: true when the design belongs to another account — the editor
    *  switches to view-only (no saves; mutating APIs answer 403). */
   readOnly?: boolean
-  /** v0.32 (Unified Canvix AI): the stored brief contract — what an
-   *  applied autonomous generation was verified against. Present when
-   *  GET /api/designs/[id] found a provenance row; the editor keeps it
-   *  in the store and the chat agent merges it into every refinement
-   *  run on this design (continuation). Type-only import: no runtime
-   *  dependency on the agent module. */
-  aiProvenance?: import('./agent/brief').DesignBrief | null
+  /** v0.32 (Unified Canvix AI): the stored provenance payload — what an
+   *  applied autonomous generation was verified against, plus the
+   *  server-side verification state (re-checked on every design save).
+   *  Present when GET /api/designs/[id] found a provenance row; the
+   *  editor keeps the brief in the store and the chat agent merges it
+   *  into every refinement run on this design (continuation).
+   *  v0.32.1: `prompt` ships ONLY in editor/owner responses — it is
+   *  private to the caller who can edit (viewers get the shareable
+   *  contract without the original prompt). Type-only import: no
+   *  runtime dependency on the agent module. */
+  aiProvenance?: {
+    prompt?: string
+    brief: import('./agent/brief').DesignBrief
+    outcome?: string
+    /** server-side verdict against the SAVED pages */
+    verified?: boolean
+    verifiedAt?: string
+    updatedAt?: string
+  } | null
 }
 
 export interface TemplateRecord extends DesignSnapshot {

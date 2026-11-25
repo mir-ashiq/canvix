@@ -186,6 +186,11 @@ export default function Editor() {
             pages: state.pages,
             baseUpdatedAt: state.baseUpdatedAt,
             ...(thumbnail ? { thumbnail } : {}),
+            // v0.32.1: the apply flow's pending contract rides THIS save —
+            // the server normalizes it ('reject' mode: over-limit is
+            // refused, never weakened) and verifies it against the
+            // saved pages (proof, not a claim)
+            ...(state.aiPendingProvenance ? { aiProvenance: state.aiPendingProvenance } : {}),
           }),
         })
         if (!res.ok) throw new Error('save failed')
@@ -193,6 +198,21 @@ export default function Editor() {
           updatedAt?: string
           merged?: boolean
           pages?: PageData[]
+          aiProvenance?: unknown
+          aiProvenanceRejected?: string
+        }
+        // v0.32.1: the contract was stored or explicitly rejected —
+        // either way the pending payload is settled (a rejection is
+        // surfaced, never silently retried into a weakened store)
+        if (saved.aiProvenance !== undefined || saved.aiProvenanceRejected !== undefined) {
+          if (saved.aiProvenanceRejected) {
+            toast({
+              title: 'AI contract not saved',
+              description: saved.aiProvenanceRejected.slice(0, 160),
+              variant: 'destructive',
+            })
+          }
+          useEditorStore.getState().setAIPendingProvenance(null)
         }
         // v0.10: the server merged our pages with concurrent edits — adopt
         // the merged result (applying through the merge gate is a no-op for

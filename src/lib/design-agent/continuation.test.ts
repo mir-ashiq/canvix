@@ -1,5 +1,6 @@
 // ─────────────────────────────────────────────────────────────
-// Unified Canvix AI — the continuation acceptance (v0.32).
+// Unified Canvix AI — the continuation acceptance (v0.32, hardened
+// v0.32.1 after the external review).
 //
 // THE milestone acceptance test, exactly as specified:
 //   a user requests an entire design → Canvix creates and verifies
@@ -14,6 +15,15 @@
 // applyDesignAction (the same validated, undoable executor user
 // edits ride), and the brief gate validates against the live store
 // state exactly the way the Assistant panel does.
+//
+// v0.32.1 additions (the review's asks, as tests):
+//   · strict normalized equality — appended words, case changes,
+//     punctuation edits and missing spaces are REJECTIONS
+//   · restrictions survive normalization ("no stock photos" persists)
+//   · over-limit briefs are refused in reject mode, counted in clamp
+//     mode — never silently weakened or truncated
+//   · reload hydration regression (the GET payload's brief, not the
+//     payload object, lands in the store)
 // ─────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from 'vitest'
@@ -114,6 +124,7 @@ function storeDesignContext(): AgentDesignCtx {
   })
   return {
     name: s.designName,
+    designId: s.designId,
     width: s.width,
     height: s.height,
     pageCount: s.pages.length,
@@ -212,20 +223,21 @@ async function refineWithAgent(
   const events: AgentEvent[] = []
   const { chat, calls } = scriptedChat(messages)
   const design = storeDesignContext()
-  const storedBrief = normalizeStoredBrief(design.aiBrief)
+  const storedBrief = normalizeStoredBrief(design.aiBrief)?.brief ?? brief
   let pending: DesignAction[] = []
   const result = await runAgentLoop({
     chat,
     design,
     mode: 'edit',
-    brief: storedBrief ?? brief,
+    brief: storedBrief,
     emit: (e) => {
       events.push(e)
       if (e.type === 'action') pending = e.actions as DesignAction[]
     },
     // the REAL executor — proving the applied pages are editable
     awaitApply: async () => applyForReal(pending),
-    validateBriefOnClient: async () => validateAgainstStore(storedBrief ?? brief ?? { requiredTexts: [], requiredColors: [], restrictions: [], notes: [], source: 'user' }),
+    validateBriefOnClient: async () =>
+      validateAgainstStore(storedBrief ?? { requiredTexts: [], requiredColors: [], restrictions: [], notes: [], source: 'user' }),
   })
   return { result: result as Awaited<ReturnType<typeof runAgentLoop>>, events, calls }
 }
@@ -284,40 +296,165 @@ describe('mergeBriefs: the continuation contract', () => {
   })
 })
 
-describe('normalizeStoredBrief: provenance hygiene', () => {
+describe('normalizeStoredBrief: provenance hygiene (v0.32.1 — nothing silently weakened)', () => {
   it('keeps texts/colors, forces mandatory, drops dimensions (the design owns geometry after apply)', () => {
     const brief = normalizeStoredBrief({
       requiredTexts: [{ tier: 'preference', text: 'Run Dal Lake 2026' }],
       requiredColors: [{ tier: 'preference', hex: '#1B3A6B' }],
       dimensions: { tier: 'mandatory', width: 1080, height: 1350 },
-      restrictions: ['nope'],
-      notes: ['x'],
       source: 'model-refined',
     })
     expect(brief).not.toBeNull()
-    expect(brief!.requiredTexts).toEqual([{ tier: 'mandatory', text: 'Run Dal Lake 2026' }])
-    expect(brief!.requiredColors).toEqual([{ tier: 'mandatory', hex: '#1b3a6b' }])
-    expect(brief!.dimensions).toBeUndefined()
-    expect(brief!.restrictions).toEqual([])
+    expect(brief!.brief.requiredTexts).toEqual([{ tier: 'mandatory', text: 'Run Dal Lake 2026' }])
+    expect(brief!.brief.requiredColors).toEqual([{ tier: 'mandatory', hex: '#1b3a6b' }])
+    expect(brief!.brief.dimensions).toBeUndefined()
   })
 
-  it('caps a hostile payload and rejects junk', () => {
+  it('restrictions and notes SURVIVE persistence (a "no stock photos" stays in the contract)', () => {
+    const brief = normalizeStoredBrief({
+      requiredTexts: [{ text: 'Run Dal Lake 2026' }],
+      restrictions: ['  no   stock photos ', 'avoid cluttered layouts'],
+      notes: ['night-sky feel'],
+    })
+    expect(brief!.brief.restrictions).toEqual(['no stock photos', 'avoid cluttered layouts'])
+    expect(brief!.brief.notes).toEqual(['night-sky feel'])
+  })
+
+  it('clamp mode bounds a hostile payload and COUNTS what it dropped; junk is null', () => {
     const hostile = {
       requiredTexts: Array.from({ length: 100 }, (_, i) => ({ text: `t${i}` })),
       requiredColors: Array.from({ length: 50 }, () => ({ hex: '#123456' })),
     }
     const brief = normalizeStoredBrief(hostile)
-    expect(brief!.requiredTexts).toHaveLength(24)
-    expect(brief!.requiredColors).toHaveLength(12)
+    // generous caps — a real pipeline brief never approaches them
+    expect(brief!.brief.requiredTexts).toHaveLength(64)
+    expect(brief!.brief.requiredColors).toHaveLength(32)
+    expect(brief!.dropped).toBe((100 - 64) + (50 - 32))
     expect(normalizeStoredBrief({ requiredTexts: [{ text: '   ' }] })).toBeNull()
     expect(normalizeStoredBrief('junk')).toBeNull()
     expect(normalizeStoredBrief(null)).toBeNull()
     expect(normalizeStoredBrief({ requiredColors: [{ hex: '#12345' }] })).toBeNull()
   })
+
+  it('reject mode REFUSES over-limit briefs instead of storing a weakened contract — never truncation', () => {
+    const overCap = {
+      requiredTexts: Array.from({ length: 65 }, (_, i) => ({ text: `t${i}` })),
+    }
+    expect(normalizeStoredBrief(overCap, { overflow: 'reject' })).toBeNull()
+    // a text LONGER than the cap is dropped in clamp mode (a truncated
+    // requirement is a DIFFERENT requirement) and refused in reject
+    // mode — never sliced mid-string
+    const longText = { requiredTexts: [{ text: 'x'.repeat(401) }] }
+    expect(normalizeStoredBrief(longText)).toBeNull()
+    expect(normalizeStoredBrief(longText, { overflow: 'reject' })).toBeNull()
+    // within limits, reject mode stores exactly what was given
+    const fine = { requiredTexts: [{ text: 'Run Dal Lake 2026' }], restrictions: ['no stock photos'] }
+    const ok = normalizeStoredBrief(fine, { overflow: 'reject' })
+    expect(ok!.brief.requiredTexts).toEqual([{ tier: 'mandatory', text: 'Run Dal Lake 2026' }])
+    expect(ok!.brief.restrictions).toEqual(['no stock photos'])
+    expect(ok!.dropped).toBe(0)
+  })
 })
 
 // ═════════════════════════════════════════════════════════════
-// 2. THE acceptance: create → verify → refine on one design
+// 2. strict normalized equality (review P0 — the regressions asked
+//    for: appended words, capitalization, punctuation, spaces)
+// ═════════════════════════════════════════════════════════════
+
+describe('validateBrief: required texts are EXACT, not substrings', () => {
+  const brief: DesignBrief = {
+    requiredTexts: [{ tier: 'mandatory', text: 'Run Dal Lake 2026' }],
+    requiredColors: [{ tier: 'mandatory', hex: '#1b3a6b' }],
+    restrictions: [],
+    notes: [],
+    source: 'user',
+  }
+  const state = (texts: string[]) => ({ texts, colors: ['#1b3a6b'], width: 1080, height: 1350 })
+
+  it('the exact string passes; whitespace wrap is tolerated', () => {
+    expect(validateBrief(brief, state(['Run Dal Lake 2026'])).satisfied).toBe(true)
+    expect(validateBrief(brief, state(['  Run\nDal   Lake 2026 '])).satisfied).toBe(true)
+  })
+  it('appended words do NOT satisfy the requirement (the review\u2019s example)', () => {
+    expect(validateBrief(brief, state(['Run Dal Lake 2026 — Special Offer'])).satisfied).toBe(false)
+    expect(validateBrief(brief, state(['Tonight: Run Dal Lake 2026'])).satisfied).toBe(false)
+  })
+  it('capitalization changes are rejections', () => {
+    expect(validateBrief(brief, state(['RUN DAL LAKE 2026'])).satisfied).toBe(false)
+    expect(validateBrief(brief, state(['run dal lake 2026'])).satisfied).toBe(false)
+  })
+  it('altered punctuation and missing spaces are rejections', () => {
+    expect(validateBrief(brief, state(['Run Dal Lake 2026!'])).satisfied).toBe(false)
+    expect(validateBrief(brief, state(['Run Dal Lake, 2026'])).satisfied).toBe(false)
+    expect(validateBrief(brief, state(['RunDalLake 2026'])).satisfied).toBe(false)
+    expect(validateBrief(brief, state(['Run Dal Lake2026'])).satisfied).toBe(false)
+  })
+})
+
+// ═════════════════════════════════════════════════════════════
+// 3. reload hydration + the pending-contract lifecycle (client side)
+// ═════════════════════════════════════════════════════════════
+
+describe('provenance hydration (the reload path)', () => {
+  it('the GET payload\u2019s BRIEF lands in the store — not the payload object (v0.32 regression)', () => {
+    const brief: DesignBrief = {
+      requiredTexts: [{ tier: 'mandatory', text: 'Run Dal Lake 2026' }],
+      requiredColors: [{ tier: 'mandatory', hex: '#1b3a6b' }],
+      restrictions: ['no stock photos'],
+      notes: [],
+      source: 'user',
+    }
+    useEditorStore.getState().loadDesign({
+      id: `design-hydrate-${Date.now()}`,
+      name: 'Night Run Poster',
+      width: 1080,
+      height: 1350,
+      pages: [{ id: 'p1', background: { type: 'solid', color: '#FFFFFF' }, elements: [] }],
+      thumbnail: null,
+      source: 'blank',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      // exactly what GET /api/designs/[id] returns for an editor
+      aiProvenance: { brief, outcome: 'passed', verified: true, verifiedAt: '2026-11-25T00:00:00.000Z' },
+    })
+    const s = useEditorStore.getState()
+    // the hydration bug stored the whole PAYLOAD as the brief — the
+    // posted aiBrief then normalized to nothing and reload silently
+    // lost the contract
+    expect(s.aiBrief).toEqual(brief)
+  })
+
+  it('a design without provenance hydrates to no brief; loadDesign clears pending', () => {
+    useEditorStore.getState().setAIPendingProvenance({
+      prompt: 'old prompt',
+      outcome: 'passed',
+      brief: {
+        requiredTexts: [{ tier: 'mandatory', text: 'stale' }],
+        requiredColors: [],
+        restrictions: [],
+        notes: [],
+        source: 'user',
+      },
+    })
+    useEditorStore.getState().loadDesign({
+      id: `design-hydrate-plain-${Date.now()}`,
+      name: 'Plain',
+      width: 1080,
+      height: 1080,
+      pages: [{ id: 'p1', background: { type: 'solid', color: '#FFFFFF' }, elements: [] }],
+      thumbnail: null,
+      source: 'blank',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    const s = useEditorStore.getState()
+    expect(s.aiBrief).toBeNull()
+    expect(s.aiPendingProvenance).toBeNull()
+  })
+})
+
+// ═════════════════════════════════════════════════════════════
+// 4. THE acceptance: create → verify → refine on one design
 // ═════════════════════════════════════════════════════════════
 
 describe('Unified Canvix AI acceptance: create → verify → refine on ONE design', () => {
@@ -369,7 +506,7 @@ describe('Unified Canvix AI acceptance: create → verify → refine on ONE desi
     expect(after.locked).toBeFalsy()
 
     // the contract held: brief validation against the LIVE store
-    const storedBrief = normalizeStoredBrief(run.report.brief)!
+    const storedBrief = normalizeStoredBrief(run.report.brief)!.brief
     const v = validateAgainstStore(storedBrief)
     expect(v.satisfied).toBe(true)
     expect(v.unmet).toEqual([])
@@ -386,7 +523,7 @@ describe('Unified Canvix AI acceptance: create → verify → refine on ONE desi
     const run = await runDesignAgent({ prompt: PROMPT, model: scriptedPlanner() })
     expect(run.outcome).toBe('passed')
     seedStore(run.pages ?? [], run.report.brief)
-    const storedBrief = normalizeStoredBrief(run.report.brief)!
+    const storedBrief = normalizeStoredBrief(run.report.brief)!.brief
 
     // sanity: the applied design satisfies its own contract
     expect(validateAgainstStore(storedBrief).satisfied).toBe(true)
@@ -420,5 +557,35 @@ describe('Unified Canvix AI acceptance: create → verify → refine on ONE desi
     expect(result.verification).toContain('Brief contract validated')
     const finalEvent = events[events.length - 1]
     expect(finalEvent?.type).toBe('done')
+  })
+
+  it('appended words are rejected too — strict equality is what the gate enforces (review P0)', async () => {
+    const run = await runDesignAgent({ prompt: PROMPT, model: scriptedPlanner() })
+    expect(run.outcome).toBe('passed')
+    seedStore(run.pages ?? [], run.report.brief)
+    const storedBrief = normalizeStoredBrief(run.report.brief)!.brief
+
+    const headlineId = textElementId(REQUIRED_TEXTS[0])
+    const { calls, result } = await refineWithAgent(
+      [
+        // the "refinement" appends a promo line to the required
+        // headline — a SUBSTRING match would let this ride through
+        turn('update_elements', { ids: [headlineId], patch: { text: `${REQUIRED_TEXTS[0]} — Special Offer` } }, 'add a promo suffix'),
+        done('Suffixed'),
+        turn('update_elements', { ids: [headlineId], patch: { text: REQUIRED_TEXTS[0] } }, 'restore the exact required headline'),
+        done('Restored verbatim'),
+      ],
+      storedBrief,
+    )
+
+    // the gate REJECTED the appended-words done: the unmet list named
+    // the requirement
+    const rejection = calls.find((c) => c.some((m) => m.role === 'user' && m.content.includes('NOT DONE')))
+    expect(rejection).toBeDefined()
+    expect(rejection!.find((m) => m.role === 'user' && m.content.includes('NOT DONE'))!.content).toContain(REQUIRED_TEXTS[0])
+
+    const restored = useEditorStore.getState().pages[useEditorStore.getState().currentPage].elements.find((e) => e.id === headlineId) as TextElement
+    expect(restored.text).toBe(REQUIRED_TEXTS[0])
+    expect(result.verification).toContain('Brief contract validated')
   })
 })

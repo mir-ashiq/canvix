@@ -158,6 +158,13 @@ interface EditorState {
   // runs on this design stay gated on the verified requirements.
   aiBrief: DesignBrief | null
   setAIBrief: (brief: DesignBrief | null) => void
+  /** v0.32.1: the contract waiting to be persisted. Set at Apply;
+   *  the design save carries it to the server (PUT /api/designs/[id]
+   *  body.aiProvenance), where it is normalized in 'reject' mode and
+   *  verified against the saved pages; cleared once the save answers
+   *  (stored or rejected — a rejection is surfaced, never silent). */
+  aiPendingProvenance: { prompt: string; outcome: string; brief: DesignBrief } | null
+  setAIPendingProvenance: (pending: { prompt: string; outcome: string; brief: DesignBrief } | null) => void
 
   // lifecycle
   loadDesign: (d: DesignRecord) => void
@@ -334,6 +341,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   // opens; set when a DesignAgent run is applied. The chat agent's
   // requests carry it so refinement runs stay gated on it.
   aiBrief: null,
+  aiPendingProvenance: null,
 
   // v0.5: collaboration runtime
   collaborators: [],
@@ -372,8 +380,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       baseUpdatedAt: d.updatedAt ?? null,
       offlineRestored: false,
       // v0.32: the stored brief contract rides the load — null for
-      // designs without AI provenance (behaviour unchanged)
-      aiBrief: d.aiProvenance ?? null,
+      // designs without AI provenance (behaviour unchanged).
+      // v0.32.1: hydrate from the PAYLOAD's brief (the GET returns
+      // {prompt?, brief, verified…} — the old code stored the whole
+      // payload as the brief, silently breaking reload continuation)
+      aiBrief: d.aiProvenance?.brief ?? null,
+      aiPendingProvenance: null,
     })
     // v0.10: seed the collab replay cursor from the server's current seq —
     // our freshly loaded document already contains every persisted edit,
@@ -453,11 +465,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     emit({ kind: 'design:rename', name: name.slice(0, 80) })
   },
 
-  // v0.32 (Unified Canvix AI): set/clear the design's stored brief
-  // contract. DesignAgent Apply sets it right after appending the
-  // pages (and persists it via /ai-provenance); loadDesign hydrates it
-  // from the design GET on open.
+  // v0.32: set/clear the design's stored brief contract. DesignAgent
+  // Apply sets it right after appending the pages (and persists it
+  // via /ai-provenance); loadDesign hydrates it from the design GET
+  // on open.
   setAIBrief: (brief) => set({ aiBrief: brief }),
+
+  // v0.32.1: queue the contract for the next design save (Apply) /
+  // clear it once the save answered (stored or rejected)
+  setAIPendingProvenance: (pending) => set({ aiPendingProvenance: pending }),
 
   pushHistory: () => {
     // v0.7: snapshots share structure — pages are never mutated in place,

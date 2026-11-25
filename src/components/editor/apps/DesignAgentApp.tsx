@@ -163,21 +163,19 @@ export function DesignAgentApp({ onClose }: AppPanelProps) {
     setApplied(true)
     // v0.32 (Unified Canvix AI — continuation): the applied pages carry
     // their contract. The store brief makes every later chat-agent run
-    // on THIS design merge it (create→verify→refine on one design);
-    // the provenance PUT persists it across sessions/reloads. Both are
-    // best-effort AFTER the pages landed — a persistence hiccup never
-    // rolls the apply back, and the session brief still guards.
+    // on THIS design merge it (create→verify→refine on one design).
+    // v0.32.1 (review P1): persistence no longer happens here — the
+    // PENDING contract rides the next design save (PUT /api/designs/
+    // [id]), where the server normalizes it in 'reject' mode and
+    // verifies it against the saved pages. No client-supplied PUT, no
+    // unearned 'passed', and a failed save can't strand a contract
+    // for pages that were never saved.
     const brief = result.report?.brief ?? null
-    if (brief) store.setAIBrief(brief)
-    if (brief && store.designId && !store.readOnly) {
-      void fetch(`/api/designs/${store.designId}/ai-provenance`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, brief, outcome: result.outcome }),
-      }).catch(() => {
-        /* session brief still guards; reload loses the stored contract */
-        console.warn('[design-agent] provenance save failed')
-      })
+    if (brief) {
+      store.setAIBrief(brief)
+      if (!store.readOnly) {
+        store.setAIPendingProvenance({ prompt, outcome: result.outcome, brief })
+      }
     }
     toast({
       title: `${chosen.length} page${chosen.length > 1 ? 's' : ''} added`,

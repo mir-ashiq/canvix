@@ -2,36 +2,72 @@ import { test, expect, type Browser } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import { Client } from 'pg'
 
-// v0.32 (Unified Canvix AI) — design provenance, end to end.
+// v0.32.1 (Unified Canvix AI hardening) — design provenance, end to
+// end through the REAL flow the review asked for: the design save.
 //
-// The stored brief contract of a design: what an applied autonomous
-// generation was verified against, persisted so later natural-language
-// refinement of the SAME design stays gated on it. Proven here through
-// the real API and the real database (migration 0013 applied by
-// db:setup, same as CI):
-//
-//   1. PUT /api/designs/[id]/ai-provenance stores a brief (normalized:
-//      tiers forced mandatory, hexes lowercased)
-//   2. GET /api/designs/[id] (the editor's load path) carries it back
-//      as aiProvenance — this is what hydrates the editor store
-//   3. GET /api/designs/[id]/ai-provenance returns it too
-//   4. a brief with nothing usable is a 422 (honest rejection)
-//   5. foreign designs follow the designs family: GET is link-view
-//      (200, null provenance — that viewer can already GET the design
-//      itself), PUT answers NOT_YOUR_DESIGN (403); a missing id is a
-//      flat 404 on both verbs (no existence oracle)
-//   6. dimension-only briefs are rejected too (the design owns the
-//      geometry after apply — a stored size would fail every
-//      refinement on a legitimately resized design)
+//   1. APPLY→SAVE: PUT /api/designs/[id] with the pages AND the
+//      pending aiProvenance payload persists the contract and
+//      VERIFIES it server-side against the saved pages (verified:
+//      true, verifiedAt bound to that save). Restrictions survive
+//      ("no stock photos" stays in the contract).
+//   2. BOUND TO THE DOCUMENT: a later save whose pages append words
+//      to a required text (the review's P0 example — substring
+//      matching used to let this through) flips verified to FALSE;
+//      restoring the exact text flips it back. Proof, not a claim.
+//   3. PRIVACY: a link VIEWER (no session) gets the shareable
+//      contract (brief + verification state) but NEVER the original
+//      generation prompt; writes are refused (NOT_YOUR_DESIGN 403,
+//      and the client-supplied provenance PUT is gone — 405).
+//   4. NO SILENT WEAKENING: a junk or over-limit brief is REFUSED at
+//      save time with an explicit reason in the response — never
+//      stored truncated or capped.
 //
 // Needs a database — see playwright.config.ts. The fixture user +
 // session + designs are seeded straight into the database (same
 // pattern as api-keys.spec.ts, inside the register budget).
 
-const USER = { id: 'u_e2e_prov_user', username: 'e2e_prov_user', token: 'e2e-prov-user-token' }
-const OTHER = { id: 'u_e2e_prov_other', username: 'e2e_prov_other' } // owns the foreign design
+const USER = { id: 'u_e2e_prov_user', username: 'e2e_prov_user', token: 'e2e-prov-user-token-v2' }
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:3000'
+
+const PROMPT = 'A poster for a night run — "Run Dal Lake 2026", night blues, 1080x1350'
+
+const BRIEF = {
+  requiredTexts: [
+    { tier: 'preference', text: 'Run Dal Lake 2026' },
+    { tier: 'preference', text: '12km · Dachigam Road · 26 Jan' },
+  ],
+  requiredColors: [{ tier: 'preference', hex: '#1B3A6B' }],
+  restrictions: ['no stock photos'],
+  notes: [],
+}
+
+/** pages that satisfy the brief exactly (strict equality) */
+const pagesSatisfying = () => [
+  {
+    id: 'p1',
+    background: { type: 'solid', color: '#FFFFFF' },
+    elements: [
+      { id: 't1', type: 'text', text: 'Run Dal Lake 2026', x: 80, y: 200, width: 900, height: 120, fontSize: 96, fontFamily: 'Inter', bold: true, fill: '#1B3A6B', align: 'center' },
+      { id: 't2', type: 'text', text: '12km · Dachigam Road · 26 Jan', x: 80, y: 360, width: 900, height: 60, fontSize: 36, fontFamily: 'Inter', fill: '#1B3A6B', align: 'center' },
+      { id: 'r1', type: 'rect', x: 0, y: 0, width: 1080, height: 120, fill: '#1B3A6B' },
+    ],
+  },
+]
+
+/** the review's P0 example: required text with words APPENDED — a
+ *  substring match would pass, strict equality must not */
+const pagesWithAppendedWords = () => [
+  {
+    id: 'p1',
+    background: { type: 'solid', color: '#FFFFFF' },
+    elements: [
+      { id: 't1', type: 'text', text: 'Run Dal Lake 2026 — Special Offer', x: 80, y: 200, width: 900, height: 120, fontSize: 96, fontFamily: 'Inter', bold: true, fill: '#1B3A6B', align: 'center' },
+      { id: 't2', type: 'text', text: '12km · Dachigam Road · 26 Jan', x: 80, y: 360, width: 900, height: 60, fontSize: 36, fontFamily: 'Inter', fill: '#1B3A6B', align: 'center' },
+      { id: 'r1', type: 'rect', x: 0, y: 0, width: 1080, height: 120, fill: '#1B3A6B' },
+    ],
+  },
+]
 
 function sessionId(token: string): string {
   return createHash('sha256').update(token).digest('hex')
@@ -45,30 +81,31 @@ test.beforeAll(async () => {
   client = new Client({ connectionString: process.env.DATABASE_URL })
   await client.connect()
   await client.query(`DELETE FROM "Session" WHERE "userId" = $1`, [USER.id])
-  await client.query(`DELETE FROM "User" WHERE "id" IN ($1, $2)`, [USER.id, OTHER.id])
+  await client.query(`DELETE FROM "User" WHERE "id" = $1`, [USER.id])
   await client.query(
-    `INSERT INTO "User" ("id", "username", "passwordHash", "createdAt") VALUES ($1, $2, 'seed-no-login', now()), ($3, $4, 'seed-no-login', now())`,
-    [USER.id, USER.username, OTHER.id, OTHER.username]
+    `INSERT INTO "User" ("id", "username", "passwordHash", "createdAt") VALUES ($1, $2, 'seed-no-login', now())`,
+    [USER.id, USER.username]
   )
   await client.query(
     `INSERT INTO "Session" ("id", "userId", "createdAt", "expiresAt") VALUES ($1, $2, now(), now() + interval '2 hours')`,
     [sessionId(USER.token), USER.id]
   )
-  await client.query(`DELETE FROM "Design" WHERE "ownerId" IN ($1, $2)`, [USER.id, OTHER.id])
-  await client.query(
-    `INSERT INTO "Design" ("id", "name", "width", "height", "pages", "ownerId", "createdAt", "updatedAt")
-     VALUES ('d_e2e_prov_mine', 'Provenance mine', 1080, 1350, '[]'::jsonb, $1, now(), now()),
-            ('d_e2e_prov_other', 'Provenance foreign', 1080, 1350, '[]'::jsonb, $2, now(), now())`,
-    [USER.id, OTHER.id]
-  )
+  await client.query(`DELETE FROM "Design" WHERE "ownerId" = $1`, [USER.id])
+  for (const id of ['d_e2e_prov_mine', 'd_e2e_prov_two']) {
+    await client.query(
+      `INSERT INTO "Design" ("id", "name", "width", "height", "pages", "ownerId", "createdAt", "updatedAt")
+       VALUES ($1, 'Provenance design', 1080, 1350, '[]'::jsonb, $2, now(), now())`,
+      [id, USER.id]
+    )
+  }
 })
 
 test.afterAll(async () => {
   if (client) {
     // provenance rows cascade with their designs; clean the designs
-    await client.query(`DELETE FROM "Design" WHERE "ownerId" IN ($1, $2)`, [USER.id, OTHER.id])
+    await client.query(`DELETE FROM "Design" WHERE "ownerId" = $1`, [USER.id])
     await client.query(`DELETE FROM "Session" WHERE "userId" = $1`, [USER.id])
-    await client.query(`DELETE FROM "User" WHERE "id" IN ($1, $2)`, [USER.id, OTHER.id])
+    await client.query(`DELETE FROM "User" WHERE "id" = $1`, [USER.id])
     await client.end().catch(() => {})
   }
 })
@@ -79,106 +116,183 @@ async function signedInContext(browser: Browser) {
   return ctx
 }
 
-test.describe('design AI provenance (Unified Canvix AI)', () => {
-  test('PUT stores the normalized brief; the design GET carries it back to the editor', async ({ browser }) => {
+type ApiResponse = { status(): number; json(): Promise<unknown> }
+type ApiFetch = (url: string, opts?: Record<string, unknown>) => Promise<ApiResponse>
+
+async function saveDesign(api: { fetch: ApiFetch }, designId: string, body: Record<string, unknown>): Promise<{ status: number; body: Record<string, unknown> }> {
+  const res = await api.fetch(`${BASE}/api/designs/${designId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', origin: BASE },
+    data: body,
+  })
+  return { status: res.status(), body: (await res.json()) as Record<string, unknown> }
+}
+
+test.describe('design AI provenance — persisted and verified by the design save (v0.32.1)', () => {
+  test('the apply→save flow stores the contract AND verifies it server-side', async ({ browser }) => {
     const ctx = await signedInContext(browser)
     const api = ctx.request
 
-    // 1. store a provenance brief (the DesignAgent Apply path)
-    const put = await api.fetch(`${BASE}/api/designs/d_e2e_prov_mine/ai-provenance`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', origin: BASE },
-      data: {
-        prompt: 'A poster for a night run',
-        outcome: 'passed',
-        brief: {
-          requiredTexts: [
-            { tier: 'preference', text: 'Run Dal Lake 2026' },
-            { tier: 'preference', text: '12km · Dachigam Road · 26 Jan' },
-          ],
-          requiredColors: [{ tier: 'preference', hex: '#1B3A6B' }],
-          dimensions: { tier: 'mandatory', width: 1080, height: 1350 },
-        },
-      },
+    // the apply flow's next save carries pages + the pending contract
+    const { status, body } = await saveDesign(api, 'd_e2e_prov_mine', {
+      pages: pagesSatisfying(),
+      aiProvenance: { prompt: PROMPT, outcome: 'passed', brief: BRIEF },
     })
-    expect(put.status()).toBe(200)
-    const stored = (await put.json()) as { provenance?: { brief?: { requiredTexts?: { tier?: string; text?: string }[]; requiredColors?: { hex?: string }[]; dimensions?: unknown } } }
-    // normalized: tiers forced mandatory, hex lowercased
-    expect(stored.provenance?.brief?.requiredTexts?.[0]).toEqual({ tier: 'mandatory', text: 'Run Dal Lake 2026' })
-    expect(stored.provenance?.brief?.requiredColors).toEqual([{ tier: 'mandatory', hex: '#1b3a6b' }])
-    expect(stored.provenance?.brief?.dimensions).toBeUndefined()
+    expect(status).toBe(200)
 
-    // 2. the editor's load path carries it (this hydrates the store)
+    // stored, normalized (tiers forced mandatory) and VERIFIED against
+    // the saved pages — with the restriction intact
+    const stored = body.aiProvenance as {
+      brief?: { requiredTexts?: { tier?: string; text?: string }[]; restrictions?: string[] }
+      verified?: boolean
+      verifiedAt?: string
+    }
+    expect(stored).toBeDefined()
+    expect(stored.brief?.requiredTexts?.[0]).toEqual({ tier: 'mandatory', text: 'Run Dal Lake 2026' })
+    expect(stored.brief?.restrictions).toEqual(['no stock photos'])
+    expect(stored.verified).toBe(true)
+    expect(typeof stored.verifiedAt).toBe('string')
+
+    // the editor's load path: prompt + contract + verification state
     const got = await api.fetch(`${BASE}/api/designs/d_e2e_prov_mine`)
     expect(got.status()).toBe(200)
-    const design = (await got.json()) as { aiProvenance?: { brief?: { requiredTexts?: { text?: string }[] } } }
+    const design = (await got.json()) as {
+      aiProvenance?: { prompt?: string; brief?: { requiredTexts?: { text?: string }[] }; verified?: boolean }
+    }
+    expect(design.aiProvenance?.prompt).toBe(PROMPT)
     expect(design.aiProvenance?.brief?.requiredTexts?.map((t) => t.text)).toEqual(
       expect.arrayContaining(['Run Dal Lake 2026', '12km · Dachigam Road · 26 Jan'])
     )
+    expect(design.aiProvenance?.verified).toBe(true)
 
-    // 3. the dedicated GET returns it too
+    // the dedicated GET agrees (the editor sees the prompt)
     const direct = await api.fetch(`${BASE}/api/designs/d_e2e_prov_mine/ai-provenance`)
     expect(direct.status()).toBe(200)
-    const directBody = (await direct.json()) as { provenance?: { outcome?: string } }
-    expect(directBody.provenance?.outcome).toBe('passed')
+    const directBody = (await direct.json()) as { provenance?: { prompt?: string; verified?: boolean } }
+    expect(directBody.provenance?.prompt).toBe(PROMPT)
+    expect(directBody.provenance?.verified).toBe(true)
 
     await ctx.close()
   })
 
-  test('a brief with nothing usable is a 422, a dimension-only brief included', async ({ browser }) => {
+  test('verification is bound to the saved document — appended words flip it false, the exact text flips it back', async ({ browser }) => {
     const ctx = await signedInContext(browser)
     const api = ctx.request
 
-    const junk = await api.fetch(`${BASE}/api/designs/d_e2e_prov_mine/ai-provenance`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', origin: BASE },
-      data: { brief: { requiredTexts: [], requiredColors: [] } },
-    })
-    expect(junk.status()).toBe(422)
+    // a later save APPENDS words to the required headline (the
+    // review's P0 example). Substring matching would call this
+    // satisfied; the strict server-side gate must not.
+    const appended = await saveDesign(api, 'd_e2e_prov_mine', { pages: pagesWithAppendedWords() })
+    expect(appended.status).toBe(200)
+    expect(appended.body.aiProvenanceVerified).toBe(false)
 
-    // dimensions alone never survive normalization — nothing checkable
-    // remains, so the PUT rejects instead of storing a no-op contract
-    const dimsOnly = await api.fetch(`${BASE}/api/designs/d_e2e_prov_mine/ai-provenance`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', origin: BASE },
-      data: { brief: { dimensions: { tier: 'mandatory', width: 1080, height: 1350 } } },
-    })
-    expect(dimsOnly.status()).toBe(422)
+    // the GET shows the contract intact but the verdict false
+    const drifted = (await (await api.fetch(`${BASE}/api/designs/d_e2e_prov_mine`)).json()) as {
+      aiProvenance?: { brief?: { requiredTexts?: { text?: string }[] }; verified?: boolean }
+    }
+    expect(drifted.aiProvenance?.brief?.requiredTexts?.[0]?.text).toBe('Run Dal Lake 2026')
+    expect(drifted.aiProvenance?.verified).toBe(false)
+
+    // restoring the exact text flips the verdict back — the proof
+    // stays bound to the CURRENT document, not a one-time claim
+    const restored = await saveDesign(api, 'd_e2e_prov_mine', { pages: pagesSatisfying() })
+    expect(restored.body.aiProvenanceVerified).toBe(true)
 
     await ctx.close()
   })
 
-  test('foreign designs follow the designs family — viewable, never writable; a missing id is a flat 404', async ({ browser }) => {
+  test('privacy: a link VIEWER gets the shareable contract, never the prompt; writes are refused', async ({ browser }) => {
+    // the owner stores a contract first (fresh design)
     const ctx = await signedInContext(browser)
     const api = ctx.request
+    const stored = await saveDesign(api, 'd_e2e_prov_two', {
+      pages: pagesSatisfying(),
+      aiProvenance: { prompt: 'private generation prompt', outcome: 'passed', brief: BRIEF },
+    })
+    expect(stored.body.aiProvenance).toBeDefined()
+    await ctx.close()
 
-    // GET: link-view semantics, same as GET /api/designs/[id] itself —
-    // that viewer can already read the whole design, so the (less
-    // sensitive) provenance rides the same rule: null when none stored
-    const got = await api.fetch(`${BASE}/api/designs/d_e2e_prov_other/ai-provenance`)
+    // the link viewer: no session at all — the designs family grants
+    // link-view, so they can read the design AND its shareable
+    // contract, but the original prompt is private to editors
+    const viewer = await browser.newContext()
+    const vapi = viewer.request
+    const got = await vapi.fetch(`${BASE}/api/designs/d_e2e_prov_two`)
     expect(got.status()).toBe(200)
-    expect(((await got.json()) as { provenance?: unknown }).provenance).toBeNull()
+    const design = (await got.json()) as { readOnly?: boolean; aiProvenance?: { prompt?: string; brief?: unknown; verified?: boolean } }
+    expect(design.readOnly).toBe(true)
+    expect(design.aiProvenance).toBeDefined()
+    expect(design.aiProvenance?.brief).toBeDefined()
+    expect(design.aiProvenance?.verified).toBe(true)
+    expect('prompt' in (design.aiProvenance ?? {})).toBe(false)
+    expect(JSON.stringify(design.aiProvenance)).not.toContain('private generation prompt')
 
-    // PUT: the family's NOT_YOUR_DESIGN — a foreign design is never
-    // writable, and the response says exactly that
-    const put = await api.fetch(`${BASE}/api/designs/d_e2e_prov_other/ai-provenance`, {
+    // the dedicated GET follows the same rule
+    const direct = await vapi.fetch(`${BASE}/api/designs/d_e2e_prov_two/ai-provenance`)
+    expect(direct.status()).toBe(200)
+    const directBody = (await direct.json()) as { provenance?: { prompt?: string; brief?: unknown } }
+    expect(directBody.provenance?.brief).toBeDefined()
+    expect('prompt' in (directBody.provenance ?? {})).toBe(false)
+
+    // writes are refused: the viewer cannot save the design (and so
+    // cannot write provenance through it)…
+    const foreignSave = await vapi.fetch(`${BASE}/api/designs/d_e2e_prov_two`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', origin: BASE },
-      data: { brief: { requiredTexts: [{ text: 'nope' }] } },
+      data: { pages: pagesSatisfying() },
     })
-    expect(put.status()).toBe(403)
-
-    // a design that does not exist is a flat 404 on both verbs — no
-    // existence oracle
-    const gotMissing = await api.fetch(`${BASE}/api/designs/d_e2e_prov_does_not_exist/ai-provenance`)
-    expect(gotMissing.status()).toBe(404)
-    const putMissing = await api.fetch(`${BASE}/api/designs/d_e2e_prov_does_not_exist/ai-provenance`, {
+    expect(foreignSave.status()).toBe(403)
+    // …and the client-supplied provenance PUT no longer exists
+    const gone = await vapi.fetch(`${BASE}/api/designs/d_e2e_prov_two/ai-provenance`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', origin: BASE },
-      data: { brief: { requiredTexts: [{ text: 'nope' }] } },
+      data: { brief: BRIEF },
     })
-    expect(putMissing.status()).toBe(404)
+    expect(gone.status()).toBe(405)
 
+    await viewer.close()
+  })
+
+  test('junk and over-limit briefs are REFUSED at save — never silently weakened', async ({ browser }) => {
+    const ctx = await signedInContext(browser)
+    const api = ctx.request
+
+    // nothing usable: the design still saves; the refusal is explicit
+    const junk = await saveDesign(api, 'd_e2e_prov_two', {
+      pages: pagesSatisfying(),
+      aiProvenance: { prompt: 'x', outcome: 'passed', brief: { requiredTexts: [], requiredColors: [] } },
+    })
+    expect(junk.status).toBe(200)
+    expect(typeof junk.body.aiProvenanceRejected).toBe('string')
+    expect(junk.body.aiProvenance).toBeUndefined()
+
+    // over-limit (more than the cap): refused rather than stored
+    // with entries silently dropped
+    const over = await saveDesign(api, 'd_e2e_prov_two', {
+      pages: pagesSatisfying(),
+      aiProvenance: {
+        prompt: 'x',
+        outcome: 'passed',
+        brief: { requiredTexts: Array.from({ length: 80 }, (_, i) => ({ text: `t${i}` })) },
+      },
+    })
+    expect(over.status).toBe(200)
+    expect(typeof over.body.aiProvenanceRejected).toBe('string')
+
+    await ctx.close()
+  })
+
+  test('a missing design id is a flat 404 on both verbs', async ({ browser }) => {
+    const ctx = await signedInContext(browser)
+    const api = ctx.request
+    const got = await api.fetch(`${BASE}/api/designs/d_e2e_prov_missing/ai-provenance`)
+    expect(got.status()).toBe(404)
+    const put = await api.fetch(`${BASE}/api/designs/d_e2e_prov_missing`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', origin: BASE },
+      data: { pages: pagesSatisfying() },
+    })
+    expect(put.status()).toBe(404)
     await ctx.close()
   })
 })

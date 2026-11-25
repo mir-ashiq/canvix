@@ -4,6 +4,9 @@
 **Scope:** one engineering upgrade, four unifications — shared provider
 resolution, shared rendering, shared validation, shared editing
 workflow — proven by a single acceptance test.
+**Hardened same day (v0.32.1):** the external review's four findings
+(3×P0, 1×P1) + the one-AI-surface consolidation — see the last
+section; it supersedes the persistence/PUT details below.
 
 ## The acceptance test (as specified, then implemented)
 
@@ -129,3 +132,96 @@ The two model seams (chat loop, pipeline plan/critique), the honesty
 contracts, the review gates and the checks-outrank-critique hierarchy
 are untouched. This milestone wires the systems together around the
 document; it does not alter how either agent thinks.
+
+---
+
+# v0.32.1 — the hardening pass (external review, 25 Nov 2026)
+
+An independent review of the merged milestone confirmed the
+architecture and CI, then sent back four findings (3×P0, 1×P1) and a
+consolidation request ("I don't want multiple AI apps in canvix, just
+keep it few"). All five are closed in this pass; the v0.32 statements
+about the client PUT and best-effort persistence above are SUPERSEDED
+by this section.
+
+## P0 — exact-text preservation is now exact
+
+`validateBrief` used case-insensitive SUBSTRING matching: a required
+`"Run Dal Lake 2026"` passed when the canvas held `"Run Dal Lake 2026
+— Special Offer"`. It now enforces strict normalized equality
+(whitespace collapsed, everything else character-for-character).
+Regression tests cover exactly the review's list — appended words,
+capitalization changes, punctuation edits, missing spaces — at three
+levels: unit (`continuation.test.ts`, `harness.test.ts`), the
+acceptance gate (a refinement that appends words is rejected and
+bounced back), and the server-side save verification (the e2e flips
+`verified` to false on an appended-words save).
+
+## P0 — no requirement is silently weakened anymore
+
+`normalizeStoredBrief` discarded `restrictions` and `notes`, silently
+truncated texts at 200 chars and capped at 24 entries. Now:
+restrictions and notes SURVIVE persistence (a "no stock photos" rides
+every refinement prompt); texts are never sliced mid-string; caps are
+generous (64 texts / 32 colors / 16 features); and overflow is
+EXPLICIT — the persistence path runs in **reject** mode (an over-limit
+brief is refused with a reason, never stored weakened), read paths run
+clamp mode and count what they dropped.
+
+## P0 — the original AI prompt is private
+
+The provenance row stores the generation prompt; both GETs used to
+ship it to anyone who could open the link — including read-only
+viewers — while the prompt can hold information not present in the
+finished design. Now `prompt` ships ONLY to callers who may edit the
+design (owner/anon attribution); link viewers receive the shareable
+contract — brief, verification state, timestamps — never the prompt.
+The e2e proves it with a real viewer against a design that HAS
+provenance.
+
+## P1 — stored provenance now carries proof, not claims
+
+The client-supplied `PUT /api/designs/[id]/ai-provenance` is GONE (an
+authorized editor could store any brief with `outcome: "passed"`).
+Contracts now enter the store only through the **design save itself**:
+the apply flow queues a pending contract in the editor store, the next
+`PUT /api/designs/[id]` carries it alongside the pages, the server
+normalizes it in reject mode and **verifies it against the final saved
+pages** (`verified`, `verifiedAt` — migration 0014). Every later save
+re-validates and keeps the verdict true to the current document —
+drift flips it false, restoration flips it back. The chat agent reads
+the AUTHORITATIVE database brief (the design context now carries
+`designId`), so a client post cannot tamper with what a run is gated
+on. Side effect: the "failed provenance save then reload" hazard is
+gone structurally — persistence rides the same save as the pages, so
+an unsaved apply loses pages and contract together, consistently.
+
+Also fixed here: the reload hydration bug — the design GET's
+`aiProvenance` payload object was stored as the brief itself, so
+reload continuation silently did nothing. The store now hydrates the
+payload's `brief` (regression-tested).
+
+## The consolidation — ONE AI surface
+
+Six AI-branded apps in the registry (chat copilot, design agent,
+Magic Write, AI image generator, AI design plan, AI theme) became one
+**Canvix AI** app with five mode tabs — Chat / Generate / Write /
+Image / Theme — each rendering the original, unchanged app component
+(`UnifiedAIApp.tsx`). The AI design plan panel is retired: its
+describe → review → apply flow IS the Generate tab, with the stronger
+DesignAgent engine behind it (`/api/ai/plan` remains available as an
+API). The wave-4 e2e now opens the unified app and switches tabs; the
+plan panel's UI test was retired with the panel.
+
+## Evidence (v0.32.1)
+
+- Unit: 1,709/1,709 (16 in the acceptance file — strict-equality
+  regressions, restriction preservation, reject-mode refusals, the
+  reload-hydration regression, and the appended-words gate).
+- tsc, eslint, production build clean locally.
+- Live-DB e2e (`unified-ai-provenance.spec.ts`, rewritten): the
+  apply→save flow with server verification, the appended-words flip,
+  viewer privacy (no prompt, writes refused, PUT 405), junk and
+  over-limit refusals with explicit reasons, flat 404 on missing ids.
+- Migration `0014` validated offline against Prisma's own schema
+  derivation (statement-equal) and applied by CI's db:setup.

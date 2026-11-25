@@ -467,10 +467,10 @@ describe('harness · brief contract', () => {
       expect(FORMAT_PRESETS[id], id).toBeTruthy()
     }
   })
-  it('validation passes when exact text + colors are present, fails with the unmet item named', () => {
+  it('validation passes only on EXACT text, fails with the unmet item named', () => {
     const brief = extractBrief('"Design Beyond Limits" with #8B5CF6 on 1080x1080')
     const ok = validateBrief(brief, {
-      texts: ['DESIGN BEYOND LIMITS — really'],
+      texts: ['Design Beyond Limits'],
       colors: ['#8b5cf6'],
       width: 1080,
       height: 1080,
@@ -482,11 +482,22 @@ describe('harness · brief contract', () => {
     expect(bad.unmet.some((u) => u.includes('8B5CF6'))).toBe(true)
     expect(bad.unmet.some((u) => u.includes('1080'))).toBe(true)
   })
-  it('case-insensitive hex matching; whitespace-tolerant text matching', () => {
+  it('case-insensitive hex matching; whitespace-tolerant but otherwise STRICT text matching', () => {
     const brief = extractBrief('"Hello World" #AABBCC')
+    // whitespace collapse still tolerated (line-wrap artifacts)
     expect(
-      validateBrief(brief, { texts: ['  hello\nworld  '], colors: ['#AABBCC'], width: 1080, height: 1080 }).satisfied,
+      validateBrief(brief, { texts: ['  Hello\nWorld  '], colors: ['#AABBCC'], width: 1080, height: 1080 }).satisfied,
     ).toBe(true)
+    // v0.32.1 (review P0): appended words no longer ride through as a
+    // "satisfied" requirement — strict equality, not containment
+    expect(
+      validateBrief(brief, { texts: ['Hello World — Special Offer'], colors: ['#AABBCC'], width: 1080, height: 1080 }).satisfied,
+    ).toBe(false)
+    // ...and neither do case changes: character-for-character after
+    // whitespace collapse
+    expect(
+      validateBrief(brief, { texts: ['hello world'], colors: ['#aabbcc'], width: 1080, height: 1080 }).satisfied,
+    ).toBe(false)
     expect(
       validateBrief(brief, { texts: ['x'], colors: ['#aabbcc'], width: 1080, height: 1080 }).satisfied,
     ).toBe(false)

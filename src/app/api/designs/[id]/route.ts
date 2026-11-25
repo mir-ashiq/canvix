@@ -11,7 +11,7 @@ import { getSessionUser } from '@/lib/auth/session'
 import { anonHashFrom } from '@/lib/auth/anon'
 import { recordActive } from '@/lib/admin/traffic'
 import { getSettings } from '@/lib/admin/config'
-import { getDesignProvenance } from '@/lib/design-provenance'
+import { getDesignProvenance, saveDesignProvenance, revalidateDesignProvenance } from '@/lib/design-provenance'
 
 // Normalise incoming pages payload (accepts object or legacy JSON string)
 // into a value suitable for the Postgres jsonb column.
@@ -48,7 +48,11 @@ async function __canvix_get(req: NextRequest, { params }: { params: Promise<{ id
     // rides the design load so the editor — and the chat agent through
     // it — knows the requirements an applied autonomous generation was
     // verified against. Null when the design has no AI provenance.
-    const aiProvenance = await getDesignProvenance(id).catch(() => null)
+    // v0.32.1 (review P0): the ORIGINAL PROMPT is private — it ships
+    // only to callers who may edit this design; link viewers get the
+    // shareable contract (brief + verification state), never the
+    // prompt that produced it.
+    const aiProvenance = await getDesignProvenance(id, { includePrompt: access.canEdit }).catch(() => null)
     return NextResponse.json({
       ...design,
       pages: design.pages ?? [],
@@ -128,11 +132,56 @@ async function __canvix_put(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     const design = await db.design.update({ where: { id }, data })
+
+    // ── v0.32.1 (Unified Canvix AI, review P1): provenance persistence
+    // rides the design save itself ─────────────────────────────────
+    // The apply flow marks the store's pending contract; the FIRST
+    // save that lands those pages persists it — normalized in
+    // 'reject' mode (over-limit briefs are REFUSED with a reason,
+    // never stored weakened) and verified SERVER-SIDE against the
+    // final saved pages (post-merge). Every LATER save re-validates
+    // the stored brief and keeps the verdict true to the document,
+    // so `verified` is proof bound to the saved version, not a
+    // client's claim.
+    let provenanceExtra: Record<string, unknown> = {}
+    try {
+      const pending = (body as { aiProvenance?: { prompt?: unknown; outcome?: unknown; brief?: unknown } }).aiProvenance
+      const finalPages = asPages(design.pages)
+      if (pending && typeof pending === 'object' && (pending.brief !== undefined || pending.outcome !== undefined)) {
+        const result = await saveDesignProvenance(
+          id,
+          {
+            prompt: typeof pending.prompt === 'string' ? pending.prompt : '',
+            outcome: typeof pending.outcome === 'string' ? pending.outcome : undefined,
+            brief: pending.brief,
+          },
+          { pages: finalPages, width: design.width, height: design.height },
+        )
+        provenanceExtra =
+          result.status === 'stored'
+            ? { aiProvenance: result.payload }
+            : { aiProvenanceRejected: result.reason }
+      } else if (body.pages !== undefined) {
+        // plain content save — keep the stored verdict honest
+        const revalidated = await revalidateDesignProvenance(id, {
+          pages: finalPages,
+          width: design.width,
+          height: design.height,
+        })
+        if (revalidated) provenanceExtra = { aiProvenanceVerified: revalidated.verified }
+      }
+    } catch (provErr) {
+      // provenance persistence is best-effort ON TOP of a successful
+      // design save — a provenance failure must never fail the save
+      console.error('PUT /api/designs/[id] provenance hook failed', provErr)
+    }
+
     return NextResponse.json({
       id: design.id,
       name: design.name,
       updatedAt: design.updatedAt,
       ...(mergedPages ? { merged: true, pages: mergedPages } : {}),
+      ...provenanceExtra,
     })
   } catch (error) {
     console.error('PUT /api/designs/[id] failed', error)

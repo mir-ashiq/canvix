@@ -156,35 +156,13 @@ async function openApp(page: Page, appName: string) {
   await page.getByText(appName, { exact: true }).first().click()
 }
 
-/** the mocked plan the /api/ai/plan route fulfills with */
-const MOCK_PLAN = {
-  plan: {
-    name: 'Trattoria Menu',
-    summary: 'Rustic two-page menu with warm accents',
-    width: 1080,
-    height: 720,
-    pages: [
-      {
-        id: 'pp1',
-        title: 'Cover',
-        enabled: true,
-        background: { type: 'gradient', from: '#7A3B2E', to: '#D9A566', angle: 135 },
-        elements: [
-          { id: 'e1', type: 'text', enabled: true, text: 'Trattoria da Luca', x: 140, y: 240, width: 800, fontSize: 84, fontFamily: 'Playfair Display', bold: true, fill: '#FFF6EC', align: 'center' },
-          { id: 'e2', type: 'rect', enabled: true, x: 340, y: 420, width: 400, height: 8, fill: '#D9A566' },
-        ],
-      },
-      {
-        id: 'pp2',
-        title: 'Antipasti',
-        enabled: true,
-        background: { type: 'solid', color: '#FFF6EC' },
-        elements: [
-          { id: 'e3', type: 'text', enabled: true, text: 'Antipasti', x: 140, y: 120, width: 400, fontSize: 56, fontFamily: 'Playfair Display', bold: true, fill: '#7A3B2E', align: 'left' },
-        ],
-      },
-    ],
-  },
+/** v0.32.1: the six AI apps consolidated into ONE "Canvix AI" app —
+ *  open it and switch to the named mode tab (Chat / Generate /
+ *  Write / Image / Theme). The tab contents are the original,
+ *  unchanged app components. */
+async function openUnifiedAI(page: Page, tab: string) {
+  await openApp(page, 'Canvix AI')
+  await page.getByRole('tab', { name: tab, exact: true }).click()
 }
 
 const MOCK_THEME = {
@@ -213,42 +191,11 @@ const MOCK_NOTES = {
 test.describe('Wave 4 — AI Power-Up', () => {
   test.setTimeout(180_000)
 
-  test('agentic plan: review gate lets you edit, toggle, then apply native pages', async ({ page }) => {
-    await register(page, 'plan')
-    const designId = await createDesign(page, 'w4 plan', [textEl({ text: 'Seed page' })])
-    await openEditor(page, designId)
-
-    await page.route('**/api/ai/plan', (route) => route.fulfill({ json: MOCK_PLAN }))
-    await openApp(page, 'AI design plan')
-
-    // the brief + generate
-    await page.getByLabel('Design brief').fill('Two-page trattoria menu, rustic and warm')
-    await page.getByRole('button', { name: 'Plan my design' }).click()
-
-    // the review gate: both pages render as cards
-    await expect(page.getByText('Trattoria Menu', { exact: true })).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByText('Cover', { exact: true })).toBeVisible()
-    await expect(page.getByText('Antipasti', { exact: true })).toBeVisible()
-
-    // editable copy — rewrite the headline
-    const headline = page.locator('input[aria-label="Element text"]').first()
-    await headline.fill('Trattoria da Enzo')
-
-    // toggle the second page OFF — the gate must skip it on apply
-    // (the page checkbox's aria-label is namespaced with "page")
-    await page.getByRole('button', { name: 'Disable page Antipasti' }).click()
-
-    await page.getByRole('button', { name: /Apply \(1p/ }).click()
-
-    // document truth: exactly one new page, with the EDITED headline
-    const applied = await waitForDoc(page, designId, (d) => d.pages.length === 2, 'the applied plan page')
-    expect(applied.pages).toHaveLength(2)
-    const newTexts = applied.pages[1].elements.filter((e) => e.type === 'text').map((e) => e.text)
-    expect(newTexts).toContain('Trattoria da Enzo')
-    expect(newTexts).not.toContain('Trattoria da Luca')
-    // the applied page carries the plan's gradient background
-    expect(applied.pages[1].elements.some((e) => e.type === 'rect')).toBe(true)
-  })
+  // v0.32.1: the 'agentic plan' UI test is retired WITH its panel —
+  // the AI design plan app was consolidated into the unified Canvix
+  // AI app's Generate tab (the stronger DesignAgent engine). The
+  // /api/ai/plan route remains available as an API; its review-gate
+  // semantics live on in the Generate tab's flow.
 
   test('speaker notes: AI draft is reviewed, edited, then saved per page', async ({ page }) => {
     await register(page, 'notes')
@@ -313,7 +260,7 @@ test.describe('Wave 4 — AI Power-Up', () => {
     await openEditor(page, designId)
 
     await page.route('**/api/ai/theme', (route) => route.fulfill({ json: MOCK_THEME }))
-    await openApp(page, 'AI theme')
+    await openUnifiedAI(page, 'Theme')
 
     await page.getByLabel('Theme mood').fill('nordic calm, cool editorial')
     await page.getByRole('button', { name: 'Generate' }).click()

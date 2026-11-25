@@ -372,12 +372,16 @@ export function validateBrief(
   const text = brief.requiredTexts
     .filter((t) => t.tier === 'mandatory')
     .map((t) => {
-      // case-insensitive + whitespace-tolerant containment: catches
-      // the user's copy through case/wrap variations while still
-      // rejecting substitutions ("Creative Pulse" ≠ "Design Beyond
-      // Limits"). Hex colors are case-insensitive the same way.
-      const wanted = t.text.replace(/\s+/g, ' ').trim().toLowerCase()
-      const found = state.texts.some((s) => s.replace(/\s+/g, ' ').trim().toLowerCase().includes(wanted))
+      // v0.32.1 (review P0): STRICT normalized equality — the required
+      // text must appear as an element's own value, not as a substring
+      // of a longer one. "Run Dal Lake 2026 — Special Offer" does NOT
+      // satisfy "Run Dal Lake 2026": appended words, re-capitalized
+      // letters, altered punctuation and collapsed spaces are all
+      // rejections the gate bounces back to fix. (Whitespace is still
+      // collapsed — line-wrap artifacts are benign, everything else
+      // must match character for character.)
+      const wanted = t.text.replace(/\s+/g, ' ').trim()
+      const found = state.texts.some((s) => s.replace(/\s+/g, ' ').trim() === wanted)
       if (!found) unmet.push(`Required text missing or altered: "${t.text}"`)
       return { text: t.text, found }
     })
@@ -506,11 +510,36 @@ export function mergeBriefs(stored: DesignBrief, live: DesignBrief): DesignBrief
 // normalizeStoredBrief turns either into a safe DesignBrief before
 // it can reach a prompt or a gate — pure, so both the (db-bound)
 // provenance module and the agent route import it from here.
+//
+// v0.32.1 (review P0): nothing is weakened silently anymore.
+// Restrictions and notes SURVIVE persistence (a "no stock photos"
+// the user demanded stays part of the contract), nothing is
+// truncated mid-requirement, and overflow is REPORTED: the
+// persistence path runs in 'reject' mode (over-limit briefs are
+// refused instead of stored in weakened form) while read paths run
+// 'clamp' (defensive bounds on untrusted client posts).
 
-const STORED_TEXTS_CAP = 24
-const STORED_COLORS_CAP = 12
-const STORED_FEATURES_CAP = 8
-const STORED_TEXT_LEN_CAP = 200
+const STORED_TEXTS_CAP = 64
+const STORED_COLORS_CAP = 32
+const STORED_FEATURES_CAP = 16
+const STORED_TEXT_LEN_CAP = 400
+const STORED_RESTRICTIONS_CAP = 12
+const STORED_RESTRICTION_LEN_CAP = 120
+const STORED_NOTES_CAP = 8
+
+/** How normalizeStoredBrief answers a brief that exceeds the safe
+ *  bounds: 'clamp' (read paths — defensive bounds on untrusted
+ *  posts) drops the over-limit entries; 'reject' (the persistence
+ *  path) refuses the whole brief — never store a weakened contract. */
+export type StoredBriefOverflow = 'clamp' | 'reject'
+
+export interface NormalizedStoredBrief {
+  brief: DesignBrief
+  /** 'clamp' mode: how many VALID requirements were dropped for
+   *  exceeding the safe bounds. 'reject' mode always returns null
+   *  instead, so 0 here means nothing was dropped. */
+  dropped: number
+}
 
 /**
  * Normalize an UNTRUSTED brief (a client post or the stored JSON) into
@@ -524,23 +553,40 @@ const STORED_TEXT_LEN_CAP = 200
  *  · tier is forced to 'mandatory' — provenance requirements are
  *    exactly the things that must survive refinement
  */
-export function normalizeStoredBrief(value: unknown): DesignBrief | null {
+export function normalizeStoredBrief(
+  value: unknown,
+  opts: { overflow?: StoredBriefOverflow } = {},
+): NormalizedStoredBrief | null {
+  const overflow = opts.overflow ?? 'clamp'
   if (!value || typeof value !== 'object') return null
   const raw = value as Partial<DesignBrief>
 
   const rawTexts: { text?: unknown }[] = Array.isArray(raw.requiredTexts)
     ? (raw.requiredTexts as { text?: unknown }[])
     : []
-  const requiredTexts: DesignBrief['requiredTexts'] = rawTexts
-    .filter((t) => !!t && typeof t.text === 'string' && (t.text as string).trim().length > 0)
+  const validTexts = rawTexts.filter(
+    (t) => !!t && typeof t.text === 'string' && (t.text as string).trim().length > 0,
+  )
+  const textsOver =
+    validTexts.filter((t) => (t.text as string).length > STORED_TEXT_LEN_CAP).length +
+    Math.max(0, validTexts.length - STORED_TEXTS_CAP)
+  if (overflow === 'reject' && textsOver > 0) return null
+  const requiredTexts: DesignBrief['requiredTexts'] = validTexts
+    .filter((t) => (t.text as string).length <= STORED_TEXT_LEN_CAP)
     .slice(0, STORED_TEXTS_CAP)
-    .map((t) => ({ tier: 'mandatory' as const, text: (t.text as string).slice(0, STORED_TEXT_LEN_CAP) }))
+    // never slice a requirement mid-string — a truncated contract
+    // value is a different requirement
+    .map((t) => ({ tier: 'mandatory' as const, text: (t.text as string).replace(/\s+/g, ' ').trim() }))
 
   const rawColors: { hex?: unknown }[] = Array.isArray(raw.requiredColors)
     ? (raw.requiredColors as { hex?: unknown }[])
     : []
-  const requiredColors: DesignBrief['requiredColors'] = rawColors
-    .filter((c) => !!c && typeof c.hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.hex as string))
+  const validColors = rawColors.filter(
+    (c) => !!c && typeof c.hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.hex as string),
+  )
+  const colorsOver = Math.max(0, validColors.length - STORED_COLORS_CAP)
+  if (overflow === 'reject' && colorsOver > 0) return null
+  const requiredColors: DesignBrief['requiredColors'] = validColors
     .slice(0, STORED_COLORS_CAP)
     .map((c) => ({ tier: 'mandatory' as const, hex: (c.hex as string).toLowerCase() }))
 
@@ -548,8 +594,10 @@ export function normalizeStoredBrief(value: unknown): DesignBrief | null {
   const rawFeatures: { kind?: unknown; count?: unknown; label?: unknown }[] = Array.isArray(raw.requiredFeatures)
     ? (raw.requiredFeatures as { kind?: unknown; count?: unknown; label?: unknown }[])
     : []
-  const requiredFeatures: RequiredFeature[] = rawFeatures
-    .filter((f) => !!f && KINDS.includes(f.kind as RequiredFeature['kind']))
+  const validFeatures = rawFeatures.filter((f) => !!f && KINDS.includes(f.kind as RequiredFeature['kind']))
+  const featuresOver = Math.max(0, validFeatures.length - STORED_FEATURES_CAP)
+  if (overflow === 'reject' && featuresOver > 0) return null
+  const requiredFeatures: RequiredFeature[] = validFeatures
     .slice(0, STORED_FEATURES_CAP)
     .map((f) => ({
       tier: 'mandatory' as const,
@@ -558,14 +606,30 @@ export function normalizeStoredBrief(value: unknown): DesignBrief | null {
       label: typeof f.label === 'string' ? f.label.slice(0, 160) : String(f.kind),
     }))
 
+  // v0.32.1 (review P0): restrictions survive persistence — a "no
+  // stock photos" the user demanded stays in the contract and rides
+  // every refinement prompt. Notes too (free-text context).
+  const cleanStrings = (list: unknown[], lenCap: number): string[] => {
+    const valid = list.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+    return valid.map((s) => s.replace(/\s+/g, ' ').trim().slice(0, lenCap))
+  }
+  const restrictions = cleanStrings(
+    Array.isArray(raw.restrictions) ? raw.restrictions : [],
+    STORED_RESTRICTION_LEN_CAP,
+  ).slice(0, STORED_RESTRICTIONS_CAP)
+  const notes = cleanStrings(Array.isArray(raw.notes) ? raw.notes : [], STORED_TEXT_LEN_CAP).slice(0, STORED_NOTES_CAP)
+
   if (!requiredTexts.length && !requiredColors.length && !requiredFeatures.length) return null
 
   return {
-    requiredTexts,
-    requiredColors,
-    ...(requiredFeatures.length ? { requiredFeatures } : {}),
-    restrictions: [],
-    notes: [],
-    source: 'user',
+    brief: {
+      requiredTexts,
+      requiredColors,
+      ...(requiredFeatures.length ? { requiredFeatures } : {}),
+      restrictions,
+      notes,
+      source: 'user',
+    },
+    dropped: overflow === 'clamp' ? textsOver + colorsOver + featuresOver : 0,
   }
 }

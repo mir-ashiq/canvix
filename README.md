@@ -968,6 +968,13 @@ tool descriptions so agents pick the right format.
   `research/V05-SECURITY-AUDIT.md`
 - **Sanitized SVG export** — all text is XML-escaped, path data is whitelisted,
   image hrefs only allow `data:`/`https:`; no scripts or event handlers
+- **Hardened media upload & delivery** — the media store accepts an exact
+  MIME allowlist (SVG/HTML/XML never accepted), verifies magic bytes at
+  finalize, enforces upload ownership, and serves every media response with
+  `nosniff` plus a sandboxing CSP; anything the stored bytes cannot prove is
+  delivered as an opaque download, including anything stored before this
+  hardening. Found via a responsibly disclosed stored-XSS report (credit:
+  @hackchang) — see [SECURITY.md](SECURITY.md) for how to report
 - **AI actions are double-validated** (server clamps + client re-checks) and
   always undoable
 - **MCP endpoint hardening** — disabled until `CANVIX_MCP_TOKEN` is set; Bearer

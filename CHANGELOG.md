@@ -5,6 +5,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security — stored XSS via `/api/media` closed (CWE-79)
+
+- **Unauthenticated stored XSS through uploaded SVG served inline from the
+  media store** (CWE-79; reporter-assessed CVSS v3.1 6.1
+  `AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N`) — closed by `fde7f25` with four
+  layers: an **exact MIME allowlist** at upload init (SVG/HTML/XML
+  structurally rejected, no prefix matching), **magic-byte verification**
+  at finalize (the bytes must prove the declared type), **ownership
+  enforcement** on append/finalize (flat 404, no existence oracle), and
+  **hardened delivery** — every media response carries `nosniff` plus a
+  sandboxing CSP, and anything the stored bytes cannot prove is served as
+  `application/octet-stream` with `Content-Disposition: attachment`, which
+  also neutralizes media stored before the hardening. Security regression
+  suites replay the original report across all four layers, including the
+  206 Range path and legacy rows. **Reported by hackchang (@hackchang)**
+  (private report, 2026-11-25) — thank you for the clear write-up and the
+  coordinated disclosure. A GitHub Security Advisory and CVE request are in
+  coordinated disclosure with the reporter; identifiers will be linked here
+  once public. Self-hosters on any build between 2026-10-29 and 2026-11-25
+  should update to current `main`.
+
 ### Added — FOSS United funding application (v0.29.5)
 
 - **Website ownership verification ACTIVATED (2026-11-24):** after the

@@ -6,17 +6,21 @@ Canvix moves fast, and security fixes land on `main` first. Only the latest
 release line receives security patches — self-hosting is one `git pull` (or
 one re-deploy) away from current.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.22.x  | ✅ current `main`  |
-| older   | ❌ upgrade first   |
+| Version | Supported              |
+| ------- | ---------------------- |
+| 0.23.x  | ✅ current release line |
+| older   | ❌ upgrade first       |
 
 ## Reporting a vulnerability
 
 **Do not report security vulnerabilities through public GitHub issues,
 discussions, or pull requests.**
 
-Instead, email the maintainer privately:
+The preferred channel is GitHub's **private vulnerability reporting** (the
+*Report a vulnerability* button on this repository's **Security** tab — it
+is enabled here).
+
+Alternatively, email the maintainer privately:
 
 > **imsrenpsycho@gmail.com**
 
@@ -41,8 +45,9 @@ than corporate:
   release within 14 days for anything exploitable on a default deployment
 - **Coordinated disclosure** — we ask for up to 90 days before public
   disclosure, and will negotiate an earlier joint announcement for anything
-  already exploited in the wild. Credit is given in the changelog unless you
-  prefer to stay anonymous.
+  already exploited in the wild. Credit is given through GitHub Security
+  Advisory credits (Reporter role) and the changelog unless you prefer to
+  stay anonymous.
 
 ### Safe harbor
 
@@ -92,6 +97,12 @@ layers is especially interesting to us:
   malformed events are dropped, never crashed on
 - **Sanitized SVG export** — XML-escaped text, whitelisted path data,
   `data:`/`https:`-only image hrefs, no script or event-handler content
+- **Hardened media upload & delivery (v0.31)** — the media store accepts
+  an exact MIME allowlist (SVG/HTML/XML structurally rejected), verifies
+  magic bytes at finalize, enforces upload ownership on append and
+  finalize, and every media response carries `nosniff` plus a sandboxing
+  CSP; anything the stored bytes cannot prove is served as an opaque
+  download — including media stored before this hardening
 - **MCP endpoint hardening** — disabled until a token is set, Bearer auth
   with timing-safe comparison, DNS-rebinding guard, SSRF-guarded image
   fetches with size/time caps, per-tool argument clamping

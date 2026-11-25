@@ -42,6 +42,17 @@ The `.gitignore` incident: `git add` **silently skips** ignored paths — a rout
 - [ ] Tag and push: `git tag vX.Y.Z && git push origin main --tags`, cut the GitHub Release from the changelog entry.
 - [ ] Post-deploy verification on the live instance: `/api/health?v=2` returns `"ok":true` with fresh counts; the release's own headline features work in the deployed build (the v0.23.1 lesson: verify *on the deployment*, not just locally).
 
+## 5. Security releases (coordinated disclosure)
+
+Born from the first coordinated disclosure (CWE-79 media upload XSS, reported 2026-11-25 by @hackchang):
+
+- [ ] The fix commit must be **inside the tagged release** before the advisory publishes — verify with `git tag --contains <fix-sha>`.
+- [ ] Update the draft advisory's `patched_versions` to the **real tag** (never a placeholder or invented number), and keep the affected range in sync with the actual tags.
+- [ ] Coordinate the publication date with the reporter: the default is the 90-day window; an earlier joint publication is fine when both parties agree AND a patched release is out.
+- [ ] The fix commit being public does **not** auto-publish the advisory — publication is a deliberate, coordinated step.
+- [ ] Credit the reporter through the advisory's **Credits** section (role: `reporter`) — an acknowledgment in the commit message or changelog is not the same thing.
+- [ ] After publication: link the GHSA and CVE in `CHANGELOG.md` and the README security notes, and state the affected self-hoster build range with the upgrade path (`git pull` + re-deploy).
+
 ---
 
 ### House rules

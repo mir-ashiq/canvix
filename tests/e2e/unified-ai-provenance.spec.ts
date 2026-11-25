@@ -16,8 +16,10 @@ import { Client } from 'pg'
 //      as aiProvenance — this is what hydrates the editor store
 //   3. GET /api/designs/[id]/ai-provenance returns it too
 //   4. a brief with nothing usable is a 422 (honest rejection)
-//   5. a foreign design is a flat 404 on both GET and PUT — no
-//      existence oracle
+//   5. foreign designs follow the designs family: GET is link-view
+//      (200, null provenance — that viewer can already GET the design
+//      itself), PUT answers NOT_YOUR_DESIGN (403); a missing id is a
+//      flat 404 on both verbs (no existence oracle)
 //   6. dimension-only briefs are rejected too (the design owns the
 //      geometry after apply — a stored size would fail every
 //      refinement on a legitimately resized design)
@@ -146,18 +148,36 @@ test.describe('design AI provenance (Unified Canvix AI)', () => {
     await ctx.close()
   })
 
-  test('a foreign design is a flat 404 on both GET and PUT — no existence oracle', async ({ browser }) => {
+  test('foreign designs follow the designs family — viewable, never writable; a missing id is a flat 404', async ({ browser }) => {
     const ctx = await signedInContext(browser)
     const api = ctx.request
 
+    // GET: link-view semantics, same as GET /api/designs/[id] itself —
+    // that viewer can already read the whole design, so the (less
+    // sensitive) provenance rides the same rule: null when none stored
     const got = await api.fetch(`${BASE}/api/designs/d_e2e_prov_other/ai-provenance`)
-    expect(got.status()).toBe(404)
+    expect(got.status()).toBe(200)
+    expect(((await got.json()) as { provenance?: unknown }).provenance).toBeNull()
+
+    // PUT: the family's NOT_YOUR_DESIGN — a foreign design is never
+    // writable, and the response says exactly that
     const put = await api.fetch(`${BASE}/api/designs/d_e2e_prov_other/ai-provenance`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', origin: BASE },
       data: { brief: { requiredTexts: [{ text: 'nope' }] } },
     })
-    expect(put.status()).toBe(404)
+    expect(put.status()).toBe(403)
+
+    // a design that does not exist is a flat 404 on both verbs — no
+    // existence oracle
+    const gotMissing = await api.fetch(`${BASE}/api/designs/d_e2e_prov_does_not_exist/ai-provenance`)
+    expect(gotMissing.status()).toBe(404)
+    const putMissing = await api.fetch(`${BASE}/api/designs/d_e2e_prov_does_not_exist/ai-provenance`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', origin: BASE },
+      data: { brief: { requiredTexts: [{ text: 'nope' }] } },
+    })
+    expect(putMissing.status()).toBe(404)
 
     await ctx.close()
   })

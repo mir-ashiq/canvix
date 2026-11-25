@@ -15,8 +15,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   generation was verified against, stored on the applied design; the
   design GET returns it as `aiProvenance` and the editor hydrates it.
 - `PUT|GET /api/designs/[id]/ai-provenance` — edit-gated persistence
-  (same-origin, its own rate budget, flat 404 on foreign designs), plus
-  a live-DB e2e spec (`tests/e2e/unified-ai-provenance.spec.ts`).
+  (same-origin, its own rate budget, NOT_YOUR_DESIGN on foreign
+  designs, flat 404 on missing ids), plus a live-DB e2e spec
+  (`tests/e2e/unified-ai-provenance.spec.ts`).
 - `mergeBriefs` / `normalizeStoredBrief` (`src/lib/agent/brief.ts`): the
   stored contract merges with every chat-agent run on that design —
   union semantics, hostile input capped, dimensions dropped (the design

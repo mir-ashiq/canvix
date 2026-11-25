@@ -100,8 +100,10 @@ the enforcement needed no new client-side gate code).
 - Live-DB e2e: `tests/e2e/unified-ai-provenance.spec.ts` — the
   provenance PUT/GET round trip through the real API against real
   Postgres, normalization asserted, junk/dimension-only briefs 422,
-  foreign designs a flat 404 (no existence oracle), the design GET
-  carrying `aiProvenance` back (the hydration path).
+  foreign designs follow the designs family (GET link-view 200 with
+  null provenance — that viewer can already GET the design itself;
+  PUT answers NOT_YOUR_DESIGN 403), missing ids a flat 404, and the
+  design GET carrying `aiProvenance` back (the hydration path).
 
 ## Decisions and disclosed limits
 

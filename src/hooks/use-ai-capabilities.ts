@@ -11,22 +11,31 @@ export function useAICapabilities() {
     loaded: boolean
     configured: boolean
     vision: boolean
-  }>({ loaded: false, configured: false, vision: false })
+    designAgent: boolean
+  }>({ loaded: false, configured: false, vision: false, designAgent: false })
 
   useEffect(() => {
     let cancelled = false
     fetch('/api/ai/capabilities')
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { configured?: boolean; capabilities?: { vision?: boolean } } | null) => {
-        if (cancelled || !data) return
-        setState({
-          loaded: true,
-          configured: Boolean(data.configured),
-          vision: Boolean(data.capabilities?.vision),
-        })
-      })
+      .then(
+        (
+          data: {
+            configured?: boolean
+            capabilities?: { vision?: boolean; designAgent?: boolean }
+          } | null,
+        ) => {
+          if (cancelled || !data) return
+          setState({
+            loaded: true,
+            configured: Boolean(data.configured),
+            vision: Boolean(data.capabilities?.vision),
+            designAgent: Boolean(data.capabilities?.designAgent),
+          })
+        },
+      )
       .catch(() => {
-        if (!cancelled) setState({ loaded: true, configured: false, vision: false })
+        if (!cancelled) setState({ loaded: true, configured: false, vision: false, designAgent: false })
       })
     return () => {
       cancelled = true

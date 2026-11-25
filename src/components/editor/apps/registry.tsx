@@ -1,6 +1,6 @@
 'use client'
 
-import { BarChart3, QrCode, Smile, Shapes, Palette, Type, Wand2, ImageIcon, Bot, LayoutTemplate, SwatchBook, Video } from 'lucide-react'
+import { BarChart3, QrCode, Smile, Shapes, Palette, Type, Wand2, ImageIcon, Bot, LayoutTemplate, SwatchBook, Video, Workflow } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 /** ── Canvix app registry ─────────────────────────────────────
@@ -36,10 +36,14 @@ import { AIImageApp } from './AIImageApp'
 import { AssistantApp } from './AssistantApp'
 import { AIPlanApp } from './AIPlanApp'
 import { AIThemeApp } from './AIThemeApp'
+import { DesignAgentApp } from './DesignAgentApp'
 
 export const CANVIX_APPS: CanvixApp[] = [
   // AI apps first (canva 2026: “Canva AI” is the flagship surface)
   { id: 'assistant', name: 'Canvix AI', desc: 'Chat copilot — copy, palettes, images, translate', icon: Bot, color: '#7630D7', content: AssistantApp },
+  // v0.31: the autonomous generation pipeline — one prompt →
+  // planned, compiled, checked, visually reviewed, REVIEWED BY YOU
+  { id: 'design-agent', name: 'Design agent', desc: 'One prompt in — a checked, reviewed, editable design out', icon: Workflow, color: '#02C0CC', content: DesignAgentApp },
   { id: 'magic-write', name: 'Magic Write', desc: 'AI copy — headlines, taglines & captions', icon: Wand2, color: '#9B6BFF', content: MagicWriteApp },
   { id: 'ai-image', name: 'AI image generator', desc: 'Turn a prompt into a design-ready image', icon: ImageIcon, color: '#02C0CC', content: AIImageApp },
   // v0.19 (Wave 4 — AI Power-Up):

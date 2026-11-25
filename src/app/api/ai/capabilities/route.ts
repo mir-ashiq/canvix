@@ -66,6 +66,10 @@ async function __canvix_get(req: NextRequest) {
       themeGeneration: text && flags.themeGeneration,   // palette + fonts
       altText: vision && flags.altText,                 // image alt text
       videoGeneration: video && flags.videoGeneration,  // text-to-video slot
+      // v0.31 (DesignAgent panel): the autonomous pipeline — needs the
+      // text slot (planning/revision); the vision slot is OPTIONAL
+      // (visual verification discloses 'unavailable' without it)
+      designAgent: text && flags.designAgent,
       upscale: true,              // local Lanczos — always available
       brushEraser: true,          // local inpainting — always available
     },

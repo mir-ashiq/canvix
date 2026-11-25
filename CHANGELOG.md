@@ -3,7 +3,20 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.31.0] — 2026-11-25
+
+> **Version reconciliation, stated not papered over:** this is the first
+> tagged release since v0.23.1 (2026-11-13). The 75 commits it carries
+> were developed under interim labels the tags never followed — the
+> changelog recorded v0.24–v0.29.5, `package.json` sat at 0.29.1, and the
+> DesignAgent work landed under `v0.31` labels. This tag reconciles all
+> frames at **0.31.0** (the era label the code already uses); nothing
+> between 0.23.1 and 0.31.0 was ever published, and tags follow
+> `RELEASE-CHECKLIST.md`, not the changelog's working labels. The Word
+> Cloud plugin's `engines.canvix` ceiling is bumped to `<0.32.0` in this
+> release — the first-party consistency suite
+> (`src/lib/plugins/firstparty.test.ts`) proves the shipped bundle
+> validates against this exact host build.
 
 ### Security — stored XSS via `/api/media` closed (CWE-79)
 
@@ -24,7 +37,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   coordinated disclosure. A GitHub Security Advisory and CVE request are in
   coordinated disclosure with the reporter; identifiers will be linked here
   once public. Self-hosters on any build between 2026-10-29 and 2026-11-25
-  should update to current `main`.
+  should update to **v0.31.0** (this release) or later.
+
+### Added — the DesignAgent generation panel (v0.31)
+
+- **The P1 gap from `docs/DESIGN-AGENT-ACCEPTANCE-REPORT.md`, closed: the
+  autonomous design pipeline now has its dedicated user surface**
+  (`2ae7e24`). `DesignAgentApp` (apps/registry) runs the full loop in the
+  editor — prompt → live run view (fixed stage order, elapsed time, stop
+  via the pipeline's abort seam) → **review gate** → Apply. Nothing lands
+  on the canvas unreviewed (the house rule every generative feature
+  obeys): the review gate shows the brief contract (verbatim texts and
+  colors), per-page enable toggles with honest geometry wireframes,
+  brief→spec conformance failures and warnings, and the full run report —
+  stages, model calls, revision rounds, the cycle guard, and each visual
+  pass with what it concluded. A failed run shows its evidence (best
+  attempt pages plus the exact unmet requirements), never a shrug and
+  never a fake pass. **fit-pages** gives every applied page a
+  deterministic canvas fit: the pipeline compiles for the format the
+  brief demanded (e.g. 1080×1350) and the panel uniformly rescales and
+  centers pages onto the design's canvas. 14 new tests (fit-pages
+  invariants + client status mapping). Underneath, the full Phase B arc
+  ships here: the DesignSpec v2 engine (wrap-aware reflow, semantic seed
+  placement), the autonomous pipeline (plan → compile → self-correct →
+  visual-verify, with checks outranking critique and every unavailable
+  seam disclosed rather than faked), BYOK production wiring
+  (`POST /api/ai/design-agent` riding the same provider resolution chain
+  as the shipped design-spec normalizer), and the 22-brief
+  instruction-fidelity benchmark. Gates: tsc clean, eslint clean,
+  1,693/1,693 unit tests, production build clean.
 
 ### Added — FOSS United funding application (v0.29.5)
 

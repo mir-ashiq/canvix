@@ -1,20 +1,20 @@
 # Canvix Roadmap — where we are, what's next
 
-> **Status date:** 2026-11-24 · **Changelog state:** v0.29.5 · `package.json` 0.29.1 · **latest published GitHub release:** v0.23.1 · **Test posture:** 1,653 unit tests across 123 test files (verified full run, 24 Nov, after the DesignAgent merge) · 38 e2e specs · CI gates every PR (`lint-unit` incl. production build + `e2e`) · `npm audit` **0 vulnerabilities**.
+> **Status date:** 2026-11-25 · **Changelog state:** v0.31.0 · `package.json` 0.31.0 · **latest published GitHub release:** v0.31.0 · **Test posture:** 1,693 unit tests across 127 test files (verified full run, 25 Nov, the v0.31.0 release run) · 39 e2e spec files + the plugins & stock-video gated suites · CI gates every PR (`lint-unit` incl. production build + `e2e` running all three suites) · `npm audit` **0 vulnerabilities**.
 >
-> **Version-numbering state (documented, not silently papered over):** the changelog records development through v0.29.5, `package.json` sits at 0.29.1, and the last tagged GitHub release is v0.23.1 — unreleased development has accumulated without tags. Tags follow `RELEASE-CHECKLIST.md`, not the changelog; the next tag is cut only when the checklist passes, not to make the numbers match.
+> **Version-numbering state:** reconciled at **v0.31.0** (2026-11-25) — the first tag since v0.23.1. The 75 commits between were developed under interim working labels the tags never followed (changelog sections v0.24–v0.29.5, `package.json` 0.29.1, the DesignAgent era's v0.31); v0.31.0 aligns all frames in one release, and the Word Cloud plugin's `engines.canvix` ceiling was bumped to `<0.32.0` in the same commit — the first-party consistency suite (`src/lib/plugins/firstparty.test.ts`) verifies the shipped bundle against this exact host build. Tags follow `RELEASE-CHECKLIST.md`; this one passed it.
 >
 > This is the living map of the project: the two planning eras (the original **v0.11.8 → v1.0 roadmap** and the **consolidation programme** that overtook it), exactly what shipped under each, what remains open, and the recommended order for finishing the job. The full research it synthesizes: `research/V0118-ROADMAP-RESEARCH.md` (the original decision record) and `docs/COMPETITIVE-ANALYSIS.md` (the wave plan + five-cluster reanalysis).
 
 ---
 
-## 0. Current state — four tracks (2026-11-24)
+## 0. Current state — four tracks (2026-11-25)
 
 Where every active effort actually stands, in one place. The sections below remain the full record.
 
 | Track | State | Contents |
 |---|---|---|
-| **Shipped on `main`** | Deployed at canvix.app; tagged through v0.23.1, changelog at v0.29.5 | WP1 complete — scoped API keys (v0.24, PR #77) + Docker/compose self-hosting; auto-snapshots (v0.24); the v0.29.4 agent-correctness arc; v0.29.5 funding & trust documentation: SECURITY.md, GOVERNANCE.md, CODE_OF_CONDUCT.md, `funding.json` with **live wellKnown domain verification** (PR #87), the FOSS United proposal, and the grantee research record; **the DesignAgent merge (24 Nov 2026, unfunded work)** — DesignSpec v2 + the deterministic design engine + the autonomous design pipeline (plan → compile → self-correct → visual-verify) with BYOK production wiring (`/api/ai/design-agent`) and the 22-brief instruction-fidelity benchmark, 1,653 unit tests green |
+| **Shipped on `main`** | Deployed at canvix.app; tagged through **v0.31.0**, changelog at v0.31.0 | WP1 complete — scoped API keys (v0.24, PR #77) + Docker/compose self-hosting; auto-snapshots (v0.24); the v0.29.4 agent-correctness arc; v0.29.5 funding & trust documentation: SECURITY.md, GOVERNANCE.md, CODE_OF_CONDUCT.md, `funding.json` with **live wellKnown domain verification** (PR #87), the FOSS United proposal, and the grantee research record; **the DesignAgent merge (24 Nov 2026, unfunded work)** — DesignSpec v2 + the deterministic design engine + the autonomous design pipeline (plan → compile → self-correct → visual-verify) with BYOK production wiring (`/api/ai/design-agent`) and the 22-brief instruction-fidelity benchmark; **the CWE-79 media-XSS closure (25 Nov 2026, `fde7f25`)** — the project's first coordinated security disclosure (reported by @hackchang), four defense layers + 40 regression tests, private GHSA + CVE request in flight; **the v0.31.0 release** reconciling all version frames |
 | **Merged feature branches** | `feat/design-spec-foundation` + `feat/design-agent` — **merged into `main`** 24 Nov 2026 | DesignSpec v2 (types, model-output parser, brief mapper), the deterministic design engine (palette/typography/layout/compositions/compile — dedicated builders for every block kind), the re-runnable **real-model + real-browser acceptance harness** (`scripts/designspec-compile.ts`, `scripts/designspec-render.cjs`, `scripts/designspec-agent-run.ts`), the seed-guarantee engine fix, `docs/DESIGNSPEC-ACCEPTANCE-REPORT.md` + `docs/DESIGN-AGENT-ACCEPTANCE-REPORT.md`, and `research/AUTONOMOUS-AGENT-RESEARCH.md` (the ReAct / OpenAI-SDK / PosterGen pattern study the pipeline architecture follows) |
 | **Pending funding — decision outstanding** | Submitted; **not awarded — never represent it as such** | **FOSS United project grant** (INR 5,00,000, milestones M1–M4, submitted 12 Nov 2026 via the funding.json mechanism): design-output correctness, reproducible design evaluation, creator education. **NLnet** (WP1–WP5, ~€12,600 labour-only): deployment trust, collaboration scale, mobile editing, sharing, v1.0 stabilization. The two scopes are deliberately disjoint — no hour or deliverable is funded twice |
 | **Unfunded development** | Proceeds on its own cadence | AI-provider track (vendor-SDK removal + direct OpenAI-compatible adapter, ~65 h — outside NLnet scope by its connectors policy), media GC, D8/D10 depth, Wave-5 remainder sequencing |
@@ -116,12 +116,14 @@ Not in the original plan, forced by operating canvix.app in production:
 | — | **Bring your own key** — profile page, per-user AI providers (`UserAIProvider`, migration 0012), user-aware capabilities, key-before-instance resolution | ✅ | v0.23.0 |
 | — | v0.23.1 patch: admin video-slot save fix (the `SLOT_ORDER` omission), BYOK failure hints on all five AI surfaces, the missing `/test` route shipped (a `.gitignore` casualty) | ✅ | v0.23.1 |
 | — | v0.23.2 patch: the admin "Test video generation" button answered `Unknown slot` (v0.16-era slot lists never learned the v0.19 video slot) — fixed + 9 regression tests | ✅ | v0.23.2 |
-| — | **WebP export** — the fourth raster format (Wave 5 remainder): browser-native encoder, feature-detected card (hidden where the canvas lies — Safari's silent PNG fallback), honest-degradation guard on the captured bytes, 1×/2×/3× + all-pages parity with PNG/JPG | ✅ | Unreleased (Wave 5 slice) |
-| — | **Docker/compose self-hosting (WP1 completion)** — the one-command self-host: three-stage image around the standalone artifact, migrate-on-boot entrypoint (P3005 auto-baseline), boot-time template sync, compose pg17 + app, CI docker job on every PR (health + register + landing through the real containers) | ✅ | Unreleased (WP1) |
+| — | **WebP export** — the fourth raster format (Wave 5 remainder): browser-native encoder, feature-detected card (hidden where the canvas lies — Safari's silent PNG fallback), honest-degradation guard on the captured bytes, 1×/2×/3× + all-pages parity with PNG/JPG | ✅ | v0.31.0 |
+| — | **Docker/compose self-hosting (WP1 completion)** — the one-command self-host: three-stage image around the standalone artifact, migrate-on-boot entrypoint (P3005 auto-baseline), boot-time template sync, compose pg17 + app, CI docker job on every PR (health + register + landing through the real containers) | ✅ | v0.31.0 |
+| — | **The DesignAgent arc (unfunded)** — DesignSpec v2 + the deterministic design engine, the autonomous design pipeline (plan → compile → self-correct → visual-verify; checks outrank critique, unavailable seams disclosed) with BYOK production wiring (`/api/ai/design-agent`), the 22-brief instruction-fidelity benchmark, and the v0.31 generation panel with its review gate and fit-pages | ✅ | v0.31.0 |
+| — | **Security: the CWE-79 media-upload stored XSS closed (`fde7f25`)** — exact MIME allowlist, magic-byte finalize check, upload ownership enforcement, hardened delivery (nosniff + sandboxing CSP + octet-stream downgrade for unprovable bytes); 40 regression tests; the project's first coordinated disclosure (reporter: @hackchang, private GHSA + CVE request in flight, 90-day window to 2027-02-23) | ✅ | v0.31.0 |
 
 ### 2.3 Where that leaves the numbers
 
-| Metric | v0.11.7 (roadmap baseline) | **Now (v0.23.1)** |
+| Metric | v0.11.7 (roadmap baseline) | **Now (v0.31.0)** |
 |---|---|---|
 | Element types | 16 | **19** (+ polygon, plugin, chart) |
 | Templates | 110 | **366** |
@@ -130,7 +132,7 @@ Not in the original plan, forced by operating canvix.app in production:
 | MCP agent tools | 20 | **22** (+ `vision_ground`, `generate_design`) |
 | Export formats | PNG/JPG/PDF-raster/SVG/MP4-WebM | + **vector-text PDF, GIF, WebCodecs WebM, PPTX** (11 formats total) |
 | Stock content | 42 bundled photos | + Pexels/Pixabay video, Freesound, 562 icons, 48 illustrations, 126 stickers, 16 sounds |
-| Unit / e2e tests | 302 / 28 | **1402 / 32** |
+| Unit / e2e tests | 302 / 28 | **1,693 / 39** |
 | CI | none | PR-gated, build + e2e, branch protection |
 | Security posture | P0 open | headers/CSP, rate limits, SSRF corpus, plugin sandbox, 0 audit vulns, disclosure policy |
 | Hand-written LOC | ≈33,000 | ≈91,000 |

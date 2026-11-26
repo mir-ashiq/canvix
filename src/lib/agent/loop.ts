@@ -407,6 +407,15 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
     return { summary: base, verification }
   }
 
+  // v0.32.5 telemetry: guard exits log their final outcome — the
+  // failed constraint (in the plan telemetry), the recovery attempts
+  // (rejections/repairs) and how the run actually ended.
+  const guardExitWithTelemetry = async (base: string, reason: string) => {
+    const exit = await guardExit(base)
+    telemetry({ outcome: 'guard-exit', reason, steps, toolCalls, designChanges, planRejections })
+    return exit
+  }
+
   while (true) {
     // ── task-driven stops ───────────────────────────────────
     if (signal?.aborted) {
@@ -431,11 +440,11 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         message: `Stopped after ${AGENT_GUARDS.strikes} consecutive invalid tool calls — the error under each step explains what to fix; try rephrasing the request.`,
         code: 'STRIKES',
       })
-      const exit = await guardExit(summary || 'Stopped after repeated invalid calls.')
+      const exit = await guardExitWithTelemetry(summary || 'Stopped after repeated invalid calls.', 'strikes')
       return { summary: exit.summary, steps, toolCalls, verification: exit.verification }
     }
     if (Date.now() - lastProgressAt > AGENT_GUARDS.idleMs) {
-      const exit = await guardExit('The run stopped making progress and was wrapped up. Everything applied so far is kept — send a follow-up message to continue.')
+      const exit = await guardExitWithTelemetry('The run stopped making progress and was wrapped up. Everything applied so far is kept — send a follow-up message to continue.', 'no-progress')
       emit({
         v: AGENT_PROTOCOL_VERSION,
         type: 'done',
@@ -468,7 +477,7 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         message: `The AI provider failed: ${err instanceof Error ? err.message.slice(0, 200) : 'unknown error'}. Applied work is kept — retry to continue.`,
         code: 'PROVIDER',
       })
-      const exit = await guardExit(summary)
+      const exit = await guardExitWithTelemetry(summary, 'provider')
       return { summary: exit.summary, steps, toolCalls, verification: exit.verification }
     }
 
@@ -772,7 +781,7 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
       if (hash === lastCallHash) {
         cycleCount += 1
         if (cycleCount >= AGENT_GUARDS.cycleRepeat - 1) {
-          const exit = await guardExit('The run repeated the same operation without effect and was wrapped up. Applied work is kept — describe the next change to continue.')
+          const exit = await guardExitWithTelemetry('The run repeated the same operation without effect and was wrapped up. Applied work is kept — describe the next change to continue.', 'cycle-repeat')
           emit({
             v: AGENT_PROTOCOL_VERSION,
             type: 'done',
@@ -806,7 +815,7 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         planRejections += 1
         telemetry({ tool: 'plan_layout', outcome: 'rejected', attempt: planRejections, detail: String((result as { error?: string }).error ?? '').slice(0, 300) })
         if (planRejections >= AGENT_GUARDS.planRejections) {
-          const exit = await guardExit(`Stopped after ${planRejections} infeasible plans — the exact math is in the errors above; ask the user for a smaller composition or fewer sections.`)
+          const exit = await guardExitWithTelemetry(`Stopped after ${planRejections} infeasible plans — the exact math is in the errors above; ask the user for a smaller composition or fewer sections.`, 'plan-infeasible')
           emit({ v: AGENT_PROTOCOL_VERSION, type: 'done', summary: exit.summary, steps, toolCalls, verification: exit.verification })
           return { summary: exit.summary, steps, toolCalls, verification: exit.verification }
         }

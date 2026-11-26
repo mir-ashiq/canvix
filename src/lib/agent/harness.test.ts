@@ -1476,7 +1476,7 @@ describe('v0.29.3 · loop: planning + fail-closed acks', () => {
     expect(stackedBands?.[0]).toEqual({ name: 'a', y: 65, h: 200 })
     expect(stackedBands?.[1].y! - (stackedBands![0].y + stackedBands![0].h)).toBeGreaterThanOrEqual(40)
     expect(stackedBands?.[1].h).toBe(200)
-    expect(stackedBands?.[1].y + stackedBands?.[1].h!).toBeLessThanOrEqual(1015)
+    expect(stackedBands![1].y + stackedBands![1].h).toBeLessThanOrEqual(1015)
 
     // 39px gap: REPAIRED to ≥40 — the model never re-attempts the plan
     const gap39 = tool!.sanitize(

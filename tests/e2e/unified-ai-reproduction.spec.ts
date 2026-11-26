@@ -265,14 +265,12 @@ test.describe('v0.32.5 · the P0 regression — zero-action failures and follow-
     const designId = await createEmptyDesign(page, 'P0 regression canvas')
     await openEditor(page, designId)
 
-    let visionCalls = 0
-    await page.route('**/api/ai/agent/vision**', async (route: Route) => {
-      visionCalls += 1
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ findings: [] }) })
-    })
+    // order matters: the agent glob also matches the vision URL, and
+    // the LAST registered handler wins — the vision counter must be
+    // registered after the agent handler to really intercept.
     await page.route('**/api/ai/agent**', async (route: Route) => {
       const req = route.request()
-      if (req.method() === 'POST' && req.url().includes('bridge=')) {
+      if (req.method() === 'POST' && (req.url().includes('bridge=') || req.url().includes('/vision'))) {
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
         return
       }
@@ -282,15 +280,20 @@ test.describe('v0.32.5 · the P0 regression — zero-action failures and follow-
         body: failedRunScript(),
       })
     })
+    let visionCalls = 0
+    await page.route('**/api/ai/agent/vision**', async (route: Route) => {
+      visionCalls += 1
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ findings: [] }) })
+    })
 
     await page.getByRole('button', { name: 'Apps', exact: true }).click()
     await page.getByText('Canvix AI', { exact: true }).first().click()
     await page.getByPlaceholder('Describe what to design or change…').fill(PROMPT)
     await page.getByRole('button', { name: 'Send', exact: true }).click()
 
-    // the honest amber failure status — NOT a green verification
-    await expect(page.getByText('Run did not produce any design changes.')).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByText('NOT completed — the run ended without applying any design change; nothing was created.')).toBeVisible()
+    // the honest amber failure status — the disclosed failure
+    // verification IS the status line (never a green check)
+    await expect(page.getByText('NOT completed — the run ended without applying any design change; nothing was created.')).toBeVisible({ timeout: 10_000 })
     // the empty canvas was never critiqued
     await page.waitForTimeout(2500)
     expect(visionCalls).toBe(0)
@@ -310,7 +313,10 @@ test.describe('v0.32.5 · the P0 regression — zero-action failures and follow-
     let run = 0
     await page.route('**/api/ai/agent**', async (route: Route) => {
       const req = route.request()
-      if (req.method() === 'POST' && req.url().includes('bridge=')) {
+      // bridge acks AND the Phase-7 vision critique also match this
+      // glob — neither is an agent run (the vision call has no
+      // `message`; capturing it made captured[1] a vision body)
+      if (req.method() === 'POST' && (req.url().includes('bridge=') || req.url().includes('/vision'))) {
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
         return
       }

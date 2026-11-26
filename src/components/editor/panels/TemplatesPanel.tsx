@@ -59,7 +59,7 @@ export function TemplatesPanel() {
   )
 
   const recommended = useMemo(() => TEMPLATES.slice(0, 4), [])
-  const premiumList = useMemo(() => list.filter((t) => t.badge === 'premium'), [list])
+  const premiumList = useMemo(() => list.filter((t) => t.badge === 'مميز'), [list])
   const hasPremiumSection = !query && category === 'all'
 
   const designHasContent = pages.some((p) => p.elements.length > 0)
@@ -115,18 +115,18 @@ export function TemplatesPanel() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="bg-transparent outline-none text-[12px] text-white w-full placeholder:text-white/35"
-            placeholder="Search templates"
-            aria-label="Search templates"
+            placeholder="ابحث في القوالب"
+            aria-label="ابحث في القوالب"
           />
           {query && (
-            <button onClick={() => setQuery('')} aria-label="Clear search" className="text-white/40 hover:text-white">
+            <button onClick={() => setQuery('')} aria-label="مسح البحث" className="text-white/40 hover:text-white">
               <X size={12} />
             </button>
           )}
         </div>
         {/* v0.11.3: single-row swipeable chips — full-bleed scroll under the panel padding */}
         <div className="cv-tabscroll -mx-4 mt-3 flex gap-1.5 overflow-x-auto px-4">
-          {[{ id: 'all', label: 'All' }, ...TEMPLATE_CATEGORIES.map((c) => ({ id: c.id, label: c.label }))].map((c) => (
+          {[{ id: 'all', label: 'الكل' }, ...TEMPLATE_CATEGORIES.map((c) => ({ id: c.id, label: c.label }))].map((c) => (
             <button
               key={c.id}
               onClick={() => setCategory(c.id)}
@@ -228,7 +228,7 @@ export function TemplatesPanel() {
           <div className="fixed z-[76] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(440px,92vw)] max-h-[86vh] overflow-y-auto cv-scroll rounded-2xl bg-[#16181D] border border-white/12 shadow-2xl p-4">
             <div className="flex items-center justify-between mb-1">
               <span className="text-sm font-bold text-white truncate">{fillTarget.name}</span>
-              <button className="text-white/60 hover:text-white" onClick={() => setFillTarget(null)} aria-label="Close fill dialog">
+              <button className="text-white/60 hover:text-white" onClick={() => setFillTarget(null)} aria-label="إغلاق نافذة التعبئة">
                 <X size={16} />
               </button>
             </div>
@@ -266,7 +266,7 @@ export function TemplatesPanel() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold text-white truncate">{preview.name}</span>
-                {preview.badge === 'premium' && (
+                {preview.badge === 'مميز' && (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-[#F5C518] bg-[#F5C518]/10 border border-[#F5C518]/25 rounded-full px-2 py-0.5 shrink-0">
                     <Gem size={10} /> Premium · Free
                   </span>
@@ -277,7 +277,7 @@ export function TemplatesPanel() {
                   </span>
                 ) : null}
               </div>
-              <button className="text-white/60 hover:text-white" onClick={() => setPreview(null)} aria-label="Close preview">
+              <button className="text-white/60 hover:text-white" onClick={() => setPreview(null)} aria-label="إغلاق المعاينة">
                 <X size={16} />
               </button>
             </div>
@@ -287,7 +287,7 @@ export function TemplatesPanel() {
             <div className="flex items-center justify-between mt-3">
               <span className="text-[11px] text-white/50">
                 {preview.width} × {preview.height} px · {preview.pages.length} page{preview.pages.length > 1 ? 's' : ''}
-                {designHasContent && ' · replaces current pages'}
+                {designHasContent && ' · يستبدل الصفحات الحالية'}
               </span>
               <button className="btn-cv h-9 px-4 text-[13px] flex items-center gap-1.5" onClick={() => use(preview)}>
                 <Check size={14} /> Use this template
@@ -352,7 +352,7 @@ const TemplateCard = memo(function TemplateCard({ t, onApply, onPreview }: { t: 
         </div>
       </button>
       {/* v0.7: premium quality badge — a label, never a paywall */}
-      {t.badge === 'premium' && (
+      {t.badge === 'مميز' && (
         <span className="absolute top-1.5 left-1.5 flex items-center gap-1 text-[9px] font-bold text-[#F5C518] bg-black/70 backdrop-blur-sm border border-[#F5C518]/30 rounded-full px-1.5 py-0.5 pointer-events-none">
           <Gem size={9} /> PREMIUM
         </span>

@@ -115,9 +115,9 @@ export function AudioPanel() {
     setInsertingSfx(id)
     try {
       await addSfxToCanvas(id)
-      toast({ title: 'Sound added', description: 'Plays in Preview and Present — autoplay it on the page for video export.' })
+      toast({ title: 'تمت إضافة الصوت', description: 'يعمل في المعاينة والعرض — فعّل التشغيل التلقائي على الصفحة عند تصدير الفيديو.' })
     } catch (err) {
-      toast({ title: 'Could not add the sound', description: err instanceof Error ? err.message : 'Try again.' })
+      toast({ title: 'تعذّرت إضافة الصوت', description: err instanceof Error ? err.message : 'حاول مجدداً.' })
     } finally {
       setInsertingSfx(null)
     }
@@ -129,13 +129,13 @@ export function AudioPanel() {
     try {
       await addStockSound(tile)
       toast({
-        title: 'Sound added',
+        title: 'تمت إضافة الصوت',
         description: `${tile.credit.provider} · ${tile.credit.author} — ${tile.credit.license}`,
       })
     } catch (err) {
       toast({
-        title: 'Could not add the sound',
-        description: err instanceof Error ? err.message : 'Try again — or pick another result.',
+        title: 'تعذّرت إضافة الصوت',
+        description: err instanceof Error ? err.message : 'حاول مجدداً أو اختر نتيجة أخرى.',
       })
     } finally {
       setBusyTile(null)
@@ -174,7 +174,7 @@ export function AudioPanel() {
       }, 200)
     } catch {
       toast({
-        title: 'Microphone unavailable',
+        title: 'الميكروفون غير متاح',
         description: 'The browser denied mic access, or no mic is connected — check the site permissions and try again.',
       })
     }
@@ -193,15 +193,15 @@ export function AudioPanel() {
 
   const saveVoiceover = async (blob: Blob) => {
     if (blob.size < 512) {
-      toast({ title: 'Recording too short', description: 'Hold the button a moment longer and try again.' })
+      toast({ title: 'التسجيل قصير جداً', description: 'اضغط مطولاً على الزر ثم حاول مجدداً.' })
       return
     }
     try {
       const { addVoiceoverRecording } = await import('../add-element')
       await addVoiceoverRecording(blob)
-      toast({ title: 'Voiceover added', description: 'A waveform card landed on the page — play it in Preview.' })
+      toast({ title: 'تمت إضافة التعليق الصوتي', description: 'تمت إضافة مقطع صوتي إلى الصفحة — شغّله من المعاينة.' })
     } catch (err) {
-      toast({ title: 'Could not save the voiceover', description: err instanceof Error ? err.message : 'Try again.' })
+      toast({ title: 'تعذّر حفظ التعليق الصوتي', description: err instanceof Error ? err.message : 'حاول مجدداً.' })
     }
   }
 
@@ -211,9 +211,9 @@ export function AudioPanel() {
     <PanelShell title="Audio" subtitle="Sound library, Freesound search and voiceover">
       <div className="space-y-5 p-3">
         {/* ── 1. offline pack ── */}
-        <section aria-label="Sound library">
+        <section aria-label="مكتبة الأصوات">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-white/50">Sound library</h4>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-white/50">مكتبة الأصوات</h4>
             <span className="text-[10px] text-white/40">16 CC0 sounds · works offline</span>
           </div>
           <div className="mt-2 flex flex-wrap gap-1">
@@ -227,7 +227,7 @@ export function AudioPanel() {
                 )}
                 aria-pressed={cat === c}
               >
-                {c === 'all' ? 'All' : SFX_CATEGORIES[c]}
+                {c === 'all' ? 'الكل' : SFX_CATEGORIES[c]}
               </button>
             ))}
           </div>
@@ -261,7 +261,7 @@ export function AudioPanel() {
         </section>
 
         {/* ── 2. Freesound search ── */}
-        <section aria-label="Freesound search">
+        <section aria-label="البحث في Freesound">
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-white/50">Freesound</h4>
             <span className="text-[10px] text-white/40">CC0 by default</span>
@@ -271,9 +271,9 @@ export function AudioPanel() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={available ? 'Search sounds — rain, whoosh, click…' : 'Search sounds (needs the Freesound key)'}
+              placeholder={available ? 'ابحث عن أصوات — مطر، حركة، نقرة…' : 'البحث عن أصوات (يتطلب مفتاح Freesound)'}
               className="min-w-0 flex-1 bg-transparent text-[13px] text-white/85 outline-none placeholder:text-white/35"
-              aria-label="Search Freesound"
+              aria-label="البحث في Freesound"
               data-testid="sound-search-input"
             />
             {busy && <Loader2 size={14} className="shrink-0 animate-spin text-white/40" />}

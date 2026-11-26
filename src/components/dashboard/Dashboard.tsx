@@ -52,14 +52,14 @@ import { AuthDialog } from '@/components/auth/AuthDialog'
 import { ProfilePanel } from '@/components/dashboard/ProfilePanel'
 import { useAuth, adoptAllDesigns, adoptDesign } from '@/lib/auth/client'
 import { TEMPLATES } from '@/lib/templates'
-import { createPage, TEMPLATE_CATEGORIES, type TemplateRecord } from '@/lib/types'
+import { إنشاءPage, TEMPLATE_CATEGORIES, type TemplateRecord } from '@/lib/types'
 import { PRESET_SIZES, PRESET_GROUPS, type SizePreset } from '@/lib/editor-utils'
 import { parseCsv, csvToFieldRows, fillTemplateFields } from '@/lib/templates/fields'
 import { cn } from '@/lib/utils'
 import {
   ApiError,
-  createDesign,
-  createFolder,
+  إنشاءDesign,
+  إنشاءFolder,
   deleteDesign,
   deleteDesignForever,
   deleteFolder,
@@ -67,8 +67,8 @@ import {
   fetchDesign,
   listTrash,
   moveDesignToFolder,
-  renameDesign,
-  renameFolder,
+  reالاسمDesign,
+  reالاسمFolder,
   restoreDesign,
   timeAgo,
   useDesigns,
@@ -108,7 +108,7 @@ const CATEGORY_ICONS: Record<string, typeof Presentation> = {
 const PRESET_ICONS = [Instagram, Instagram, Presentation, Printer, BadgeCheck, Video, Square, FileImage]
 
 /** v0.26 performance: render children only once the placeholder scrolls
- *  near the viewport. The home page mounts ~370 template cards, each a
+ *  near the viewport. The home صفحة mounts ~370 template cards, each a
  *  full Konva stage — mounting them all at once was the 5–6 s "template
  *  grid takes forever" jank. One shared IntersectionObserver, a cheap
  *  div placeholder, and a generous 600 px rootMargin so cards are ready
@@ -152,7 +152,7 @@ const GROUP_ICONS: Record<string, typeof Instagram> = {
 }
 
 function newBlankPages() {
-  return [createPage()]
+  return [إنشاءPage()]
 }
 
 /** v0.8: translate server-side DB trouble into a toast that says what to DO
@@ -177,7 +177,7 @@ export function Dashboard() {
   const goLanding = useAppStore((s) => s.goLanding)
   const openEditor = useAppStore((s) => s.openEditor)
   const loadEditorDesign = useEditorStore((s) => s.loadDesign)
-  // v0.14 (D6): folder organization — activeFolder null = "All designs"
+  // v0.14 (D6): folder organization — activeFolder null = "كل التصاميم"
   // (the root, the pre-v0.14 view). The designs hook refetches on switch.
   const [activeFolder, setActiveFolder] = useState<string | null>(null)
   const { designs, loading, refresh, dbIssue, hasMore, loadMore } = useDesigns(activeFolder)
@@ -185,7 +185,7 @@ export function Dashboard() {
   const isMobile = useIsMobile()
   const [helpOpen, setHelpOpen] = useState(false)
 
-  // v0.9: accounts — free forever, username + password
+  // v0.9: accounts — free forever, userالاسم + password
   const { user, login, register, logout, refresh: refreshAuth } = useAuth()
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
@@ -217,7 +217,7 @@ export function Dashboard() {
     try {
       return csvToFieldRows(parseCsv(csvText), csvTarget.fields.map((f) => f.key))
     } catch (err) {
-      return { rows: [], missing: [], error: err instanceof Error ? err.message : 'CSV parse failed' }
+      return { rows: [], missing: [], error: err instanceof Error ? err.message : 'فشل تحليل ملف CSV' }
     }
   }, [csvTarget, csvText])
 
@@ -230,28 +230,28 @@ export function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows: csvParsed.rows.slice(0, 100) }),
       })
-      if (!res.ok) throw new Error('fill failed')
-      const body = (await res.json()) as { created?: { id: string }[] }
-      toast({ title: `Created ${body.created?.length ?? 0} design${(body.created?.length ?? 0) === 1 ? '' : 's'} from “${csvTarget.name}”` })
+      if (!res.ok) throw new Error('فشل الملء')
+      const body = (await res.json()) as { إنشاءd?: { id: string }[] }
+      toast({ title: `إنشاءd ${body.إنشاءd?.length ?? 0} design${(body.إنشاءd?.length ?? 0) === 1 ? '' : 's'} from “${csvTarget.الاسم}”` })
       setCsvTarget(null)
       setCsvText('')
       await refresh()
     } catch {
-      toast({ title: 'Bulk fill failed — try fewer rows', variant: 'destructive' })
+      toast({ title: 'Bulk فشل الملء — try fewer rows', variant: 'destructive' })
     } finally {
       setCsvBusy(false)
     }
   }
-  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null)
-  const [renameValue, setRenameValue] = useState('')
+  const [reالاسمTarget, setإعادة تسميةTarget] = useState<{ id: string; الاسم: string } | null>(null)
+  const [reالاسمValue, setإعادة تسميةValue] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   // v0.4: trash + sort
   const [trashOpen, setTrashOpen] = useState(false)
   const [trash, setTrash] = useState<DesignMeta[] | null>(null)
-  const [sort, setSort] = useState<'recent' | 'name'>('recent')
-  // v0.14 (D6): the create/rename folder dialog (one dialog, two modes)
+  const [sort, setSort] = useState<'الأحدث' | 'الاسم'>('الأحدث')
+  // v0.14 (D6): the إنشاء/reالاسم folder dialog (one dialog, two modes)
   const [folderDialog, setFolderDialog] = useState<
-    { mode: 'create' } | { mode: 'rename'; id: string; name: string } | null
+    { mode: 'إنشاء' } | { mode: 'reالاسم'; id: string; الاسم: string } | null
   >(null)
   const [folderValue, setFolderValue] = useState('')
 
@@ -268,37 +268,37 @@ export function Dashboard() {
     if (open && trash === null) void refreshTrash()
   }
 
-  const doRestore = async (id: string, name: string) => {
+  const doRestore = async (id: string, الاسم: string) => {
     try {
       await restoreDesign(id)
       await Promise.all([refresh(), refreshTrash()])
-      toast({ title: `“${name}” restored` })
+      toast({ title: `“${الاسم}” restored` })
     } catch {
-      toast({ title: 'Could not restore', variant: 'destructive' })
+      toast({ title: 'تعذّر الاستعادة', variant: 'destructive' })
     }
   }
 
-  const doDeleteForever = async (id: string, name: string) => {
+  const doDeleteForever = async (id: string, الاسم: string) => {
     try {
       await deleteDesignForever(id)
       await refreshTrash()
-      toast({ title: `“${name}” deleted forever` })
+      toast({ title: `“${الاسم}” deleted forever` })
     } catch {
-      toast({ title: 'Could not delete', variant: 'destructive' })
+      toast({ title: 'تعذّر الحذف', variant: 'destructive' })
     }
   }
 
-  const filteredTemplates = useMemo<TemplateRecord[]>(
+  const filteredالقوالب = useMemo<TemplateRecord[]>(
     () =>
       TEMPLATES.map((t) => ({
         id: t.slug,
         slug: t.slug,
-        name: t.name,
+        الاسم: t.الاسم,
         category: t.category,
         width: t.width,
         height: t.height,
         accent: t.accent,
-        pages: t.pages,
+        صفحةs: t.صفحةs,
         ...(t.fields ? { fields: t.fields } : {}),
       })).filter((t) => category === 'all' || t.category === category),
     [category]
@@ -307,32 +307,32 @@ export function Dashboard() {
   const filteredDesigns = useMemo(
     () =>
       (designs ?? [])
-        .filter((d) => d.name.toLowerCase().includes(query.toLowerCase()))
+        .filter((d) => d.الاسم.toLowerCase().includes(query.toLowerCase()))
         .sort((a, b) =>
-          sort === 'name'
-            ? a.name.localeCompare(b.name)
+          sort === 'الاسم'
+            ? a.الاسم.localeCompare(b.الاسم)
             : new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         ),
     [designs, query, sort]
   )
 
   // ── actions ─────────────────────────────────────────────────
-  // v0.14 (D6): anything created from this dashboard is born inside the
+  // v0.14 (D6): anything إنشاءd from this dashboard is born inside the
   // folder the user is currently viewing (null = the root)
-  const startBlank = async (w: number, h: number, name?: string) => {
+  const startBlank = async (w: number, h: number, الاسم?: string) => {
     setCreating(true)
     try {
-      const record = await createDesign({
-        name: name ?? 'Untitled design',
+      const record = await إنشاءDesign({
+        الاسم: الاسم ?? 'تصميم بلا عنوان',
         width: w,
         height: h,
-        pages: newBlankPages(),
+        صفحةs: newBlankPages(),
         folderId: activeFolder,
       })
       openEditor(record)
       loadEditorDesign(record)
     } catch (error) {
-      apiErrorToast(error, 'Could not create design')
+      apiErrorToast(error, 'تعذّر إنشاء التصميم')
     } finally {
       setCreating(false)
     }
@@ -345,21 +345,21 @@ export function Dashboard() {
       // raw {{markers}} never reach the canvas from the dashboard (the
       // editor panel offers the guided fill dialog, CSV does bulk).
       const exampleValues = Object.fromEntries((t.fields ?? []).map((f) => [f.key, f.example]))
-      const pages = t.fields?.length ? fillTemplateFields(t.pages, exampleValues) : t.pages
-      const record = await createDesign({
-        name: t.name,
+      const صفحةs = t.fields?.length ? fillTemplateFields(t.صفحةs, exampleValues) : t.صفحةs
+      const record = await إنشاءDesign({
+        الاسم: t.الاسم,
         width: t.width,
         height: t.height,
-        pages,
+        صفحةs,
         source: `template:${t.slug}`,
         folderId: activeFolder,
       })
       openEditor(record)
       loadEditorDesign(record)
     } catch (error) {
-      // v0.8: “Could not open template” now explains itself (migration/host
+      // v0.8: “تعذّر فتح القالب” now explains itself (migration/host
       // switch issues include the exact fix instead of a dead end).
-      apiErrorToast(error, 'Could not open template')
+      apiErrorToast(error, 'تعذّر فتح القالب')
     } finally {
       setCreating(false)
     }
@@ -371,7 +371,7 @@ export function Dashboard() {
       openEditor(record)
       loadEditorDesign(record)
     } catch {
-      toast({ title: 'Could not open design', variant: 'destructive' })
+      toast({ title: 'تعذّر فتح التصميم', variant: 'destructive' })
     }
   }
 
@@ -383,9 +383,9 @@ export function Dashboard() {
         d.folderId && (folders ?? []).some((f) => f.id === d.folderId) ? d.folderId : null
       await duplicateDesign(d.id, mineFolder)
       await Promise.all([refresh(), refreshFolders()])
-      toast({ title: 'Design duplicated' })
+      toast({ title: 'تم نسخ التصميم' })
     } catch {
-      toast({ title: 'Could not duplicate', variant: 'destructive' })
+      toast({ title: 'تعذّر نسخ التصميم', variant: 'destructive' })
     }
   }
 
@@ -394,83 +394,83 @@ export function Dashboard() {
     try {
       await deleteDesign(id)
       await refresh()
-      toast({ title: 'Design deleted' })
+      toast({ title: 'تم حذف التصميم' })
     } catch {
-      toast({ title: 'Could not delete', variant: 'destructive' })
+      toast({ title: 'تعذّر الحذف', variant: 'destructive' })
     }
   }
 
-  const doRename = async () => {
-    if (!renameTarget) return
-    const target = renameTarget
-    setRenameTarget(null)
-    if (!renameValue.trim()) return
+  const doإعادة تسمية = async () => {
+    if (!reالاسمTarget) return
+    const target = reالاسمTarget
+    setإعادة تسميةTarget(null)
+    if (!reالاسمValue.trim()) return
     try {
-      await renameDesign(target.id, renameValue.trim())
+      await reالاسمDesign(target.id, reالاسمValue.trim())
       await refresh()
     } catch {
-      toast({ title: 'Could not rename', variant: 'destructive' })
+      toast({ title: 'تعذّرت إعادة التسمية', variant: 'destructive' })
     }
   }
 
   // ── v0.14 (D6): folder actions ──────────────────────────────
-  const openCreateFolder = () => {
+  const openإنشاءFolder = () => {
     setFolderValue('')
-    setFolderDialog({ mode: 'create' })
+    setFolderDialog({ mode: 'إنشاء' })
   }
 
-  const openRenameFolder = (id: string, name: string) => {
-    setFolderValue(name)
-    setFolderDialog({ mode: 'rename', id, name })
+  const openإعادة تسميةFolder = (id: string, الاسم: string) => {
+    setFolderValue(الاسم)
+    setFolderDialog({ mode: 'reالاسم', id, الاسم })
   }
 
   const doFolderSubmit = async () => {
     if (!folderDialog) return
     const dialog = folderDialog
-    const name = folderValue.trim()
+    const الاسم = folderValue.trim()
     setFolderDialog(null)
-    if (!name) return
+    if (!الاسم) return
     try {
-      if (dialog.mode === 'create') {
-        const folder = await createFolder(name)
+      if (dialog.mode === 'إنشاء') {
+        const folder = await إنشاءFolder(الاسم)
         await refreshFolders()
-        toast({ title: `Folder “${folder.name}” created` })
+        toast({ title: `Folder “${folder.الاسم}” إنشاءd` })
       } else {
-        await renameFolder(dialog.id, name)
+        await reالاسمFolder(dialog.id, الاسم)
         await refreshFolders()
-        toast({ title: 'Folder renamed' })
+        toast({ title: 'تمت إعادة تسمية المجلد' })
       }
     } catch (error) {
-      apiErrorToast(error, 'Could not save the folder')
+      apiErrorToast(error, 'تعذّر حفظ المجلد')
     }
   }
 
-  const doDeleteFolder = async (id: string, name: string) => {
+  const doDeleteFolder = async (id: string, الاسم: string) => {
     const ok = window.confirm(
-      `Delete the folder “${name}”?\n\nThe designs inside are NOT deleted — they return to All designs.`,
+      `Delete the folder “${الاسم}”?\n\nThe designs inside are NOT deleted — they return to كل التصاميم.`,
     )
     if (!ok) return
     try {
       await deleteFolder(id)
       if (activeFolder === id) setActiveFolder(null)
       await Promise.all([refreshFolders(), refresh()])
-      toast({ title: `Folder “${name}” deleted — its designs are in All designs` })
+      toast({ title: `Folder “${الاسم}” deleted — its designs are in كل التصاميم` })
     } catch {
-      toast({ title: 'Could not delete the folder', variant: 'destructive' })
+      toast({ title: 'تعذّر الحذف the folder', variant: 'destructive' })
     }
   }
 
-  const doMoveDesign = async (id: string, folderId: string | null, name: string) => {
+  const doMoveDesign = async (id: string, folderId: string | null, الاسم: string) => {
     try {
       await moveDesignToFolder(id, folderId)
       await Promise.all([refresh(), refreshFolders()])
       toast({
         title: folderId
-          ? `“${name}” moved to “${(folders ?? []).find((f) => f.id === folderId)?.name ?? 'folder'}”`
-          : `“${name}” moved to All designs`,
+          ? `“${الاسم}” moved to “${(folders ?? []).find((f) => f.id === folderId)?.الاسم ?? 'folder'}”`
+          : `“${الاسم}” moved to كل التصاميم`,
       })
     } catch (error) {
-      apiErrorToast(error, 'Could not move the design')
+      apiErrorToast(error, 'تعذّر نقل التصميم')
     }
   }
 
@@ -481,17 +481,17 @@ export function Dashboard() {
         <button
           onClick={() => setCustomOpen(true)}
           className="h-9 w-9 rounded-full bg-[#7630D7] hover:bg-[#8B5CF6] text-white flex items-center justify-center shadow-lg shadow-[#7630D7]/40 transition-colors"
-          aria-label="Create a design"
-          title="Create a design"
+          aria-label="إنشاء a design"
+          title="إنشاء a design"
         >
           <Plus size={20} />
         </button>
         <div className="h-3" />
         {[
-          { label: 'Home', icon: LayoutGrid, active: true },
-          { label: 'Templates', icon: LayoutTemplate, target: 'templates' },
-          { label: 'Projects', icon: FolderOpen, target: 'recents' },
-          { label: 'Brand', icon: BookMarked, target: 'brand' },
+          { label: 'الرئيسية', icon: LayoutGrid, active: true },
+          { label: 'القوالب', icon: LayoutTemplate, target: 'templates' },
+          { label: 'المشاريع', icon: FolderOpen, target: 'الأحدثs' },
+          { label: 'الهوية', icon: BookMarked, target: 'brand' },
         ].map((item) => (
           <button
             key={item.label}
@@ -501,7 +501,7 @@ export function Dashboard() {
               item.active ? 'bg-[#2A2C35] text-white' : 'text-white/60 hover:text-white hover:bg-white/[0.06]'
             )}
             aria-label={item.label}
-            aria-current={item.active ? 'page' : undefined}
+            aria-current={item.active ? 'صفحة' : undefined}
           >
             <item.icon size={19} />
             <span className="text-[9px] font-medium leading-none">{item.label}</span>
@@ -551,7 +551,7 @@ export function Dashboard() {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search your designs"
+              placeholder="ابحث في تصاميمك"
               className="pl-10 h-10 rounded-full bg-white/[0.06] border-white/10 text-white placeholder:text-white/35 focus-visible:ring-[#7630D7]/50 focus-visible:border-[#7630D7]/60"
               aria-label="Search designs"
             />
@@ -570,7 +570,7 @@ export function Dashboard() {
                 <button
                   className="h-10 w-10 rounded-full bg-gradient-to-br from-[#02C0CC] to-[#7630D7] text-white text-[13px] font-extrabold flex items-center justify-center shrink-0 hover:brightness-110 transition-all"
                   aria-label="Account menu"
-                  title={user ? `Signed in as ${user.username}` : 'Sign in — free forever'}
+                  title={user ? `Signed in as ${user.userالاسم}` : 'سجّل الدخول — مجاناً للأبد'}
                   // v0.26 perf: warm the profile dialog's two API calls the
                   // moment the user shows intent (menu open) — the dialog
                   // itself then renders from the prefetched data instead of
@@ -582,14 +582,14 @@ export function Dashboard() {
                     void fetch('/api/keys', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => {})
                   }}
                 >
-                  {user ? user.username.slice(0, 2).toUpperCase() : 'CV'}
+                  {user ? user.userالاسم.slice(0, 2).toUpperCase() : 'CV'}
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64 bg-[#16181D] border-white/10 text-white">
                 <div className="px-3 py-2.5 border-b border-white/[0.07]">
                   {user ? (
                     <>
-                      <div className="text-[13px] font-semibold text-[#00C4CC]">@{user.username}</div>
+                      <div className="text-[13px] font-semibold text-[#00C4CC]">@{user.userالاسم}</div>
                       <div className="text-[11px] text-white/45">Your designs are private to your account</div>
                     </>
                   ) : (
@@ -612,13 +612,13 @@ export function Dashboard() {
                             await refresh()
                             toast({ title: `${adopted} design${adopted === 1 ? '' : 's'} moved into your account` })
                           } catch {
-                            toast({ title: 'Could not adopt designs', variant: 'destructive' })
+                            toast({ title: 'تعذّر استيراد التصاميم', variant: 'destructive' })
                           } finally {
                             setAdopting(false)
                           }
                         }}
                       >
-                        <FolderInput size={14} /> {adopting ? 'Adopting…' : `Save my designs to this account (${mineCount})`}
+                        <FolderInput size={14} /> {adopting ? 'جارٍ استيراد التصاميم…' : `Save my designs to this account (${mineCount})`}
                       </DropdownMenuItem>
                     )}
                     {legacyCount > 0 && (
@@ -627,8 +627,8 @@ export function Dashboard() {
                         disabled={adopting}
                         onClick={async () => {
                           const ok = window.confirm(
-                            `Adopt ${legacyCount} legacy design${legacyCount === 1 ? '' : 's'} created before accounts existed?\n\n` +
-                              'Only do this if this Canvix instance (or its shared designs) is yours — ' +
+                            `Adopt ${legacyCount} legacy design${legacyCount === 1 ? '' : 's'} إنشاءd before accounts existed?\n\n` +
+                              'نفّذ ذلك فقط إذا كانت نسخة TEa.G3 هذه أو التصاميم المشتركة ملكك — ' +
                               'on a shared deployment, legacy designs may include other people\u2019s work.',
                           )
                           if (!ok) return
@@ -638,7 +638,7 @@ export function Dashboard() {
                             await Promise.all([refreshAuth(), refresh()])
                             toast({ title: `${adopted} design${adopted === 1 ? '' : 's'} moved into your account` })
                           } catch {
-                            toast({ title: 'Could not adopt designs', variant: 'destructive' })
+                            toast({ title: 'تعذّر استيراد التصاميم', variant: 'destructive' })
                           } finally {
                             setAdopting(false)
                           }
@@ -660,7 +660,7 @@ export function Dashboard() {
                       <LogIn size={14} /> Sign in
                     </DropdownMenuItem>
                     <DropdownMenuItem className="gap-2" onClick={() => { setAuthMode('register'); setAuthOpen(true) }}>
-                      <LogIn size={14} /> Create a free account
+                      <LogIn size={14} /> إنشاء a free account
                     </DropdownMenuItem>
                   </>
                 )}
@@ -706,16 +706,16 @@ export function Dashboard() {
               const Icon = PRESET_ICONS[i % PRESET_ICONS.length]
               return (
                 <button
-                  key={preset.name}
-                  onClick={() => startBlank(preset.width, preset.height, preset.name)}
+                  key={preset.الاسم}
+                  onClick={() => startBlank(preset.width, preset.height, preset.الاسم)}
                   disabled={creating}
                   className="group flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-[#16171D] p-4 hover:border-[#7630D7]/60 hover:bg-[#1C1E28] transition-all disabled:opacity-50"
-                  aria-label={`Create ${preset.name}`}
+                  aria-label={`إنشاء ${preset.الاسم}`}
                 >
                   <span className="h-10 w-10 rounded-xl bg-brand-gradient-soft text-[#A78BFA] flex items-center justify-center group-hover:scale-110 transition-transform">
                     <Icon size={19} />
                   </span>
-                  <span className="text-[13px] font-semibold text-center leading-tight">{preset.name}</span>
+                  <span className="text-[13px] font-semibold text-center leading-tight">{preset.الاسم}</span>
                   <span className="text-[11px] text-white/40">{preset.hint}</span>
                 </button>
               )
@@ -735,10 +735,10 @@ export function Dashboard() {
           </div>
         </section>
 
-        {/* ── Templates ── */}
+        {/* ── القوالب ── */}
         <section id="cv-templates" className="pt-12 scroll-mt-20">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <h2 className="text-xl font-bold">Templates</h2>
+            <h2 className="text-xl font-bold">القوالب</h2>
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => setCategory('all')}
@@ -771,19 +771,19 @@ export function Dashboard() {
             </div>
           </div>
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {filteredTemplates.map((t) => (
+            {filteredالقوالب.map((t) => (
               <LazyCard key={t.slug}>
                 <button
                   onClick={() => startFromTemplate(t)}
                   disabled={creating}
                   className="group text-left w-full"
-                  aria-label={`Open template ${t.name}`}
+                  aria-label={`Open template ${t.الاسم}`}
                 >
                   <div
                     className="relative rounded-xl overflow-hidden border border-white/10 shadow-lg shadow-black/30 group-hover:shadow-xl group-hover:-translate-y-0.5 transition-all bg-[#0F1015]"
                     style={{ aspectRatio: `${t.width} / ${t.height}` }}
                   >
-                    <DesignPreview page={t.pages[0]} width={t.width} height={t.height} />
+                    <DesignPreview صفحة={t.صفحةs[0]} width={t.width} height={t.height} />
                     <div className="absolute inset-0 bg-[#7630D7]/0 group-hover:bg-[#7630D7]/15 transition-colors" />
                     <span className="absolute top-2 right-2 h-6 w-6 rounded-full bg-[#7630D7] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                       <Plus size={14} />
@@ -802,7 +802,7 @@ export function Dashboard() {
                       </span>
                     ) : null}
                   </div>
-                  <div className="mt-2 text-sm font-medium truncate text-white/85 group-hover:text-[#A78BFA] transition-colors">{t.name}</div>
+                  <div className="mt-2 text-sm font-medium truncate text-white/85 group-hover:text-[#A78BFA] transition-colors">{t.الاسم}</div>
                   <div className="text-xs text-white/40">{t.width} × {t.height}</div>
                 </button>
               </LazyCard>
@@ -810,18 +810,18 @@ export function Dashboard() {
           </div>
         </section>
 
-        {/* ── Brand kit ── */}
+        {/* ── الهوية kit ── */}
         <section id="cv-brand" className="pt-12 scroll-mt-20">
-          <h2 className="text-xl font-bold">Brand kit</h2>
+          <h2 className="text-xl font-bold">الهوية kit</h2>
           <div className="mt-4 rounded-2xl border border-white/10 bg-[#16171D] p-5 flex flex-col sm:flex-row items-center gap-6">
             <div className="flex gap-2">
               {(['#7630D7', '#02C0CC', '#FF5C8A', '#1F142E', '#FFD166'] as const).map((c) => (
-                <span key={c} className="h-10 w-10 rounded-xl border border-white/15" style={{ background: c }} aria-label={`Brand color ${c}`} />
+                <span key={c} className="h-10 w-10 rounded-xl border border-white/15" style={{ background: c }} aria-label={`الهوية color ${c}`} />
               ))}
             </div>
             <div className="flex-1 text-center sm:text-left">
               <div className="text-sm font-semibold">Set your brand colors &amp; fonts in the editor</div>
-              <div className="text-xs text-white/40 mt-0.5">Open any design → Brand tab. Saved locally, applied anywhere.</div>
+              <div className="text-xs text-white/40 mt-0.5">Open any design → الهوية tab. Saved locally, applied anywhere.</div>
             </div>
             <Button
               variant="outline"
@@ -829,7 +829,7 @@ export function Dashboard() {
               onClick={() => {
                 const first = filteredDesigns[0] ?? null
                 if (first) void openDesign(first.id)
-                else toast({ title: 'Open a design first, then click the Brand tab' })
+                else toast({ title: 'Open a design first, then click the الهوية tab' })
               }}
             >
               Open editor
@@ -858,17 +858,17 @@ export function Dashboard() {
           </section>
         )}
 
-        {/* ── Recent designs ── */}
-        <section id="cv-recents" className="pt-12 scroll-mt-20">
+        {/* ── الأحدث designs ── */}
+        <section id="cv-الأحدثs" className="pt-12 scroll-mt-20">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <h2 className="text-xl font-bold">
               {activeFolder
-                ? (folders ?? []).find((f) => f.id === activeFolder)?.name ?? 'Folder'
-                : 'Recent designs'}
+                ? (folders ?? []).find((f) => f.id === activeFolder)?.الاسم ?? 'Folder'
+                : 'الأحدث designs'}
             </h2>
             {/* v0.4: canva-style sort control */}
             <div className="flex items-center gap-1 rounded-full border border-white/10 p-0.5" role="group" aria-label="Sort designs">
-              {(['recent', 'name'] as const).map((mode) => (
+              {(['الأحدث', 'الاسم'] as const).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => setSort(mode)}
@@ -878,13 +878,13 @@ export function Dashboard() {
                   )}
                   aria-pressed={sort === mode}
                 >
-                  {mode === 'recent' ? 'Recent' : 'Name'}
+                  {mode === 'الأحدث' ? 'الأحدث' : 'Name'}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* v0.14 (D6): folder chips — All designs + the caller's folders. */}
+          {/* v0.14 (D6): folder chips — كل التصاميم + the caller's folders. */}
           <div className="mt-3 flex items-center gap-2 flex-wrap" role="group" aria-label="Design folders">
             <button
               onClick={() => setActiveFolder(null)}
@@ -896,7 +896,7 @@ export function Dashboard() {
               )}
               aria-pressed={activeFolder === null}
             >
-              <LayoutGrid size={14} /> All designs
+              <LayoutGrid size={14} /> كل التصاميم
             </button>
             {(folders ?? []).map((f) => (
               <span
@@ -912,9 +912,9 @@ export function Dashboard() {
                   onClick={() => setActiveFolder(f.id)}
                   className="inline-flex items-center gap-1.5 rounded-l-full pl-3.5 py-1.5 pr-1.5 text-sm font-medium hover:text-white transition-colors"
                   aria-pressed={activeFolder === f.id}
-                  aria-label={`Open folder ${f.name}`}
+                  aria-label={`Open folder ${f.الاسم}`}
                 >
-                  <Folder size={14} /> {f.name}
+                  <Folder size={14} /> {f.الاسم}
                   <span className="text-xs text-white/40">{f.designCount}</span>
                 </button>
                 <DropdownMenu>
@@ -923,16 +923,16 @@ export function Dashboard() {
                       variant="ghost"
                       size="icon"
                       className="h-6 w-6 rounded-r-full text-white/50 hover:bg-white/10 hover:text-white"
-                      aria-label={`Options for folder ${f.name}`}
+                      aria-label={`Options for folder ${f.الاسم}`}
                     >
                       <MoreHorizontal size={13} />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-40 bg-[#16181D] border-white/10 text-white">
-                    <DropdownMenuItem onClick={() => openRenameFolder(f.id, f.name)}>
-                      <Pencil size={14} className="mr-2" /> Rename
+                    <DropdownMenuItem onClick={() => openإعادة تسميةFolder(f.id, f.الاسم)}>
+                      <Pencil size={14} className="mr-2" /> إعادة تسمية
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => void doDeleteFolder(f.id, f.name)}>
+                    <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => void doDeleteFolder(f.id, f.الاسم)}>
                       <Trash2 size={14} className="mr-2" /> Delete folder
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -940,7 +940,7 @@ export function Dashboard() {
               </span>
             ))}
             <button
-              onClick={openCreateFolder}
+              onClick={openإنشاءFolder}
               className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium border border-dashed border-white/20 text-white/50 hover:border-white/40 hover:text-white transition-colors"
               aria-label="New folder"
             >
@@ -965,7 +965,7 @@ export function Dashboard() {
               <p className="mt-4 font-semibold">{activeFolder ? 'This folder is empty' : 'No designs yet'}</p>
               <p className="mt-1 text-sm text-white/45">
                 {activeFolder
-                  ? 'Open a design’s ⋯ menu and “Move to folder”, or create something new — it lands here.'
+                  ? 'Open a design’s ⋯ menu and “Move to folder”, or إنشاء something new — it lands here.'
                   : 'Pick a preset or template above to get started.'}
               </p>
             </div>
@@ -977,10 +977,10 @@ export function Dashboard() {
                     onClick={() => openDesign(d.id)}
                     className="relative block w-full rounded-xl overflow-hidden border border-white/10 shadow-lg shadow-black/30 group-hover:shadow-xl group-hover:-translate-y-0.5 transition-all bg-[#0F1015]"
                     style={{ aspectRatio: `${d.width} / ${d.height}` }}
-                    aria-label={`Open ${d.name}`}
+                    aria-label={`Open ${d.الاسم}`}
                   >
                     {d.thumbnail ? (
-                      <img src={d.thumbnail} alt={d.name} className="w-full h-full object-cover" />
+                      <img src={d.thumbnail} alt={d.الاسم} className="w-full h-full object-cover" />
                     ) : (
                       <span className="absolute inset-0 flex items-center justify-center text-white/30 text-xs font-medium">
                         {d.width} × {d.height}
@@ -989,12 +989,12 @@ export function Dashboard() {
                   </button>
                   <div className="mt-2 flex items-start justify-between gap-1">
                     <div className="min-w-0">
-                      <div className="text-sm font-medium truncate text-white/85">{d.name}</div>
+                      <div className="text-sm font-medium truncate text-white/85">{d.الاسم}</div>
                       <div className="text-xs text-white/40">{timeAgo(d.updatedAt)}</div>
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg shrink-0 text-white/60 hover:bg-white/10 hover:text-white" aria-label={`Options for ${d.name}`}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg shrink-0 text-white/60 hover:bg-white/10 hover:text-white" aria-label={`Options for ${d.الاسم}`}>
                           <MoreHorizontal size={15} />
                         </Button>
                       </DropdownMenuTrigger>
@@ -1008,7 +1008,7 @@ export function Dashboard() {
                               const r = await adoptDesign(d.id)
                               if (r.ok) {
                                 await refresh()
-                                toast({ title: `“${d.name}” moved into your account` })
+                                toast({ title: `“${d.الاسم}” moved into your account` })
                               } else {
                                 toast({ title: r.error ?? 'Could not save this design', variant: 'destructive' })
                               }
@@ -1017,8 +1017,8 @@ export function Dashboard() {
                             <FolderInput size={14} className="mr-2" /> Save to my account
                           </DropdownMenuItem>
                         )}
-                        <DropdownMenuItem onClick={() => { setRenameTarget({ id: d.id, name: d.name }); setRenameValue(d.name) }}>
-                          <Pencil size={14} className="mr-2" /> Rename
+                        <DropdownMenuItem onClick={() => { setإعادة تسميةTarget({ id: d.id, الاسم: d.الاسم }); setإعادة تسميةValue(d.الاسم) }}>
+                          <Pencil size={14} className="mr-2" /> إعادة تسمية
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => void doDuplicate(d)}>
                           <Copy size={14} className="mr-2" /> Duplicate
@@ -1030,13 +1030,13 @@ export function Dashboard() {
                           <DropdownMenuSubContent className="w-44 bg-[#16181D] border-white/10 text-white">
                             {(folders ?? []).length === 0 ? (
                               <DropdownMenuItem disabled>
-                                Create a folder first — “New folder” above
+                                إنشاء a folder first — “New folder” above
                               </DropdownMenuItem>
                             ) : (
                               (folders ?? []).map((f) => (
                                 <DropdownMenuItem
                                   key={f.id}
-                                  onClick={() => void doMoveDesign(d.id, f.id, d.name)}
+                                  onClick={() => void doMoveDesign(d.id, f.id, d.الاسم)}
                                   className="gap-2"
                                 >
                                   {d.folderId === f.id ? (
@@ -1044,14 +1044,14 @@ export function Dashboard() {
                                   ) : (
                                     <span className="w-[14px]" />
                                   )}
-                                  <span className="truncate">{f.name}</span>
+                                  <span className="truncate">{f.الاسم}</span>
                                 </DropdownMenuItem>
                               ))
                             )}
                             {d.folderId && (
                               <>
                                 <DropdownMenuSeparator className="bg-white/10" />
-                                <DropdownMenuItem onClick={() => void doMoveDesign(d.id, null, d.name)}>
+                                <DropdownMenuItem onClick={() => void doMoveDesign(d.id, null, d.الاسم)}>
                                   <FolderMinus size={14} className="mr-2" /> Remove from folder
                                 </DropdownMenuItem>
                               </>
@@ -1119,7 +1119,7 @@ export function Dashboard() {
                         style={{ aspectRatio: `${d.width} / ${d.height}` }}
                       >
                         {d.thumbnail ? (
-                          <img src={d.thumbnail} alt={d.name} className="w-full h-full object-cover" />
+                          <img src={d.thumbnail} alt={d.الاسم} className="w-full h-full object-cover" />
                         ) : (
                           <span className="absolute inset-0 flex items-center justify-center text-white/30 text-xs font-medium">
                             {d.width} × {d.height}
@@ -1128,7 +1128,7 @@ export function Dashboard() {
                       </div>
                       <div className="mt-2 flex items-start justify-between gap-1">
                         <div className="min-w-0">
-                          <div className="text-sm font-medium truncate text-white/85">{d.name}</div>
+                          <div className="text-sm font-medium truncate text-white/85">{d.الاسم}</div>
                           <div className="text-xs text-white/40">
                             deleted {timeAgo(d.deletedAt ?? d.updatedAt)}
                           </div>
@@ -1138,8 +1138,8 @@ export function Dashboard() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 rounded-lg text-white/60 hover:bg-white/10 hover:text-white"
-                            onClick={() => void doRestore(d.id, d.name)}
-                            aria-label={`Restore ${d.name}`}
+                            onClick={() => void doRestore(d.id, d.الاسم)}
+                            aria-label={`Restore ${d.الاسم}`}
                             title="Restore"
                           >
                             <RotateCcw size={14} />
@@ -1148,8 +1148,8 @@ export function Dashboard() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 rounded-lg text-white/60 hover:bg-red-500/15 hover:text-red-400"
-                            onClick={() => void doDeleteForever(d.id, d.name)}
-                            aria-label={`Delete ${d.name} forever`}
+                            onClick={() => void doDeleteForever(d.id, d.الاسم)}
+                            aria-label={`Delete ${d.الاسم} forever`}
                             title="Delete forever"
                           >
                             <Trash2 size={14} />
@@ -1218,7 +1218,7 @@ export function Dashboard() {
                   ['V', 'Select tool'],
                   ['Delete', 'Delete selection'],
                   ['Double-click text', 'Edit text inline'],
-                  ['Double-click layer', 'Rename a layer'],
+                  ['Double-click layer', 'إعادة تسمية a layer'],
                   ['Space + drag', 'Pan the canvas'],
                   ['Drag empty canvas', 'Marquee select'],
                   ['Drag from ruler', 'Pull out a guide'],
@@ -1233,11 +1233,11 @@ export function Dashboard() {
             <div>
               <div className="text-[12px] font-bold text-white/85 mb-2 uppercase tracking-wide">Where things live</div>
               <ul className="text-[12px] text-white/70 space-y-1.5 leading-relaxed">
-                <li>· <b className="text-white/90">Templates / Elements / Text</b> — left rail in the editor</li>
-                <li>· <b className="text-white/90">Brand</b> — colors, palettes, fonts &amp; logos (saved locally)</li>
+                <li>· <b className="text-white/90">القوالب / Elements / Text</b> — left rail in the editor</li>
+                <li>· <b className="text-white/90">الهوية</b> — colors, palettes, fonts &amp; logos (saved locally)</li>
                 <li>· <b className="text-white/90">Apps</b> — charts, QR codes, icons, palettes &amp; placeholder text</li>
                 <li>· <b className="text-white/90">Uploads</b> — drop images onto the canvas anytime</li>
-                <li>· <b className="text-white/90">Layers</b> — rename (double-click), reorder, lock &amp; hide</li>
+                <li>· <b className="text-white/90">Layers</b> — reالاسم (double-click), reorder, lock &amp; hide</li>
                 <li>· <b className="text-white/90">File menu</b> — rulers, version history &amp; downloads</li>
                 <li>· <b className="text-white/90">Crop</b> — select an image → Crop button or right-click</li>
               </ul>
@@ -1258,7 +1258,7 @@ export function Dashboard() {
       <Dialog open={customOpen} onOpenChange={setCustomOpen}>
         <DialogContent className="rounded-[28px] sm:max-w-sm bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle>Create a custom design</DialogTitle>
+            <DialogTitle>إنشاء a custom design</DialogTitle>
             <DialogDescription className="text-white/55">Pick any pixel size — you can resize later.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
@@ -1286,7 +1286,7 @@ export function Dashboard() {
                 void startBlank(w, h)
               }}
             >
-              Create
+              إنشاء
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1300,7 +1300,7 @@ export function Dashboard() {
             <DialogDescription className="text-white/55">
               {PRESET_GROUPS.reduce((n, g) => n + g.presets.length, 0)} presets across five categories — or{' '}
               <button className="text-[#A78BFA] underline" onClick={() => { setSizesOpen(false); setCustomOpen(true) }}>
-                create a custom size
+                إنشاء a custom size
               </button>
               .
             </DialogDescription>
@@ -1319,7 +1319,7 @@ export function Dashboard() {
             {PRESET_GROUPS.map((group) => {
               const q = sizeQuery.trim().toLowerCase()
               const presets = q
-                ? group.presets.filter((p) => p.name.toLowerCase().includes(q) || p.hint.toLowerCase().includes(q))
+                ? group.presets.filter((p) => p.الاسم.toLowerCase().includes(q) || p.hint.toLowerCase().includes(q))
                 : group.presets
               if (!presets.length) return null
               const Icon = GROUP_ICONS[group.id] ?? Square
@@ -1331,16 +1331,16 @@ export function Dashboard() {
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {presets.map((p: SizePreset) => (
                       <button
-                        key={group.id + p.name}
+                        key={group.id + p.الاسم}
                         onClick={() => {
                           setSizesOpen(false)
-                          void startBlank(p.width, p.height, p.name)
+                          void startBlank(p.width, p.height, p.الاسم)
                         }}
                         disabled={creating}
                         className="flex flex-col items-start gap-0.5 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 hover:border-[#7630D7]/60 hover:bg-[#7630D7]/10 transition-all text-left disabled:opacity-50"
-                        aria-label={`Create ${p.name} (${p.hint})`}
+                        aria-label={`إنشاء ${p.الاسم} (${p.hint})`}
                       >
-                        <span className="text-[12px] font-semibold text-white/90 truncate w-full">{p.name}</span>
+                        <span className="text-[12px] font-semibold text-white/90 truncate w-full">{p.الاسم}</span>
                         <span className="text-[10px] text-white/40">{p.hint}</span>
                       </button>
                     ))}
@@ -1348,11 +1348,11 @@ export function Dashboard() {
                 </div>
               )
             })}
-            {sizeQuery.trim() && !PRESET_GROUPS.some((g) => g.presets.some((p) => p.name.toLowerCase().includes(sizeQuery.trim().toLowerCase()))) && (
+            {sizeQuery.trim() && !PRESET_GROUPS.some((g) => g.presets.some((p) => p.الاسم.toLowerCase().includes(sizeQuery.trim().toLowerCase()))) && (
               <p className="text-center text-sm text-white/40 py-6">
                 No size matches “{sizeQuery}” —{' '}
                 <button className="text-[#A78BFA] underline" onClick={() => { setSizesOpen(false); setCustomOpen(true) }}>
-                  create a custom size
+                  إنشاء a custom size
                 </button>
               </p>
             )}
@@ -1365,10 +1365,10 @@ export function Dashboard() {
         <DialogContent className="rounded-[28px] sm:max-w-md bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FileSpreadsheet size={16} className="text-[#02C0CC]" /> Bulk-fill “{csvTarget?.name}”
+              <FileSpreadsheet size={16} className="text-[#02C0CC]" /> Bulk-fill “{csvTarget?.الاسم}”
             </DialogTitle>
             <DialogDescription className="text-white/55">
-              Upload a CSV whose header row names the fields — one design is created per data row (up to 100).
+              Upload a CSV whose header row الاسمs the fields — one design is إنشاءd per data row (up to 100).
             </DialogDescription>
           </DialogHeader>
 
@@ -1409,7 +1409,7 @@ export function Dashboard() {
                 onChange={(e) => setCsvText(e.target.value)}
                 rows={5}
                 className="w-full rounded-xl bg-white/[0.06] border border-white/10 px-3 py-2 text-[12px] font-mono text-white outline-none focus:border-[#7630D7] placeholder:text-white/30"
-                placeholder={'…or paste CSV here\nname,date\nAda,2026-03-14'}
+                placeholder={'…or paste CSV here\nالاسم,date\nAda,2026-03-14'}
                 aria-label="CSV content"
               />
 
@@ -1438,16 +1438,16 @@ export function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Rename dialog ── */}
-      <Dialog open={!!renameTarget} onOpenChange={(open) => !open && setRenameTarget(null)}>
+      {/* ── إعادة تسمية dialog ── */}
+      <Dialog open={!!reالاسمTarget} onOpenChange={(open) => !open && setإعادة تسميةTarget(null)}>
         <DialogContent className="rounded-[28px] sm:max-w-sm bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle>Rename design</DialogTitle>
+            <DialogTitle>إعادة تسمية design</DialogTitle>
           </DialogHeader>
-          <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus onKeyDown={(e) => e.key === 'Enter' && doRename()} className="bg-white/[0.06] border-white/10 text-white" />
+          <Input value={reالاسمValue} onChange={(e) => setإعادة تسميةValue(e.target.value)} autoFocus onKeyDown={(e) => e.key === 'Enter' && doإعادة تسمية()} className="bg-white/[0.06] border-white/10 text-white" />
           <DialogFooter>
-            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setRenameTarget(null)}>Cancel</Button>
-            <Button className="btn-cv" onClick={doRename}>Save</Button>
+            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setإعادة تسميةTarget(null)}>Cancel</Button>
+            <Button className="btn-cv" onClick={doإعادة تسمية}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1468,12 +1468,12 @@ export function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* ── v0.14 (D6): create / rename folder dialog ── */}
+      {/* ── v0.14 (D6): إنشاء / reالاسم folder dialog ── */}
       <Dialog open={!!folderDialog} onOpenChange={(open) => !open && setFolderDialog(null)}>
         <DialogContent className="rounded-[28px] sm:max-w-sm bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle>{folderDialog?.mode === 'rename' ? 'Rename folder' : 'New folder'}</DialogTitle>
-            {folderDialog?.mode === 'create' && (
+            <DialogTitle>{folderDialog?.mode === 'reالاسم' ? 'إعادة تسمية folder' : 'New folder'}</DialogTitle>
+            {folderDialog?.mode === 'إنشاء' && (
               <DialogDescription className="text-white/55">
                 Folders organize your designs — deleting one never deletes the designs inside.
               </DialogDescription>
@@ -1484,15 +1484,15 @@ export function Dashboard() {
             onChange={(e) => setFolderValue(e.target.value)}
             autoFocus
             maxLength={60}
-            placeholder="Folder name"
+            placeholder="Folder الاسم"
             onKeyDown={(e) => e.key === 'Enter' && void doFolderSubmit()}
             className="bg-white/[0.06] border-white/10 text-white"
-            aria-label="Folder name"
+            aria-label="Folder الاسم"
           />
           <DialogFooter>
             <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setFolderDialog(null)}>Cancel</Button>
             <Button className="btn-cv" onClick={() => void doFolderSubmit()}>
-              {folderDialog?.mode === 'rename' ? 'Save' : 'Create'}
+              {folderDialog?.mode === 'reالاسم' ? 'Save' : 'إنشاء'}
             </Button>
           </DialogFooter>
         </DialogContent>

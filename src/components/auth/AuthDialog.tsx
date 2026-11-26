@@ -48,8 +48,8 @@ export function AuthDialog({ open, onOpenChange, onAuthed, initialMode = 'login'
 function AuthDialogForm({ onOpenChange, onAuthed, initialMode }: Omit<AuthDialogProps, 'open'>) {
   const [mode, setMode] = useState<'login' | 'register'>(initialMode ?? 'login')
   const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
+  const [password, setكلمة المرور] = useState('')
+  const [showكلمة المرور, setShowكلمة المرور] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -117,25 +117,25 @@ function AuthDialogForm({ onOpenChange, onAuthed, initialMode }: Omit<AuthDialog
             </div>
             <div className="space-y-1.5">
               <label htmlFor="cv-auth-password" className="text-[12px] font-medium text-white/70">
-                Password
+                كلمة المرور
               </label>
               <div className="relative">
                 <Input
                   id="cv-auth-password"
-                  type={showPassword ? 'text' : 'password'}
+                  type={showكلمة المرور ? 'text' : 'password'}
                   autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => setكلمة المرور(e.target.value)}
                   placeholder={mode === 'login' ? 'كلمة المرور الخاصة بك' : '8 أحرف على الأقل'}
                   className="h-10 pr-10 bg-white/[0.06] border-white/10 text-white placeholder:text-white/30 focus-visible:ring-[#7630D7]/50"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword((v) => !v)}
+                  onClick={() => setShowكلمة المرور((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70"
-                  aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                  aria-label={showكلمة المرور ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                 >
-                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  {showكلمة المرور ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
             </div>

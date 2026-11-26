@@ -150,7 +150,7 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             <div className="flex items-center gap-2">
               <Input
                 type="number"
-                placeholder="Width"
+                placeholder="العرض"
                 value={custom.w}
                 onChange={(e) => setCustom((c) => ({ ...c, w: e.target.value }))}
                 className="bg-white/5 border-white/10 text-white h-10 [color-scheme:dark]"
@@ -159,7 +159,7 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               <span className="text-white/40">×</span>
               <Input
                 type="number"
-                placeholder="Height"
+                placeholder="الارتفاع"
                 value={custom.h}
                 onChange={(e) => setCustom((c) => ({ ...c, h: e.target.value }))}
                 className="bg-white/5 border-white/10 text-white h-10 [color-scheme:dark]"

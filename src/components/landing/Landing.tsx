@@ -13,7 +13,7 @@ import {
   Sparkles,
   Palette,
   Undo2,
-  عرض تقديمي,
+  Presentation,
   Instagram,
   Printer,
   Video,
@@ -27,7 +27,7 @@ import {
   Check,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
-import { شعار } from '@/components/logo'
+import { Logo } from '@/components/logo'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth/client'
 
@@ -46,7 +46,7 @@ function EditorMockup() {
       <div className="flex h-[calc(100%-37px)]">
         {/* dark rail */}
         <div className="w-12 bg-[#17181D] flex flex-col items-center pt-3 gap-3">
-          {[عرض تقديمي, Shapes, Type, ImageIcon, Layers].map((Icon, i) => (
+          {[Presentation, Shapes, Type, ImageIcon, Layers].map((Icon, i) => (
             <div
               key={i}
               className={`h-8 w-8 rounded-lg flex items-center justify-center ${

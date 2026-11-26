@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import {
-  عريض, مائل, تسطير, يتوسطه خط, CaseUpper, AlignLeft, AlignCenter, AlignRight,
+  Bold, Italic, Underline, Strikethrough, CaseUpper, AlignLeft, AlignCenter, AlignRight,
   AlignJustify, Minus, Plus, LetterText, Percent, Sparkles, Move, CopyPlus, Trash2,
-  تجميع, إلغاء التجميع, ArrowUpToLine, ArrowDownToLine, BringToFront, SendToBack,
+  Group, Ungroup, ArrowUpToLine, ArrowDownToLine, BringToFront, SendToBack,
   AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd,
   AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd,
   AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter,
@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { useEditorStore, selectedElements, currentPageData } from '@/store/editor-store'
 import type { AudioElement, ChartElement, ChartSeries, EmbedElement, FrameElement, ImageElement, LineElement, PluginElement, ShapeElement, StickerElement, TableElement, TextElement, VideoElement, AnyElement, FrameShape, ChartKind } from '@/lib/types'
-import { FRAME_SHAPES, isتجميع, CHART_KINDS, CHART_KIND_LABELS } from '@/lib/types'
+import { FRAME_SHAPES, isGroup, CHART_KINDS, CHART_KIND_LABELS } from '@/lib/types'
 import { CHART_PALETTE, MAX_CHART_LABELS, MAX_CHART_SERIES, CHART_VALUE_LIMIT } from '@/lib/chart-geometry'
 import { TEXT_EFFECTS } from '@/lib/types'
 import { beatSourceOf } from '@/lib/media/beat-detect'
@@ -79,8 +79,8 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
   // v0.11: the page's beat grid — powers the Beat Sync popover below
   const beatSource = beatSourceOf(currentPageData(state))
 
-  const canتجميع = isMulti
-  const canإلغاء التجميع = sel.some((e) => isتجميع(e))
+  const canGroup = isMulti
+  const canUngroup = sel.some((e) => isGroup(e))
 
   const isTopbar = variant === 'topbar'
 
@@ -90,26 +90,26 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
         'flex items-center gap-0.5 min-w-0 overflow-x-auto cv-scroll-dark',
         isTopbar ? 'h-14 items-center px-1' : 'h-14 items-center px-2 bg-[#16181D] border-t border-white/[0.09]'
       )}
-      aria-label="عناصر التحكم الشائعة للعنصر المحدد"
+      aria-label="Selected element common controls"
       style={{ scrollbarWidth: 'none' }}
     >
       {/* ── multi-select ─────────────────────────────────────── */}
       {isMulti ? (
         <>
           <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0">{sel.length} selected</span>
-          <TBtn onClick={() => state.groupSelection()} disabled={!canتجميع} title="تجميع (Ctrl+G)" ariaLabel="تجميع">
-            <تجميع size={15} />
+          <TBtn onClick={() => state.groupSelection()} disabled={!canGroup} title="Group (Ctrl+G)" ariaLabel="Group">
+            <Group size={15} />
           </TBtn>
-          <TBtn onClick={() => state.ungroupSelection()} disabled={!canإلغاء التجميع} title="إلغاء التجميع (Ctrl+Shift+G)" ariaLabel="إلغاء التجميع">
-            <إلغاء التجميع size={15} />
+          <TBtn onClick={() => state.ungroupSelection()} disabled={!canUngroup} title="Ungroup (Ctrl+Shift+G)" ariaLabel="Ungroup">
+            <Ungroup size={15} />
           </TBtn>
           <Divider />
           <PositionPopover ids={ids} count={sel.length} />
           <Divider />
-          <TBtn onClick={() => state.duplicateSelection()} title="إنشاء نسخة (Ctrl+D)" ariaLabel="نسخ">
+          <TBtn onClick={() => state.duplicateSelection()} title="Duplicate (Ctrl+D)" ariaLabel="Duplicate">
             <CopyPlus size={15} />
           </TBtn>
-          <TBtn onClick={() => state.deleteSelection()} title="حذف (Del)" ariaLabel="حذف" danger>
+          <TBtn onClick={() => state.deleteSelection()} title="Delete (Del)" ariaLabel="Delete" danger>
             <Trash2 size={15} />
           </TBtn>
         </>
@@ -118,7 +118,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           <FontDropdown value={text.fontFamily} onChange={(f) => update(ids, { fontFamily: f })} />
           {/* size stepper */}
           <div className="flex items-center shrink-0">
-            <TBtn onClick={() => update(ids, { fontSize: Math.max(6, text.fontSize - 2) })} title="تصغير حجم الخط" ariaLabel="تصغير حجم الخط" className="!rounded-r-none">
+            <TBtn onClick={() => update(ids, { fontSize: Math.max(6, text.fontSize - 2) })} title="Decrease font size" ariaLabel="Decrease font size" className="!rounded-r-none">
               <Minus size={14} />
             </TBtn>
             <input
@@ -131,7 +131,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
               className="h-8 w-10 bg-white/[0.06] border-y border-white/10 text-white text-[12px] text-center outline-none focus:border-[#7630D7] [color-scheme:dark]"
               aria-label="Font size"
             />
-            <TBtn onClick={() => update(ids, { fontSize: Math.min(400, text.fontSize + 2) })} title="تكبير حجم الخط" ariaLabel="تكبير حجم الخط" className="!rounded-l-none">
+            <TBtn onClick={() => update(ids, { fontSize: Math.min(400, text.fontSize + 2) })} title="Increase font size" ariaLabel="Increase font size" className="!rounded-l-none">
               <Plus size={14} />
             </TBtn>
           </div>
@@ -141,7 +141,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
             gradient={text.fillGradient ?? null}
             onChange={(c, committed) => committed ? update(ids, { fill: c, fillGradient: null }) : updateLive(ids, { fill: c, fillGradient: null })}
             onGradient={(g, committed) => { const patch = g ? { fillGradient: g, fill: g.from } : { fillGradient: null }; if (committed) update(ids, patch); else updateLive(ids, patch) }}
-            title="لون النص"
+            title="Text colour"
           />
 
           {/* v0.15 (R1): while the element carries rich spans, per-range
@@ -152,36 +152,36 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
               className="cv-tbtn"
               style={{ width: 'auto', padding: '0 10px', fontSize: 11, gap: 6 }}
               onClick={() => update(ids, { spans: null })}
-              title="تنسيق النص المتقدم مفعّل — امسح تنسيق المقاطع للعودة إلى التنسيق الأساسي"
-              aria-label="مسح تنسيق النص"
+              title="Rich text active — clear per-range styling back to the base style"
+              aria-label="Clear rich text styling"
               data-testid="clear-rich-text"
             >
               Rich text · Clear
             </button>
           ) : (
             <>
-              <TBtn onClick={() => update(ids, { bold: !text.bold })} dataActive={text.bold} title="عريض" ariaLabel="عريض">
-                <عريض size={14} />
+              <TBtn onClick={() => update(ids, { bold: !text.bold })} dataActive={text.bold} title="Bold" ariaLabel="Bold">
+                <Bold size={14} />
               </TBtn>
-              <TBtn onClick={() => update(ids, { italic: !text.italic })} dataActive={text.italic} title="مائل" ariaLabel="مائل">
-                <مائل size={14} />
+              <TBtn onClick={() => update(ids, { italic: !text.italic })} dataActive={text.italic} title="Italic" ariaLabel="Italic">
+                <Italic size={14} />
               </TBtn>
-              <TBtn onClick={() => update(ids, { underline: !text.underline })} dataActive={text.underline} title="تسطير" ariaLabel="تسطير">
-                <تسطير size={14} />
+              <TBtn onClick={() => update(ids, { underline: !text.underline })} dataActive={text.underline} title="Underline" ariaLabel="Underline">
+                <Underline size={14} />
               </TBtn>
-              <TBtn onClick={() => update(ids, { strike: !text.strike })} dataActive={text.strike} title="يتوسطه خط" ariaLabel="يتوسطه خط">
-                <يتوسطه خط size={14} />
+              <TBtn onClick={() => update(ids, { strike: !text.strike })} dataActive={text.strike} title="Strikethrough" ariaLabel="Strikethrough">
+                <Strikethrough size={14} />
               </TBtn>
             </>
           )}
-          <TBtn onClick={() => update(ids, { uppercase: !text.uppercase })} dataActive={text.uppercase} title="أحرف كبيرة" ariaLabel="أحرف كبيرة">
+          <TBtn onClick={() => update(ids, { uppercase: !text.uppercase })} dataActive={text.uppercase} title="Uppercase" ariaLabel="Uppercase">
             <CaseUpper size={14} />
           </TBtn>
 
           {/* alignment */}
           <ToolbarPopover
             trigger={(open) => (
-              <button className="cv-tbtn" data-active={open} aria-label="تبديل محاذاة النص" title="محاذاة النص">
+              <button className="cv-tbtn" data-active={open} aria-label="Toggle text alignment" title="Text alignment">
                 {(() => { const I = ALIGN_ICONS[text.align] ?? AlignLeft; return <I size={14} /> })()}
               </button>
             )}
@@ -205,42 +205,42 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           {/* spacing */}
           <ToolbarPopover
             trigger={(open) => (
-              <button className="cv-tbtn" data-active={open} aria-label="إعدادات متقدمة" title="تباعد الأحرف والأسطر">
+              <button className="cv-tbtn" data-active={open} aria-label="Advanced settings" title="Letter & line spacing">
                 <LetterText size={14} />
               </button>
             )}
           >
-            <SliderRow label="تباعد الأحرف" value={text.letterSpacing} min={-10} max={80} step={1} onChange={(v) => updateLive(ids, { letterSpacing: v })} onCommit={() => update(ids, { letterSpacing: text.letterSpacing })} />
-            <SliderRow label="تباعد الأسطر" value={text.lineHeight} min={0.6} max={3} step={0.05} onChange={(v) => updateLive(ids, { lineHeight: v })} onCommit={() => update(ids, { lineHeight: text.lineHeight })} format={(v) => `${v.toFixed(2)}×`} />
+            <SliderRow label="Letter spacing" value={text.letterSpacing} min={-10} max={80} step={1} onChange={(v) => updateLive(ids, { letterSpacing: v })} onCommit={() => update(ids, { letterSpacing: text.letterSpacing })} />
+            <SliderRow label="Line spacing" value={text.lineHeight} min={0.6} max={3} step={0.05} onChange={(v) => updateLive(ids, { lineHeight: v })} onCommit={() => update(ids, { lineHeight: text.lineHeight })} format={(v) => `${v.toFixed(2)}×`} />
           </ToolbarPopover>
 
           {/* v0.18 (Wave 3): list + direction + auto-fit */}
           <ToolbarPopover
             width={228}
             trigger={(open) => (
-              <button className="cv-tbtn" data-active={open || !!text.listStyle || !!text.autoFit} aria-label="خيارات القوائم والملاءمة" title="القائمة والملاءمة التلقائية">
+              <button className="cv-tbtn" data-active={open || !!text.listStyle || !!text.autoFit} aria-label="List and fit options" title="List & auto-fit">
                 <List size={14} />
               </button>
             )}
           >
             <div className="text-[12px] font-bold text-white/90 mb-1.5">List style</div>
             <div className="flex gap-1 mb-2.5">
-              <TBtn onClick={() => update(ids, { listStyle: 'none' })} dataActive={!text.listStyle || text.listStyle === 'none'} title="بلا قائمة" ariaLabel="بلا قائمة">
+              <TBtn onClick={() => update(ids, { listStyle: 'none' })} dataActive={!text.listStyle || text.listStyle === 'none'} title="No list" ariaLabel="No list">
                 <List size={13} className="opacity-40 line-through" />
               </TBtn>
-              <TBtn onClick={() => update(ids, { listStyle: 'bullet' })} dataActive={text.listStyle === 'bullet'} title="قائمة نقطية" ariaLabel="قائمة نقطية" data-testid="list-bullet">
+              <TBtn onClick={() => update(ids, { listStyle: 'bullet' })} dataActive={text.listStyle === 'bullet'} title="Bulleted list" ariaLabel="Bulleted list" data-testid="list-bullet">
                 <List size={13} />
               </TBtn>
-              <TBtn onClick={() => update(ids, { listStyle: 'number' })} dataActive={text.listStyle === 'number'} title="قائمة مرقمة" ariaLabel="قائمة مرقمة" data-testid="list-number">
+              <TBtn onClick={() => update(ids, { listStyle: 'number' })} dataActive={text.listStyle === 'number'} title="Numbered list" ariaLabel="Numbered list" data-testid="list-number">
                 <ListOrdered size={13} />
               </TBtn>
             </div>
             <div className="text-[12px] font-bold text-white/90 mb-1.5">Direction</div>
             <div className="flex gap-1 mb-2.5">
-              <TBtn onClick={() => update(ids, { direction: 'ltr' })} dataActive={text.direction !== 'rtl'} title="من اليسار إلى اليمين" ariaLabel="من اليسار إلى اليمين">
+              <TBtn onClick={() => update(ids, { direction: 'ltr' })} dataActive={text.direction !== 'rtl'} title="Left to right" ariaLabel="Left to right">
                 <span className="text-[11px] font-semibold px-1">LTR</span>
               </TBtn>
-              <TBtn onClick={() => update(ids, { direction: 'rtl' })} dataActive={text.direction === 'rtl'} title="من اليمين إلى اليسار (Arabic, Hebrew…)" ariaLabel="من اليمين إلى اليسار" data-testid="dir-rtl">
+              <TBtn onClick={() => update(ids, { direction: 'rtl' })} dataActive={text.direction === 'rtl'} title="Right to left (Arabic, Hebrew…)" ariaLabel="Right to left" data-testid="dir-rtl">
                 <Languages size={13} />
               </TBtn>
             </div>
@@ -418,7 +418,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           )}
           {group && (
             <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0 flex items-center gap-1.5">
-              <Layers size={13} /> تجميع
+              <Layers size={13} /> Group
             </span>
           )}
           <ToolbarPopover trigger={(open) => (
@@ -1356,7 +1356,7 @@ function ChartToolbar({ chart, ids }: { chart: ChartElement; ids: string[] }) {
         {chart.kind === 'bar' && (
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[11px] text-white/60 w-16">Bars</span>
-            <ChartToggle label="تجميع" active={chart.barMode !== 'stack'} onClick={() => update(ids, { barMode: 'group' })} />
+            <ChartToggle label="Group" active={chart.barMode !== 'stack'} onClick={() => update(ids, { barMode: 'group' })} />
             <ChartToggle label="Stack" active={chart.barMode === 'stack'} onClick={() => update(ids, { barMode: 'stack' })} />
           </div>
         )}
@@ -1387,7 +1387,7 @@ function ChartToolbar({ chart, ids }: { chart: ChartElement; ids: string[] }) {
           <span className="text-[11px] text-white/60">Panel</span>
           <ColorMenu value={chart.fill} onChange={(c, committed) => committed ? update(ids, { fill: c }) : updateLive(ids, { fill: c })} title="Chart background" />
           <span className="text-[11px] text-white/60 ml-2">Text</span>
-          <ColorMenu value={chart.textColor} onChange={(c, committed) => committed ? update(ids, { textColor: c }) : updateLive(ids, { textColor: c })} title="لون النص" />
+          <ColorMenu value={chart.textColor} onChange={(c, committed) => committed ? update(ids, { textColor: c }) : updateLive(ids, { textColor: c })} title="Text colour" />
         </div>
         <SliderRow
           label="Text size"

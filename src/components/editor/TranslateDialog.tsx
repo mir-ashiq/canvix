@@ -65,8 +65,8 @@ function collectCellTexts(els: AnyElement[], out: TableCellEntry[] = []): TableC
   return out
 }
 
-/** Canva "Translate" — AI-translate every text element in the design. */
-export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+/** Canva "ترجمة" — AI-translate every text element in the design. */
+export function ترجمةDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const pages = useEditorStore((s) => s.pages)
   const translateTexts = useEditorStore((s) => s.translateTexts)
   const [lang, setLang] = useState<string | null>(null)
@@ -92,7 +92,7 @@ export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenC
       })
       const data = (await res.json()) as { translations?: string[]; error?: string }
       if (!res.ok || !Array.isArray(data.translations) || data.translations.length !== allTexts.length) {
-        toast({ title: 'Translate failed', description: data.error ?? 'Please try again.', variant: 'destructive' })
+        toast({ title: 'ترجمة failed', description: data.error ?? 'Please try again.', variant: 'destructive' })
         return
       }
       const translations = data.translations
@@ -120,10 +120,10 @@ export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenC
         updateElements([id], { cells })
       }
       const total = texts.length + cellEntries.length
-      toast({ title: `Translated to ${picked.native}`, description: `${total} text${total === 1 ? '' : 's'} updated. Ctrl+Z to undo.` })
+      toast({ title: `ترجمةd to ${picked.native}`, description: `${total} text${total === 1 ? '' : 's'} updated. Ctrl+Z to undo.` })
       onOpenChange(false)
     } catch {
-      toast({ title: 'Translate is unavailable right now.', variant: 'destructive' })
+      toast({ title: 'ترجمة is unavailable right now.', variant: 'destructive' })
     } finally {
       setBusy(false)
     }
@@ -134,11 +134,11 @@ export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenC
       <DialogContent className="rounded-[28px] bg-[#16181D] border-white/10 text-white sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-lg font-bold flex items-center gap-2">
-            <Languages size={17} className="text-[#02C0CC]" /> Translate design
+            <Languages size={17} className="text-[#02C0CC]" /> ترجمة design
           </DialogTitle>
           <DialogDescription className="text-white/60">
             {texts.length + cellEntries.length
-              ? `Translate all ${texts.length + cellEntries.length} text${texts.length + cellEntries.length === 1 ? '' : 's'} (incl. table cells) across ${pages.length} page${pages.length === 1 ? '' : 's'} with AI. Your layout stays intact.`
+              ? `ترجمة all ${texts.length + cellEntries.length} text${texts.length + cellEntries.length === 1 ? '' : 's'} (incl. table cells) across ${pages.length} page${pages.length === 1 ? '' : 's'} with AI. Your layout stays intact.`
               : 'This design has no text to translate yet.'}
           </DialogDescription>
         </DialogHeader>
@@ -181,7 +181,7 @@ export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenC
             onClick={() => void run()}
           >
             {busy ? <Loader2 size={15} className="mr-1.5 animate-spin" /> : <Languages size={15} className="mr-1.5" />}
-            {busy ? 'Translating…' : 'Translate'}
+            {busy ? 'Translating…' : 'ترجمة'}
           </Button>
         </div>
       </DialogContent>

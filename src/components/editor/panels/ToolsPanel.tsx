@@ -10,10 +10,10 @@ import { cn } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
 
 const SUB_TABS = [
-  { id: 'draw', label: 'Draw', icon: Brush },
-  { id: 'position', label: 'Position', icon: ArrowUp },
-  { id: 'background', label: 'Background', icon: Palette },
-  { id: 'layers', label: 'Layers', icon: LayersIcon },
+  { id: 'draw', label: 'رسم', icon: Brush },
+  { id: 'position', label: 'الموضع', icon: ArrowUp },
+  { id: 'background', label: 'الخلفية', icon: Palette },
+  { id: 'layers', label: 'الطبقات', icon: LayersIcon },
 ] as const
 
 type SubTab = (typeof SUB_TABS)[number]['id']
@@ -117,7 +117,7 @@ function DrawTab() {
             value={drawColor}
             onChange={(e) => setDrawColor(e.target.value)}
             className="w-8 h-8 rounded-lg bg-transparent border border-white/15 cursor-pointer"
-            aria-label="Custom brush color"
+            aria-label="لون فرشاة مخصص"
           />
         </label>
       </div>
@@ -131,7 +131,7 @@ function DrawTab() {
           value={drawSize}
           onChange={(e) => setDrawSize(parseInt(e.target.value, 10))}
           className="w-full accent-[#7630D7]"
-          aria-label="Brush size"
+          aria-label="حجم الفرشاة"
         />
         <div className="mt-2 h-10 rounded-xl bg-white/[0.05] flex items-center justify-center">
           <div className="rounded-full bg-white" style={{ width: Math.min(drawSize, 36), height: Math.min(drawSize, 36) }} />

@@ -669,7 +669,7 @@ export function Dashboard() {
                   <CircleHelp size={14} /> Help &amp; shortcuts
                 </DropdownMenuItem>
                 <DropdownMenuItem className="gap-2" onClick={goLanding}>
-                  <Info size={14} /> About Canvix
+                  <Info size={14} /> About TEa.G3
                 </DropdownMenuItem>
                 <DropdownMenuItem className="gap-2" asChild>
                   <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer">
@@ -677,7 +677,7 @@ export function Dashboard() {
                   </a>
                 </DropdownMenuItem>
                 <DropdownMenuItem className="gap-2" asChild>
-                  <a href="https://github.com/mir-ashiq/canvix/stargazers" target="_blank" rel="noreferrer">
+                  <a href="https://github.com/TEaG3/eng-salman/stargazers" target="_blank" rel="noreferrer">
                     <Heart size={14} /> Star the project
                   </a>
                 </DropdownMenuItem>
@@ -1243,7 +1243,7 @@ export function Dashboard() {
               </ul>
             </div>
             <a
-              href="https://github.com/mir-ashiq/canvix/discussions"
+              href="https://github.com/TEaG3/eng-salman/discussions"
               target="_blank"
               rel="noreferrer"
               className="flex items-center gap-2 text-[12px] text-[#02C0CC] hover:underline"

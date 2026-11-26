@@ -267,7 +267,7 @@ export function Landing() {
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 animate-fade-up delay-300">
               <Button size="lg" className="btn-brand-gradient rounded-full px-8 text-base h-12 gap-2" onClick={goDashboard}>
-                Start designing — it&apos;s free <ArrowRight size={18} />
+                ابدأ التصميم — مجاناً <ArrowRight size={18} />
               </Button>
               <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer" className="w-full sm:w-auto">
                 <Button size="lg" variant="outline" className="rounded-full px-8 text-base h-12 gap-2 w-full sm:w-auto">
@@ -455,12 +455,12 @@ export function Landing() {
                 <span className="h-2.5 w-2.5 rounded-full bg-[#FF5C8A]" />
                 <span className="h-2.5 w-2.5 rounded-full bg-[#FFD166]" />
                 <span className="h-2.5 w-2.5 rounded-full bg-[#34C77B]" />
-                <span className="ml-2 text-xs font-medium text-muted-foreground">terminal — canvix</span>
+                <span className="ml-2 text-xs font-medium text-muted-foreground">terminal — TEa.G3</span>
               </div>
               <div className="font-mono text-xs sm:text-sm leading-relaxed bg-[#17181D] p-5 overflow-x-auto">
                 <div className="text-white/40"># clone &amp; run your own Canva alternative</div>
-                <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">git clone https://github.com/mir-ashiq/canvix</span></div>
-                <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">cd canvix &amp;&amp; bun install</span></div>
+                <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">git clone https://github.com/TEaG3/eng-salman</span></div>
+                <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">cd eng-salman &amp;&amp; bun install</span></div>
                 <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">bun run db:push &amp;&amp; bun run db:seed</span></div>
                 <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">bun run dev</span></div>
                 <div className="mt-3 text-[#34C77B]">✓ ready on http://localhost:3000</div>
@@ -480,7 +480,7 @@ export function Landing() {
               No signup, no credit card, no watermark. Open the editor and start creating right now.
             </p>
             <Button size="lg" className="btn-brand-gradient rounded-full px-10 text-base h-13 gap-2 mt-8 py-3.5" onClick={goDashboard}>
-              Start designing <ArrowRight size={18} />
+              ابدأ التصميم <ArrowRight size={18} />
             </Button>
           </div>
         </section>
@@ -492,14 +492,14 @@ export function Landing() {
           <div className="flex items-center gap-3">
             <Logo size={24} />
             <span className="text-sm text-muted-foreground">
-              © 2026 Canvix · MIT License
+              © 2026 TEa.G3 · ترخيص MIT
             </span>
           </div>
           <div className="flex items-center gap-5 text-sm text-muted-foreground">
             <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors inline-flex items-center gap-1.5">
               <Github size={15} /> GitHub
             </a>
-            <a href="https://github.com/mir-ashiq/canvix#-ai--development-disclosure" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">AI Disclosure</a>
+            <a href="https://github.com/TEaG3/eng-salman#-ai--development-disclosure" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">AI Disclosure</a>
             <a href="#features" className="hover:text-foreground transition-colors">المميزات</a>
             <a href="#faq" className="hover:text-foreground transition-colors">الأسئلة الشائعة</a>
           </div>

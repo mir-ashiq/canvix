@@ -177,7 +177,7 @@ export function Dashboard() {
   const goLanding = useAppStore((s) => s.goLanding)
   const openEditor = useAppStore((s) => s.openEditor)
   const loadEditorDesign = useEditorStore((s) => s.loadDesign)
-  // v0.14 (D6): folder organization — activeFolder null = "All designs"
+  // v0.14 (D6): folder organization — activeFolder null = "كل التصاميم"
   // (the root, the pre-v0.14 view). The designs hook refetches on switch.
   const [activeFolder, setActiveFolder] = useState<string | null>(null)
   const { designs, loading, refresh, dbIssue, hasMore, loadMore } = useDesigns(activeFolder)
@@ -274,7 +274,7 @@ export function Dashboard() {
       await Promise.all([refresh(), refreshTrash()])
       toast({ title: `“${name}” restored` })
     } catch {
-      toast({ title: 'Could not restore', variant: 'destructive' })
+      toast({ title: 'تعذّرت استعادة التصميم', variant: 'destructive' })
     }
   }
 
@@ -284,7 +284,7 @@ export function Dashboard() {
       await refreshTrash()
       toast({ title: `“${name}” deleted forever` })
     } catch {
-      toast({ title: 'Could not delete', variant: 'destructive' })
+      toast({ title: 'تعذّر حذف التصميم', variant: 'destructive' })
     }
   }
 
@@ -323,7 +323,7 @@ export function Dashboard() {
     setCreating(true)
     try {
       const record = await createDesign({
-        name: name ?? 'Untitled design',
+        name: name ?? 'تصميم بلا عنوان',
         width: w,
         height: h,
         pages: newBlankPages(),
@@ -332,7 +332,7 @@ export function Dashboard() {
       openEditor(record)
       loadEditorDesign(record)
     } catch (error) {
-      apiErrorToast(error, 'Could not create design')
+      apiErrorToast(error, 'تعذّر إنشاء التصميم')
     } finally {
       setCreating(false)
     }
@@ -359,7 +359,7 @@ export function Dashboard() {
     } catch (error) {
       // v0.8: “Could not open template” now explains itself (migration/host
       // switch issues include the exact fix instead of a dead end).
-      apiErrorToast(error, 'Could not open template')
+      apiErrorToast(error, 'تعذّر فتح القالب')
     } finally {
       setCreating(false)
     }
@@ -371,7 +371,7 @@ export function Dashboard() {
       openEditor(record)
       loadEditorDesign(record)
     } catch {
-      toast({ title: 'Could not open design', variant: 'destructive' })
+      toast({ title: 'تعذّر فتح التصميم', variant: 'destructive' })
     }
   }
 
@@ -383,9 +383,9 @@ export function Dashboard() {
         d.folderId && (folders ?? []).some((f) => f.id === d.folderId) ? d.folderId : null
       await duplicateDesign(d.id, mineFolder)
       await Promise.all([refresh(), refreshFolders()])
-      toast({ title: 'Design duplicated' })
+      toast({ title: 'تم نسخ التصميم' })
     } catch {
-      toast({ title: 'Could not duplicate', variant: 'destructive' })
+      toast({ title: 'تعذّر نسخ التصميم', variant: 'destructive' })
     }
   }
 
@@ -394,9 +394,9 @@ export function Dashboard() {
     try {
       await deleteDesign(id)
       await refresh()
-      toast({ title: 'Design deleted' })
+      toast({ title: 'تم حذف التصميم' })
     } catch {
-      toast({ title: 'Could not delete', variant: 'destructive' })
+      toast({ title: 'تعذّر حذف التصميم', variant: 'destructive' })
     }
   }
 
@@ -409,7 +409,7 @@ export function Dashboard() {
       await renameDesign(target.id, renameValue.trim())
       await refresh()
     } catch {
-      toast({ title: 'Could not rename', variant: 'destructive' })
+      toast({ title: 'تعذّرت إعادة تسمية التصميم', variant: 'destructive' })
     }
   }
 
@@ -438,10 +438,10 @@ export function Dashboard() {
       } else {
         await renameFolder(dialog.id, name)
         await refreshFolders()
-        toast({ title: 'Folder renamed' })
+        toast({ title: 'تمت إعادة تسمية المجلد' })
       }
     } catch (error) {
-      apiErrorToast(error, 'Could not save the folder')
+      apiErrorToast(error, 'تعذّر حفظ المجلد')
     }
   }
 
@@ -456,7 +456,7 @@ export function Dashboard() {
       await Promise.all([refreshFolders(), refresh()])
       toast({ title: `Folder “${name}” deleted — its designs are in All designs` })
     } catch {
-      toast({ title: 'Could not delete the folder', variant: 'destructive' })
+      toast({ title: 'تعذّر حذف المجلد', variant: 'destructive' })
     }
   }
 
@@ -470,7 +470,7 @@ export function Dashboard() {
           : `“${name}” moved to All designs`,
       })
     } catch (error) {
-      apiErrorToast(error, 'Could not move the design')
+      apiErrorToast(error, 'تعذّر نقل التصميم')
     }
   }
 
@@ -488,10 +488,10 @@ export function Dashboard() {
         </button>
         <div className="h-3" />
         {[
-          { label: 'Home', icon: LayoutGrid, active: true },
-          { label: 'Templates', icon: LayoutTemplate, target: 'templates' },
-          { label: 'Projects', icon: FolderOpen, target: 'recents' },
-          { label: 'Brand', icon: BookMarked, target: 'brand' },
+          { label: 'الرئيسية', icon: LayoutGrid, active: true },
+          { label: 'القوالب', icon: LayoutTemplate, target: 'templates' },
+          { label: 'المشاريع', icon: FolderOpen, target: 'recents' },
+          { label: 'الهوية', icon: BookMarked, target: 'brand' },
         ].map((item) => (
           <button
             key={item.label}
@@ -519,7 +519,7 @@ export function Dashboard() {
             </a>
           )}
           <a
-            href="https://github.com/mir-ashiq/canvix"
+            href="https://github.com/TEaG3/eng-salman"
             target="_blank"
             rel="noreferrer"
             className="w-9 h-9 rounded-full text-white/50 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors"
@@ -531,8 +531,8 @@ export function Dashboard() {
           <button
             onClick={goLanding}
             className="h-9 w-9 rounded-full cv-topbar-gradient text-white text-[13px] font-bold flex items-center justify-center"
-            aria-label="About Canvix"
-            title="About Canvix"
+            aria-label="حول TEa.G3"
+            title="حول TEa.G3"
           >
             C
           </button>
@@ -543,7 +543,7 @@ export function Dashboard() {
       {/* ── Header ── */}
       <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#1F142E]/90 backdrop-blur-lg">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 h-16 flex items-center gap-3">
-          <button onClick={goLanding} aria-label="Canvix home" className="shrink-0 md:hidden">
+          <button onClick={goLanding} aria-label="الصفحة الرئيسية لـ TEa.G3" className="shrink-0 md:hidden">
             <Logo size={26} />
           </button>
           <div className="relative flex-1 max-w-md">
@@ -551,7 +551,7 @@ export function Dashboard() {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search your designs"
+              placeholder="ابحث في تصاميمك"
               className="pl-10 h-10 rounded-full bg-white/[0.06] border-white/10 text-white placeholder:text-white/35 focus-visible:ring-[#7630D7]/50 focus-visible:border-[#7630D7]/60"
               aria-label="Search designs"
             />
@@ -570,7 +570,7 @@ export function Dashboard() {
                 <button
                   className="h-10 w-10 rounded-full bg-gradient-to-br from-[#02C0CC] to-[#7630D7] text-white text-[13px] font-extrabold flex items-center justify-center shrink-0 hover:brightness-110 transition-all"
                   aria-label="Account menu"
-                  title={user ? `Signed in as ${user.username}` : 'Sign in — free forever'}
+                  title={user ? `Signed in as ${user.username}` : 'سجّل الدخول — مجاناً للأبد'}
                   // v0.26 perf: warm the profile dialog's two API calls the
                   // moment the user shows intent (menu open) — the dialog
                   // itself then renders from the prefetched data instead of
@@ -612,13 +612,13 @@ export function Dashboard() {
                             await refresh()
                             toast({ title: `${adopted} design${adopted === 1 ? '' : 's'} moved into your account` })
                           } catch {
-                            toast({ title: 'Could not adopt designs', variant: 'destructive' })
+                            toast({ title: 'تعذّر استيراد التصاميم', variant: 'destructive' })
                           } finally {
                             setAdopting(false)
                           }
                         }}
                       >
-                        <FolderInput size={14} /> {adopting ? 'Adopting…' : `Save my designs to this account (${mineCount})`}
+                        <FolderInput size={14} /> {adopting ? 'جارٍ استيراد التصاميم…' : `Save my designs to this account (${mineCount})`}
                       </DropdownMenuItem>
                     )}
                     {legacyCount > 0 && (
@@ -628,7 +628,7 @@ export function Dashboard() {
                         onClick={async () => {
                           const ok = window.confirm(
                             `Adopt ${legacyCount} legacy design${legacyCount === 1 ? '' : 's'} created before accounts existed?\n\n` +
-                              'Only do this if this Canvix instance (or its shared designs) is yours — ' +
+                              'نفّذ ذلك فقط إذا كانت نسخة TEa.G3 هذه أو التصاميم المشتركة ملكك — ' +
                               'on a shared deployment, legacy designs may include other people\u2019s work.',
                           )
                           if (!ok) return
@@ -638,7 +638,7 @@ export function Dashboard() {
                             await Promise.all([refreshAuth(), refresh()])
                             toast({ title: `${adopted} design${adopted === 1 ? '' : 's'} moved into your account` })
                           } catch {
-                            toast({ title: 'Could not adopt designs', variant: 'destructive' })
+                            toast({ title: 'تعذّر استيراد التصاميم', variant: 'destructive' })
                           } finally {
                             setAdopting(false)
                           }
@@ -672,7 +672,7 @@ export function Dashboard() {
                   <Info size={14} /> About Canvix
                 </DropdownMenuItem>
                 <DropdownMenuItem className="gap-2" asChild>
-                  <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer">
+                  <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer">
                     <Github size={14} /> GitHub repository
                   </a>
                 </DropdownMenuItem>
@@ -1173,12 +1173,12 @@ export function Dashboard() {
             <span>© 2026 · MIT License</span>
           </div>
           <a
-            href="https://github.com/mir-ashiq/canvix"
+            href="https://github.com/TEaG3/eng-salman"
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1.5 hover:text-white/80 transition-colors"
           >
-            <Github size={14} /> {isMobile ? 'GitHub' : 'github.com/mir-ashiq/canvix'}
+            <Github size={14} /> {isMobile ? 'GitHub' : 'github.com/TEaG3/eng-salman'}
           </a>
         </div>
       </footer>

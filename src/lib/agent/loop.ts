@@ -44,6 +44,14 @@ export interface LoopDeps {
   chat: ChatFn
   design: AgentDesignCtx
   mode: AgentMode
+  /** v0.32.2 (defect B, production report): the user's ORIGINAL
+   *  request, verbatim. It becomes the first user message of the
+   *  model conversation and survives compaction — the model must
+   *  always be able to see what it was asked for, not a synthetic
+   *  "User request mode: edit. Begin." placeholder (which starved
+   *  the model of the actual creative brief: it kept inspecting the
+   *  canvas, claimed no brief was given and created nothing). */
+  request: string
   /** the run's brief contract (extracted by the route) */
   brief?: DesignBrief | null
   /** v0.29: local quality audit of the latest design snapshot
@@ -237,6 +245,15 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
    *  claiming completion without fixing the unmet items must not
    *  loop forever (LangChain's "declare it blocked" pattern). */
   let doneRejections = 0
+  /** v0.32.2 (progress requirement): how many WRITE/DESTRUCTIVE tool
+   *  calls were actually applied in this run. A create/improve run
+   *  that changed NOTHING must not be reported as successfully
+   *  created — the reproduction (empty canvas, model looped on
+   *  get_page_state, claimed "no design brief provided") ended with
+   *  a normal done summary over an untouched document. */
+  let designChanges = 0
+  /** done turns rejected because the run changed nothing yet */
+  let emptyDoneRejections = 0
 
   const toolCtx: ToolContext = {
     validIds: contextValidIds(design),
@@ -247,12 +264,12 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
 
   const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
     { role: 'system', content: loopSystemPrompt({ design, ctx: toolCtx, mode, brief, skills }) },
-    {
-      role: 'user',
-      content: `User request mode: ${mode}. Begin.${
-        mode === 'discuss' || mode === 'explain' ? ' Answer the question directly and emit done with your answer in the summary.' : ''
-      }`,
-    },
+    // v0.32.2 (defect B): the ORIGINAL user request is the actual
+    // first user message. compactMessages always keeps messages[1],
+    // so it survives compaction; tool observations and gate
+    // feedback append AFTER it, never replace it. The mode guidance
+    // lives in the system prompt (MODE_PROMPTS), not here.
+    { role: 'user', content: deps.request },
   ]
 
   emit({ v: AGENT_PROTOCOL_VERSION, type: 'mode', mode, reason: `classified as ${mode}` })
@@ -264,6 +281,17 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
     strikes = 0
     lastProgressAt = Date.now()
   }
+
+  /** v0.32.2 (progress requirement): guard exits must be HONEST about
+   *  what actually happened — a create/improve run that changed
+   *  nothing is INCOMPLETE, never a wrapped-up success. */
+  const guardExit = (base: string): { summary: string; verification: string | undefined } =>
+    (mode === 'create' || mode === 'improve') && designChanges === 0
+      ? {
+          summary: `INCOMPLETE — no design changes were made. ${base}`,
+          verification: 'NOT completed — the run ended without applying any design change; nothing was created.',
+        }
+      : { summary: base, verification }
 
   while (true) {
     // ── task-driven stops ───────────────────────────────────
@@ -289,18 +317,20 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         message: `Stopped after ${AGENT_GUARDS.strikes} consecutive invalid tool calls — the error under each step explains what to fix; try rephrasing the request.`,
         code: 'STRIKES',
       })
-      return { summary: summary || 'Stopped after repeated invalid calls.', steps, toolCalls, verification }
+      const exit = guardExit(summary || 'Stopped after repeated invalid calls.')
+      return { summary: exit.summary, steps, toolCalls, verification: exit.verification }
     }
     if (Date.now() - lastProgressAt > AGENT_GUARDS.idleMs) {
+      const exit = guardExit('The run stopped making progress and was wrapped up. Everything applied so far is kept — send a follow-up message to continue.')
       emit({
         v: AGENT_PROTOCOL_VERSION,
         type: 'done',
-        summary: 'The run stopped making progress and was wrapped up. Everything applied so far is kept — send a follow-up message to continue.',
+        summary: exit.summary,
         steps,
         toolCalls,
-        verification,
+        verification: exit.verification,
       })
-      return { summary, steps, toolCalls, verification }
+      return { summary: exit.summary, steps, toolCalls, verification: exit.verification }
     }
 
     // ── compaction (memory + provider context protection) ───
@@ -324,7 +354,8 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         message: `The AI provider failed: ${err instanceof Error ? err.message.slice(0, 200) : 'unknown error'}. Applied work is kept — retry to continue.`,
         code: 'PROVIDER',
       })
-      return { summary, steps, toolCalls, verification }
+      const exit = guardExit(summary)
+      return { summary: exit.summary, steps, toolCalls, verification: exit.verification }
     }
 
     const turn = parseAgentTurn(raw)
@@ -345,6 +376,26 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
     // ── done? ────────────────────────────────────────────────
     if (turn.done) {
       summary = String(turn.summary ?? '').slice(0, 800) || 'Done.'
+      // v0.32.2 (progress requirement): a create/improve run that has
+      // not changed the document yet cannot claim completion. The
+      // first such done is bounced with build guidance; the second
+      // ends the run HONESTLY (never reported as a created design).
+      if ((mode === 'create' || mode === 'improve') && designChanges === 0) {
+        emptyDoneRejections += 1
+        if (emptyDoneRejections >= 2) {
+          const honest = `INCOMPLETE — no design changes were made. ${summary}`
+          const noChangeVerification =
+            'NOT completed — the run ended without applying any design change; nothing was created.'
+          emit({ v: AGENT_PROTOCOL_VERSION, type: 'done', summary: honest, steps, toolCalls, verification: noChangeVerification })
+          return { summary: honest, steps, toolCalls, verification: noChangeVerification }
+        }
+        messages.push({
+          role: 'user',
+          content:
+            'NOT DONE — this is a create run and the canvas has not been changed yet. Build the requested design NOW with your tools: set_background first, then add_text for every headline/subline/CTA and add_rect/add_shape for structure (the user\u2019s original request is the first message of this conversation). Emit done only after the design exists on the canvas. If you believe you cannot proceed, explain exactly what is missing in your summary.',
+        })
+        continue
+      }
       // BRIEF GATE (Phase 5): create/improve runs must validate
       // against real client state before completion is accepted.
       // v0.32 (Unified Canvix AI): an EDIT run that carries a brief
@@ -575,15 +626,16 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
       if (hash === lastCallHash) {
         cycleCount += 1
         if (cycleCount >= AGENT_GUARDS.cycleRepeat - 1) {
+          const exit = guardExit('The run repeated the same operation without effect and was wrapped up. Applied work is kept — describe the next change to continue.')
           emit({
             v: AGENT_PROTOCOL_VERSION,
             type: 'done',
-            summary: 'The run repeated the same operation without effect and was wrapped up. Applied work is kept — describe the next change to continue.',
+            summary: exit.summary,
             steps,
             toolCalls,
-            verification,
+            verification: exit.verification,
           })
-          return { summary, steps, toolCalls, verification }
+          return { summary: exit.summary, steps, toolCalls, verification: exit.verification }
         }
       } else {
         cycleCount = 0
@@ -648,6 +700,9 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
     toolCalls += 1
     steps += 1
     markProgress()
+    // v0.32.2: only real writes count as design changes (reads —
+    // get_page_state/measure/plan/validate — never do)
+    if (tool.risk === 'write' || tool.risk === 'destructive') designChanges += 1
     emit({ v: AGENT_PROTOCOL_VERSION, type: 'observation', stepIndex: steps - 1, message: result.observation })
 
     // usage telemetry: immediately on the first apply, then at most

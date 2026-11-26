@@ -3,12 +3,45 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] — Unified Canvix AI (create → verify → refine) + the hardening pass
+## [Unreleased] — Unified Canvix AI hardening + the reproduction fix
 
-> One engineering upgrade, four unifications, one external review
-> closed (4 findings) and ONE AI surface — full write-up in
-> `docs/UNIFIED-AI-MILESTONE.md` (the v0.32.1 section), acceptance in
-> `src/lib/design-agent/continuation.test.ts`.
+> The external-review hardening (v0.32.1) and the production
+> reproduction fix (v0.32.2) — write-ups in
+> `docs/UNIFIED-AI-MILESTONE.md`.
+
+### Fixed — the production reproduction (v0.32.2): "Canvix AI ignores creative requests and loops on an empty canvas"
+
+- **Intent classification (`router.ts`):** social-media posts,
+  stories, reels and platform names are first-class artifact nouns
+  ("Design a bold Instagram post for a coffee launch" routed to EDIT
+  because the artifact vocabulary missed them). Styling adjectives
+  (bold/minimal/elegant/dark/colorful) are no longer edit evidence in
+  any list — an adjective describes the requested design; the verb
+  carries edit intent, so "Make the existing title bold" still routes
+  to edit. "What is wrong …" joins the review guard; artifact nouns
+  inside existing-element references ("make the poster title bold")
+  stay edits.
+- **The original request reaches the model (`loop.ts`):** the loop's
+  conversation opened with a synthetic "User request mode: edit.
+  Begin." instead of the user's actual words. `request` is now a
+  MANDATORY `runAgentLoop` input and becomes the first user message,
+  verbatim — preserved through compaction, retries and tool
+  observations.
+- **Honest completion:** a create/improve run that applied zero
+  design changes can no longer report success — the first such done
+  is bounced with build guidance, the second ends as `INCOMPLETE —
+  no design changes were made` with a `NOT completed` verification;
+  the strikes/idle/cycle/provider guards report the same honest
+  framing. Guards unchanged (nothing bypassed, no limits raised).
+  A pinned edit mode on an empty canvas is respected, not converted —
+  the model explains and asks what to create instead of looping.
+- Regressions: 9 new unit tests (the five mandatory mode cases,
+  request-as-first-message, compaction survival, the scripted
+  reproduction with no `get_page_state` loop, the honest empty
+  report) + a new browser e2e (`unified-ai-reproduction.spec.ts`)
+  running the exact reproduction through the real editor: Auto mode
+  sends the verbatim request unpinned, the created design saves,
+  reopens and is editable through the real properties UI.
 
 ### Added — design provenance (the contract that persists, verified)
 

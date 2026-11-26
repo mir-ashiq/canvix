@@ -10,10 +10,10 @@ import { Toaster } from "@/components/ui/toaster";
  * in production; SITE_URL should be set to the deployed TEa.G3 origin.
  */
 const SITE_URL =
-  process.env.SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "https://canvix.app";
+  process.env.SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL;
 
 export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
+  metadataBase: SITE_URL ? new URL(SITE_URL) : undefined,
   title: {
     default: "TEa.G3 — تطوير المطور العراقي",
     template: "%s — TEa.G3",

@@ -31,17 +31,20 @@ import { IllustrationsApp } from './IllustrationsApp'
 import { PaletteApp } from './PaletteApp'
 import { LoremApp } from './LoremApp'
 import { StickersApp } from './StickersApp'
-import { UnifiedAIApp } from './UnifiedAIApp'
+import { AssistantApp } from './AssistantApp'
 
 export const CANVIX_APPS: CanvixApp[] = [
-  // AI apps first (canva 2026: “Canva AI” is the flagship surface)
-  // v0.32.1 (Unified Canvix AI): ONE AI surface. The six AI-branded
-  // apps (chat copilot, design agent, Magic Write, AI image, AI
-  // design plan, AI theme) consolidated into a single app with five
-  // modes (Chat / Generate / Write / Image / Theme — see
-  // UnifiedAIApp). The AI design plan panel is retired: its
-  // describe → review → apply flow IS the Generate tab.
-  { id: 'ai', name: 'Canvix AI', desc: 'One AI for the whole design — chat, generate, write, images, theme', icon: Bot, color: '#7630D7', content: UnifiedAIApp },
+  // v0.32.6 · ONE agent, ZERO selectors. The v0.32.1 "unified" app
+  // kept five tabs (Chat / Generate / Write / Image / Theme) and the
+  // chat tab still carried seven mode chips (Auto/Create/Edit/
+  // Review/Improve/Explain/Plan) — three nested agent surfaces. The
+  // review that mattered: "no need for this chat, generate, write
+  // and all that — keep one that does all by himself."
+  // AssistantApp is that one agent: it classifies every message
+  // itself and runs the whole pipeline autonomously — map the
+  // canvas (occupancy), plan the geometry into the free space,
+  // build, check and fix overlap, verify against the brief, stop.
+  { id: 'ai', name: 'Canvix AI', desc: 'One agent — describe what you want; it maps, plans, builds, checks and verifies by itself', icon: Bot, color: '#7630D7', content: AssistantApp },
   { id: 'charts', name: 'Charts', desc: 'Bar, line & donut charts as editable shapes', icon: BarChart3, color: '#7630D7', content: ChartsApp },
   { id: 'qr', name: 'QR generator', desc: 'Turn any link or text into a QR code', icon: QrCode, color: '#3B82F6', content: QRApp },
   { id: 'icons', name: 'Icons', desc: '562 offline icons + the Iconify universe online', icon: Shapes, color: '#02C0CC', content: IconsApp },

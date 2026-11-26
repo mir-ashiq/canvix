@@ -561,3 +561,87 @@ today (page height, margins, per-section y/h). It does not yet solve
 horizontal multi-column placement inside a band — the model still
 places cards within a band (guarded by the audit's overlap and
 duplicate checks).
+
+---
+
+# v0.32.6 — ONE agent, ZERO selectors + the canvas map
+
+**The review that mattered:** "wtf are you doing bro… no need for
+this chat, generate, write and all that — only keep 1… then there is
+this [Auto Create Edit Review Improve Explain Plan] — why all these,
+remove them as well and keep only one that does all by himself…
+just do this: have canvix AI [map] the background and what's present
+and all that geometrically so that overlap won't happen and it will
+know where to put everything by using geometry and math and
+boundaries. once it finishes everything then it should check what I
+built and check overlap and errors and all that and fix if any and
+after that it should double check if what it wanted is exactly same
+as it built and after everything it should stop."
+
+## 1 · ONE surface, no selectors
+
+The v0.32.1 "unified" app had FIVE tabs (Chat / Generate / Write /
+Image / Theme); the Chat tab still carried SEVEN mode chips (Auto /
+Create / Edit / Review / Improve / Explain / Plan); the Generate tab
+was a THIRD agent surface ("Design agent") that broke on a provider
+outage with two overlapping failure messages. Three nested agents,
+three selectors, zero of them what the user asked for.
+
+Now: **the app IS the agent.** `AssistantApp` is registered
+directly — no tab wrapper, no mode chips, no pinned mode. Every
+message is classified by the agent itself (the router's Auto
+semantics); it creates, edits, reviews, explains — whatever the
+message needs. Deleted outright: `UnifiedAIApp`, `DesignAgentApp`,
+`MagicWriteApp`, `AIImageApp`, `AIThemeApp` (the server routes stay
+— the text panel, notes, alt-text and image features use them as
+APIs; only the panel surfaces are gone).
+
+## 2 · the CANVAS MAP — plans fit the free space, deterministically
+
+"First maps the background and what's present, geometrically, so
+overlap won't happen." Existing elements are now merged into
+**occupied bands** (`context.ts · canvasMap()`), refreshed after
+every apply. The plan solver (`plan-repair.ts`) receives them and
+fits the model's sections into the **FREE intervals** between them:
+
+- all sections fit one free interval → natural uniform-gap layout
+  inside it;
+- otherwise first-fit across intervals (order preserved, ≥40px
+  gaps);
+- nothing fits → **infeasible with the exact map** ("existing
+  elements occupy y 65–365 (headline), y 405–805 (cards); free:
+  y 805–1015 (210px). Your 3 sections (620px) do not fit…") — the
+  model shrinks, drops sections, or asks to clear (destructive,
+  confirmed). Never a fabricated plan, never planned on top of
+  existing content.
+
+The plan observation opens with the map — visible to the model AND
+the user: "CANVAS MAP — existing elements occupy y …; your sections
+were fitted into the FREE space (never on top of them)."
+
+## 3 · the pipeline (unchanged in shape, now fully mapped)
+
+map (canvasMap) → plan (occupancy-fitted, auto-repaired) → build →
+audit overlap/errors + one bounded fix round → brief double-check
+("is what it built what it wanted") → stop. The last three stages
+are v0.32.3–v0.32.5 behavior, kept exactly as shipped.
+
+## Test evidence
+
+Unit **1,745/1,745** (+5 canvas-map regressions: free-space fitting,
+exact-map infeasibility, canvasMap merging, the plan observation,
+loop wiring). Twelve existing flows moved to a compact-top fixture
+(the old spread-out fixture left 415px of contiguous free space — a
+full-composition plan on it is now honestly infeasible, which is
+correct improve-run semantics: plan your ADDITIONS, or clear first).
+E2E: wave4 minus the retired AI-theme TAB test (4/4); the
+reproduction spec 3/3 with the selector-free app.
+
+## Disclosed limitation
+
+The map is vertical-band (the planner's vocabulary). Two elements
+side-by-side at the same y merge into one occupied band — horizontal
+carving inside a free band remains the model's job, guarded by the
+audit's overlap checks. Image GENERATION is not yet an agent tool
+(the former Image tab's route remains an API; the agent places
+existing assets, URLs and uploads).

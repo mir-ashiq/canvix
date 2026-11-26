@@ -1,5 +1,6 @@
 - v0.32.4 — deterministic design correctness: hard plan validation (real ≥40px gaps, bounds), duplicate-text/shape detection, plan adherence, wrap-up audit disclosure, per-design run ledger (0015), the phantom list_fonts tool made real.
 - v0.32.5 — P0 regression fix: server-computed plan geometry (auto-repair, bounded infeasibility), no strikes for recoverable plans, zero-action runs skip vision critique, honest failure UI.
+- v0.32.6 — one agent, zero selectors (5 tabs + 7 mode chips removed); the canvas map: plans fit the free space between existing elements.
 # Canvix Roadmap — where we are, what's next
 
 > **Status date:** 2026-11-25 · **Changelog state:** v0.31.0 · `package.json` 0.31.0 · **latest published GitHub release:** v0.31.0 · **Test posture:** 1,693 unit tests across 127 test files (verified full run, 25 Nov, the v0.31.0 release run) · 39 e2e spec files + the plugins & stock-video gated suites · CI gates every PR (`lint-unit` incl. production build + `e2e` running all three suites) · `npm audit` **0 vulnerabilities**.

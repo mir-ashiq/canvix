@@ -44,7 +44,7 @@ export function telemetry(event: Record<string, unknown>): void {
   }
 }
 import { AGENT_TOOLS, AGENT_TOOL_MAP, fontFamilies, type ToolContext, type SanitizeResult, type AgentTool } from './tools'
-import { serializeDesignContext, contextValidIds, type AgentDesignCtx } from './context'
+import { serializeDesignContext, contextValidIds, canvasMap, type AgentDesignCtx } from './context'
 import { MODE_PROMPTS, MODE_TOOL_RISK } from './router'
 import { skillsPromptSection, selectSkills, type DesignSkill } from './skills'
 import { briefPromptSection, type DesignBrief } from './brief'
@@ -341,6 +341,10 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
     width: design.width ?? 1080,
     height: design.height ?? 1080,
     fonts: new Set(fontFamilies()),
+    // v0.32.6 · the CANVAS MAP: existing elements' occupied bands.
+    // The plan solver fits new sections into the FREE space between
+    // them — nothing is planned on top of existing content.
+    occupied: canvasMap(design),
   }
 
   const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
@@ -899,7 +903,9 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         content: `UPDATED PAGE STATE (fresh from the client after your edits):\n${serializeDesignContext(refreshed)}`,
       })
       // refresh the local tool context too — new ids are valid now
+      // and the canvas map reflects what the edits actually occupy
       toolCtx.validIds = contextValidIds(refreshed)
+      toolCtx.occupied = canvasMap(refreshed)
       continue
     }
 

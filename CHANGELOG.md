@@ -3,6 +3,24 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+### Changed — v0.32.6: ONE agent, ZERO selectors + the canvas map
+
+- **One surface:** the five-tab unified app (Chat / Generate / Write /
+  Image / Theme) and the seven mode chips (Auto / Create / Edit /
+  Review / Improve / Explain / Plan) are GONE — the app IS the agent.
+  Every message is classified and executed by the agent itself.
+  Deleted surfaces: UnifiedAIApp, DesignAgentApp ("Design agent"),
+  MagicWriteApp, AIImageApp, AIThemeApp (their routes remain APIs).
+- **The canvas map:** existing elements become occupied bands
+  (merged, disjoint, refreshed after every apply). Plans are fitted
+  into the FREE intervals between them — never on top of existing
+  content. Infeasible plans return the exact occupancy map and the
+  largest free interval. The plan observation shows the map ("CANVAS
+  MAP — existing elements occupy y …; your sections were fitted into
+  the FREE space").
+- Unit 1,745/1,745 (+5 canvas-map regressions); e2e updated
+  (wave4's AI-theme TAB test retired with its tab).
+
 ### Fixed — v0.32.5: the P0 plan-validator regression (server-computed geometry)
 
 - **The failure:** a valid creative brief ("Design a bold Instagram

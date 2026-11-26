@@ -15,6 +15,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { DesignBrief } from './brief'
+import { mergeOccupied } from './plan-repair'
 
 export interface AgentElementCtx {
   id: string
@@ -123,4 +124,24 @@ export function serializeDesignContext(d: AgentDesignCtx): string {
 /** The ids the sanitizer should accept (flat, groups included). */
 export function contextValidIds(d: AgentDesignCtx): Set<string> {
   return new Set((d.elements ?? []).map((e) => e.id))
+}
+
+/** v0.32.6 · the CANVAS MAP: existing elements as occupied vertical
+ *  bands (merged, disjoint, label = text excerpt or type). The plan
+ *  solver fits new sections into the FREE space between these bands,
+ *  so a plan can never reserve space on top of existing content —
+ *  "it first maps what's present geometrically" happens here, in
+ *  deterministic code, not in the model's arithmetic. */
+export function canvasMap(d: AgentDesignCtx): { y: number; h: number; label?: string }[] {
+  const raw = (d.elements ?? [])
+    .filter((e) => typeof e.y === 'number' && (typeof e.height === 'number' || typeof e.fontSize === 'number'))
+    .map((e) => ({
+      y: e.y as number,
+      h: Math.max(1, Math.round((e.height as number | undefined) ?? (e.fontSize as number | undefined) ?? 24)),
+      label:
+        typeof e.text === 'string' && e.text.trim()
+          ? e.text.trim().slice(0, 24)
+          : undefined,
+    }))
+  return mergeOccupied(raw)
 }

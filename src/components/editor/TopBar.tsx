@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Home, MessageCircle, Play, Presentation, Share2, ChevronDown, Undo2, Redo2, Download, Github, Cloud, Check, Loader2, Ruler, History, Languages, Wand2, Zap, MousePointer2, Brush, Eye, BookMarked } from 'lucide-react'
+import { Home, MessageCircle, Play, Presentation, Share2, ChevronDown, Undo2, Redo2, تنزيل, Github, Cloud, Check, Loader2, Ruler, History, Languages, Wand2, Zap, MousePointer2, Brush, Eye, BookMarked } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
 import { interactionMode } from '@/lib/editor-utils'
@@ -47,7 +47,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
   const commentsOpen = useEditorStore((s) => s.commentsOpen)
   const toggleComments = useEditorStore((s) => s.toggleComments)
   const animateOpen = useEditorStore((s) => s.animateOpen)
-  const toggleAnimate = useEditorStore((s) => s.toggleAnimate)
+  const toggleتحريك = useEditorStore((s) => s.toggleتحريك)
   const designId = useEditorStore((s) => s.designId)
   const unreadCount = useCommentsStore((s) => s.unreadIds.size)
 
@@ -99,7 +99,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
             <Play size={15} /> Magic Resize
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => setMagicLayersOpen(true)}>
-            <Wand2 size={15} /> Magic Layers — edit a flat design
+            <Wand2 size={15} /> الطبقات السحرية — عدّل التصميم
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => setTranslateOpen(true)}>
             <Languages size={15} /> Translate design…
@@ -117,7 +117,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-white/10" />
           <DropdownMenuItem className="gap-2" onClick={() => setExportOpen(true)}>
-            <Download size={15} /> Download
+            <تنزيل size={15} /> تنزيل
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-white/10" />
           <DropdownMenuItem className="gap-2" onClick={onShortcuts}>
@@ -131,9 +131,9 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Magic Layers */}
+      {/* الطبقات السحرية */}
       <button className={cn(item, 'hidden sm:flex')} onClick={() => setMagicLayersOpen(true)} aria-label="الطبقات السحرية">
-        <Wand2 size={13} className="text-white/80" /> Magic Layers
+        <Wand2 size={13} className="text-white/80" /> الطبقات السحرية
       </button>
 
       {/* Magic Resize */}
@@ -212,8 +212,8 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
             </span>
           )}
         </Button>
-        <button className={cn(item, 'hidden sm:flex')} onClick={toggleAnimate} aria-label="تحريك">
-          <Zap size={13} className={cn(animateOpen && 'text-[#02C0CC]')} /> Animate
+        <button className={cn(item, 'hidden sm:flex')} onClick={toggleتحريك} aria-label="تحريك">
+          <Zap size={13} className={cn(animateOpen && 'text-[#02C0CC]')} /> تحريك
         </button>
         <button className={cn(item, 'hidden sm:flex')} onClick={() => setPreviewOpen(true)} aria-label="معاينة التصميم">
           <Play size={14} /> Preview
@@ -232,7 +232,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           <Share2 size={15} /> <span className="hidden sm:inline">Share</span>
         </Button>
         <Button size="icon" variant="ghost" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={() => setExportOpen(true)} aria-label="تنزيل" title="تنزيل">
-          <Download size={17} />
+          <تنزيل size={17} />
         </Button>
       </div>
 

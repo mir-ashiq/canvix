@@ -42,7 +42,7 @@ export function VersionHistoryDialog({ open, onOpenChange }: { open: boolean; on
       <DialogContent className="rounded-[28px] bg-[#16181D] border-white/10 text-white sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <History size={18} className="text-[#02C0CC]" /> Version history
+            <History size={18} className="text-[#02C0CC]" /> سجل الإصدارات
           </DialogTitle>
           <DialogDescription className="text-white/55">
             Snapshots are stored in this browser for this design. Restoring keeps your current state on undo (Ctrl+Z).
@@ -108,10 +108,10 @@ export function VersionHistoryDialog({ open, onOpenChange }: { open: boolean; on
                 className="h-8 px-3 rounded-lg text-white/85 hover:bg-white/10 hover:text-white text-[12px] font-semibold"
                 onClick={() => {
                   restoreVersion(v.id)
-                  toast({ title: `Restored “${v.label}”`, description: 'Ctrl+Z brings your previous state back.' })
+                  toast({ title: `استعادةd “${v.label}”`, description: 'Ctrl+Z brings your previous state back.' })
                 }}
               >
-                <RotateCcw size={13} /> Restore
+                <RotateCcw size={13} /> استعادة
               </Button>
               <Button
                 variant="ghost"

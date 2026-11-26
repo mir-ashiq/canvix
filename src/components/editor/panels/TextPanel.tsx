@@ -10,12 +10,12 @@ export function TextPanel() {
   const brand = useEditorStore((s) => s.brand)
 
   return (
-    <PanelShell title="Text" subtitle="Click to add — style it from the toolbar above the canvas.">
+    <PanelShell title="Text" subtitle="اضغط للإضافة — ثم نسّق النص من شريط الأدوات أعلى مساحة التصميم.">
       {/* canva signature purple pill */}
       <button
         onClick={() => addText('body')}
         className="w-full h-11 rounded-full bg-[#7630D7] hover:bg-[#8B5CF6] text-white text-[14px] font-semibold flex items-center justify-center gap-2 transition-colors mt-1 shadow-lg shadow-[#7630D7]/25"
-        aria-label="Add a text box"
+        aria-label="إضافة مربع نص"
       >
         <Plus size={16} /> Add a text box
       </button>
@@ -23,8 +23,8 @@ export function TextPanel() {
       <div className="flex gap-2 mt-2">
         <button
           className="flex-1 h-10 rounded-xl border border-white/12 bg-white/[0.05] hover:bg-white/10 text-[12px] font-semibold flex items-center justify-center gap-1.5 text-white/85 transition-colors"
-          onClick={() => addTextStyled({ text: 'Draft magic copy with Canvix AI…', fontSize: 28, fontFamily: 'Poppins', width: 640 })}
-          aria-label="Magic Write"
+          onClick={() => addTextStyled({ text: 'اكتب نصاً إبداعياً بمساعدة ذكاء TEa.G3…', fontSize: 28, fontFamily: 'Poppins', width: 640 })}
+          aria-label="الكتابة السحرية"
         >
           <Sparkles size={13} className="text-[#02C0CC]" /> Magic Write
         </button>
@@ -34,23 +34,23 @@ export function TextPanel() {
         <button
           onClick={() => addText('heading')}
           className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4 hover:border-[#7630D7] hover:bg-[#7630D7]/10 transition-all flex items-center gap-3"
-          aria-label="Add a heading"
+          aria-label="إضافة عنوان رئيسي"
         >
           <Heading1 size={20} className="text-white/50" />
-          <span style={{ fontFamily: 'Montserrat', fontWeight: 800, fontSize: 26 }} className="leading-none text-white">Add a heading</span>
+          <span style={{ fontFamily: 'Montserrat', fontWeight: 800, fontSize: 26 }} className="leading-none text-white">إضافة عنوان رئيسي</span>
         </button>
         <button
           onClick={() => addText('subheading')}
           className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4 hover:border-[#7630D7] hover:bg-[#7630D7]/10 transition-all flex items-center gap-3"
-          aria-label="Add a subheading"
+          aria-label="إضافة عنوان فرعي"
         >
           <Heading2 size={18} className="text-white/50" />
-          <span style={{ fontFamily: 'Poppins', fontWeight: 700, fontSize: 19 }} className="leading-none text-white">Add a subheading</span>
+          <span style={{ fontFamily: 'Poppins', fontWeight: 700, fontSize: 19 }} className="leading-none text-white">إضافة عنوان فرعي</span>
         </button>
         <button
           onClick={() => addText('body')}
           className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4 hover:border-[#7630D7] hover:bg-[#7630D7]/10 transition-all flex items-center gap-3"
-          aria-label="Add body text"
+          aria-label="إضافة نص أساسي"
         >
           <TypeIcon size={16} className="text-white/50" />
           <span style={{ fontFamily: 'Poppins', fontSize: 15 }} className="leading-none text-white/90">Add a little bit of body text</span>
@@ -71,7 +71,7 @@ export function TextPanel() {
                 width: 700,
               })
               addTextStyled({
-                text: 'Pair it with a clean, readable body font.',
+                text: 'نسّقه مع خط واضح وسهل القراءة.',
                 fontFamily: style.body.family,
                 bold: false,
                 fontSize: 30,
@@ -115,10 +115,10 @@ export function TextPanel() {
           <button
             className="ml-auto h-8 px-3 rounded-lg bg-white/10 hover:bg-[#7630D7] text-[11px] font-semibold text-white transition-colors shrink-0"
             onClick={() => {
-              addTextStyled({ text: 'Brand heading sample', fontFamily: brand.headingFont, bold: true, fontSize: 64, width: 700 })
-              addTextStyled({ text: 'And its matching brand body font.', fontFamily: brand.bodyFont, fontSize: 26, width: 620 })
+              addTextStyled({ text: 'نموذج عنوان الهوية', fontFamily: brand.headingFont, bold: true, fontSize: 64, width: 700 })
+              addTextStyled({ text: 'والخط الأساسي المتناسق مع الهوية.', fontFamily: brand.bodyFont, fontSize: 26, width: 620 })
             }}
-            aria-label="Add brand font pair"
+            aria-label="إضافة زوج خطوط الهوية"
           >
             Use
           </button>

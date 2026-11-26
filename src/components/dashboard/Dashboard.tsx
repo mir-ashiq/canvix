@@ -738,7 +738,7 @@ export function Dashboard() {
         {/* ── Templates ── */}
         <section id="cv-templates" className="pt-12 scroll-mt-20">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <h2 className="text-xl font-bold">Templates</h2>
+            <h2 className="text-xl font-bold">القوالب</h2>
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => setCategory('all')}
@@ -1234,7 +1234,7 @@ export function Dashboard() {
               <div className="text-[12px] font-bold text-white/85 mb-2 uppercase tracking-wide">Where things live</div>
               <ul className="text-[12px] text-white/70 space-y-1.5 leading-relaxed">
                 <li>· <b className="text-white/90">Templates / Elements / Text</b> — left rail in the editor</li>
-                <li>· <b className="text-white/90">Brand</b> — colors, palettes, fonts &amp; logos (saved locally)</li>
+                <li>· <b className="text-white/90">الهوية</b> — colors, palettes, fonts &amp; logos (saved locally)</li>
                 <li>· <b className="text-white/90">Apps</b> — charts, QR codes, icons, palettes &amp; placeholder text</li>
                 <li>· <b className="text-white/90">Uploads</b> — drop images onto the canvas anytime</li>
                 <li>· <b className="text-white/90">Layers</b> — rename (double-click), reorder, lock &amp; hide</li>

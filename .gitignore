@@ -94,3 +94,16 @@ core
 # design-agent acceptance/benchmark artifacts (kept in download/, not the repo)
 /scripts/designspec-agent/
 /scripts/designspec-browser-bundle.js
+
+# Private identity, signing material and local credentials
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+*.asc
+*.key
+.secrets/
+.private/
+credentials.json
+service-account*.json

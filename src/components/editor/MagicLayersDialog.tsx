@@ -161,7 +161,7 @@ export function MagicLayersDialog({ open, onOpenChange }: { open: boolean; onOpe
       const rec = await reconstructDesign(analysis, imageUrl, width, height, [...discarded])
       applyReconstruction(rec)
       toast({
-        title: 'Magic Layers created',
+        title: 'الطبقات السحرية created',
         description: `${rec.elements.length} editable layers extracted — each element can be selected, moved and restyled.`,
       })
       close(false)
@@ -229,7 +229,7 @@ export function MagicLayersDialog({ open, onOpenChange }: { open: boolean; onOpe
       <DialogContent className="rounded-[28px] sm:max-w-2xl bg-[#16181D] border-white/10 text-white max-h-[88vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg font-bold">
-            <Wand2 size={18} className="text-[#02C0CC]" /> Magic Layers
+            <Wand2 size={18} className="text-[#02C0CC]" /> الطبقات السحرية
           </DialogTitle>
           <DialogDescription className="text-white/60">
             Turn a flat design image into an editable layout — text, images and shapes become real layers you can move, restyle and edit.

@@ -9,7 +9,7 @@
 منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر — تطوير المطور العراقي TEa.G3.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-00C4CC.svg)](LICENSE)
-[![CI](https://github.com/mir-ashiq/canvix/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mir-ashiq/canvix/actions/workflows/ci.yml)
+[![CI](https://github.com/TEaG3/eng-salman/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TEaG3/eng-salman/actions/workflows/ci.yml)
 [![Next.js](https://img.shields.io/badge/Next.js%2016-black?logo=next.js)](https://nextjs.org)
 [![React 19](https://img.shields.io/badge/React%2019-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://typescriptlang.org)
@@ -481,7 +481,7 @@ is right here.
 > **Prerequisites:** [Node.js 20+](https://nodejs.org) (or [Bun](https://bun.sh)), and a PostgreSQL database — a free [Supabase](https://supabase.com) project is the easiest start (any other Postgres works too: Neon, RDS, Docker, local).
 
 ```bash
-git clone https://github.com/mir-ashiq/canvix.git
+git clone https://github.com/TEaG3/eng-salman.git
 cd tea-g3
 npm install            # or: bun install
 

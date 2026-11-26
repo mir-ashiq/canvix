@@ -91,43 +91,43 @@ function EditorMockup() {
 const FEATURES = [
   {
     icon: Shapes,
-    title: 'Drag-and-drop editor',
-    text: 'Shapes, lines, graphics, stickers and images — move, resize and rotate everything with buttery-smooth canvas rendering.',
+    title: 'محرر السحب والإفلات',
+    text: 'أشكال وخطوط ورسومات وملصقات وصور؛ حرّك العناصر وغيّر أحجامها ودوّرها بسلاسة.',
   },
   {
     icon: Type,
-    title: 'Beautiful typography',
-    text: '369 hand-picked Google Fonts with on-demand loading, styles and pairings. Bold, italic, spacing, alignment and colors at your fingertips.',
+    title: 'تنسيق نصوص احترافي',
+    text: '369 خطاً مختاراً بعناية، مع خيارات الوزن والميل والمسافات والمحاذاة والألوان.',
   },
   {
     icon: Palette,
-    title: 'Templates for everything',
-    text: 'All 366 templates are free — Instagram posts, stories, pitch decks, posters, logos and thumbnails. Start from a template, make it yours.',
+    title: 'قوالب لكل استخدام',
+    text: 'جميع القوالب الـ366 مجانية: منشورات وقصص إنستغرام وعروض وملصقات وشعارات وصور مصغّرة.',
   },
   {
     icon: Layers,
-    title: 'Layers & smart guides',
-    text: 'Reorder layers, lock elements and snap things into perfect alignment with magenta smart guides.',
+    title: 'الطبقات وأدلة المحاذاة',
+    text: 'رتّب الطبقات وثبّت العناصر واستخدم أدلة ذكية لمحاذاة دقيقة.',
   },
   {
     icon: Undo2,
-    title: 'Undo, redo & autosave',
-    text: 'A full history stack with keyboard shortcuts, plus automatic saving so your work is never lost.',
+    title: 'تراجع وإعادة وحفظ تلقائي',
+    text: 'سجل كامل للتعديلات مع اختصارات لوحة المفاتيح وحفظ تلقائي يحمي أعمالك.',
   },
   {
     icon: Download,
-    title: 'Export anywhere',
-    text: 'PNG, JPG, WebP, SVG, PDF, PPTX, even GIF and video — crisp up to 3× resolution. No watermarks, ever.',
+    title: 'تصدير بكل سهولة',
+    text: 'صدّر بصيغ PNG وJPG وWebP وSVG وPDF وPPTX وGIF والفيديو بدقة تصل إلى 3 أضعاف، دون علامة مائية.',
   },
   {
     icon: Smartphone,
-    title: 'Works on every device',
-    text: 'The same editor adapts from desktop workstations to tablets and phones with touch-native interactions.',
+    title: 'يعمل على جميع الأجهزة',
+    text: 'محرر واحد يتكيف مع الحاسوب والأجهزة اللوحية والهواتف ويدعم اللمس.',
   },
   {
     icon: Heart,
-    title: 'Free & open source',
-    text: 'MIT licensed, self-hostable, community-driven. No accounts, no paywalls, no locked premium elements.',
+    title: 'مجاني ومفتوح المصدر',
+    text: 'مرخّص MIT وقابل للاستضافة الذاتية؛ بلا جدران دفع أو عناصر مقفلة.',
   },
 ]
 
@@ -137,20 +137,20 @@ const FEATURES = [
 const BIG_FEATURES = [
   {
     icon: Users,
-    title: 'Real-time collaboration',
-    text: 'Invite anyone with a link and design together live — cursors, selections and edits sync instantly. No seat pricing, no viewer limits, no “upgrade to invite more editors”.',
+    title: 'تعاون مباشر',
+    text: 'ادعُ الآخرين عبر رابط وصمّموا معاً مباشرة، مع مزامنة المؤشرات والتحديدات والتعديلات فورياً، دون قيود على عدد المتعاونين.',
     accent: 'from-[#02C0CC] to-[#0090AA]',
   },
   {
     icon: Bot,
-    title: 'AI that works for you',
-    text: 'A design-aware assistant that fixes overlaps and balances layouts automatically, background remover, magic eraser, auto-adjust and more. Bring your own API key — or run the local on-device engines with zero setup.',
+    title: 'ذكاء اصطناعي يعمل لخدمتك',
+    text: 'مساعد ذكي لترتيب التصميم وإزالة الخلفيات والممحاة السحرية والتحسين التلقائي. استخدم مفتاح API الخاص بك أو الأدوات المحلية.',
     accent: 'from-[#7630D7] to-[#9B6BFF]',
   },
   {
     icon: Server,
-    title: 'Self-host in one command',
-    text: 'Your designs live in your own Postgres. One docker compose command and the whole platform — editor, collab, templates — runs on your hardware, forever.',
+    title: 'استضافة ذاتية بأمر واحد',
+    text: 'تبقى تصاميمك في قاعدة بياناتك. شغّل المنصة ومحررها وقوالبها والتعاون على خادمك بأمر Docker واحد.',
     accent: 'from-[#FF5C8A] to-[#FF8A5C]',
   },
 ]
@@ -312,11 +312,11 @@ export function Landing() {
           <div className="text-center">
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
               What the paid tools charge for,{' '}
-              <span className="text-brand-gradient">Canvix gives away</span>
+              <span className="text-brand-gradient">يقدمه TEa.G3 مجاناً</span>
             </h2>
             <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
               The features that cost the most elsewhere — collaboration seats, AI credits, team
-              workspaces — are core parts of Canvix, free and open.
+              workspaces — are core parts of TEa.G3 مجاناً وبشفافية.
             </p>
           </div>
           <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -339,10 +339,10 @@ export function Landing() {
         <section id="features" className="bg-[#FAFAFC] border-y border-black/5">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 py-20 sm:py-28">
             <h2 className="text-center text-3xl sm:text-4xl font-extrabold tracking-tight">
-              Everything you need to <span className="text-brand-gradient">create</span>
+              Everything you need to <span className="text-brand-gradient">الإبداع</span>
             </h2>
             <p className="mt-4 text-center text-muted-foreground max-w-2xl mx-auto">
-              A serious editor, not a toy. Canvix packs the features people actually use from
+              A serious editor, not a toy. TEa.G3 يضم الأدوات التي تحتاجها فعلاً من
               commercial design tools — minus the price tag.
             </p>
             <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -367,7 +367,7 @@ export function Landing() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="text-center">
               <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-                Start from a <span className="text-brand-gradient">template</span>
+                Start from a <span className="text-brand-gradient">قالب</span>
               </h2>
               <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
                 Sized and styled for every platform. Open one, tweak everything — every template is
@@ -409,7 +409,7 @@ export function Landing() {
         <section id="faq" className="bg-[#FAFAFC] border-y border-black/5 py-20 sm:py-28">
           <div className="mx-auto max-w-3xl px-4 sm:px-6">
             <h2 className="text-center text-3xl sm:text-4xl font-extrabold tracking-tight">
-              Questions, <span className="text-brand-gradient">answered</span>
+              Questions, <span className="text-brand-gradient">وأجوبة</span>
             </h2>
             <div className="mt-10 space-y-3">
               {FAQ.map((f, i) => (
@@ -427,11 +427,10 @@ export function Landing() {
                 <Star size={14} /> Built in the open
               </div>
               <h2 className="mt-5 text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
-                The design tool that <span className="text-brand-gradient">belongs to you</span>
+                The design tool that <span className="text-brand-gradient">تملكها أنت</span>
               </h2>
               <p className="mt-5 text-muted-foreground leading-relaxed">
-                Commercial design tools lock your creativity behind subscriptions. Canvix is
-                different — the code is on GitHub, the license is MIT, and every design you make
+                Commercial design tools lock your creativity behind subscriptions. أما TEa.G3 فيختلف — the code is on GitHub, the license is MIT, and every design you make
                 is exportable at full quality. Self-host it, fork it, improve it.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row gap-3">

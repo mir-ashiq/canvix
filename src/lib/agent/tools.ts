@@ -46,8 +46,12 @@ export interface ToolContext {
   /** v0.32.6 · the CANVAS MAP: existing elements' occupied vertical
    *  bands (merged, disjoint — see plan-repair.ts). The plan solver
    *  fits new sections into the FREE space between them so nothing
-   *  is planned on top of existing content. */
+   *  is planned on top of existing content.
+   *  v0.32.7: partials (small elements to plan around horizontally)
+   *  and freeRegions (the largest 2D free rectangles) join the map. */
   occupied?: { y: number; h: number; label?: string }[]
+  partials?: string[]
+  freeRegions?: { x: number; y: number; w: number; h: number }[]
 }
 
 export type SanitizeResult =
@@ -245,15 +249,23 @@ export const AGENT_TOOLS: AgentTool[] = [
       if (notes) lines.push(`notes: ${notes}`)
 
       // the canvas map disclosure: what is already on the page and
-      // where the free space is — visible to the user AND the model
+      // where the free space is — visible to the user AND the model.
+      // v0.32.7: TRUE 2D — occupied bands (section-scale elements),
+      // the small elements to plan around horizontally, and the
+      // largest free regions.
       const occupied = ctx.occupied ?? []
-      const mapNote = occupied.length
-        ? `CANVAS MAP — existing elements occupy y ${occupied.map((o) => `${Math.round(o.y)}–${Math.round(o.y + o.h)}${o.label ? ` (${o.label})` : ''}`).join(', ')}; your sections were fitted into the FREE space (never on top of them).`
-        : ''
+      let mapNote = ''
+      if (occupied.length || ctx.partials?.length || ctx.freeRegions?.length) {
+        const mapLines: string[] = []
+        if (occupied.length) mapLines.push(`occupied bands: ${occupied.map((o) => `y ${Math.round(o.y)}–${Math.round(o.y + o.h)}${o.label ? ` (${o.label})` : ''}`).join(', ')}`)
+        if (ctx.partials?.length) mapLines.push(`small elements to plan around horizontally: ${ctx.partials.slice(0, 4).join('; ')}`)
+        if (ctx.freeRegions?.length) mapLines.push(`largest free regions: ${ctx.freeRegions.slice(0, 4).map((r) => `(${r.x},${r.y}) ${r.w}×${r.h}`).join(' | ')}`)
+        mapNote = `CANVAS MAP (2D) — ${mapLines.join('\n')}\nYour sections were fitted into the FREE vertical space (never on top of existing content); inside each band, place content around the small elements listed. `
+      }
       const repairedNote = repair.repairs.length
         ? `PLAN AUTO-REPAIRED (your heights, order and contents were kept; the SERVER computed valid positions): ${repair.repairs.join('; ')}. Build inside these exact bands — do not recompute them.`
         : 'Bands verified: non-overlapping, ≥40px gaps, inside the safe area. Build inside these exact bands.'
-      const observation = `${mapNote ? `${mapNote}\n` : ''}PLAN RECORDED (${lines.length} lines):\n${lines.join('\n')}\n${repairedNote}`
+      const observation = `${mapNote}PLAN RECORDED (${lines.length} lines):\n${lines.join('\n')}\n${repairedNote}`
       return {
         ok: true,
         actions: [{ type: '__planLayout', lines, bands: repair.bands }],

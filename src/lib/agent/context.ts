@@ -15,7 +15,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { DesignBrief } from './brief'
-import { mergeOccupied } from './plan-repair'
+import { freeVerticalBands, freeRegions2D, hierarchyLines, spatialMap } from './spatial'
 
 export interface AgentElementCtx {
   id: string
@@ -33,6 +33,9 @@ export interface AgentElementCtx {
   fontFamily?: string
   name?: string
   locked?: boolean
+  /** v0.32.7: rotation in degrees — the spatial map expands the
+   *  AABB so rotated elements occupy their true footprint. */
+  rotation?: number
   /** v0.29.3: client-measured rendered text width in px (canvas
    *  measureText — the same metrics the renderer uses). Present when
    *  a v0.29.3+ panel built the context; the audit's overflow check
@@ -117,6 +120,22 @@ export function serializeDesignContext(d: AgentDesignCtx): string {
   lines.push(`Fonts in use: ${(d.fontsInUse ?? []).slice(0, 8).join(', ') || 'none'}`)
   lines.push(`Overlapping pairs: ${d.overlaps?.length ? d.overlaps.join('; ') : 'none detected'}`)
   lines.push(`Off-canvas elements: ${d.offCanvas?.length ? d.offCanvas.join('; ') : 'none detected'}`)
+  // v0.32.7 · the 2D SPATIAL MAP — z-order, intentional layering,
+  // free space and hierarchy, computed deterministically (spatial.ts)
+  if (els.length) {
+    const map = spatialMap(d)
+    if (map.intentional.length) {
+      lines.push(`Intentional layering (NOT defects): ${map.intentional.slice(0, 6).map((p) => `${p.front.type}#${p.front.id} on its ${p.kind} ${p.back.type}#${p.back.id}`).join('; ')}`)
+    }
+    if (map.partials.length) {
+      lines.push(`Small elements to plan around horizontally: ${map.partials.slice(0, 4).join('; ')}`)
+    }
+    const regions = freeRegions2D(d, 5)
+    if (regions.length) {
+      lines.push(`Largest free regions (x,y w×h): ${regions.map((r) => `(${r.x},${r.y}) ${r.w}×${r.h}`).join(' | ')}`)
+    }
+    lines.push(...hierarchyLines(d))
+  }
   if (d.otherPages?.length) lines.push(`Other pages: ${d.otherPages.join(' | ')}`)
   return lines.join('\n')
 }
@@ -126,22 +145,10 @@ export function contextValidIds(d: AgentDesignCtx): Set<string> {
   return new Set((d.elements ?? []).map((e) => e.id))
 }
 
-/** v0.32.6 · the CANVAS MAP: existing elements as occupied vertical
- *  bands (merged, disjoint, label = text excerpt or type). The plan
- *  solver fits new sections into the FREE space between these bands,
- *  so a plan can never reserve space on top of existing content —
- *  "it first maps what's present geometrically" happens here, in
- *  deterministic code, not in the model's arithmetic. */
+/** v0.32.6 · the CANVAS MAP → v0.32.7: TRUE 2D. The vertical bands
+ *  the plan solver eats now come from spatial.ts (rotation-aware
+ *  AABBs, z-order, section-scale blocking, partial-occupancy
+ *  disclosures) instead of a naive every-element merge. */
 export function canvasMap(d: AgentDesignCtx): { y: number; h: number; label?: string }[] {
-  const raw = (d.elements ?? [])
-    .filter((e) => typeof e.y === 'number' && (typeof e.height === 'number' || typeof e.fontSize === 'number'))
-    .map((e) => ({
-      y: e.y as number,
-      h: Math.max(1, Math.round((e.height as number | undefined) ?? (e.fontSize as number | undefined) ?? 24)),
-      label:
-        typeof e.text === 'string' && e.text.trim()
-          ? e.text.trim().slice(0, 24)
-          : undefined,
-    }))
-  return mergeOccupied(raw)
+  return freeVerticalBands(d).occupied
 }

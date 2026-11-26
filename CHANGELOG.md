@@ -3,6 +3,39 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+### Changed — v0.32.7: spatial intelligence, intent, persistence, resilience
+
+- **2D spatial map** (spatial.ts): rotation-aware AABBs, z-order,
+  intentional layering (a card behind its text is not a collision),
+  section-scale band blocking with partial-occupancy disclosures,
+  2D free regions, text-hierarchy ladder — wired into the plan
+  solver, tool observations, the audit and the system prompt.
+- **Context-aware editing** (intent.ts): add / replace / reposition
+  / restyle / redesign / remove / refine / review — deterministic,
+  shown live in the panel. The plan-first gate fires only for
+  create/add/redesign; a "check and fix" run is never bounced into
+  planning new sections.
+- **Persistent execution + recovery:** DesignAgentRun.status/state
+  (migration 0016) — the run's brief, plan, applied actions and
+  verification milestones persist live; a provider/network
+  interruption marks the run interrupted and the NEXT run injects
+  the snapshot as recovery context: complete, never re-add.
+- **Provider resilience** (chat-resilience.ts): bounded exponential
+  backoff for transient errors (auth/config errors fail fast), a
+  per-provider circuit breaker, and the CONFIGURED fallback chain
+  (user BYOK → instance slot → env/file; ZAI_NO_FALLBACK=1 opts
+  out). Gateway-reported tokens accumulate in the run's usage.
+- **Verification completed:** blocking audit issues (contrast,
+  overlap, off-canvas, obscured, duplicates, empty sections) get
+  one bounded fix round, then the re-audit is authoritative —
+  remaining blockers end the run INCOMPLETE. Advisories (alignment,
+  typography, hierarchy, deep margins) disclose, never block. The
+  brief validator adopts the design engine's NFC-exact contract.
+- **Tests:** +50 regressions (spatial, intent, resilience, loop);
+  recovery e2e (mocked route, real editor); the live benchmark spec
+  (CANVIX_BENCH_LIVE=1, real provider) writes docs/BENCHMARK-v0.32.7.md.
+  Fixed: the panel crashed on a partial brief event.
+
 ### Changed — v0.32.6: ONE agent, ZERO selectors + the canvas map
 
 - **One surface:** the five-tab unified app (Chat / Generate / Write /
@@ -4139,3 +4172,11 @@ Canva-style dashboard & mobile polish.
 Initial release: Konva.js editor (text/shapes/lines/graphics/stickers/images),
 smart snapping, layers, templates, dashboard, autosave, PNG/JPG export,
 responsive mobile/tablet/desktop UI.
+
+### Evaluation note — v0.32.7
+
+The live benchmark spec exists (`tests/e2e/live-agent-benchmark.spec.ts`,
+`CANVIX_BENCH_LIVE=1`, writes `docs/BENCHMARK-v0.32.7.md` itself). Both
+session attempts were cut short by the provider gateway's real rate
+limits; no completion rates are claimed and the milestone PR was not
+merged on mocked results alone.

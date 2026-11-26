@@ -16,7 +16,10 @@ import { auditDesign as runDesignAudit } from '@/lib/agent/audit'
 import { selectSkills } from '@/lib/agent/skills'
 import { extractBrief, mergeBriefs, normalizeStoredBrief, type DesignBrief } from '@/lib/agent/brief'
 import { critiqueWithVision } from '@/lib/agent/vision'
-import { getClientForSlotForUser } from '@/lib/ai/provider'
+import { classifyEditIntent } from '@/lib/agent/intent'
+import { chatResilient } from '@/lib/ai/chat-resilience'
+import { getClientForSlotForUser, getClientForSlot, makeClient, resolveSlot } from '@/lib/ai/provider'
+import { getProviders } from '@/lib/admin/config'
 import { getSessionUser } from '@/lib/auth/session'
 import { getDesignProvenance } from '@/lib/design-provenance'
 import { db } from '@/lib/db'
@@ -217,19 +220,33 @@ async function __canvix_post(req: NextRequest) {
     // loudly instead of silently degrading.
     const jsonModePref = (process.env.ZAI_JSON_MODE ?? 'auto').trim().toLowerCase()
     let jsonModeLive = jsonModePref !== 'off'
-    const rawCreate = ctx.zai.chat.completions.create as unknown as (
-      body: Record<string, unknown>,
-    ) => Promise<{ choices: { message?: { content?: unknown } }[] }>
-    const chat = async (msgs: { role: 'system' | 'user' | 'assistant'; content: string }[]) => {
+    type RawCreate = (body: Record<string, unknown>) => Promise<{ choices: { message?: { content?: unknown } }[] }>
+    interface ChatTarget {
+      /** circuit-breaker key — the provider's label/source */
+      key: string
+      zai: { chat: { completions: { create: RawCreate } } }
+      model?: string
+    }
+    const rawCreateOf = (t: ChatTarget): RawCreate =>
+      t.zai.chat.completions.create as unknown as RawCreate
+    /** one turn through ONE target (json-mode negotiation included).
+     *  Token usage is accumulated when the gateway reports it. */
+    const callOnce = async (t: ChatTarget, msgs: { role: 'system' | 'user' | 'assistant'; content: string }[]) => {
       const base: Record<string, unknown> = {
-        ...(ctx.model ? { model: ctx.model } : {}),
+        ...(t.model ? { model: t.model } : {}),
         messages: msgs,
         thinking: { type: 'disabled' },
       }
       const callJson = (withJson: boolean) =>
-        rawCreate(withJson ? { ...base, response_format: { type: 'json_object' } } : base)
+        rawCreateOf(t)(withJson ? { ...base, response_format: { type: 'json_object' } } : base)
+      const capture = (completion: { choices?: { message?: { content?: unknown } }[]; usage?: { prompt_tokens?: number; completion_tokens?: number } }) => {
+        const u = completion.usage
+        if (u && typeof u.prompt_tokens === 'number') promptTokens += u.prompt_tokens
+        if (u && typeof u.completion_tokens === 'number') completionTokens += u.completion_tokens
+      }
       try {
         const completion = await callJson(jsonModeLive)
+        capture(completion)
         return String(completion.choices[0]?.message?.content ?? '')
       } catch (e) {
         const msg = String((e as Error | undefined)?.message ?? e)
@@ -240,10 +257,89 @@ async function __canvix_post(req: NextRequest) {
         ) {
           jsonModeLive = false // remember for the whole run
           const completion = await callJson(false)
+          capture(completion)
           return String(completion.choices[0]?.message?.content ?? '')
         }
         throw e
       }
+    }
+
+    // v0.32.7 · PROVIDER RESILIENCE — the configured fallback chain.
+    // The 26 Nov 2026 incident: the gateway flapped 502 → fetch
+    // failed → 429 for two hours and every mid-flight run DIED.
+    // chatResilient (chat-resilience.ts) wraps every model call:
+    // bounded exponential backoff for TRANSIENT failures (429/5xx/
+    // network — permanent errors fail fast), a per-provider circuit
+    // breaker, and the CONFIGURED fallback chain — other providers
+    // the user (BYOK) or the instance already configured for the
+    // text slot. Nothing is invented; every attempt still passes the
+    // feature rate limit and rides AIUsage accounting. ZAI_NO_FALLBACK=1
+    // disables the chain (spend control).
+    const primary: ChatTarget = {
+      key: ctx.label ?? ctx.source ?? 'primary',
+      zai: ctx.zai as unknown as ChatTarget['zai'],
+      model: ctx.model,
+    }
+    const chatTargets: ChatTarget[] = [primary]
+    const seenBase = new Set<string>([primary.key])
+    const addTarget = async (t: ChatTarget | null) => {
+      if (!t) return
+      if (seenBase.has(t.key)) return
+      seenBase.add(t.key)
+      chatTargets.push(t)
+    }
+    // the instance-wide slot (distinct when the user's BYOK answered)
+    if (ctx.source === 'user') {
+      try {
+        const inst = await getClientForSlot('text')
+        if (inst?.zai) await addTarget({ key: inst.label ?? `instance:${inst.source}`, zai: inst.zai as unknown as ChatTarget['zai'], model: inst.model })
+      } catch {
+        /* the chain answers with what it has */
+      }
+    }
+    // the env/file layers when a table/DB layer answered the primary
+    try {
+      const base = await resolveSlot('text')
+      if (base && (base.source === 'env' || base.source === 'file') && ctx.source !== 'env' && ctx.source !== 'file') {
+        const zai = await makeClient(base.baseUrl, base.apiKey, base.headers)
+        await addTarget({ key: `${base.source}:${base.baseUrl}`, zai: zai as unknown as ChatTarget['zai'], model: base.model })
+      }
+    } catch {
+      /* best-effort chain */
+    }
+    // the user's OTHER BYOK providers that answer the text slot
+    if (userId) {
+      try {
+        const rows = await db.userAIProvider.findMany({ where: { userId }, orderBy: { createdAt: 'asc' }, take: 8 })
+        for (const r of rows) {
+          const slots = r.slots.split(',').map((s) => s.trim())
+          if (!slots.includes('text')) continue
+          const model = (() => { try { const m = r.models as { text?: string } | null; return m?.text } catch { return undefined } })()
+          if (seenBase.has(`byok:${r.id}`)) continue
+          const zai = await makeClient(r.baseUrl, r.apiKey)
+          await addTarget({ key: `byok:${r.label}`, zai: zai as unknown as ChatTarget['zai'], model })
+        }
+      } catch {
+        /* BYOK must never break the fallback chain */
+      }
+    }
+
+    // v0.32.7: token accounting — accumulated from gateway-reported
+    // usage when present (never estimated; absent providers simply
+    // report nothing). Surfaced in the run's final usage event.
+    let promptTokens = 0
+    let completionTokens = 0
+    const chat = async (msgs: { role: 'system' | 'user' | 'assistant'; content: string }[]) => {
+      const text = await chatResilient(
+        chatTargets.map((t) => ({ key: t.key, fn: () => callOnce(t, msgs) })),
+        {
+          attempts: 3,
+          onRetry: (attempt, err, delay) => {
+            console.warn(`[ai/agent] transient provider failure (attempt ${attempt}), ${delay}ms backoff: ${String((err as Error)?.message ?? err).slice(0, 120)}`)
+          },
+        },
+      )
+      return text
     }
 
     // ── 1. classify the mode (heuristic first, model when unsure) ──
@@ -295,6 +391,12 @@ async function __canvix_post(req: NextRequest) {
       mode,
       !!(design.brand && (design.brand.colors?.length || design.brand.headingFont)),
     )
+
+    // v0.32.7 · CONTEXT-AWARE EDITING: what does this message want
+    // DONE to the existing design? (deterministic — intent.ts). The
+    // loop's plan-first gate and per-intent guidance follow it, and
+    // the panel shows it live (SSE intent event).
+    const { intent, reason: intentReason } = classifyEditIntent(message, design)
 
     const runId = newRunId()
     const encoder = new TextEncoder()
@@ -371,21 +473,88 @@ async function __canvix_post(req: NextRequest) {
           // THIS design (mode, request, actions, outcome) enter the
           // system prompt. Best-effort: a ledger failure must never
           // break the run itself.
+          // v0.32.7 · PERSISTENT EXECUTION: an unfinished 'running'
+          // row (server died mid-run) is excluded; an 'interrupted'
+          // row (429/502/network cut a run mid-flight) is loaded as
+          // RECOVERY so the next message COMPLETES the work instead
+          // of restarting (and duplicating) it.
           let ledgerLines: string[] = []
+          let recoveryLines: string[] = []
           if (design.designId) {
             try {
               const rows = await db.designAgentRun.findMany({
-                where: { designId: design.designId },
+                where: { designId: design.designId, NOT: { status: 'running' } },
                 orderBy: { createdAt: 'desc' },
                 take: 3,
               })
               ledgerLines = rows.map(
                 (r) =>
-                  `${r.mode} "${r.request.slice(0, 80)}" → ${r.toolCalls} action(s): ${r.summary.slice(0, 160)}${r.findings ? ` [residue to fix: ${r.findings.slice(0, 140)}]` : ''}`,
+                  `${r.mode} "${r.request.slice(0, 80)}" → ${r.toolCalls} action(s): ${r.summary.slice(0, 160)}${r.status === 'interrupted' ? ' [INTERRUPTED mid-run — its work is on the canvas]' : ''}${r.findings ? ` [residue to fix: ${r.findings.slice(0, 140)}]` : ''}`,
               )
             } catch {
               /* best-effort — run without the ledger */
             }
+            try {
+              const last = await db.designAgentRun.findFirst({
+                where: { designId: design.designId, status: 'interrupted' },
+                orderBy: { createdAt: 'desc' },
+              })
+              const state = last?.state as
+                | {
+                    intent?: string
+                    request?: string
+                    plan?: { name: string; y: number; h: number }[]
+                    applied?: { tool: string; detail?: string }[]
+                    pending?: string[]
+                    verification?: string[]
+                    brief?: { requiredTexts?: string[] } | null
+                  }
+                | null
+              if (last && state?.applied?.length) {
+                recoveryLines = [
+                  `the interrupted run asked: "${state.request ?? last.request}" (intent: ${state.intent ?? '?'})`,
+                  `it applied ${state.applied.length} action(s) — ALL of it is already on the canvas: ${state.applied.slice(-8).map((a) => a.tool).join(', ')}`,
+                  state.plan?.length ? `its plan had ${state.plan.length} section(s): ${state.plan.map((b) => `${b.name} (y ${Math.round(b.y)}–${Math.round(b.y + b.h)})`).join(', ')}` : '',
+                  state.pending?.length ? `pending items it had not finished: ${state.pending.join('; ')}` : '',
+                  state.verification?.length ? `verification reached: ${state.verification.join(', ')}` : 'verification had not started',
+                ].filter(Boolean)
+              }
+            } catch {
+              /* best-effort — run without recovery */
+            }
+          }
+
+          // v0.32.7 · the run row: created at START (status 'running'),
+          // updated live by the loop's persistRun, finalized in the
+          // finally below. The canvas stays the authority; the row is
+          // the recoverable trace.
+          const runStartedAt = Date.now()
+          let runRowId: string | null = null
+          if (design.designId) {
+            try {
+              const row = await db.designAgentRun.create({
+                data: {
+                  designId: design.designId,
+                  mode,
+                  request: message.slice(0, 240),
+                  summary: '',
+                  toolCalls: 0,
+                  status: 'running',
+                },
+              })
+              runRowId = row.id
+            } catch {
+              /* best-effort — run without persistence */
+            }
+          }
+          const persistRun = (state: Record<string, unknown>) => {
+            if (!runRowId) return
+            void db.designAgentRun
+              .update({
+                where: { id: runRowId },
+                data: { status: String(state.status ?? 'running'), state: state as never },
+              })
+              .catch(() => {})
           }
 
           let loopResult: Awaited<ReturnType<typeof runAgentLoop>> | null = null
@@ -406,6 +575,15 @@ async function __canvix_post(req: NextRequest) {
               ledger: ledgerLines,
               brief,
               skills,
+              // v0.32.7 · what this message wants done to the existing
+              // design (add/replace/reposition/restyle/redesign/remove/
+              // refine/review — deterministic, intent.ts) + the interrupted
+              // run's persisted state, so a retry COMPLETES the work
+              intent,
+              recovery: recoveryLines,
+              // v0.32.7 · live run-state persistence (best-effort) — the
+              // loop calls it after plans, applies and at exits
+              persistRun: (state) => persistRun(state as unknown as Record<string, unknown>),
               emit,
               confirmed: new Set(body.confirmed ?? []),
               signal: {
@@ -490,29 +668,60 @@ async function __canvix_post(req: NextRequest) {
                 })
               },
             })
+            // v0.32.7: the run's final usage — turns, tools, wall time,
+            // model calls, and tokens when the gateway reported them
+            if (loopResult) {
+              emit({
+                v: AGENT_PROTOCOL_VERSION,
+                type: 'usage',
+                turns: loopResult.steps,
+                toolCalls: loopResult.toolCalls,
+                elapsedMs: Date.now() - runStartedAt,
+                modelCalls: 0,
+                ...(promptTokens || completionTokens ? { promptTokens, completionTokens } : {}),
+              })
+            }
           } finally {
             bridges.delete(runId)
-            // v0.32.4: persist the run ledger row — what THIS run did,
-            // so the next run in this design starts with grounded
-            // execution memory. Best-effort: the run's outcome is
-            // already streamed; a ledger write failure never
-            // surfaces as an agent error.
+            // v0.32.4 → v0.32.7: finalize the run row (created at run
+            // START above): the loop's persistRun already set status/
+            // state; this writes the human summary + findings. An
+            // exception path (loopResult null) marks the row
+            // interrupted — its applied work is recoverable. Best-effort:
+            // a ledger write failure never surfaces as an agent error.
             if (design.designId) {
               try {
-                await db.designAgentRun.create({
-                  data: {
-                    designId: design.designId,
-                    mode,
-                    request: message.slice(0, 240),
-                    summary: String(loopResult?.summary ?? '').slice(0, 600),
-                    toolCalls: loopResult?.toolCalls ?? 0,
-                    findings:
-                      (loopResult?.findings ?? [])
-                        .map((f) => `${f.severity} ${f.issue}`)
-                        .join(' | ')
-                        .slice(0, 1200) || null,
-                  },
-                })
+                const interrupted = loopResult === null
+                if (runRowId) {
+                  await db.designAgentRun.update({
+                    where: { id: runRowId },
+                    data: {
+                      summary: String(loopResult?.summary ?? '(the run ended without a summary)').slice(0, 600),
+                      toolCalls: loopResult?.toolCalls ?? 0,
+                      findings:
+                        (loopResult?.findings ?? [])
+                          .map((f) => `${f.severity} ${f.issue}`)
+                          .join(' | ')
+                          .slice(0, 1200) || null,
+                      ...(interrupted ? { status: 'interrupted' } : {}),
+                    },
+                  })
+                } else {
+                  await db.designAgentRun.create({
+                    data: {
+                      designId: design.designId,
+                      mode,
+                      request: message.slice(0, 240),
+                      summary: String(loopResult?.summary ?? '').slice(0, 600),
+                      toolCalls: loopResult?.toolCalls ?? 0,
+                      findings:
+                        (loopResult?.findings ?? [])
+                          .map((f) => `${f.severity} ${f.issue}`)
+                          .join(' | ')
+                          .slice(0, 1200) || null,
+                    },
+                  })
+                }
               } catch {
                 /* best-effort ledger */
               }

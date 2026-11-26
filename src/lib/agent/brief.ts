@@ -380,8 +380,13 @@ export function validateBrief(
       // rejections the gate bounces back to fix. (Whitespace is still
       // collapsed — line-wrap artifacts are benign, everything else
       // must match character for character.)
-      const wanted = t.text.replace(/\s+/g, ' ').trim()
-      const found = state.texts.some((s) => s.replace(/\s+/g, ' ').trim() === wanted)
+      // v0.32.7 (design-engine hardening): NFC normalization both
+      // sides — the deterministic engine's exactEquals contract
+      // (compile.ts). A required text containing "café" must match
+      // an element whose "é" was stored as e + U+0301 (unicode
+      // composition differences are not alterations).
+      const wanted = t.text.replace(/\s+/g, ' ').trim().normalize('NFC')
+      const found = state.texts.some((s) => s.replace(/\s+/g, ' ').trim().normalize('NFC') === wanted)
       if (!found) unmet.push(`Required text missing or altered: "${t.text}"`)
       return { text: t.text, found }
     })

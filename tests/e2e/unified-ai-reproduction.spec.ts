@@ -182,7 +182,7 @@ test.describe('Unified Canvix AI reproduction (v0.32.2 fix)', () => {
     // the chat reports the create run honestly (a normal done, no INCOMPLETE)
     await expect(page.getByText('Coffee-launch Instagram post created', { exact: false })).toBeVisible({ timeout: 10_000 })
 
-    await page.screenshot({ path: '/home/z/my-project/download/repro-created.png', fullPage: false })
+    await page.screenshot({ path: 'test-results/repro-created.png', fullPage: false })
 
     // ── reopen: the created design survives with its elements ──
     await openEditor(page, designId)
@@ -205,6 +205,6 @@ test.describe('Unified Canvix AI reproduction (v0.32.2 fix)', () => {
     expect(headline.fontSize).toBe(96)
     expect(headline.locked).toBeFalsy()
 
-    await page.screenshot({ path: '/home/z/my-project/download/repro-edited.png', fullPage: false })
+    await page.screenshot({ path: 'test-results/repro-edited.png', fullPage: false })
   })
 })

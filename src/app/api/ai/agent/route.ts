@@ -375,6 +375,9 @@ async function __canvix_post(req: NextRequest) {
               // loop as the actual first user message — the model sees
               // what it was asked for, verbatim, all run long
               request: message,
+              // v0.32.3: the conversation this request arrives in —
+              // the loop's model sees the prior turns verbatim
+              history,
               brief,
               skills,
               emit,

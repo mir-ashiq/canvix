@@ -52,6 +52,13 @@ export interface LoopDeps {
    *  the model of the actual creative brief: it kept inspecting the
    *  canvas, claimed no brief was given and created nothing). */
   request: string
+  /** v0.32.3: the CONVERSATION this request arrives in — prior user
+   *  and assistant turns (already trimmed/validated by the route).
+   *  Inserted before the request so the model knows what it already
+   *  did in this chat ("make another one like the last one" keeps
+   *  meaning). Compaction never drops this head, only the long
+   *  tool-observation middle. */
+  history?: { role: 'user' | 'assistant'; content: string }[]
   /** the run's brief contract (extracted by the route) */
   brief?: DesignBrief | null
   /** v0.29: local quality audit of the latest design snapshot
@@ -118,11 +125,23 @@ export function loopSystemPrompt(deps: {
   skills?: DesignSkill[]
 }): string {
   const { design, ctx, mode, brief, skills } = deps
+  const W = design.width ?? 1080
+  const H = design.height ?? 1080
+  const margin = 0.06
   const lines: string[] = [
     'You are the Canvix design agent — an autonomous design assistant working inside a graphic editor.',
     'You see the CURRENT design state below. You act ONLY through tools, one per turn.',
     '',
     MODE_PROMPTS[mode],
+    '',
+    // v0.32.3: the geometry ground truth, stated up front with the
+    // numbers computed for THIS page — where the canvas starts and
+    // ends, where elements may live, how the listed boxes read.
+    `CANVAS GEOMETRY (ground truth for every placement):`,
+    `· Page bounds: ${W}x${H}px, origin (0,0) at the TOP-LEFT, y grows DOWNWARD. Nothing may sit outside 0..${W} x 0..${H}.`,
+    `· Safe area (6% margins): x ${Math.round(W * margin)}..${Math.round(W * (1 - margin))}, y ${Math.round(H * margin)}..${Math.round(H * (1 - margin))}.`,
+    `· Every element below is listed with its exact box @(x,y) WxH — those edges are where it starts and ends; compute band/gap math from them, not from guesses.`,
+    `· The page background line in the state below is real; change it with set_background, never with full-bleed cover rects.`,
     '',
     'Reply with ONE JSON object per turn, nothing else:',
     '{"thought": "one short sentence of reasoning", "tool": "tool_name", "args": { ... }}',
@@ -192,17 +211,22 @@ function callHash(tool: string, args: unknown): string {
   }
 }
 
-/** Compact the message list: keep system + the first user message +
- *  the last turns, summarize the middle into one assistant note. */
-function compactMessages(messages: { role: 'system' | 'user' | 'assistant'; content: string }[]): { compacted: typeof messages; from: number } {
+/** Compact the message list: keep the head (system + conversation
+ *  history + the request — everything up to requestIndex inclusive)
+ *  and the last turns, summarize the tool-observation middle into
+ *  one assistant note. The user's original request and the chat's
+ *  prior turns are NEVER folded away. */
+function compactMessages(
+  messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
+  requestIndex: number,
+): { compacted: typeof messages; from: number } {
   if (messages.length <= 12) return { compacted: messages, from: messages.length }
-  const system = messages.slice(0, 1)
-  const firstUser = messages.slice(1, 2)
+  const head = messages.slice(0, requestIndex + 1)
   const tail = messages.slice(-8)
-  const middle = Math.max(0, messages.length - 1 - 1 - 8)
+  const middle = Math.max(0, messages.length - head.length - 8)
   const summary = `[context compacted — ${middle} earlier turns summarized] Earlier in this run you completed several steps. Key outcomes persist in the CURRENT DESIGN STATE inside the system context; element ids from before a get_page_state refresh may be stale — call get_page_state if unsure. Continue the task; do not redo completed work.`
   return {
-    compacted: [...system, ...firstUser, { role: 'assistant', content: summary }, ...tail],
+    compacted: [...head, { role: 'assistant', content: summary }, ...tail],
     from: messages.length,
   }
 }
@@ -254,6 +278,13 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
   let designChanges = 0
   /** done turns rejected because the run changed nothing yet */
   let emptyDoneRejections = 0
+  /** v0.32.3: plan-first gate fired? (create/improve runs whose first
+   *  action is a WRITE before any plan_layout get ONE redirect —
+   *  guidance, never a hard block) */
+  let planBounced = false
+  /** v0.32.3: has plan_layout run in this run? Once it has, writes
+   *  proceed freely — the gate never fires again. */
+  let planHasRun = false
 
   const toolCtx: ToolContext = {
     validIds: contextValidIds(design),
@@ -264,13 +295,21 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
 
   const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
     { role: 'system', content: loopSystemPrompt({ design, ctx: toolCtx, mode, brief, skills }) },
+    // v0.32.3: the conversation this request arrives in — prior
+    // user/assistant turns, verbatim (route-sanitized). The model
+    // knows what it already did in this chat.
+    ...(deps.history ?? []),
     // v0.32.2 (defect B): the ORIGINAL user request is the actual
-    // first user message. compactMessages always keeps messages[1],
-    // so it survives compaction; tool observations and gate
-    // feedback append AFTER it, never replace it. The mode guidance
-    // lives in the system prompt (MODE_PROMPTS), not here.
+    // user message right after the history. compactMessages keeps the
+    // whole head (system + history + request), so it survives
+    // compaction; tool observations and gate feedback append AFTER
+    // it, never replace it. The mode guidance lives in the system
+    // prompt (MODE_PROMPTS), not here.
     { role: 'user', content: deps.request },
   ]
+  /** index of the request message — the head (system + history +
+   *  request) is never compacted away */
+  const requestIndex = messages.length - 1
 
   emit({ v: AGENT_PROTOCOL_VERSION, type: 'mode', mode, reason: `classified as ${mode}` })
   for (const s of skills) emit({ v: AGENT_PROTOCOL_VERSION, type: 'skill', id: s.id, name: s.name })
@@ -335,7 +374,7 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
 
     // ── compaction (memory + provider context protection) ───
     if (messages.length > AGENT_GUARDS.maxMessages) {
-      const { compacted, from } = compactMessages(messages)
+      const { compacted, from } = compactMessages(messages, requestIndex)
       const to = compacted.length
       messages.length = 0
       messages.push(...compacted)
@@ -561,6 +600,26 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
       })
       continue
     }
+    // v0.32.3 PLAN-FIRST: a create/improve run whose first action is
+    // a WRITE (before any plan_layout) is redirected ONCE — geometry
+    // first, then build. Reads are always fine; a run that already
+    // planned is never bounced; after one bounce the model may
+    // proceed (never a hard block, the guards still hold).
+    if (
+      !planBounced &&
+      !planHasRun &&
+      (mode === 'create' || mode === 'improve') &&
+      (tool.risk === 'write' || tool.risk === 'destructive') &&
+      toolName !== 'set_background'
+    ) {
+      planBounced = true
+      messages.push({
+        role: 'user',
+        content:
+          'PLAN FIRST — before adding elements, call plan_layout with your composition: page background, one vertical band per section (headline, subline, cards, CTA, footer) with y + height that tile the safe area with \u226540px gaps. Place geometry first, then colors and content inside those bands. (set_background may run before the plan; every other write waits for it.) This reminder fires once — after planning, build freely.',
+      })
+      continue
+    }
     emit({ v: AGENT_PROTOCOL_VERSION, type: 'step', index: steps, thought, tool: toolName })
 
     const args = (turn.args && typeof turn.args === 'object' && !Array.isArray(turn.args) ? turn.args : {}) as Record<string, unknown>
@@ -570,6 +629,7 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
     // plan is streamed to the user (the 'plan' event) and echoed as
     // an observation. No apply/ack round trip: a plan changes nothing.
     if (toolName === 'plan_layout' && result.ok) {
+      planHasRun = true
       const planLines = (result.actions as { type: string; lines?: string[] }[])
         .flatMap((a) => (a && a.type === '__planLayout' && Array.isArray(a.lines) ? a.lines : []))
       const lines = planLines.length ? planLines : ['(model emitted an empty plan)']

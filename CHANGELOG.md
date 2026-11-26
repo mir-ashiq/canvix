@@ -3,6 +3,21 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+### Added — v0.32.3: plan-first, geometry ground truth, conversation memory
+
+- **Conversation history reaches the loop:** `LoopDeps.history`
+  (route-sanitized, last 12 turns) enters the model conversation
+  verbatim as `[system, ...history, request]`; compaction keeps the
+  whole head — only the tool-observation middle is folded. Follow-ups
+  like "make another one like the last one" keep their meaning.
+- **CANVAS GEOMETRY ground-truth block** in the system prompt: page
+  bounds, origin, y-down, the computed 6% safe area, exact element
+  boxes (`@(x,y) WxH`), background via `set_background` only.
+- **Plan-first is structural:** a create run's first element write
+  before any `plan_layout` is redirected once (geometry first, then
+  colors/content); planned runs and edit runs are never bounced;
+  never a hard block.
+
 ## [Unreleased] — Unified Canvix AI hardening + the reproduction fix
 
 > The external-review hardening (v0.32.1) and the production

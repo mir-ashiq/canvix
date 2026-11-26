@@ -274,6 +274,7 @@ describe('harness · tool matrix', () => {
     // fill → done (audit clean, accepted)
     const { chat } = scriptedChat([
       turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
       turn('add_text', { text: 'Dark text on dark bg', fontSize: 40, color: '#111122' }),
       done('Poster complete'),
       turn('add_text', { text: 'Fixed headline', fontSize: 40, color: '#FFFFFF' }),
@@ -306,6 +307,7 @@ describe('harness · tool matrix', () => {
     const events: AgentEvent[] = []
     const { chat } = scriptedChat([
       turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
       turn('add_text', { text: 'Still dark', fontSize: 40, color: '#111122' }),
       done('Done attempt 1'),
       done('Done attempt 2 — unfixable, disclosed'),
@@ -333,6 +335,7 @@ describe('harness · tool matrix', () => {
     // the fix round → the run must END AS DONE with disclosure, not error
     const { chat } = scriptedChat([
       turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
       turn('add_text', { text: 'Dark text', fontSize: 40, color: '#111122' }),
       done('Poster complete'),
       turn('patch_things', { nope: true }),
@@ -359,6 +362,7 @@ describe('harness · tool matrix', () => {
     const events: AgentEvent[] = []
     const { chat, calls } = scriptedChat([
       turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
       turn('update_elements', { ids: ['txt-1'], patch: { color: '#FFFFFF' } }),
       done('Fixed contrast'),
     ])
@@ -577,6 +581,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
     // FAILS first: gray missing) → fix → done (passes)
     const { chat, calls } = scriptedChat([
       turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
       turn('add_text', { text: 'Design Beyond Limits', fontSize: 110, color: '#FFFFFF', bold: true }),
       turn('add_text', { text: 'Create Smarter. Design Faster.', fontSize: 40, color: '#22D3EE' }),
       turn('add_text', { text: 'Try Canvix Free', fontSize: 36, color: '#8B5CF6' }),
@@ -613,6 +618,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
     const brief = extractBrief('"Design Beyond Limits"')
     let validationCalls = 0
     const { chat, calls } = scriptedChat([
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
       turn('add_text', { text: 'Creative Pulse', fontSize: 96 }),
       done('Done'),  // rejected 1
       done('Done'),  // rejected 2
@@ -704,6 +710,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
     const replies: string[] = []
     // page 1: bg + 2 texts; goto page 2: bg + 2 texts; verify; done
     replies.push(turn('set_background', { kind: 'solid', from: '#0D1117' }))
+    replies.push(turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }))
     replies.push(turn('add_text', { text: 'Slide One', fontSize: 90 }))
     replies.push(turn('add_text', { text: 'The vision', fontSize: 32 }))
     replies.push(turn('add_page'))
@@ -717,7 +724,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
     replies.push(turn('animate_elements', { ids: ['txt-1'], kind: 'rise' }))
     replies.push(turn('get_page_state'))
     replies.push(done('Two slides built with consistent styling.'))
-    expect(replies.length).toBe(14) // v0.27's cap was 8
+    expect(replies.length).toBe(15) // v0.27's cap was 8; v0.32.3 adds the plan turn
     const { chat, calls } = scriptedChat(replies)
     // refreshed page-2 state: two fresh elements (ids the model just made)
     const refreshed: AgentDesignCtx = {
@@ -737,16 +744,17 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       awaitApply: async () => ({ ok: true }),
       refreshedContext: () => refreshed,
     })
-    expect(result.toolCalls).toBe(13) // every step applied — no cap hit
-    expect(result.steps).toBe(13)
+    expect(result.steps).toBe(14) // 13 tools + the plan turn (v0.32.3)
     // page switch flowed through: the model saw page 2's state
-    expect(calls[6].some((m) => m.content.includes('UPDATED PAGE STATE'))).toBe(true)
+    // (call 8 = index 7, one later now that the plan turn is call 2)
+    expect(calls[7].some((m) => m.content.includes('UPDATED PAGE STATE'))).toBe(true)
   })
 
   /** Case D: geometry repair — off-canvas + overlaps detected and
    *  fixed with fix_overlaps. */
   it('CASE D: geometry repair — fix_overlaps after placement', async () => {
     const { chat } = scriptedChat([
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
       turn('add_text', { text: 'Big Headline', fontSize: 140, x: 0, y: 0 }),
       turn('add_text', { text: 'Sub', fontSize: 40, x: 0, y: 20 }), // overlaps the headline
       turn('fix_overlaps'),
@@ -771,6 +779,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
     const valid: [string, Record<string, unknown>][] = [
       ['get_page_state', {}],
       ['set_background', { kind: 'gradient', from: '#090B1A', to: '#8B5CF6', angle: 160 }],
+      ['plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }],
       ['add_text', { text: 'Hello', fontSize: 64, color: '#FFFFFF' }],
       ['add_shape', { shape: 'rect', x: 10, y: 10, width: 100, height: 80 }],
       ['add_line', { x: 10, y: 200, length: 300, variant: 'arrow' }],
@@ -835,7 +844,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
     // every write tool applied except the declined clear_page; the
     // validate_brief pseudo-action applies state without an ack and is
     // not counted as a tool call (v0.28.1 live-eval fix)
-    expect(result.toolCalls).toBe(valid.length - 2)
+    expect(result.toolCalls).toBe(valid.length - 3) // validate_brief + plan_layout are not counted
     expect(declined).toBe(true)
     expect(result.summary).toBe('Sweep complete')
   })
@@ -876,7 +885,8 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
     const result = await runAgentLoop({
       chat: async () => {
         n += 1
-        if (n === 4) signal.aborted = true
+        if (n === 1) return turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] })
+        if (n === 5) signal.aborted = true
         return turn('add_sticker', { emoji: '⭐', n }) // distinct args — no cycle guard
       },
       design,
@@ -948,6 +958,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
   it('CASE F7: compaction folds a long conversation and emits a compact event', async () => {
     const events: AgentEvent[] = []
     const replies: string[] = []
+    replies.push(turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }))
     for (let i = 0; i < 65; i++) replies.push(turn('add_sticker', { emoji: '⭐', n: i }))
     replies.push(done('Long run complete'))
     const result = await runAgentLoop({
@@ -964,6 +975,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
   it('usage telemetry streams during long runs', async () => {
     const events: AgentEvent[] = []
     const replies: string[] = []
+    replies.push(turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }))
     for (let i = 0; i < 40; i++) replies.push(turn('add_sticker', { emoji: '⭐' }))
     replies.push(done('done'))
     await runAgentLoop({
@@ -1317,6 +1329,7 @@ describe('v0.29.3 · loop: vision critique BEFORE completion', () => {
     const captures: string[] = []
     const { chat, calls } = scriptedChat([
       turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
       turn('add_text', { text: 'CANVIX', fontSize: 72, color: '#F8FAFC' }),
       done('Poster complete'),
       turn('move_elements', { ids: ['txt-1'], dx: 0, dy: 40 }),
@@ -1357,6 +1370,7 @@ describe('v0.29.3 · loop: vision critique BEFORE completion', () => {
     const { chat } = scriptedChat([
       turn('set_background', { kind: 'solid', from: '#090B1A' }),
       done('Poster complete'),
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
       turn('update_elements', { ids: ['txt-1'], fill: '#F8FAFC' }),
       done('Poster complete — attempted'),
     ])
@@ -1619,9 +1633,12 @@ describe('v0.32.2 · loop: the original request reaches the model (defect B)', (
     const events: AgentEvent[] = []
     // 70 distinct writes ≈ 140 messages → past maxMessages(120),
     // compaction fires mid-run; messages[1] must stay the request
-    const replies = Array.from({ length: 70 }, (_, i) =>
-      turn('add_text', { text: `line ${i}`, y: 40 + i * 20, fontSize: 24, color: '#FFFFFF' }),
-    )
+    const replies = [
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
+      ...Array.from({ length: 70 }, (_, i) =>
+        turn('add_text', { text: `line ${i}`, y: 40 + i * 20, fontSize: 24, color: '#FFFFFF' }),
+      ),
+    ]
     replies.push(done('Long build complete'))
     const { chat, calls } = scriptedChat(replies)
     const result = await runAgentLoop({
@@ -1657,6 +1674,7 @@ describe('v0.32.2 · loop: the reproduction end-to-end on an empty canvas', () =
     const events: AgentEvent[] = []
     const { chat, calls } = scriptedChat([
       turn('set_background', { kind: 'gradient', from: '#120A2A', to: '#2E1A47' }),
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
       turn('add_text', { text: 'ARTISAN ROAST', y: 210, fontSize: 132, color: '#FFFFFF', bold: true }),
       turn('add_text', { text: 'our coffee launch — first sip free', y: 400, fontSize: 46, color: '#E8D9FF' }),
       turn('add_shape', { shape: 'rect', x: 140, y: 780, width: 800, height: 360, fill: '#2E1A47' }),
@@ -1744,6 +1762,7 @@ describe('v0.32.2 · loop: the reproduction end-to-end on an empty canvas', () =
     const events: AgentEvent[] = []
     const { chat, calls } = scriptedChat([
       turn('set_background', { kind: 'solid', from: '#111111' }),
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
       turn('add_text', { text: 'Coffee launch', fontSize: 90, color: '#FFFFFF' }),
       done('Done attempt 1 — missing the required color'),
       turn('add_text', { text: 'order at canvix.coffee', fontSize: 40, color: '#E2604F' }),
@@ -1773,5 +1792,154 @@ describe('v0.32.2 · loop: the reproduction end-to-end on an empty canvas', () =
     expect(validations).toBe(2)
     expect(result.summary).not.toContain('INCOMPLETE')
     expect(result.verification).toContain('Brief contract validated')
+  })
+})
+
+// ═════════════════════════════════════════════════════════════
+// v0.32.3 · plan-first + conversation memory + geometry ground
+// truth (the user's architecture ask, made structural)
+// ═════════════════════════════════════════════════════════════
+
+describe('v0.32.3 · conversation history reaches the loop', () => {
+  const emptyDesign: AgentDesignCtx = {
+    name: 'Untitled', width: 1080, height: 1920, pageCount: 1,
+    currentPageIndex: 0, elements: [], colorsInUse: [], otherPages: [],
+  }
+
+  it('the first model call carries the prior turns verbatim, before the request', async () => {
+    const events: AgentEvent[] = []
+    const history = [
+      { role: 'user' as const, content: 'Design a bold Instagram post for a coffee launch' },
+      { role: 'assistant' as const, content: 'Coffee-launch Instagram post created: bold headline, offer line and CTA card.' },
+    ]
+    const { chat, calls } = scriptedChat([
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }] }),
+      done('Adjusted per the earlier conversation.'),
+    ])
+    await runAgentLoop({
+      chat, design: emptyDesign, mode: 'edit',
+      request: 'make another one like the last one but for tea',
+      history,
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    const first = calls[0]
+    // [system, history…, request] — the conversation arrives verbatim
+    expect(first?.[1]?.role).toBe('user')
+    expect(first?.[1]?.content).toBe('Design a bold Instagram post for a coffee launch')
+    expect(first?.[2]?.role).toBe('assistant')
+    expect(first?.[2]?.content).toContain('bold headline')
+    // and the CURRENT request is still the last pre-loop message
+    expect(first?.[3]?.content).toBe('make another one like the last one but for tea')
+  })
+
+  it('compaction keeps the whole head — history and request survive a long run', async () => {
+    const events: AgentEvent[] = []
+    const history = [
+      { role: 'user' as const, content: 'first request in this conversation' },
+      { role: 'assistant' as const, content: 'first answer in this conversation' },
+    ]
+    const replies = [
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }] }),
+      ...Array.from({ length: 70 }, (_, i) =>
+        turn('add_text', { text: `line ${i}`, y: 40 + i * 20, fontSize: 24, color: '#FFFFFF' })),
+      done('Long build complete'),
+    ]
+    const { chat, calls } = scriptedChat(replies)
+    await runAgentLoop({
+      chat, design: emptyDesign, mode: 'create',
+      request: 'build the long thing', history,
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    expect(events.some((e) => e.type === 'compact')).toBe(true)
+    const last = calls[calls.length - 1]
+    // the head is never compacted away: history + request stay verbatim
+    const contents = last?.map((m) => m.content)
+    expect(contents).toContain('first request in this conversation')
+    expect(contents).toContain('build the long thing')
+  })
+})
+
+describe('v0.32.3 · geometry ground truth in the system prompt', () => {
+  it('states the page bounds, the safe area numbers and how to read element boxes', () => {
+    const prompt = loopSystemPrompt({ design, ctx: { validIds: new Set(['el-1']), width: 1080, height: 1080, fonts: new Set(['Inter']) }, mode: 'create' })
+    expect(prompt).toContain('CANVAS GEOMETRY')
+    expect(prompt).toContain('1080x1080px')
+    expect(prompt).toContain('origin (0,0) at the TOP-LEFT')
+    expect(prompt).toContain('Safe area (6% margins): x 65..1015, y 65..1015')
+    expect(prompt).toContain('@(x,y) WxH')
+    expect(prompt).toContain('set_background, never with full-bleed cover rects')
+  })
+})
+
+describe('v0.32.3 · plan-first gate (create runs)', () => {
+  const emptyDesign: AgentDesignCtx = {
+    name: 'Untitled', width: 1080, height: 1920, pageCount: 1,
+    currentPageIndex: 0, elements: [], colorsInUse: [], otherPages: [],
+  }
+
+  it('a create run that writes before planning is redirected ONCE, then proceeds', async () => {
+    const events: AgentEvent[] = []
+    // model: tries to build immediately → PLAN FIRST bounce → plans → builds → done
+    const { chat, calls } = scriptedChat([
+      turn('add_text', { text: 'Too eager', fontSize: 64, y: 100 }),
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('add_text', { text: 'Planned headline', fontSize: 96, y: 80, color: '#FFFFFF' }),
+      done('Planned first, then built.'),
+    ])
+    const result = await runAgentLoop({
+      chat, design: emptyDesign, mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    // the premature write was redirected with the plan-first guidance
+    const bounced = calls.some((c) => c.some((m) => m.role === 'user' && m.content.startsWith('PLAN FIRST —')))
+    expect(bounced).toBe(true)
+    // the too-eager text was NOT applied — only the post-plan work counts
+    const actionJson = JSON.stringify(events.filter((e) => e.type === 'action'))
+    expect(actionJson).not.toContain('Too eager')
+    expect(actionJson).toContain('Planned headline')
+    // and the run completes normally (one bounce, never a block)
+    expect(result.summary).not.toContain('INCOMPLETE')
+  })
+
+  it('a run that plans first never sees the bounce', async () => {
+    const events: AgentEvent[] = []
+    const { chat, calls } = scriptedChat([
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }] }),
+      turn('add_text', { text: 'Planned from the start', fontSize: 72, y: 80 }),
+      done('Done.'),
+    ])
+    await runAgentLoop({
+      chat, design: emptyDesign, mode: 'create',
+      request: 'Design a poster',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    expect(calls.some((c) => c.some((m) => m.role === 'user' && m.content.startsWith('PLAN FIRST —')))).toBe(false)
+  })
+
+  it('edit runs are exempt — surgical edits never require a plan', async () => {
+    const events: AgentEvent[] = []
+    const editDesign: AgentDesignCtx = {
+      ...emptyDesign,
+      elements: [{ id: 'txt-1', type: 'text', x: 100, y: 100, width: 400, height: 80, text: 'Headline', fontSize: 64, fill: '#111111' }],
+    }
+    const { chat, calls } = scriptedChat([
+      turn('update_elements', { ids: ['txt-1'], patch: { fontSize: 96 } }),
+      done('Bigger headline.'),
+    ])
+    const result = await runAgentLoop({
+      chat, design: editDesign, mode: 'edit',
+      request: 'Make the existing title bigger',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    expect(calls.some((c) => c.some((m) => m.role === 'user' && m.content.startsWith('PLAN FIRST —')))).toBe(false)
+    expect(result.toolCalls).toBe(1)
+    expect(result.summary).not.toContain('INCOMPLETE')
   })
 })

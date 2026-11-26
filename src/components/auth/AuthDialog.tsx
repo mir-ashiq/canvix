@@ -48,8 +48,8 @@ export function AuthDialog({ open, onOpenChange, onAuthed, initialMode = 'login'
 function AuthDialogForm({ onOpenChange, onAuthed, initialMode }: Omit<AuthDialogProps, 'open'>) {
   const [mode, setMode] = useState<'login' | 'register'>(initialMode ?? 'login')
   const [username, setUsername] = useState('')
-  const [password, setكلمة المرور] = useState('')
-  const [showكلمة المرور, setShowكلمة المرور] = useState(false)
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -67,7 +67,7 @@ function AuthDialogForm({ onOpenChange, onAuthed, initialMode }: Omit<AuthDialog
       })
       const data = (await res.json().catch(() => ({}))) as { user?: { username: string }; error?: string }
       if (!res.ok) {
-        setError(typeof data.error === 'string' ? data.error : 'حدث خطأ ما. حاول مرة أخرى.')
+        setError(typeof data.error === 'string' ? data.error : 'Something went wrong. Please try again.')
         return
       }
       // the collab identity now carries the real name
@@ -75,7 +75,7 @@ function AuthDialogForm({ onOpenChange, onAuthed, initialMode }: Omit<AuthDialog
       onAuthed(data.user?.username ?? username.trim())
       onOpenChange(false)
     } catch {
-      setError('خطأ في الاتصال — حاول مرة أخرى.')
+      setError('Network error — please try again.')
     } finally {
       setBusy(false)
     }
@@ -89,13 +89,13 @@ function AuthDialogForm({ onOpenChange, onAuthed, initialMode }: Omit<AuthDialog
             <div className="flex items-center gap-2.5">
               <Logo size={24} />
               <DialogTitle className="text-lg font-semibold">
-                {mode === 'login' ? 'مرحباً بعودتك' : 'أنشئ حسابك المجاني'}
+                {mode === 'login' ? 'Welcome back' : 'Create your free account'}
               </DialogTitle>
             </div>
             <DialogDescription className="text-white/50 text-[13px] leading-relaxed text-left">
               {mode === 'login'
-                ? 'سجّل الدخول للاحتفاظ بتصاميمك بأمان في حسابك.'
-                : 'مجاني دائماً — جميع الميزات والقوالب بلا اشتراكات. الحساب يحفظ أعمالك لك وحدك.'}
+                ? 'Sign in to keep your designs private to your account.'
+                : 'Free forever — every feature, every template, no subscriptions. Accounts just keep your work yours.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -111,31 +111,31 @@ function AuthDialogForm({ onOpenChange, onAuthed, initialMode }: Omit<AuthDialog
                 spellCheck={false}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="مثال: tea_g3"
+                placeholder="e.g. ashiq_designs"
                 className="h-10 bg-white/[0.06] border-white/10 text-white placeholder:text-white/30 focus-visible:ring-[#7630D7]/50"
               />
             </div>
             <div className="space-y-1.5">
               <label htmlFor="cv-auth-password" className="text-[12px] font-medium text-white/70">
-                كلمة المرور
+                Password
               </label>
               <div className="relative">
                 <Input
                   id="cv-auth-password"
-                  type={showكلمة المرور ? 'text' : 'password'}
+                  type={showPassword ? 'text' : 'password'}
                   autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                   value={password}
-                  onChange={(e) => setكلمة المرور(e.target.value)}
-                  placeholder={mode === 'login' ? 'كلمة المرور الخاصة بك' : '8 أحرف على الأقل'}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={mode === 'login' ? 'Your password' : 'At least 8 characters'}
                   className="h-10 pr-10 bg-white/[0.06] border-white/10 text-white placeholder:text-white/30 focus-visible:ring-[#7630D7]/50"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowكلمة المرور((v) => !v)}
+                  onClick={() => setShowPassword((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70"
-                  aria-label={showكلمة المرور ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
-                  {showكلمة المرور ? <EyeOff size={15} /> : <Eye size={15} />}
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
             </div>
@@ -147,12 +147,12 @@ function AuthDialogForm({ onOpenChange, onAuthed, initialMode }: Omit<AuthDialog
             )}
 
             <Button type="submit" disabled={busy || !username.trim() || !password} className="btn-cv w-full h-10 rounded-full font-semibold">
-              {busy ? (mode === 'login' ? 'جارٍ تسجيل الدخول…' : 'جارٍ إنشاء الحساب…') : mode === 'login' ? 'تسجيل الدخول' : 'إنشاء حساب'}
+              {busy ? (mode === 'login' ? 'Signing in…' : 'Creating account…') : mode === 'login' ? 'Sign in' : 'Create account'}
             </Button>
           </form>
 
           <p className="mt-4 text-center text-[12.5px] text-white/45">
-            {mode === 'login' ? "ليس لديك حساب؟ " : 'لديك حساب بالفعل؟ '}
+            {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
             <button
               type="button"
               onClick={() => {
@@ -161,7 +161,7 @@ function AuthDialogForm({ onOpenChange, onAuthed, initialMode }: Omit<AuthDialog
               }}
               className={cn('font-semibold text-[#00C4CC] hover:text-[#00C4CC]/80 underline-offset-2 hover:underline')}
             >
-              {mode === 'login' ? 'أنشئ حساباً — مجاناً' : 'تسجيل الدخول'}
+              {mode === 'login' ? 'Create one — it’s free' : 'Sign in'}
             </button>
           </p>
         </div>

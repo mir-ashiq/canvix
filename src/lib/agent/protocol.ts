@@ -55,6 +55,11 @@ export const AGENT_GUARDS = {
   turnWarnAt: 50,
   /** actions attached to a single-shot `act` reply */
   maxDirectActions: 6,
+  /** v0.32.5: consecutive infeasible plan_layout rejections before
+   *  an honest stop with the exact math (separate from `strikes` —
+   *  geometric constraint failures are recoverable, not model
+   *  failures, but a run may not retry them forever) */
+  planRejections: 3,
 } as const
 
 /** v0.28 modes (Phase 8). Read-only modes (review, explain, plan,

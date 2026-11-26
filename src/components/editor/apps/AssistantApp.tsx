@@ -25,6 +25,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bot, Loader2, Send, Sparkles, User, Square, Undo2, ShieldAlert, ListChecks, Eye, Gauge, Scissors, CheckCircle2 } from 'lucide-react'
+import { turnOutcome } from '@/lib/agent/outcome'
 import type { AnyElement, TextElement } from '@/lib/types'
 import { useEditorStore } from '@/store/editor-store'
 import { AppHeader, type AppPanelProps } from './registry'
@@ -567,9 +568,15 @@ export function AssistantApp({ onClose }: AppPanelProps) {
         }
       }
 
-      // Phase 7: after create/improve runs, one visual critique pass
+      // Phase 7: after create/improve runs, one visual critique pass.
+      // v0.32.5: only when the run actually APPLIED changes — the P0
+      // run died at three infeasible plans with zero elements and the
+      // client still critiqued the EMPTY canvas ("vision model
+      // returned no parseable critique"). A zero-action run has
+      // nothing to verify visually; the honest status is "nothing
+      // was created", not a critique of a blank page.
       let critiqueNote: string | undefined
-      if ((mode === 'create' || mode === 'improve') && summary && !controller.signal.aborted) {
+      if ((mode === 'create' || mode === 'improve') && summary && appliedCount > 0 && !controller.signal.aborted) {
         const critique = await visionCritique(runBrief ?? briefRef.current)
         if (critique) {
           critiqueNote = critique.note
@@ -764,12 +771,32 @@ export function AssistantApp({ onClose }: AppPanelProps) {
                   </div>
                 )}
                 <div className="text-[12.5px] text-white/85 leading-relaxed whitespace-pre-wrap">{turn.content}</div>
-                {turn.verification && (
-                  <div className="flex items-start gap-1.5 text-[11px] text-emerald-300/80">
-                    <CheckCircle2 size={12} className="mt-0.5 shrink-0" />
-                    <span>{turn.verification}</span>
-                  </div>
-                )}
+                {/* v0.32.5: honest outcome tone — the P0 run's failures
+                    rendered with the same emerald check as successes. A
+                    disclosed failure gets the amber alert; only a clean
+                    verification keeps the green check. */}
+                {(() => {
+                  const outcome = turnOutcome({ mode: turn.mode, verification: turn.verification, content: turn.content, appliedActions: turn.appliedActions })
+                  if (!turn.verification && outcome !== 'failure') return null
+                  if (outcome === 'failure') {
+                    const status = turn.verification
+                      ?? (turn.mode === 'create' || turn.mode === 'improve'
+                        ? 'Run did not produce any design changes.'
+                        : 'Run stopped without a verified outcome.')
+                    return (
+                      <div className="flex items-start gap-1.5 text-[11px] text-amber-300/90">
+                        <ShieldAlert size={12} className="mt-0.5 shrink-0" />
+                        <span>{status}</span>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className="flex items-start gap-1.5 text-[11px] text-emerald-300/80">
+                      <CheckCircle2 size={12} className="mt-0.5 shrink-0" />
+                      <span>{turn.verification}</span>
+                    </div>
+                  )
+                })()}
                 {turn.usage && (
                   <div className="flex items-center gap-2 text-[10px] text-white/35">
                     <Gauge size={10} />

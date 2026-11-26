@@ -1452,10 +1452,13 @@ describe('v0.29.3 · loop: planning + fail-closed acks', () => {
     expect(result.steps).toBe(2) // plan_layout + set_background each count as a step
   })
 
-  it('plan_layout rejects stacked bands with actionable guidance (v0.32.4: hard reject, not a warning)', () => {
+  it('plan_layout AUTO-REPAIRS invalid geometry server-side (v0.32.5: the model never re-does gap arithmetic)', () => {
     const tool = AGENT_TOOL_MAP.get('plan_layout')
     expect(tool).toBeTruthy()
-    const res = tool!.sanitize(
+    // safe area on the 1080px harness canvas: y 65..1015 (950px usable)
+    // a stacked plan (gap −50) is REPAIRED, not rejected: order,
+    // heights and contents kept; the server computes valid positions.
+    const stacked = tool!.sanitize(
       {
         sections: [
           { name: 'a', y: 100, height: 200, contains: 'x' },
@@ -1464,12 +1467,19 @@ describe('v0.29.3 · loop: planning + fail-closed acks', () => {
       },
       ctx,
     )
-    // the 24px overlap slack is gone: gap = 250 - 300 = -50 → REJECTED
-    expect(res.ok).toBe(false)
-    expect(String((res as { error?: string }).error)).toContain('≥40px gap')
-    expect(String((res as { error?: string }).error)).toContain('"a" and "b"')
-    // 39px gap: still rejected — the boundary is 40, sharp on both sides
-    const res39 = tool!.sanitize(
+    expect(stacked.ok).toBe(true)
+    const stackedObs = String((stacked as { observation?: string }).observation)
+    expect(stackedObs).toContain('AUTO-REPAIRED')
+    expect(stackedObs).toContain('do not recompute')
+    const stackedBands = (stacked as { actions?: { bands?: { name: string; y: number; h: number }[] }[] }).actions?.[0]?.bands
+    expect(stackedBands?.map((b) => b.name)).toEqual(['a', 'b'])
+    expect(stackedBands?.[0]).toEqual({ name: 'a', y: 65, h: 200 })
+    expect(stackedBands?.[1].y! - (stackedBands![0].y + stackedBands![0].h)).toBeGreaterThanOrEqual(40)
+    expect(stackedBands?.[1].h).toBe(200)
+    expect(stackedBands?.[1].y + stackedBands?.[1].h!).toBeLessThanOrEqual(1015)
+
+    // 39px gap: REPAIRED to ≥40 — the model never re-attempts the plan
+    const gap39 = tool!.sanitize(
       {
         sections: [
           { name: 'a', y: 100, height: 200, contains: 'x' },
@@ -1478,36 +1488,53 @@ describe('v0.29.3 · loop: planning + fail-closed acks', () => {
       },
       ctx,
     )
-    expect(res39.ok).toBe(false)
-    // 40px gap: accepted
-    const res40 = tool!.sanitize(
+    expect(gap39.ok).toBe(true)
+    const g39 = (gap39 as { actions?: { bands?: { name: string; y: number; h: number }[] }[] }).actions?.[0]?.bands
+    expect(g39?.map((b) => b.name)).toEqual(['a', 'b'])
+    expect(g39?.[0].h).toBe(200)
+    expect(g39?.[1].h).toBe(100)
+    expect(g39![1].y - (g39![0].y + g39![0].h)).toBeGreaterThanOrEqual(40)
+
+    // a VALID plan (from the safe-area top, exact 40px gaps): accepted
+    // UNCHANGED — no repair note, the model's own geometry stands.
+    const valid = tool!.sanitize(
       {
         sections: [
-          { name: 'a', y: 100, height: 200, contains: 'x' },
-          { name: 'b', y: 340, height: 100, contains: 'y' },
+          { name: 'a', y: 65, height: 200, contains: 'x' },
+          { name: 'b', y: 305, height: 100, contains: 'y' },
         ],
       },
       ctx,
     )
-    expect(res40.ok).toBe(true)
-    // a band beyond the page: rejected with the exact numbers
-    const resBeyond = tool!.sanitize(
-      {
-        sections: [
-          { name: 'a', y: 100, height: 200, contains: 'x' },
-          { name: 'b', y: 340, height: 2000, contains: 'y' },
-        ],
-      },
-      ctx,
-    )
-    expect(resBeyond.ok).toBe(false)
-    expect(String((resBeyond as { error?: string }).error)).toContain('beyond the')
-    // the structured bands ride the action for the plan-adherence audit
-    const actions = (res40 as { actions?: { bands?: { name: string; y: number; h: number }[] }[] }).actions
-    expect(actions?.[0]?.bands).toEqual([
-      { name: 'a', y: 100, h: 200 },
-      { name: 'b', y: 340, h: 100 },
+    expect(valid.ok).toBe(true)
+    const validObs = String((valid as { observation?: string }).observation)
+    expect(validObs).toContain('Bands verified')
+    expect(validObs).not.toContain('AUTO-REPAIRED')
+    const validBands = (valid as { actions?: { bands?: { name: string; y: number; h: number }[] }[] }).actions?.[0]?.bands
+    expect(validBands).toEqual([
+      { name: 'a', y: 65, h: 200 },
+      { name: 'b', y: 305, h: 100 },
     ])
+
+    // truly INFEASIBLE (1200px of content > 950px usable): rejected
+    // with the exact math — never a fabricated plan. No strikes: the
+    // loop's separate plan budget handles it (pinned below).
+    const infeasible = tool!.sanitize(
+      {
+        sections: [
+          { name: 'a', y: 65, height: 400, contains: 'x' },
+          { name: 'b', y: 505, height: 400, contains: 'y' },
+          { name: 'c', y: 945, height: 400, contains: 'z' },
+        ],
+      },
+      ctx,
+    )
+    expect(infeasible.ok).toBe(false)
+    const err = String((infeasible as { error?: string }).error)
+    expect(err).toContain('Infeasible plan')
+    expect(err).toContain('1200px')
+    expect(err).toContain('950px')
+    expect(err).toContain('Reduce the section heights')
   })
 
   it('a failed (timed-out) apply ack tells the model the action was NOT applied — fail closed', async () => {
@@ -2163,5 +2190,210 @@ describe('v0.32.4 · run ledger renders into the system prompt', () => {
     // the font sample now carries the real catalog size + discovery pointer
     expect(without).toContain('369 total')
     expect(without).toContain('list_fonts')
+  })
+})
+
+// ═════════════════════════════════════════════════════════════
+// v0.32.5 · THE P0 REGRESSION — a valid creative request must not
+// die at three repairable layout calculations with ZERO elements.
+// The production failure: "Design a bold Instagram post for a
+// coffee launch" → three plan_layout rejections (<40px gaps) →
+// "Stopped after 3 consecutive invalid tool calls" → 0 elements →
+// vision critique of the EMPTY canvas.
+// ═════════════════════════════════════════════════════════════
+
+describe('v0.32.5 · the P0 regression — recoverable geometry must not kill a creative run', () => {
+  const emptyDesign: AgentDesignCtx = {
+    name: 'Untitled', width: 1080, height: 1080, pageCount: 1,
+    currentPageIndex: 0, elements: [], colorsInUse: [], otherPages: [],
+  }
+  // the model's bad arithmetic from the production run: sections
+  // with <40px gaps (auto-repaired now) — sent THREE times in a row
+  const badGeometryPlan = (y2: number) => ({
+    background: '#090B1A',
+    sections: [
+      { name: 'headline', y: 60, height: 200, contains: 'COFFEE' },
+      { name: 'subline', y: y2, height: 120, contains: 'the launch' },
+      { name: 'cta', y: 900, height: 100, contains: 'Shop Now' },
+    ],
+  })
+
+  it('three bad-geometry plans in a row are AUTO-REPAIRED — the run proceeds to real elements (the exact production failure)', async () => {
+    const events: AgentEvent[] = []
+    const { chat, calls } = scriptedChat([
+      turn('plan_layout', badGeometryPlan(220)), // gap -40 → OLD: strike 1
+      turn('plan_layout', badGeometryPlan(240)), // gap 0   → OLD: strike 2
+      turn('plan_layout', badGeometryPlan(259)), // gap 39  → OLD: strike 3 → DEAD
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('add_text', { text: 'COFFEE LAUNCH', fontSize: 64, color: '#FFFFFF', y: 65, x: 100 }),
+      done('Coffee launch post built.'),
+    ])
+    const result = await runAgentLoop({
+      chat, design: emptyDesign, mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    // OLD code: "Stopped after 3 consecutive invalid tool calls", 0 elements.
+    // NEW: every bad plan was repaired server-side; the build happened.
+    expect(result.summary).toContain('Coffee launch post built')
+    expect(result.steps).toBe(5) // 3 plans + set_background + add_text (done is not a step)
+    expect(result.toolCalls).toBe(2) // set_background + add_text applied
+    const planEvents = events.filter((e) => e.type === 'plan')
+    expect(planEvents.length).toBe(3)
+    // the model was never told to redo arithmetic — the server did it
+    expect(calls.some((c) => c.some((m) => m.content.includes('AUTO-REPAIRED')))).toBe(true)
+  })
+
+  it('three INFEASIBLE plans stop honestly with the exact math — bounded, never an infinite retry', async () => {
+    const events: AgentEvent[] = []
+    const infeasible = () => ({
+      sections: [
+        { name: 'a', y: 65, height: 400, contains: 'x' },
+        { name: 'b', y: 505, height: 400, contains: 'y' },
+        { name: 'c', y: 945, height: 400, contains: 'z' },
+      ],
+    })
+    const { chat } = scriptedChat([
+      turn('plan_layout', infeasible()),
+      turn('plan_layout', infeasible()),
+      turn('plan_layout', infeasible()),
+      // if the guard failed to fire, this would apply and the run
+      // would continue — the assertion below pins that it cannot
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      done('Should not get here'),
+    ])
+    const result = await runAgentLoop({
+      chat, design: emptyDesign, mode: 'create',
+      request: 'Design a poster',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    expect(result.summary).toContain('infeasible plans')
+    expect(result.summary).toContain('INCOMPLETE') // guardExit honesty: zero changes
+    expect(result.toolCalls).toBe(0) // nothing applied after the honest stop
+    const last = events[events.length - 1]
+    expect(last.type).toBe('done')
+  })
+
+  it('a repaired plan flows straight into real editable element creation', async () => {
+    const events: AgentEvent[] = []
+    let planBandsSeen: { name: string; y: number; h: number }[] | undefined
+    const { chat } = scriptedChat([
+      turn('plan_layout', badGeometryPlan(220)), // −40px gap → repaired
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('add_text', { text: 'COFFEE', fontSize: 64, color: '#FFFFFF', y: 70, x: 100 }),
+      done('Built.'),
+    ])
+    const result = await runAgentLoop({
+      chat, design: emptyDesign, mode: 'create',
+      request: 'Design a coffee poster',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+      auditDesign: (bands) => {
+        planBandsSeen = bands
+        return []
+      },
+    })
+    expect(result.summary).toContain('Built')
+    // the plan event carried the REPAIRED geometry (bands start at the
+    // safe-area top y=65, not the model's requested y=60)
+    const plan = events.find((e) => e.type === 'plan') as { steps?: string[] } | undefined
+    expect(plan?.steps?.join('\n')).toContain('y=65')
+    // the audit received the repaired bands (plan-adherence wiring)
+    expect(planBandsSeen?.length).toBe(3)
+  })
+})
+
+describe('v0.32.5 · deterministic plan solver (plan-repair.ts)', () => {
+  it('five sections fit a 1080×1080 canvas with calculated spacing', async () => {
+    const { repairPlanBands } = await import('./plan-repair')
+    const r = repairPlanBands(
+      [
+        { name: 'headline', y: 60, h: 150 },
+        { name: 'subline', y: 300, h: 80 },
+        { name: 'cards', y: 500, h: 300 },
+        { name: 'cta', y: 900, h: 100 },
+        { name: 'footer', y: 950, h: 60 },
+      ],
+      1080,
+    )
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.bands).toHaveLength(5)
+    expect(r.bands[0].y).toBe(65) // safe-area top
+    for (let i = 1; i < r.bands.length; i++) {
+      expect(r.bands[i].y - (r.bands[i - 1].y + r.bands[i - 1].h)).toBeGreaterThanOrEqual(40)
+    }
+    const last = r.bands[4]
+    expect(last.y + last.h).toBeLessThanOrEqual(1015)
+    expect(r.repairs.length).toBeGreaterThan(0)
+  })
+
+  it('1080×1350 and 1080×1920 canvases lay out correctly', async () => {
+    const { repairPlanBands } = await import('./plan-repair')
+    // 1350: safe 81..1269 (1188 usable)
+    const a = repairPlanBands([
+      { name: 'h', y: 100, h: 200 },
+      { name: 'c', y: 320, h: 400 },
+      { name: 'f', y: 900, h: 100 },
+    ], 1350)
+    expect(a.ok).toBe(true)
+    if (a.ok) {
+      expect(a.bands[0].y).toBe(81)
+      expect(a.bands[2].y + a.bands[2].h).toBeLessThanOrEqual(1269)
+      expect(a.bands[1].y - (a.bands[0].y + a.bands[0].h)).toBeGreaterThanOrEqual(40)
+    }
+    // 1920: safe 115..1805 (1690 usable)
+    const b = repairPlanBands([
+      { name: 'h', y: 100, h: 200 },
+      { name: 's', y: 320, h: 120 },
+      { name: 'cards', y: 500, h: 400 },
+      { name: 'cta', y: 950, h: 150 },
+      { name: 'footer', y: 1150, h: 100 },
+    ], 1920)
+    expect(b.ok).toBe(true)
+    if (b.ok) {
+      expect(b.bands[0].y).toBe(115)
+      expect(b.bands[4].y + b.bands[4].h).toBeLessThanOrEqual(1805)
+      for (let i = 1; i < b.bands.length; i++) {
+        expect(b.bands[i].y - (b.bands[i - 1].y + b.bands[i - 1].h)).toBeGreaterThanOrEqual(40)
+      }
+    }
+    // infeasible on BOTH: 2000px of content cannot fit either page
+    const inf: { name: string; y: number; h: number }[] = [{ name: 'x', y: 100, h: 2000 }]
+    expect(repairPlanBands(inf, 1350).ok).toBe(false)
+    expect(repairPlanBands(inf, 1920).ok).toBe(false)
+  })
+
+  it('a VALID plan is accepted unchanged — zero repairs', async () => {
+    const { repairPlanBands } = await import('./plan-repair')
+    const r = repairPlanBands([
+      { name: 'a', y: 65, h: 200 },
+      { name: 'b', y: 305, h: 100 },
+    ], 1080)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.repairs).toEqual([])
+    expect(r.bands).toEqual([
+      { name: 'a', y: 65, h: 200 },
+      { name: 'b', y: 305, h: 100 },
+    ])
+  })
+})
+
+describe('v0.32.5 · honest outcome classification (a failure is never a green check)', () => {
+  it('failure markers classify as failure; clean verification as success', async () => {
+    const { turnOutcome, isFailureOutcome } = await import('./outcome')
+    expect(isFailureOutcome('NOT completed — the run ended without applying any design change')).toBe(true)
+    expect(isFailureOutcome('Stopped after 3 infeasible plans — the exact math is in the errors above')).toBe(true)
+    expect(isFailureOutcome('Quality audit at wrap-up reports 2 issue(s) — disclosed, unfixed.')).toBe(true)
+    expect(isFailureOutcome('Brief contract validated against the live canvas — all mandatory items present.')).toBe(false)
+    expect(turnOutcome({ mode: 'create', verification: 'Brief contract validated against the live canvas.', appliedActions: 12 })).toBe('success')
+    expect(turnOutcome({ mode: 'create', verification: undefined, content: 'Stopped after 3 consecutive invalid tool calls', appliedActions: 0 })).toBe('failure')
+    // the exact P0 production turn: create, 0 actions, no verification
+    expect(turnOutcome({ mode: 'create', verification: undefined, content: 'Stopped after 3 infeasible plans — ask the user for a smaller composition.', appliedActions: 0 })).toBe('failure')
+    // discuss/review turns apply nothing BY DESIGN — not failures
+    expect(turnOutcome({ mode: 'discuss', verification: undefined, content: 'This poster uses a strong vertical hierarchy…', appliedActions: 0 })).toBe('unknown')
   })
 })

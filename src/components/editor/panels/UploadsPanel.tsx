@@ -88,17 +88,17 @@ export function UploadsPanel() {
           })
           if (hasImageSelected) {
             replaceSelectedImage(src, w, h)
-            toast({ title: 'Image replaced' })
+            toast({ title: 'تم استبدال الصورة' })
           } else {
             addImageFromSrc(src, w, h)
-            toast({ title: 'Image uploaded to your library' })
+            toast({ title: 'تم رفع الصورة إلى مكتبتك' })
           }
         } else {
           const add = kind === 'audio' ? addAudioFromFile : addVideoFromFile
           await add(file, (ratio) => {
             setMediaUploads((prev) => prev.map((u) => (u.key === key ? { ...u, ratio } : u)))
           })
-          toast({ title: kind === 'audio' ? 'Audio added — open Preview to play it' : 'Video added — open Preview to play it' })
+          toast({ title: kind === 'audio' ? 'تمت إضافة الصوت — افتح المعاينة لتشغيله' : 'تمت إضافة الفيديو — افتح المعاينة لتشغيله' })
         }
       } catch (err) {
         setMediaUploads((prev) => prev.map((u) => (u.key === key ? { ...u, failed: true } : u)))
@@ -120,17 +120,17 @@ export function UploadsPanel() {
         const { w, h } = await probeImageSize(`/api/media/${item.id}`)
         if (hasImageSelected) {
           replaceSelectedImage(`/api/media/${item.id}`, w, h)
-          toast({ title: 'Image replaced' })
+          toast({ title: 'تم استبدال الصورة' })
         } else {
           addImageFromSrc(`/api/media/${item.id}`, w, h)
         }
       } else if (item.mime.startsWith('audio/')) {
-        await addAudioFromLibrary(item.id, item.name ?? 'Audio')
+        await addAudioFromLibrary(item.id, item.name ?? 'الصوت')
       } else if (item.mime.startsWith('video/')) {
-        await addVideoFromLibrary(item.id, item.name ?? 'Video')
+        await addVideoFromLibrary(item.id, item.name ?? 'الفيديو')
       }
     } catch {
-      toast({ title: 'Could not insert this file', variant: 'destructive' })
+      toast({ title: 'تعذّرت إضافة هذا الملف', variant: 'destructive' })
     }
   }
 
@@ -153,7 +153,7 @@ export function UploadsPanel() {
       state.moveLayer(el.id, 'back')
       state.setLock([el.id], true)
     }
-    toast({ title: 'Set as background' })
+    toast({ title: 'تعيين كخلفية' })
   }
 
   const commitRename = async () => {
@@ -168,7 +168,7 @@ export function UploadsPanel() {
       await renameLibraryItem(id, trimmed)
     } catch {
       setItems(prev)
-      toast({ title: 'Could not rename', variant: 'destructive' })
+      toast({ title: 'تعذّرت إعادة التسمية', variant: 'destructive' })
     }
   }
 
@@ -180,13 +180,13 @@ export function UploadsPanel() {
       await removeLibraryItem(item.id)
       if (prevQuota) setQuota({ ...prevQuota, used: Math.max(0, prevQuota.used - item.size) })
       toast({
-        title: 'Removed from your library',
-        description: 'Designs already using this file keep working.',
+        title: 'تمت الإزالة من مكتبتك',
+        description: 'ستبقى التصاميم التي تستخدم هذا الملف تعمل.',
       })
     } catch {
       setItems(prev)
       setQuota(prevQuota)
-      toast({ title: 'Could not remove', variant: 'destructive' })
+      toast({ title: 'تعذّرت الإزالة', variant: 'destructive' })
     }
   }
 
@@ -195,7 +195,7 @@ export function UploadsPanel() {
       <div className="px-4 pt-4 pb-3 border-b border-white/[0.07] shrink-0">
         <h3 className="font-bold text-sm">Uploads</h3>
         <p className="text-xs text-white/50 mt-0.5">
-          {hasImageSelected ? 'Click a file to replace the selected image.' : 'Your files follow your account.'}
+          {hasImageSelected ? 'اضغط على ملف لاستبدال الصورة المحددة.' : 'ملفاتك مرتبطة بحسابك.'}
         </p>
         {hasImageSelected && (
           <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#02C0CC] bg-[#02C0CC]/10 border border-[#02C0CC]/25 rounded-full px-2.5 py-1">
@@ -214,7 +214,7 @@ export function UploadsPanel() {
         <button
           onClick={() => fileRef.current?.click()}
           className="w-full rounded-xl border-2 border-dashed border-white/15 hover:border-[#7630D7] hover:bg-[#7630D7]/10 transition-all py-8 flex flex-col items-center gap-2 text-white/50"
-          aria-label="Upload images and media"
+          aria-label="ارفع الصور والوسائط"
         >
           <Upload size={22} />
           <span className="text-sm font-medium text-white/80">Click or drag files here</span>
@@ -230,7 +230,7 @@ export function UploadsPanel() {
             void handleFiles(e.target.files)
             e.target.value = ''
           }}
-          aria-label="File upload"
+          aria-label="رفع ملف"
         />
 
         {mediaUploads.length > 0 && (

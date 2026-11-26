@@ -146,7 +146,7 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           ))}
 
           <div>
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-2">Custom size</h3>
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-2">حجم مخصص</h3>
             <div className="flex items-center gap-2">
               <Input
                 type="number"

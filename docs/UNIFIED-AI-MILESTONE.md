@@ -225,3 +225,96 @@ plan panel's UI test was retired with the panel.
   over-limit refusals with explicit reasons, flat 404 on missing ids.
 - Migration `0014` validated offline against Prisma's own schema
   derivation (statement-equal) and applied by CI's db:setup.
+
+---
+
+# v0.32.2 — the production reproduction fix (26 Nov 2026)
+
+**Report:** "Canvix AI → Chat → Auto, empty 1080×1920 canvas, the
+suggested prompt 'Design a bold Instagram post for a coffee launch' —
+mode `edit`, repeated `get_page_state`, the model claims no design
+brief was provided, nothing created, cycle guard ends the run."
+
+Both confirmed code defects are fixed, plus the honesty requirements.
+
+## Defect A — intent classification (router.ts)
+
+The artifact vocabulary missed the entire social-media family, so the
+prompt had no create signal; the styling adjective "bold" sat in BOTH
+edit-evidence lists and flipped it to edit. Fixes: platform
+posts/stories/reels and platform names are first-class artifact
+nouns; **styling adjectives are no longer edit evidence in any list**
+(an adjective describes the requested design — "Design a bold
+Instagram post" is create; the VERB carries edit intent, so "Make the
+existing title bold" still routes to edit); "What is wrong …" (and
+its curly-apostrophe form) joins the review guard; an artifact noun
+inside an existing-element reference ("make the poster title bold")
+is exempted from the create-first guards. The classifier prompt
+teaches the same rule.
+
+## Defect B — the request never reached the model (loop.ts)
+
+The loop's conversation opened with the synthetic
+`User request mode: edit. Begin.` — the user's actual request existed
+only in the route, and `runAgentLoop()` had no request parameter.
+`request: string` is now a MANDATORY loop input and becomes the first
+user message, verbatim. `compactMessages` keeps `messages[1]` by
+construction, so it survives compaction (regression-tested through a
+70-turn run that compacts mid-run); tool observations and gate
+feedback append after it. The route passes the original message.
+
+## The honesty requirements
+
+- **Progress gate:** a create/improve run that applied ZERO
+  write/destructive tools cannot claim completion — the first such
+  done is bounced with explicit build guidance; the second ends the
+  run as `INCOMPLETE — no design changes were made` with
+  verification `NOT completed …` (never reported as a created
+  design). The strikes / idle / cycle / provider guards report the
+  same honest framing for empty create runs. Guards are UNCHANGED
+  (no limit raised, no bypass).
+- **Pinned modes are respected, not converted:** an explicitly pinned
+  edit run on an empty canvas keeps edit mode; the edit-mode prompt
+  now instructs the model to say so honestly and ask what to create,
+  instead of inventing elements or re-reading the page forever.
+
+## Should the Chat tab delegate full creation to DesignAgent?
+
+Investigated — recommendation: **not yet, and not silently.** The
+DesignAgent pipeline (plan → compile → deterministic checks → visual
+verify → user review gate) is the stronger engine for COMPLETE
+multi-block designs, but delegating chat create-runs to it would
+change the response contract mid-conversation (the pipeline returns
+pages + a review gate, not the streaming action protocol the chat
+panel renders) and would take the design decisions away from the
+conversation the user is in. The right evolution, as a follow-up with
+its own acceptance: offer the hand-off EXPLICITLY — when a chat
+create run completes, the panel suggests "want the full pipeline? Run
+Generate" (a one-click jump to the Generate tab, already in the
+unified Canvix AI app); and/or an explicit "use the design agent"
+phrase in Auto mode that routes to the pipeline with the same
+request. The fixed chat loop is honest and capable for first drafts
+(as the reproduction proves); the pipeline stays the premium path.
+This PR keeps the chat loop's behavior otherwise untouched — BYOK,
+rate limits, cancellation, brief contracts, ownership checks, tool
+validation, undo and autosave all ride the unchanged bridge.
+
+## Evidence (v0.32.2)
+
+- Unit: 1,718/1,718 (9 new regressions in `harness.test.ts`: the
+  five mandatory mode cases, adjective-vs-verb routing, the
+  request-as-first-message check, compaction survival, the scripted
+  reproduction creation with no `get_page_state` loop, the
+  bounced-then-honest empty done, the pure-cycle honest end, and the
+  brief-gate-before-done case).
+- Browser (new `tests/e2e/unified-ai-reproduction.spec.ts`, the exact
+  reproduction through the real editor): Auto mode sends the verbatim
+  request unpinned; the create run's streamed actions land as native
+  editable elements; autosave persists them; the design reopens; the
+  user edits the AI-created headline through the real properties UI
+  (font size 132→96, unlocked) and it saves. Screenshots captured.
+- Real-provider evaluation: NOT RUN — no provider credentials exist
+  in this sandbox (checked `.z-ai-config*`, provider env vars). The
+  browser regression runs with the agent route mocked to the exact
+  stream the fixed loop emits; the live canvix.app run after deploy
+  is the real-provider check.

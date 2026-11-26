@@ -371,6 +371,10 @@ async function __canvix_post(req: NextRequest) {
               chat,
               design,
               mode,
+              // v0.32.2 (defect B): the ORIGINAL user request rides the
+              // loop as the actual first user message — the model sees
+              // what it was asked for, verbatim, all run long
+              request: message,
               brief,
               skills,
               emit,

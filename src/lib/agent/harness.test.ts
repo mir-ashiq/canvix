@@ -283,6 +283,7 @@ describe('harness · tool matrix', () => {
       chat,
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
       auditDesign: async () => {
@@ -313,6 +314,7 @@ describe('harness · tool matrix', () => {
       chat,
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
       // the audit NEVER clears — the run must still terminate honestly
@@ -341,6 +343,7 @@ describe('harness · tool matrix', () => {
       chat,
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
       auditDesign: async () => ['Low contrast: text "Dark text" #111122 on #090B1A is 1.0:1 (needs 3:1)'],
@@ -363,6 +366,7 @@ describe('harness · tool matrix', () => {
       chat,
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
     })
@@ -584,6 +588,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       chat,
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       brief,
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
@@ -619,6 +624,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       chat,
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       brief,
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
@@ -657,6 +663,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       chat,
       design,
       mode: 'review',
+      request: 'What is wrong with this design?',
       emit: (e) => {
         if (e.type === 'action') appliedTools.push(e.tool)
         events.push(e)
@@ -680,6 +687,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       chat: rogueChat,
       design,
       mode: 'review',
+      request: 'What is wrong with this design?',
       emit: (e) => {
         if (e.type === 'action') rogueAppliedTools.push(e.tool)
       },
@@ -724,6 +732,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       chat,
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: () => {},
       awaitApply: async () => ({ ok: true }),
       refreshedContext: () => refreshed,
@@ -748,6 +757,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       chat,
       design,
       mode: 'improve',
+      request: 'Make this design more professional',
       emit: () => {},
       awaitApply: async () => ({ ok: true }),
       refreshedContext: () => design,
@@ -811,6 +821,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       chat,
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: () => {},
       confirmed: new Set(),
       awaitConfirm: async () => {
@@ -836,6 +847,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       chat: async () => turn('update_elements', { ids: ['ghost'], patch: { fill: '#123456' } }),
       design,
       mode: 'edit',
+      request: 'Make the existing title bigger',
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
     })
@@ -849,6 +861,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       chat: async () => turn('add_sticker', { emoji: '🤖' }),
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
     })
@@ -868,6 +881,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       },
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: () => {},
       signal,
       awaitApply: async () => ({ ok: true }),
@@ -886,6 +900,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       chat,
       design,
       mode: 'edit',
+      request: 'Make the existing title bigger',
       emit: () => {},
       confirmed: new Set(),
       awaitConfirm: async () => false,
@@ -906,6 +921,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       },
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
     })
     expect(result.toolCalls).toBe(0)
@@ -922,6 +938,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       chat,
       design,
       mode: 'review',
+      request: 'What is wrong with this design?',
       emit: () => {},
       awaitApply: async () => ({ ok: true }),
     })
@@ -937,6 +954,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       chat: scriptedChat(replies).chat,
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
     })
@@ -952,6 +970,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
       chat: scriptedChat(replies).chat,
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
     })
@@ -1313,6 +1332,7 @@ describe('v0.29.3 · loop: vision critique BEFORE completion', () => {
       chat,
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
       captureCanvas: async () => {
@@ -1344,6 +1364,7 @@ describe('v0.29.3 · loop: vision critique BEFORE completion', () => {
       chat,
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
       captureCanvas: async () => 'data:image/png;base64,AAA',
@@ -1367,6 +1388,7 @@ describe('v0.29.3 · loop: vision critique BEFORE completion', () => {
       chat,
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
       captureCanvas: async () => null,
@@ -1385,6 +1407,7 @@ describe('v0.29.3 · loop: vision critique BEFORE completion', () => {
       chat,
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: () => {},
       awaitApply: async () => ({ ok: true }),
       captureCanvas: async () => 'data:image/png;base64,AAA',
@@ -1408,7 +1431,7 @@ describe('v0.29.3 · loop: planning + fail-closed acks', () => {
       turn('set_background', { kind: 'solid', from: '#090B1A' }),
       done('Done'),
     ])
-    const result = await runAgentLoop({ chat, design, mode: 'create', emit: (e) => events.push(e), awaitApply: async () => ({ ok: true }) })
+    const result = await runAgentLoop({ chat, design, mode: 'create', request: 'Design a bold Instagram post for a coffee launch', emit: (e) => events.push(e), awaitApply: async () => ({ ok: true }) })
     const planEvent = events.find((e) => e.type === 'plan') as { steps?: string[] } | undefined
     expect(planEvent).toBeTruthy()
     expect(planEvent?.steps?.join('\n')).toContain('headline')
@@ -1440,6 +1463,7 @@ describe('v0.29.3 · loop: planning + fail-closed acks', () => {
       chat,
       design,
       mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
       emit: () => {},
       // v0.29.3 route semantics: timeout resolves ok:false
       awaitApply: async () => ({ ok: false, message: 'ack timeout — the client did NOT confirm the apply' }),
@@ -1513,5 +1537,241 @@ describe('v0.29.4 · new skills (glassmorphism, mockups, accessibility)', () => 
     const section = skillsPromptSection(selectSkills(CANVIX_PROMPT, 'create'))
     expect(section).toContain('Skill: Glassmorphism')
     expect(section).toContain('Skill: Realistic Product Mockups')
+  })
+})
+
+// ═════════════════════════════════════════════════════════════
+// v0.32.2 · THE PRODUCTION REPRODUCTION (P0: "Canvix AI ignores
+// creative requests and loops on an empty canvas")
+//
+//   "Design a bold Instagram post for a coffee launch" in Auto mode
+//   on an empty 1080×1920 canvas routed to EDIT, the model never saw
+//   the request ("User request mode: edit. Begin." was the only user
+//   message), looped get_page_state, and the run ended with nothing
+//   created. Both defects + the honesty requirements are pinned here.
+// ═════════════════════════════════════════════════════════════
+
+describe('v0.32.2 · router: the Instagram-post misroute (defect A)', () => {
+  it('the five mandatory regressions', () => {
+    expect(heuristicMode('Design a bold Instagram post for a coffee launch')).toEqual({ mode: 'create', confidence: 'high' })
+    expect(heuristicMode('Create a colorful social media graphic')).toEqual({ mode: 'create', confidence: 'high' })
+    expect(heuristicMode('Make the existing title bold')).toEqual({ mode: 'edit', confidence: 'high' })
+    expect(heuristicMode('Move the coffee cup image to the right')).toEqual({ mode: 'edit', confidence: 'high' })
+    expect(heuristicMode('What is wrong with this design?')).toEqual({ mode: 'review', confidence: 'high' })
+  })
+
+  it('styling adjectives describe the requested design — they are NOT edit evidence', () => {
+    for (const msg of [
+      'Design a bold Instagram post for a coffee launch',
+      'design a minimal instagram story',
+      'make a vibrant tiktok cover',
+      'create an elegant linkedin post',
+      'a colorful facebook ad please',
+      'Design a bold poster',
+      'make me a dark moody menu',
+    ]) {
+      expect(heuristicMode(msg).mode, msg).toBe('create')
+    }
+  })
+
+  it('an artifact noun inside an existing-element reference is still an edit', () => {
+    expect(heuristicMode('Make the poster title bold').mode).toBe('edit')
+    expect(heuristicMode('delete the instagram logo on page 2').mode).toBe('edit')
+    expect(heuristicMode('make the existing title bold').mode).toBe('edit')
+  })
+})
+
+describe('v0.32.2 · loop: the original request reaches the model (defect B)', () => {
+  const emptyDesign: AgentDesignCtx = {
+    name: 'Untitled',
+    width: 1080,
+    height: 1920,
+    pageCount: 1,
+    currentPageIndex: 0,
+    elements: [],
+    colorsInUse: [],
+    otherPages: [],
+  }
+  const REQUEST = 'Design a bold Instagram post for a coffee launch'
+
+  it('the FIRST model call carries the full original request as the actual user message, verbatim', async () => {
+    const events: AgentEvent[] = []
+    const { chat, calls } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#1B3A6B' }),
+      done('Created'),
+    ])
+    await runAgentLoop({
+      chat,
+      design: emptyDesign,
+      mode: 'create',
+      request: REQUEST,
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    expect(calls.length).toBeGreaterThan(0)
+    expect(calls[0]?.[0]?.role).toBe('system')
+    expect(calls[0]?.[1]?.role).toBe('user')
+    // the USER'S OWN WORDS — not "User request mode: create. Begin."
+    expect(calls[0]?.[1]?.content).toBe(REQUEST)
+  })
+
+  it('the request survives compaction — long runs never lose what was asked', async () => {
+    const events: AgentEvent[] = []
+    // 70 distinct writes ≈ 140 messages → past maxMessages(120),
+    // compaction fires mid-run; messages[1] must stay the request
+    const replies = Array.from({ length: 70 }, (_, i) =>
+      turn('add_text', { text: `line ${i}`, y: 40 + i * 20, fontSize: 24, color: '#FFFFFF' }),
+    )
+    replies.push(done('Long build complete'))
+    const { chat, calls } = scriptedChat(replies)
+    const result = await runAgentLoop({
+      chat,
+      design: emptyDesign,
+      mode: 'create',
+      request: REQUEST,
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    expect(events.some((e) => e.type === 'compact')).toBe(true)
+    const lastCall = calls[calls.length - 1]
+    expect(lastCall?.[1]?.role).toBe('user')
+    expect(lastCall?.[1]?.content).toBe(REQUEST)
+    expect(result.summary).not.toContain('INCOMPLETE')
+  })
+})
+
+describe('v0.32.2 · loop: the reproduction end-to-end on an empty canvas', () => {
+  const emptyDesign: AgentDesignCtx = {
+    name: 'Untitled',
+    width: 1080,
+    height: 1920,
+    pageCount: 1,
+    currentPageIndex: 0,
+    elements: [],
+    colorsInUse: [],
+    otherPages: [],
+  }
+  const REQUEST = 'Design a bold Instagram post for a coffee launch'
+
+  it('creates a complete native editable design from the reproduction prompt — no get_page_state loop', async () => {
+    const events: AgentEvent[] = []
+    const { chat, calls } = scriptedChat([
+      turn('set_background', { kind: 'gradient', from: '#120A2A', to: '#2E1A47' }),
+      turn('add_text', { text: 'ARTISAN ROAST', y: 210, fontSize: 132, color: '#FFFFFF', bold: true }),
+      turn('add_text', { text: 'our coffee launch — first sip free', y: 400, fontSize: 46, color: '#E8D9FF' }),
+      turn('add_shape', { shape: 'rect', x: 140, y: 780, width: 800, height: 360, fill: '#2E1A47' }),
+      turn('add_text', { text: 'order at canvix.coffee', y: 920, fontSize: 56, color: '#FFFFFF' }),
+      done('Coffee-launch Instagram post created: bold headline, offer line and CTA card, night palette.'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design: emptyDesign,
+      mode: 'create',
+      request: REQUEST,
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+
+    // the model BUILT: five applied write tools
+    expect(result.toolCalls).toBe(5)
+    // native editable elements were emitted as real design actions
+    const actions = events.filter((e) => e.type === 'action') as unknown as { tool: string; actions: unknown[] }[]
+    const actionJson = JSON.stringify(actions.flatMap((a) => a.actions))
+    expect(actionJson).toContain('"type":"addText"')
+    expect(actionJson).toContain('"type":"addShape"')
+    expect(actionJson).toContain('ARTISAN ROAST')
+    // NO state-inspection loop during a successful create
+    expect(actions.map((a) => a.tool)).not.toContain('get_page_state')
+    // honest SUCCESS (changes were made) — not an INCOMPLETE wrap-up
+    expect(result.summary).not.toContain('INCOMPLETE')
+    expect(events[events.length - 1]?.type).toBe('done')
+    // and the model saw what it was asked for
+    expect(calls[0]?.[1]?.content).toBe(REQUEST)
+  })
+
+  it('the failure shape is bounced and reported honestly — never "successfully created"', async () => {
+    const events: AgentEvent[] = []
+    // the exact reproduction behavior: inspect, inspect again, then
+    // claim you cannot proceed because "no design brief was provided"
+    const { chat, calls } = scriptedChat([
+      turn('get_page_state', {}),
+      turn('get_page_state', {}),
+      done('I need more information — no design brief was provided.'),
+      turn('get_page_state', { page: 0 }),
+      done('Still cannot proceed without requirements.'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design: emptyDesign,
+      mode: 'create',
+      request: REQUEST,
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+
+    // the premature done was REJECTED with build guidance
+    const bounce = calls.find((c) => c.some((m) => m.role === 'user' && m.content.includes('NOT DONE — this is a create run')))
+    expect(bounce).toBeDefined()
+    // and the run ended HONESTLY: no design changes → not a success
+    expect(result.summary).toContain('INCOMPLETE — no design changes were made')
+    expect(result.verification).toContain('NOT completed')
+    const final = events[events.length - 1] as { type: string; summary?: string; verification?: string }
+    expect(final.type).toBe('done')
+    expect(String(final.summary)).toContain('INCOMPLETE')
+    expect(String(final.verification)).toContain('NOT completed')
+  })
+
+  it('a pure get_page_state cycle on an empty canvas ends INCOMPLETE — the guard stays, honestly', async () => {
+    const events: AgentEvent[] = []
+    const { chat } = scriptedChat([
+      turn('get_page_state', {}),
+      turn('get_page_state', {}),
+      turn('get_page_state', {}),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design: emptyDesign,
+      mode: 'create',
+      request: REQUEST,
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    expect(result.summary).toContain('INCOMPLETE')
+    expect(result.verification).toContain('NOT completed')
+  })
+
+  it('the brief gate still runs before a create run may claim completion', async () => {
+    const events: AgentEvent[] = []
+    const { chat, calls } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#111111' }),
+      turn('add_text', { text: 'Coffee launch', fontSize: 90, color: '#FFFFFF' }),
+      done('Done attempt 1 — missing the required color'),
+      turn('add_text', { text: 'order at canvix.coffee', fontSize: 40, color: '#E2604F' }),
+      done('Done — requirements met'),
+    ])
+    // validation answers unsatisfied until the model's fix round
+    // (the 4th turn adds the missing required text), then passes
+    let validations = 0
+    const result = await runAgentLoop({
+      chat,
+      design: emptyDesign,
+      mode: 'create',
+      request: 'Coffee launch post with "Coffee launch" and the color #E2604F',
+      brief: extractBrief('"Coffee launch" and the color #E2604F'),
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+      validateBriefOnClient: async () => {
+        validations += 1
+        return validations === 1
+          ? { satisfied: false, unmet: ['Required text missing or altered: "order at canvix.coffee"'] }
+          : { satisfied: true, unmet: [] }
+      },
+    })
+    // the first done was rejected for the unmet requirement…
+    expect(calls.some((c) => c.some((m) => m.role === 'user' && m.content.includes('NOT DONE (attempt 1 of 3)')))).toBe(true)
+    // …the fix round added the missing text → the re-validation passed
+    expect(validations).toBe(2)
+    expect(result.summary).not.toContain('INCOMPLETE')
+    expect(result.verification).toContain('Brief contract validated')
   })
 })

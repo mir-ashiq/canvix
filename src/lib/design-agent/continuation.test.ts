@@ -229,6 +229,7 @@ async function refineWithAgent(
     chat,
     design,
     mode: 'edit',
+    request: 'Make the headline bigger',
     brief: storedBrief,
     emit: (e) => {
       events.push(e)

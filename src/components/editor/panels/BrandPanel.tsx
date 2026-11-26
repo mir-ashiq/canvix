@@ -121,7 +121,7 @@ export function BrandPanel() {
     }, 800)
   }, [])
 
-  const activeKitName = kits.find((k) => k.id === activeKitId)?.name ?? 'My brand'
+  const activeKitName = kits.find((k) => k.id === activeKitId)?.name ?? 'هويتي'
   const persist = (b: BrandKit) => {
     setLocal(b)
     setBrand(b)
@@ -137,7 +137,7 @@ export function BrandPanel() {
 
   const applyColor = (c: string) => {
     if (!selected.length) {
-      toast({ title: 'Select an element first' })
+      toast({ title: 'حدّد عنصراً أولاً' })
       return
     }
     for (const el of selected) {
@@ -146,16 +146,16 @@ export function BrandPanel() {
       } else if (el.type === 'line' || el.type === 'stroke') {
         updateElements([el.id], { stroke: c })
       } else if (el.type === 'sticker') {
-        toast({ title: 'Stickers keep their own colours' })
+        toast({ title: 'تحتفظ الملصقات بألوانها الأصلية' })
       }
     }
-    toast({ title: 'Brand colour applied' })
+    toast({ title: 'تم تطبيق لون الهوية' })
   }
 
   const applyFont = (family: string, heading: boolean) => {
     const texts = selected.filter((e) => e.type === 'text')
     if (!texts.length) {
-      toast({ title: 'Select a text element first' })
+      toast({ title: 'حدّد عنصراً نصياً أولاً' })
       return
     }
     updateElements(texts.map((t) => t.id), { fontFamily: family, bold: heading })
@@ -196,7 +196,7 @@ export function BrandPanel() {
   const savePalette = () => {
     const palettes = [local.colors, ...(local.palettes ?? [])].slice(0, 8)
     persist({ ...local, palettes })
-    toast({ title: 'Palette saved to Brand Kit' })
+    toast({ title: 'تم حفظ لوحة الألوان في مكتبة الهوية' })
   }
 
   const addLogo = async (file: File) => {
@@ -224,9 +224,9 @@ export function BrandPanel() {
           height: Math.round(dims.h * scale),
         })
       )
-      toast({ title: 'Logo saved & added to canvas' })
+      toast({ title: 'تم حفظ الشعار وإضافته إلى مساحة التصميم' })
     } catch {
-      toast({ title: 'Could not read logo file', variant: 'destructive' })
+      toast({ title: 'تعذّرت قراءة ملف الشعار', variant: 'destructive' })
     }
   }
 
@@ -247,7 +247,7 @@ export function BrandPanel() {
   }
 
   return (
-    <PanelShell title="Brand" subtitle="Your colours, fonts, palettes & logos.">
+    <PanelShell title="الهوية" subtitle="ألوانك وخطوطك ولوحاتك وشعاراتك.">
       {/* v0.17 (Wave 2): server-side kit selector + sync state */}
       <div className="mt-2 flex items-center gap-2">
         <select
@@ -262,16 +262,16 @@ export function BrandPanel() {
             try { localStorage.setItem(BRAND_KEY, JSON.stringify(merged)) } catch { /* ignore */ }
           }}
           className="flex-1 min-w-0 h-9 rounded-xl bg-white/[0.05] border border-white/10 text-white text-[12px] px-2 outline-none focus:border-[#7630D7] [color-scheme:dark]"
-          aria-label="Active brand kit"
+          aria-label="حزمة الهوية النشطة"
         >
-          <option value="">{activeKitId ? 'Choose a kit…' : 'My brand (unsaved)'}</option>
+          <option value="">{activeKitId ? 'اختر حزمة…' : 'هويتي (غير محفوظة)'}</option>
           {kits.map((k) => (
             <option key={k.id} value={k.id}>{k.name}</option>
           ))}
         </select>
         <button
           onClick={() => {
-            const name = prompt('Name the new brand kit', 'New brand kit')
+            const name = prompt('سمّ حزمة الهوية الجديدة', 'حزمة هوية جديدة')
             if (!name) return
             void (async () => {
               const res = await fetch('/api/brand-kits', {
@@ -291,7 +291,7 @@ export function BrandPanel() {
           }}
           className="h-9 px-2.5 rounded-xl border border-white/12 bg-white/[0.05] hover:bg-[#7630D7] hover:border-transparent text-white/80 text-[11px] font-semibold shrink-0"
           aria-label="Create a new brand kit"
-          title="New brand kit"
+          title="حزمة هوية جديدة"
         >
           <Plus size={13} />
         </button>

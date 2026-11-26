@@ -13,7 +13,7 @@ import {
   Sparkles,
   Palette,
   Undo2,
-  عرض تقديمي,
+  Presentation,
   Instagram,
   Printer,
   Video,
@@ -27,7 +27,7 @@ import {
   Check,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
-import { شعار } from '@/components/logo'
+import { Logo } from '@/components/logo'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth/client'
 
@@ -46,7 +46,7 @@ function EditorMockup() {
       <div className="flex h-[calc(100%-37px)]">
         {/* dark rail */}
         <div className="w-12 bg-[#17181D] flex flex-col items-center pt-3 gap-3">
-          {[عرض تقديمي, Shapes, Type, ImageIcon, Layers].map((Icon, i) => (
+          {[Presentation, Shapes, Type, ImageIcon, Layers].map((Icon, i) => (
             <div
               key={i}
               className={`h-8 w-8 rounded-lg flex items-center justify-center ${
@@ -101,8 +101,8 @@ const FEATURES = [
   },
   {
     icon: Palette,
-    title: 'القوالب for everything',
-    text: 'All 366 templates are free — منشور إنستغرامs, stories, pitch decks, posters, logos and thumbnails. Start from a template, make it yours.',
+    title: 'Templates for everything',
+    text: 'All 366 templates are free — Instagram posts, stories, pitch decks, posters, logos and thumbnails. Start from a template, make it yours.',
   },
   {
     icon: Layers,
@@ -117,7 +117,7 @@ const FEATURES = [
   {
     icon: Download,
     title: 'Export anywhere',
-    text: 'PNG, JPG, WebP, SVG, PDF, PPTX, even GIF and video — crisp up to 3× resolution. دون علامات مائية.',
+    text: 'PNG, JPG, WebP, SVG, PDF, PPTX, even GIF and video — crisp up to 3× resolution. No watermarks, ever.',
   },
   {
     icon: Smartphone,
@@ -158,14 +158,14 @@ const BIG_FEATURES = [
 const TEMPLATE_SHOWCASE = [
   { label: 'منشور إنستغرام', from: '#FF5C8A', to: '#FFB84C', icon: Instagram, title: 'MEGA SALE' },
   { label: 'قصة', from: '#B8E986', to: '#7ED957', icon: Instagram, title: 'NEW DROP' },
-  { label: 'عرض تقديمي', from: '#FFFFFF', to: '#E8F6F7', icon: عرض تقديمي, title: 'Nimbus', dark: true },
+  { label: 'عرض تقديمي', from: '#FFFFFF', to: '#E8F6F7', icon: Presentation, title: 'Nimbus', dark: true },
   { label: 'ملصق', from: '#FFD166', to: '#FFC93C', icon: Printer, title: 'LIVE MUSIC', dark: true },
   { label: 'صورة مصغّرة', from: '#0D1117', to: '#161B22', icon: Video, title: 'TOP 10 AI' },
   { label: 'شعار', from: '#FFFFFF', to: '#F4F5F7', icon: BadgeCheck, title: 'NOVA', dark: true },
 ]
 
-/** v0.26: short الأسئلة الشائعة answering the questions new visitors actually ask. */
-const الأسئلة الشائعة = [
+/** v0.26: short FAQ answering the questions new visitors actually ask. */
+const FAQ = [
   {
     q: 'هل هو مجاني حقاً؟ وما المقابل؟',
     a: 'مجاني بالكامل بترخيص MIT. لا توجد باقات مدفوعة أو علامات مائية أو حدود للتصدير أو عناصر مقفلة. النسخة المستضافة هي نفس الشيفرة التي يمكنك استضافتها بنفسك.',
@@ -219,7 +219,7 @@ export function Landing() {
       <header className="sticky top-0 z-50 border-b border-black/5 bg-white/80 backdrop-blur-lg">
         <nav className="mx-auto max-w-7xl px-4 sm:px-6 h-16 flex items-center justify-between">
           <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="الصفحة الرئيسية لـ TEa.G3">
-            <شعار size={30} />
+            <Logo size={30} />
           </button>
           <div className="hidden md:flex items-center gap-1 text-sm font-medium text-muted-foreground">
             <a href="#features" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">المميزات</a>
@@ -255,10 +255,10 @@ export function Landing() {
           <div className="absolute -bottom-40 -left-32 h-96 w-96 rounded-full blur-3xl opacity-20 bg-[#00C4CC] animate-float" style={{ animationDelay: '2s' }} aria-hidden="true" />
           <div className="relative mx-auto max-w-7xl px-4 sm:px-6 pt-16 pb-20 sm:pt-24 sm:pb-28 text-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-1.5 text-xs font-semibold text-[#7D2AE8] shadow-sm animate-fade-up">
-              <Sparkles size={14} /> مجاني دائماً · لا يتطلب حساباً · ترخيص MIT · قابل للاستضافة الذاتية
+              <Sparkles size={14} /> Free forever · No account needed · MIT licensed · Self-hostable
             </div>
             <h1 className="mt-6 text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.05] animate-fade-up delay-100">
-              صمّم كل ما تتخيله.
+              Design anything.
               <br />
               <span className="text-brand-gradient">مجاني للجميع.</span>
             </h1>
@@ -267,11 +267,11 @@ export function Landing() {
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 animate-fade-up delay-300">
               <Button size="lg" className="btn-brand-gradient rounded-full px-8 text-base h-12 gap-2" onClick={goDashboard}>
-                ابدأ التصميم — it&apos;s free <ArrowRight size={18} />
+                Start designing — it&apos;s free <ArrowRight size={18} />
               </Button>
               <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer" className="w-full sm:w-auto">
                 <Button size="lg" variant="outline" className="rounded-full px-8 text-base h-12 gap-2 w-full sm:w-auto">
-                  <Github size={18} /> أضف نجمة للمشروع على GitHub
+                  <Github size={18} /> Star on GitHub
                 </Button>
               </a>
             </div>
@@ -312,11 +312,11 @@ export function Landing() {
           <div className="text-center">
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
               What the paid tools charge for,{' '}
-              <span className="text-brand-gradient">TEa.G3 gives away</span>
+              <span className="text-brand-gradient">Canvix gives away</span>
             </h2>
             <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
               The features that cost the most elsewhere — collaboration seats, AI credits, team
-              workspaces — are core parts of TEa.G3, free and open.
+              workspaces — are core parts of Canvix, free and open.
             </p>
           </div>
           <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -335,14 +335,14 @@ export function Landing() {
           </div>
         </section>
 
-        {/* ── المميزات grid ── */}
+        {/* ── Features grid ── */}
         <section id="features" className="bg-[#FAFAFC] border-y border-black/5">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 py-20 sm:py-28">
             <h2 className="text-center text-3xl sm:text-4xl font-extrabold tracking-tight">
-              كل ما تحتاجه لـ <span className="text-brand-gradient">create</span>
+              Everything you need to <span className="text-brand-gradient">create</span>
             </h2>
             <p className="mt-4 text-center text-muted-foreground max-w-2xl mx-auto">
-              A serious editor, not a toy. TEa.G3 packs the features people actually use from
+              A serious editor, not a toy. Canvix packs the features people actually use from
               commercial design tools — minus the price tag.
             </p>
             <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -362,7 +362,7 @@ export function Landing() {
           </div>
         </section>
 
-        {/* ── القوالب ── */}
+        {/* ── Templates ── */}
         <section id="templates" className="py-20 sm:py-28">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="text-center">
@@ -399,45 +399,45 @@ export function Landing() {
             </div>
             <div className="mt-10 text-center">
               <Button variant="outline" className="rounded-full px-6 gap-2" onClick={goDashboard}>
-                تصفّح جميع القوالب الـ366 <ArrowRight size={16} />
+                Browse all 366 templates <ArrowRight size={16} />
               </Button>
             </div>
           </div>
         </section>
 
-        {/* ── الأسئلة الشائعة (v0.26) ── */}
+        {/* ── FAQ (v0.26) ── */}
         <section id="faq" className="bg-[#FAFAFC] border-y border-black/5 py-20 sm:py-28">
           <div className="mx-auto max-w-3xl px-4 sm:px-6">
             <h2 className="text-center text-3xl sm:text-4xl font-extrabold tracking-tight">
-              أسئلة <span className="text-brand-gradient">وأجوبة</span>
+              Questions, <span className="text-brand-gradient">answered</span>
             </h2>
             <div className="mt-10 space-y-3">
-              {الأسئلة الشائعة.map((f, i) => (
+              {FAQ.map((f, i) => (
                 <FaqItem key={f.q} q={f.q} a={f.a} defaultOpen={i === 0} />
               ))}
             </div>
           </div>
         </section>
 
-        {/* ── مفتوح المصدر ── */}
+        {/* ── Open source ── */}
         <section id="opensource" className="mx-auto max-w-7xl px-4 sm:px-6 py-20 sm:py-28">
           <div className="grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-1.5 text-xs font-semibold text-[#7D2AE8] shadow-sm">
-                <Star size={14} /> تطوير مفتوح المصدر
+                <Star size={14} /> Built in the open
               </div>
               <h2 className="mt-5 text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
-                أداة التصميم التي <span className="text-brand-gradient">تكون ملكك</span>
+                The design tool that <span className="text-brand-gradient">belongs to you</span>
               </h2>
               <p className="mt-5 text-muted-foreground leading-relaxed">
-                Commercial design tools lock your creativity behind subscriptions. TEa.G3 is
+                Commercial design tools lock your creativity behind subscriptions. Canvix is
                 different — the code is on GitHub, the license is MIT, and every design you make
                 is exportable at full quality. Self-host it, fork it, improve it.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row gap-3">
                 <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer">
                   <Button size="lg" className="btn-brand-gradient rounded-full px-8 gap-2 h-12 w-full sm:w-auto">
-                    <Github size={18} /> عرض الشيفرة المصدرية
+                    <Github size={18} /> View the source
                   </Button>
                 </a>
                 <Button
@@ -446,7 +446,7 @@ export function Landing() {
                   className="rounded-full px-8 h-12 w-full sm:w-auto"
                   onClick={goDashboard}
                 >
-                  جرّبه الآن
+                  Try it now
                 </Button>
               </div>
             </div>
@@ -460,7 +460,7 @@ export function Landing() {
               </div>
               <div className="font-mono text-xs sm:text-sm leading-relaxed bg-[#17181D] p-5 overflow-x-auto">
                 <div className="text-white/40"># clone &amp; run your own Canva alternative</div>
-                <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">git clone https://github.com/TEaG3/eng-salman</span></div>
+                <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">git clone https://github.com/mir-ashiq/canvix</span></div>
                 <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">cd canvix &amp;&amp; bun install</span></div>
                 <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">bun run db:push &amp;&amp; bun run db:seed</span></div>
                 <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">bun run dev</span></div>
@@ -481,7 +481,7 @@ export function Landing() {
               No signup, no credit card, no watermark. Open the editor and start creating right now.
             </p>
             <Button size="lg" className="btn-brand-gradient rounded-full px-10 text-base h-13 gap-2 mt-8 py-3.5" onClick={goDashboard}>
-              ابدأ التصميم <ArrowRight size={18} />
+              Start designing <ArrowRight size={18} />
             </Button>
           </div>
         </section>
@@ -491,16 +491,16 @@ export function Landing() {
       <footer className="mt-auto border-t border-black/5 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <شعار size={24} />
+            <Logo size={24} />
             <span className="text-sm text-muted-foreground">
-              © 2026 TEa.G3 · MIT License
+              © 2026 Canvix · MIT License
             </span>
           </div>
           <div className="flex items-center gap-5 text-sm text-muted-foreground">
             <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors inline-flex items-center gap-1.5">
               <Github size={15} /> GitHub
             </a>
-            <a href="https://github.com/TEaG3/eng-salman#-ai--development-disclosure" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">AI Disclosure</a>
+            <a href="https://github.com/mir-ashiq/canvix#-ai--development-disclosure" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">AI Disclosure</a>
             <a href="#features" className="hover:text-foreground transition-colors">المميزات</a>
             <a href="#faq" className="hover:text-foreground transition-colors">الأسئلة الشائعة</a>
           </div>

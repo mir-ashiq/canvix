@@ -318,3 +318,63 @@ validation, undo and autosave all ride the unchanged bridge.
   browser regression runs with the agent route mocked to the exact
   stream the fixed loop emits; the live canvix.app run after deploy
   is the real-provider check.
+
+---
+
+# v0.32.3 — plan-first, geometry ground truth, conversation memory
+
+**The ask:** the agent should know the canvas geometry (where it
+starts and ends), know every tool/element on it, plan the layout
+geometrically FIRST, then build, then check what it actually made
+(overlap etc.) before stopping — and it should remember the
+conversation it is in.
+
+The survey found most of the pipeline already existed (per-element
+`@(x,y) WxH` boxes, overlaps/off-canvas detection, the full TOOLS +
+fonts vocabulary, `plan_layout` bands, brief/audit/vision
+verify-then-stop). Three gaps were real and are now closed:
+
+## 1. The conversation history never reached the loop
+
+`history` was wired only into the one-shot discuss/explain answers;
+every create/edit/review run started blind to the chat it arrived
+in. `LoopDeps.history` (route-sanitized: last 12 turns × 800 chars)
+now enters the model conversation verbatim —
+`[system, ...history, request]` — and **compaction keeps the whole
+head** (system + history + request); only the long tool-observation
+middle is ever folded. "Make another one like the last one" keeps
+meaning.
+
+## 2. Geometry was implicit, not stated
+
+A **CANVAS GEOMETRY** ground-truth block now leads the system prompt
+with the numbers computed for the page: bounds, origin, y-down, the
+6% safe area (`x 65..1015` for a 1080px page), how to read the
+element boxes (`@(x,y) WxH` edges are exact), and that the page
+background changes via `set_background`, never full-bleed cover
+rects.
+
+## 3. Plan-first was a prompt request, not a rule
+
+A create/improve run whose first element write arrives before any
+`plan_layout` is now redirected ONCE (`PLAN FIRST — … bands with
+y + height that tile the safe area …`): geometry first, then colors
+and content inside the bands. `set_background` stays exempt (the
+LAYOUT PLANNING guidance pairs it with the plan); a run that already
+planned is never bounced; after one bounce the model may proceed —
+guidance, never a hard block. Edit runs are exempt entirely.
+
+## Verify-then-stop (already structural — unchanged)
+
+Brief contract → quality audit (contrast/overlap/overflow/
+off-canvas, ONE fix round) → grounded vision critique → honest
+`INCOMPLETE` framing for empty create runs. The guards were not
+touched.
+
+## Evidence
+
+1,724/1,724 unit (6 new regressions: history-in-first-call verbatim,
+compaction-keeps-the-head, the geometry block's computed numbers, the
+plan-first bounce + redirect, planned-runs-never-bounced,
+edit-runs-exempt). 14 scripted create-run tests updated to encode
+plan-first (their models now plan before building).

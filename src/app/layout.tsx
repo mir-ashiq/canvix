@@ -36,9 +36,9 @@ export const metadata: Metadata = {
     "free design tool",
     "self hosted design tool",
   ],
-  authors: [{ name: "Ashiq Hussain Mir" }],
+  authors: [{ name: "المطور العراقي TEa.G3" }],
   alternates: { canonical: "/" },
-  icons: { icon: "/canvix.svg" },
+  icons: { icon: "/tea-g3.svg" },
   openGraph: {
     title: "TEa.G3 — تطوير المطور العراقي",
     description:

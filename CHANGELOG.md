@@ -3,6 +3,33 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+### Fixed — v0.32.5: the P0 plan-validator regression (server-computed geometry)
+
+- **The failure:** a valid creative brief ("Design a bold Instagram
+  post for a coffee launch") died at three rejected plan_layout
+  calls with ZERO elements — every rejection cost a strike, and the
+  model was asked to redo the gap arithmetic it could not do.
+- **The server computes geometry now** (`plan-repair.ts`, pure):
+  valid plans accepted unchanged; repairable plans AUTO-REPAIRED
+  (heights, order, contents kept; positions/gaps computed
+  deterministically and disclosed); infeasible plans rejected with
+  the exact math (never fabricated). The model never re-attempts
+  arithmetic.
+- **Plan rejections are no longer strikes** — a separate bounded
+  budget (3 consecutive) stops honestly with the infeasibility math.
+  Genuine failures (invalid JSON, unknown tools, other tool errors)
+  still strike; destructive confirmation and all resource guards
+  unchanged.
+- **Zero-action runs skip visual critique** — both the loop's
+  done-time vision round and the client's Phase-7 pass (a dead run
+  used to critique the EMPTY canvas).
+- **A failure is never a green check** (`outcome.ts`): disclosed
+  failures render with an amber alert; create/improve turns that
+  applied nothing say so explicitly.
+- **Agent telemetry:** `[agent:telemetry]` JSON lines for plan
+  rejections/repairs and guard-exit outcomes (geometry and outcomes
+  only — no credentials).
+
 ### Added — v0.32.4: deterministic design correctness
 
 - **Hard plan validation:** plan_layout REJECTS invalid geometry

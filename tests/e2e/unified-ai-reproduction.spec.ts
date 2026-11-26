@@ -208,3 +208,167 @@ test.describe('Unified Canvix AI reproduction (v0.32.2 fix)', () => {
     await page.screenshot({ path: 'test-results/repro-edited.png', fullPage: false })
   })
 })
+
+/** v0.32.5 · the P0 production failure, browser-level:
+ *  "Design a bold Instagram post for a coffee launch" on an empty
+ *  canvas → three rejected plan_layout calls (<40px gaps) →
+ *  "Stopped after 3 consecutive invalid tool calls" → ZERO elements
+ *  → the client then critiqued the EMPTY canvas and the failure sat
+ *  next to a green verification check.
+ *
+ *  The unit harness pins the SERVER side (auto-repair, no strikes,
+ *  bounded infeasibility). This spec pins the CLIENT side: a failed
+ *  zero-action create run (a) never calls the vision route and
+ *  (b) shows the amber failure status, never a green check. */
+function failedRunScript(): string {
+  const ev = (e: unknown) => `data: ${JSON.stringify(e)}\n\n`
+  const events: unknown[] = [
+    { v: V, type: 'start', runId: 'mock-p0-run' },
+    { v: V, type: 'mode', mode: 'create', reason: 'classified as create' },
+    { v: V, type: 'step', index: 0, thought: 'planning the coffee post', tool: 'plan_layout' },
+    { v: V, type: 'observation', stepIndex: 0, message: 'ERROR: sections "headline" and "subline" need ≥40px gap; found 20px.' },
+    { v: V, type: 'step', index: 1, thought: 'retrying the plan', tool: 'plan_layout' },
+    { v: V, type: 'observation', stepIndex: 1, message: 'ERROR: sections need ≥40px gap; found 10px.' },
+    { v: V, type: 'step', index: 2, thought: 'retrying again', tool: 'plan_layout' },
+    { v: V, type: 'observation', stepIndex: 2, message: 'ERROR: sections need ≥40px gap; found 0px.' },
+    {
+      v: V, type: 'done', steps: 3, toolCalls: 0,
+      summary: 'INCOMPLETE — no design changes were made. Stopped after 3 infeasible plans — the exact math is in the errors above; ask the user for a smaller composition or fewer sections.',
+      verification: 'NOT completed — the run ended without applying any design change; nothing was created.',
+    },
+  ]
+  return events.map(ev).join('')
+}
+
+/** the follow-up turn in the SAME conversation: an edit-run script
+ *  that changes the headline — pins that a follow-up request
+ *  reaches the route verbatim WITH the prior conversation. */
+function followUpScript(): string {
+  const ev = (e: unknown) => `data: ${JSON.stringify(e)}\n\n`
+  const events: unknown[] = [
+    { v: V, type: 'start', runId: 'mock-followup-run' },
+    { v: V, type: 'mode', mode: 'edit', reason: 'classified as edit' },
+    { v: V, type: 'step', index: 0, thought: 'making the headline the user asked for', tool: 'update_elements' },
+    {
+      v: V, type: 'action', stepIndex: 0, callId: 'f0', risk: 'write', tool: 'update_elements',
+      actions: [{ type: 'updateElements', ids: ['<headline-id>'], patch: { text: 'CREATE IT YOURSELF' } }],
+    },
+    { v: V, type: 'observation', stepIndex: 0, message: 'Headline updated.' },
+    { v: V, type: 'done', steps: 1, toolCalls: 1, summary: 'Headline changed as requested.' },
+  ]
+  return events.map(ev).join('')
+}
+
+test.describe('v0.32.5 · the P0 regression — zero-action failures and follow-ups', () => {
+  test('a failed zero-action create run never critiques the empty canvas and shows the honest failure status', async ({ page }) => {
+    await register(page, 'p0')
+    const designId = await createEmptyDesign(page, 'P0 regression canvas')
+    await openEditor(page, designId)
+
+    // order matters: the agent glob also matches the vision URL, and
+    // the LAST registered handler wins — the vision counter must be
+    // registered after the agent handler to really intercept.
+    await page.route('**/api/ai/agent**', async (route: Route) => {
+      const req = route.request()
+      if (req.method() === 'POST' && (req.url().includes('bridge=') || req.url().includes('/vision'))) {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' },
+        body: failedRunScript(),
+      })
+    })
+    let visionCalls = 0
+    await page.route('**/api/ai/agent/vision**', async (route: Route) => {
+      visionCalls += 1
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ findings: [] }) })
+    })
+
+    await page.getByRole('button', { name: 'Apps', exact: true }).click()
+    await page.getByText('Canvix AI', { exact: true }).first().click()
+    await page.getByPlaceholder('Describe what to design or change…').fill(PROMPT)
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+
+    // the honest amber failure status — the disclosed failure
+    // verification IS the status line (never a green check)
+    await expect(page.getByText('NOT completed — the run ended without applying any design change; nothing was created.')).toBeVisible({ timeout: 10_000 })
+    // the empty canvas was never critiqued
+    await page.waitForTimeout(2500)
+    expect(visionCalls).toBe(0)
+    // the document is still empty — no partial residue
+    const still = await doc(page, designId)
+    expect(still.pages[0].elements).toHaveLength(0)
+
+    await page.screenshot({ path: 'test-results/p0-honest-failure.png', fullPage: false })
+  })
+
+  test('the coffee prompt then "Create by yourself" as a follow-up in the same conversation', async ({ page }) => {
+    await register(page, 'followup')
+    const designId = await createEmptyDesign(page, 'Follow-up conversation canvas')
+    await openEditor(page, designId)
+
+    const captured: Record<string, unknown>[] = []
+    let run = 0
+    await page.route('**/api/ai/agent**', async (route: Route) => {
+      const req = route.request()
+      // bridge acks AND the Phase-7 vision critique also match this
+      // glob — neither is an agent run (the vision call has no
+      // `message`; capturing it made captured[1] a vision body)
+      if (req.method() === 'POST' && (req.url().includes('bridge=') || req.url().includes('/vision'))) {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+        return
+      }
+      run += 1
+      captured.push(req.postDataJSON() as Record<string, unknown>)
+      // run 1: the coffee create script; run 2+: the follow-up edit.
+      // the edit script targets the headline the create run added —
+      // patch the real element id into the scripted action.
+      const body = run === 1
+        ? sseScript()
+        : followUpScript().replace('<headline-id>', String((captured[run - 1] as { design?: { elements?: { id?: string; text?: string }[] } }).design?.elements?.find((e) => e.text === 'ARTISAN ROAST')?.id ?? ''))
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' },
+        body,
+      })
+    })
+
+    await page.getByRole('button', { name: 'Apps', exact: true }).click()
+    await page.getByText('Canvix AI', { exact: true }).first().click()
+
+    // turn 1: the production coffee prompt
+    await page.getByPlaceholder('Describe what to design or change…').fill(PROMPT)
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+    await waitForDoc(
+      page,
+      designId,
+      (d) => (d.pages[0]?.elements ?? []).some((e) => (e as { text?: string }).text === 'ARTISAN ROAST'),
+      'the first-run headline',
+    )
+
+    // turn 2: the production follow-up, in the SAME conversation
+    await page.getByPlaceholder('Describe what to design or change…').fill('Create by yourself')
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+
+    // the follow-up request reached the route VERBATIM, with the
+    // conversation history riding along
+    await expect
+      .poll(async () => captured.length, { timeout: 10_000 })
+      .toBeGreaterThanOrEqual(2)
+    expect((captured[1] as { message?: string }).message).toBe('Create by yourself')
+    const history = (captured[1] as { history?: { role: string; content: string }[] }).history ?? []
+    expect(history.some((h) => h.content.includes('coffee launch'))).toBe(true)
+
+    // the follow-up's edit really landed on the AI-created headline
+    await waitForDoc(
+      page,
+      designId,
+      (d) => (d.pages[0]?.elements ?? []).some((e) => (e as { text?: string }).text === 'CREATE IT YOURSELF'),
+      'the follow-up headline change',
+    )
+
+    await page.screenshot({ path: 'test-results/follow-up-conversation.png', fullPage: false })
+  })
+})

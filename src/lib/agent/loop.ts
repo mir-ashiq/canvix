@@ -29,6 +29,20 @@
 // ─────────────────────────────────────────────────────────────
 
 import { AGENT_GUARDS, AGENT_PROTOCOL_VERSION, parseAgentTurn, type AgentEvent, type AgentMode, type AgentTurn } from './protocol'
+
+/** v0.32.5: structured, credential-free agent telemetry — the failed
+ *  constraint, the recovery attempts and the final outcome, as one
+ *  JSON line the server logs can filter (`[agent:telemetry]`).
+ *  Server-side only (this module runs on the route, never shipped to
+ *  the browser); carries geometry and outcomes only — never prompts,
+ *  keys or provider data. */
+export function telemetry(event: Record<string, unknown>): void {
+  try {
+    console.warn(`[agent:telemetry] ${JSON.stringify({ at: new Date().toISOString(), ...event })}`)
+  } catch {
+    /* logging must never break the loop */
+  }
+}
 import { AGENT_TOOLS, AGENT_TOOL_MAP, fontFamilies, type ToolContext, type SanitizeResult, type AgentTool } from './tools'
 import { serializeDesignContext, contextValidIds, type AgentDesignCtx } from './context'
 import { MODE_PROMPTS, MODE_TOOL_RISK } from './router'
@@ -315,6 +329,12 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
    *  __planLayout action) — passed to the quality audit so it can
    *  check plan adherence (empty planned sections). */
   const planBands: { name: string; y: number; h: number }[] = []
+  /** v0.32.5: consecutive infeasible plan_layout rejections. These
+   *  never touch `strikes` (recoverable geometric constraints, not
+   *  model failures) but they are BOUNDED — a model that cannot
+   *  produce a fitting plan stops honestly with the exact math
+   *  instead of retrying forever. */
+  let planRejections = 0
 
   const toolCtx: ToolContext = {
     validIds: contextValidIds(design),
@@ -387,6 +407,15 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
     return { summary: base, verification }
   }
 
+  // v0.32.5 telemetry: guard exits log their final outcome — the
+  // failed constraint (in the plan telemetry), the recovery attempts
+  // (rejections/repairs) and how the run actually ended.
+  const guardExitWithTelemetry = async (base: string, reason: string) => {
+    const exit = await guardExit(base)
+    telemetry({ outcome: 'guard-exit', reason, steps, toolCalls, designChanges, planRejections })
+    return exit
+  }
+
   while (true) {
     // ── task-driven stops ───────────────────────────────────
     if (signal?.aborted) {
@@ -411,11 +440,11 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         message: `Stopped after ${AGENT_GUARDS.strikes} consecutive invalid tool calls — the error under each step explains what to fix; try rephrasing the request.`,
         code: 'STRIKES',
       })
-      const exit = await guardExit(summary || 'Stopped after repeated invalid calls.')
+      const exit = await guardExitWithTelemetry(summary || 'Stopped after repeated invalid calls.', 'strikes')
       return { summary: exit.summary, steps, toolCalls, verification: exit.verification }
     }
     if (Date.now() - lastProgressAt > AGENT_GUARDS.idleMs) {
-      const exit = await guardExit('The run stopped making progress and was wrapped up. Everything applied so far is kept — send a follow-up message to continue.')
+      const exit = await guardExitWithTelemetry('The run stopped making progress and was wrapped up. Everything applied so far is kept — send a follow-up message to continue.', 'no-progress')
       emit({
         v: AGENT_PROTOCOL_VERSION,
         type: 'done',
@@ -448,7 +477,7 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         message: `The AI provider failed: ${err instanceof Error ? err.message.slice(0, 200) : 'unknown error'}. Applied work is kept — retry to continue.`,
         code: 'PROVIDER',
       })
-      const exit = await guardExit(summary)
+      const exit = await guardExitWithTelemetry(summary, 'provider')
       return { summary: exit.summary, steps, toolCalls, verification: exit.verification }
     }
 
@@ -563,7 +592,10 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
       // never influence the design. Bounded: one critique now, one
       // correction round, one verification re-capture. A run whose
       // final capture still shows P0 defects does NOT claim success.
-      if ((mode === 'create' || mode === 'improve') && deps.critique && visionCritiques < 2) {
+      // v0.32.5: a run that applied NOTHING skips the critique —
+      // capturing an empty canvas produced "vision model returned no
+      // parseable critique" noise on the P0 run and verifies nothing.
+      if ((mode === 'create' || mode === 'improve') && designChanges > 0 && deps.critique && visionCritiques < 2) {
         const shot = deps.captureCanvas ? await deps.captureCanvas() : null
         if (!shot) {
           // fail-closed: no capture → visual quality is NOT verified,
@@ -685,12 +717,16 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
     // an observation. No apply/ack round trip: a plan changes nothing.
     if (toolName === 'plan_layout' && result.ok) {
       planHasRun = true
+      // v0.32.5: a recorded plan (possibly server-repaired) resets the
+      // infeasibility budget — the guard counts CONSECUTIVE rejections
+      planRejections = 0
       const planActions = (result.actions as { type: string; lines?: string[]; bands?: { name: string; y: number; h: number }[] }[])
       const planLines = planActions.flatMap((a) => (a && a.type === '__planLayout' && Array.isArray(a.lines) ? a.lines : []))
       // v0.32.4: keep the structured bands for the quality audit's
       // plan-adherence check (empty planned sections)
       planBands.length = 0
       planBands.push(...planActions.flatMap((a) => (a && a.type === '__planLayout' && Array.isArray(a.bands) ? a.bands : [])))
+      telemetry({ tool: 'plan_layout', outcome: 'recorded', repaired: (result.observation ?? '').includes('AUTO-REPAIRED'), bands: planBands.length })
       const lines = planLines.length ? planLines : ['(model emitted an empty plan)']
       emit({ v: AGENT_PROTOCOL_VERSION, type: 'plan', steps: lines })
       emit({ v: AGENT_PROTOCOL_VERSION, type: 'observation', stepIndex: steps, message: result.observation })
@@ -745,7 +781,7 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
       if (hash === lastCallHash) {
         cycleCount += 1
         if (cycleCount >= AGENT_GUARDS.cycleRepeat - 1) {
-          const exit = await guardExit('The run repeated the same operation without effect and was wrapped up. Applied work is kept — describe the next change to continue.')
+          const exit = await guardExitWithTelemetry('The run repeated the same operation without effect and was wrapped up. Applied work is kept — describe the next change to continue.', 'cycle-repeat')
           emit({
             v: AGENT_PROTOCOL_VERSION,
             type: 'done',
@@ -763,6 +799,29 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
     }
 
     if (!result.ok) {
+      // v0.32.5 · P0 REGRESSION FIX: plan_layout rejections are
+      // RECOVERABLE geometric constraints, not model failures. The
+      // P0 production run died at "Stopped after 3 consecutive
+      // invalid tool calls" with ZERO elements because every rejected
+      // plan cost a strike. Two changes:
+      //   · repairable geometry no longer rejects at all — the
+      //     server-side solver auto-repairs it (plan-repair.ts), so
+      //     the loop never sees those cases;
+      //   · what still rejects (infeasible heights, malformed
+      //     sections) counts against a SEPARATE bounded budget —
+      //     never the shared strike counter — and stops honestly
+      //     with the exact math after PLAN_REJECTION_BUDGET tries.
+      if (toolName === 'plan_layout') {
+        planRejections += 1
+        telemetry({ tool: 'plan_layout', outcome: 'rejected', attempt: planRejections, detail: String((result as { error?: string }).error ?? '').slice(0, 300) })
+        if (planRejections >= AGENT_GUARDS.planRejections) {
+          const exit = await guardExitWithTelemetry(`Stopped after ${planRejections} infeasible plans — the exact math is in the errors above; ask the user for a smaller composition or fewer sections.`, 'plan-infeasible')
+          emit({ v: AGENT_PROTOCOL_VERSION, type: 'done', summary: exit.summary, steps, toolCalls, verification: exit.verification })
+          return { summary: exit.summary, steps, toolCalls, verification: exit.verification }
+        }
+        messages.push({ role: 'user', content: observationFor(toolName, result, false) })
+        continue
+      }
       // free correction: rejected calls cost only a strike
       strikes += 1
       messages.push({ role: 'user', content: observationFor(toolName, result, false) })

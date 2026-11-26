@@ -16,6 +16,7 @@
 
 import { FONTS } from '@/lib/fonts/catalog'
 import type { ToolRisk } from './protocol'
+import { repairPlanBands } from './plan-repair'
 
 export interface AgentTool {
   name: string
@@ -174,71 +175,68 @@ export const AGENT_TOOLS: AgentTool[] = [
       if (!Array.isArray(sectionsRaw) || sectionsRaw.length === 0) {
         return { ok: false, error: '"sections" must be a non-empty array: [{name, y, height, contains}].' }
       }
-      const lines: string[] = []
       const H = ctx.height
+      // parse the requested sections (name + numeric y/height + the
+      // model's own `contains` notes). Malformed entries are hard
+      // errors — GEOMETRY, however, is no longer the model's job.
+      const parsed: { name: string; y: number; h: number; contains: string }[] = []
       for (const s of sectionsRaw.slice(0, 12)) {
         if (!s || typeof s !== 'object') continue
         const sec = s as Record<string, unknown>
         const name = typeof sec.name === 'string' ? sec.name.trim().slice(0, 40) : ''
-        const y = num(sec as Record<string, unknown>, 'y')
-        const height = num(sec as Record<string, unknown>, 'height')
+        const y = num(sec, 'y')
+        const height = num(sec, 'height')
         const contains = typeof sec.contains === 'string' ? sec.contains.trim().slice(0, 80) : ''
         if (!name) return { ok: false, error: 'Each section needs a "name".' }
         if (y === null || height === null || height <= 0) {
           return { ok: false, error: `Section "${name}" needs numeric y and height (> 0).` }
         }
-        lines.push(`${name}: y=${Math.round(y)} h=${Math.round(height)}${contains ? ` — ${contains}` : ''}`)
+        parsed.push({ name, y, h: Math.round(height), contains })
       }
-      if (!lines.length) return { ok: false, error: '"sections" contained no usable entries.' }
-      const bg = hex(args, 'background')
-      if (bg) lines.unshift(`page background ${bg}`)
-      const notes = typeof args.notes === 'string' ? args.notes.trim().slice(0, 200) : ''
-      if (notes) lines.push(`notes: ${notes}`)
-      // v0.32.4: HARD geometry validation — the plan protocol
-      // promises ≥40px gaps and bands inside the page; the plan is
-      // now REJECTED when it violates either (the model retries
-      // with a corrected plan; sanitize errors are retryable, not
-      // strikes). Safe-area intrusion stays a WARNING (content can
-      // sit inside bands that start slightly high; the audit flags
-      // actual text that hugs the edge). This closes the old `- 24`
-      // slack that let sections overlap by up to 24px.
-      const bands = sectionsRaw
-        .filter((s) => s && typeof s === 'object')
-        .map((s) => s as Record<string, unknown>)
-        .map((s) => ({
-          name: typeof s.name === 'string' ? s.name.trim().slice(0, 40) : '',
-          y: num(s, 'y') ?? 0,
-          h: num(s, 'height') ?? 0,
-        }))
-        .filter((b) => b.h > 0)
-      const sorted = [...bands].sort((a, b) => a.y - b.y)
-      const problems: string[] = []
-      const warnings: string[] = []
-      if (sorted.length) {
-        if (sorted[0].y < 0) problems.push(`section 1 starts at y=${Math.round(sorted[0].y)} — negative y`)
-        const last = sorted[sorted.length - 1]
-        if (last.y + last.h > H) problems.push(`the last section ends at y=${Math.round(last.y + last.h)} — beyond the ${H}px page`)
-        for (let i = 1; i < sorted.length; i++) {
-          const gap = sorted[i].y - (sorted[i - 1].y + sorted[i - 1].h)
-          if (gap < 40) {
-            problems.push(`sections "${sorted[i - 1].name}" and "${sorted[i].name}" need ≥40px gap; found ${Math.round(gap)}px at y=${Math.round(sorted[i].y)}`)
-          }
-        }
-        const safeTop = Math.round(H * 0.06)
-        const safeBottom = Math.round(H * 0.94)
-        if (sorted[0].y < safeTop) warnings.push(`the first band starts at y=${Math.round(sorted[0].y)}, inside the 6% top margin (${safeTop}px) — prefer starting at y=${safeTop}`)
-        if (last.y + last.h > safeBottom) warnings.push(`the last band ends at y=${Math.round(last.y + last.h)}, inside the 6% bottom margin (ends ${safeBottom}px) — prefer ending by y=${safeBottom}`)
-      }
-      if (problems.length) {
+      if (!parsed.length) return { ok: false, error: '"sections" contained no usable entries.' }
+
+      // v0.32.5 · THE P0 REGRESSION FIX: the v0.32.4 validator
+      // rejected bad geometry and told the model to redo the gap
+      // arithmetic. A model that could NOT do that arithmetic failed
+      // plan_layout three times in a row and the run died with ZERO
+      // elements — on the panel's own coffee-launch suggestion.
+      // Forcing the model to compute geometry was the bug: the
+      // SERVER computes it now (plan-repair.ts, pure + deterministic).
+      //   · valid plan          → accepted unchanged
+      //   · invalid but fitting → AUTO-REPAIRED y-positions and gaps
+      //                           (heights, order, contents kept) and
+      //                           the repair is DISCLOSED — the model
+      //                           builds from the repaired bands
+      //   · cannot fit          → honest infeasibility with the exact
+      //                           math (the model shrinks or drops
+      //                           sections — never a fabrication)
+      const repair = repairPlanBands(parsed.map((p) => ({ name: p.name, y: p.y, h: p.h })), H)
+      if (!repair.ok) {
         return {
           ok: false,
-          error: `Invalid plan: ${problems.join('; ')}. Revise plan_layout so the bands tile the page top-to-bottom, each fully inside 0..${H} with ≥40px gaps between sections.`,
+          error: `${repair.infeasible} Resend plan_layout with smaller section heights (keep the names and order).`,
         }
       }
-      const observation = `PLAN RECORDED (${lines.length} lines):\n${lines.join('\n')}${warnings.length ? `\nPLAN WARNINGS: ${warnings.join('; ')} — revise the bands before building.` : '\nBands verified: non-overlapping, ≥40px gaps, inside the page.'}`
+
+      // the plan lines are the REPAIRED geometry — the authoritative
+      // bands the model must build inside (no model arithmetic).
+      const lines: string[] = []
+      const bg = hex(args, 'background')
+      if (bg) lines.push(`page background ${bg}`)
+      for (const b of repair.bands) {
+        const c = parsed.find((p) => p.name === b.name)
+        lines.push(`${b.name}: y=${Math.round(b.y)} h=${Math.round(b.h)}${c?.contains ? ` — ${c.contains}` : ''}`)
+      }
+      const notes = typeof args.notes === 'string' ? args.notes.trim().slice(0, 200) : ''
+      if (notes) lines.push(`notes: ${notes}`)
+
+      const repairedNote = repair.repairs.length
+        ? `PLAN AUTO-REPAIRED (your heights, order and contents were kept; the SERVER computed valid positions): ${repair.repairs.join('; ')}. Build inside these exact bands — do not recompute them.`
+        : 'Bands verified: non-overlapping, ≥40px gaps, inside the safe area. Build inside these exact bands.'
+      const observation = `PLAN RECORDED (${lines.length} lines):\n${lines.join('\n')}\n${repairedNote}`
       return {
         ok: true,
-        actions: [{ type: '__planLayout', lines, bands }],
+        actions: [{ type: '__planLayout', lines, bands: repair.bands }],
         observation,
       }
     },

@@ -473,3 +473,91 @@ margin advisory with shallow-bleed tolerance, empty-section
 adherence, wrap-up residue disclosure, list_fonts search/cap/no-
 match, ledger rendering + absence, hard validator boundaries incl.
 the 39/40px edge and beyond-page rejection). Live re-test below.
+
+---
+
+# v0.32.5 — the P0 regression fix: the server computes geometry
+
+**The production failure (reported against `4d5fa3a`):** "Design a
+bold Instagram post for a coffee launch" on an empty canvas →
+CREATE classified correctly → three `plan_layout` calls → all three
+rejected for <40px gaps → "Stopped after 3 consecutive invalid tool
+calls" → **0 elements**. Retrying with "Create by yourself" failed
+the same way, and the client then critiqued the EMPTY canvas
+("The vision model returned no parseable critique").
+
+**Root cause — confirmed in source, not just reported:**
+
+1. `loop.ts`: every rejected sanitize (including plan geometry)
+   executed `strikes += 1` — three repairable geometry mistakes were
+   fatal. The v0.32.4 milestone report described rejections as
+   "retryable, not strikes"; the merged code contradicted the
+   report. The report was wrong about the merged behavior.
+2. `AssistantApp.tsx`: Phase-7 visual critique ran for ANY
+   create/improve turn with a summary — including zero-action
+   failures — so a dead run critiqued a blank canvas.
+3. The failure turn rendered next to an unconditional emerald
+   verification check.
+
+## The fix: stop asking the model to do arithmetic
+
+**`src/lib/agent/plan-repair.ts` (new, pure):** a deterministic
+layout solver. Given the page height, the 6% margins and the
+requested sections it computes valid positions and gaps:
+
+- **valid plan** → accepted unchanged (zero repairs);
+- **repairable** (heights fit; positions/gaps don't) →
+  **AUTO-REPAIRED**: heights, order and contents kept, y-positions
+  and gaps computed server-side, the repair DISCLOSED in the
+  observation ("your heights, order and contents were kept; the
+  SERVER computed valid positions … Build inside these exact bands —
+  do not recompute them");
+- **infeasible** (content taller than the safe area) → rejected with
+  the exact math ("1200px of content, safe area 950px … smallest
+  fitting layout needs ≤316px per section") — never a fabricated
+  plan.
+
+**Loop:** `plan_layout` rejections are no longer strikes. They count
+against a separate bounded budget (`AGENT_GUARDS.planRejections`,
+3 CONSECUTIVE — a recorded plan resets it); exceeding it stops
+honestly with the infeasibility math. Invalid JSON, unknown tools and
+other tool errors still strike exactly as before; destructive
+confirmation, cycle and idle guards untouched.
+
+**Vision gates:** the loop's done-time vision round AND the client's
+Phase-7 critique both skip when the run applied nothing — there is
+nothing to verify visually on an unchanged canvas.
+
+**Honest outcome UI (`src/lib/agent/outcome.ts`, new):** `turnOutcome()`
+classifies a finished turn (failure markers; create/improve turns
+that applied nothing). A failure renders with an amber
+ShieldAlert and, when there is no verification string, an explicit
+"Run did not produce any design changes." — never the emerald check.
+
+**Telemetry:** `[agent:telemetry]` JSON lines log the plan lifecycle
+(rejected attempt + constraint, recorded/repaired outcome), and
+guard exits log their reason, steps, tool calls and design changes —
+geometry and outcomes only, never credentials.
+
+## Test evidence
+
+Unit **1,740/1,740** (+7): the exact production failure (three
+bad-geometry plans in a row → all auto-repaired → the build
+proceeds — OLD code dies at 3 strikes with 0 elements); three
+consecutive INFEASIBLE plans stop honestly bounded; a repaired plan
+flows into real element creation with repaired bands reaching the
+audit; 39px gap repaired / 40px accepted unchanged; five sections on
+1080×1080 via calculated spacing; 1080×1350 and 1080×1920; infeasible
+on both; honest outcome classification. E2E +2: a failed zero-action
+create run never calls the vision route and shows the amber failure
+status; the coffee prompt then "Create by yourself" as a follow-up
+in the same conversation reaches the route verbatim with history,
+and its edit lands on the AI-created headline.
+
+## Disclosed limitation
+
+The plan solver covers the vertical band layout the planner speaks
+today (page height, margins, per-section y/h). It does not yet solve
+horizontal multi-column placement inside a band — the model still
+places cards within a band (guarded by the audit's overlap and
+duplicate checks).

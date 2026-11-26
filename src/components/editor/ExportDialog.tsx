@@ -1,15 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Download, Loader2, FileImage, FileType2, FileCode2, Film, ImagePlay, Presentation } from 'lucide-react'
+import { تنزيل, Loader2, FileImage, FileType2, FileCode2, Film, ImagePlay, Presentation } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { captureStage, canvasBridge } from './canvas/canvas-bridge'
 import { exportDesignToSVGs, downloadSVG } from '@/lib/svg-export'
 import { collectPluginElements, primePluginRenders } from '@/lib/plugins/renderer-cache'
 import {
-  chooseVideoExportEngine,
-  computeExportSize,
-  detectVideoFormat,
+  chooseVideoتصديرEngine,
+  computeتصديرSize,
+  detectVideoالصيغة,
   detectWebCodecsVideoSupport,
   downloadVideo,
   buildTimeline,
@@ -18,7 +18,7 @@ import {
   pagesHaveAutoplayAudio,
   pagesHaveSfxCues,
   pagesHaveAutoplayVideo,
-  type VideoExportEngineDecision,
+  type VideoتصديرEngineDecision,
 } from '@/lib/video-export'
 import { planGifFrames, selectGifPages, type GifPageRange } from '@/lib/gif-plan'
 import { WEBP_QUALITY, assertWebpDataUrl, canvasEncodesWebp } from '@/lib/webp-plan'
@@ -39,7 +39,7 @@ function sanitizeFilename(name: string): string {
   return (name || 'canvix-design').trim().toLowerCase().replace(/[^a-z0-9-_ ]/g, '').replace(/\s+/g, '-') || 'canvix-design'
 }
 
-function triggerDownload(url: string, filename: string) {
+function triggerتنزيل(url: string, filename: string) {
   const a = document.createElement('a')
   a.href = url
   a.download = filename
@@ -80,15 +80,15 @@ const GIF_FPSES = [
   { id: 20, label: '20 fps', hint: 'Smooth' },
 ] as const
 
-type FormatId = (typeof FORMATS)[number]['id']
+type الصيغةId = (typeof FORMATS)[number]['id']
 
-export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+export function تصديرDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const name = useEditorStore((s) => s.designName)
   const pages = useEditorStore((s) => s.pages)
   const setCurrentPage = useEditorStore((s) => s.setCurrentPage)
   const currentPage = useEditorStore((s) => s.currentPage)
 
-  const [format, setFormat] = useState<FormatId>('png')
+  const [format, setالصيغة] = useState<الصيغةId>('png')
   const [scale, setScale] = useState(2)
   const [allPages, setAllPages] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -102,22 +102,22 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const [gifRangeMode, setGifRangeMode] = useState<'current' | 'all' | 'range'>('all')
   const [gifFrom, setGifFrom] = useState(1)
   const [gifTo, setGifTo] = useState(pages.length)
-  const videoFormat = detectVideoFormat()
+  const videoالصيغة = detectVideoالصيغة()
   const videoDuration = estimateVideoDuration(pages)
   // v0.15 R2: which engine will exportVideo use for THIS design?
   // (audio designs keep MediaRecorder; silent designs get WebCodecs)
-  const [engine, setEngine] = useState<VideoExportEngineDecision | null>(null)
+  const [engine, setEngine] = useState<VideoتصديرEngineDecision | null>(null)
   useEffect(() => {
     let live = true
     void (async () => {
-      const { width, height } = computeExportSize(
+      const { width, height } = computeتصديرSize(
         canvasBridge.pageWidth || 1080,
         canvasBridge.pageHeight || 1080,
         scale === 3 ? 1920 : scale === 2 ? 1440 : 960,
       )
       const wc = await detectWebCodecsVideoSupport(width, height)
-      const mr = detectVideoFormat()
-      const decision = chooseVideoExportEngine({
+      const mr = detectVideoالصيغة()
+      const decision = chooseVideoتصديرEngine({
         webcodecs: wc.supported,
         mediaRecorder: mr !== null,
         mediaRecorderAudio: mr?.audio ?? false,
@@ -180,14 +180,14 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   } catch (e) {
     gifError = e instanceof Error ? e.message : String(e)
   }
-  const gifSize2d = computeExportSize(canvasBridge.pageWidth || 1080, canvasBridge.pageHeight || 1080, gifSize)
+  const gifSize2d = computeتصديرSize(canvasBridge.pageWidth || 1080, canvasBridge.pageHeight || 1080, gifSize)
 
   const run = async () => {
     setBusy(true)
     setProgress(null)
     try {
       if (format === 'mp4') {
-        if (!videoFormat) throw new Error('This browser cannot record video. Try Chrome or Edge.')
+        if (!videoالصيغة) throw new Error('This browser cannot record video. Try Chrome or Edge.')
         const result = await exportVideo({
           designWidth: canvasBridge.pageWidth || 1080,
           designHeight: canvasBridge.pageHeight || 1080,
@@ -237,10 +237,10 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         // and images; speaker notes ride along as notes slides;
         // charts/tables/embeds/plugins fall back to PNG snapshots.
         // Pages render from DATA (the PDF posture — no stage flips).
-        const pagesToExport = allPages ? pages : [pages[currentPage]]
-        await primePluginRenders(collectPluginElements(pagesToExport), 'export')
+        const pagesToتصدير = allPages ? pages : [pages[currentPage]]
+        await primePluginRenders(collectPluginElements(pagesToتصدير), 'export')
         const { inlineMediaImages } = await import('@/lib/svg-export')
-        const inlined = await inlineMediaImages(pagesToExport)
+        const inlined = await inlineMediaImages(pagesToتصدير)
         const { exportDesignToPptx, downloadPptx } = await import('@/lib/pptx-export')
         const result = await exportDesignToPptx({
           designWidth: canvasBridge.pageWidth || 1080,
@@ -266,12 +266,12 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         // v0.13 (P4): plugin renders are awaited FIRST (bounded by
         // the 10 s contract deadline) so their sanitized svg can be
         // embedded; missing plugins degrade to placeholder cards.
-        const pagesToExport = allPages ? pages : [pages[currentPage]]
-        await primePluginRenders(collectPluginElements(pagesToExport), 'export')
+        const pagesToتصدير = allPages ? pages : [pages[currentPage]]
+        await primePluginRenders(collectPluginElements(pagesToتصدير), 'export')
         // v0.14 (D1): media-store images inline to data URLs so the
         // file is portable (deep-copy inside — the live pages untouched)
         const { inlineMediaImages } = await import('@/lib/svg-export')
-        const inlined = await inlineMediaImages(pagesToExport)
+        const inlined = await inlineMediaImages(pagesToتصدير)
         const svgs = exportDesignToSVGs(inlined, canvasBridge.pageWidth, canvasBridge.pageHeight)
         for (let k = 0; k < svgs.length; k++) {
           const suffix = svgs.length > 1 ? `-page-${(allPages ? 0 : currentPage) + k + 1}` : ''
@@ -291,10 +291,10 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         // capture, no page-flip waits); anything vectors can't express
         // (emoji, plugin renders, filtered images, shadows) falls back to
         // per-element raster strips at the chosen detail level.
-        const pagesToExport = allPages ? pages : [pages[currentPage]]
-        await primePluginRenders(collectPluginElements(pagesToExport), 'export')
+        const pagesToتصدير = allPages ? pages : [pages[currentPage]]
+        await primePluginRenders(collectPluginElements(pagesToتصدير), 'export')
         const { inlineMediaImages } = await import('@/lib/svg-export')
-        const inlined = await inlineMediaImages(pagesToExport)
+        const inlined = await inlineMediaImages(pagesToتصدير)
         const { exportDesignToPdf, downloadPdf } = await import('@/lib/pdf-export')
         const result = await exportDesignToPdf({
           designWidth: canvasBridge.pageWidth || 1080,
@@ -336,15 +336,15 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         // mislabelled file (the Safari fallback path)
         if (format === 'webp') assertWebpDataUrl(url)
         const suffix = indices.length > 1 ? `-page-${idx + 1}` : ''
-        triggerDownload(url, `${base}${suffix}.${format}`)
+        triggerتنزيل(url, `${base}${suffix}.${format}`)
         if (indices.length > 1) await new Promise((r) => setTimeout(r, 380))
       }
       if (savedPage !== useEditorStore.getState().currentPage) setCurrentPage(savedPage)
-      toast({ title: `Downloaded ${pageCount} ${pageCount > 1 ? 'files' : 'file'}` })
+      toast({ title: `تنزيلed ${pageCount} ${pageCount > 1 ? 'files' : 'file'}` })
       onOpenChange(false)
     } catch (err) {
-      console.error('Export failed', err)
-      toast({ title: 'Export failed', variant: 'destructive' })
+      console.error('تصدير failed', err)
+      toast({ title: 'تصدير failed', variant: 'destructive' })
     } finally {
       setBusy(false)
     }
@@ -359,7 +359,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto rounded-[28px] sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileImage size={18} className="text-[#7D2AE8]" /> Download your design
+            <FileImage size={18} className="text-[#7D2AE8]" /> تنزيل your design
           </DialogTitle>
           <DialogDescription>No watermarks. Files are generated locally in your browser.</DialogDescription>
         </DialogHeader>
@@ -373,7 +373,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                 return (
                   <button
                     key={f.id}
-                    onClick={() => setFormat(f.id)}
+                    onClick={() => setالصيغة(f.id)}
                     className={cn(
                       'rounded-xl border-2 p-3 text-left transition-all',
                       format === f.id ? 'border-[#00C4CC] bg-[#F0FBFC]' : 'border-black/10 hover:border-black/25'
@@ -390,7 +390,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           </div>
 
           <div>
-            <h4 className="text-xs font-semibold text-muted-foreground mb-2">Quality</h4>
+            <h4 className="text-xs font-semibold text-muted-foreground mb-2">الجودة</h4>
             {format === 'svg' ? (
               <p className="text-[11px] text-muted-foreground py-3">
                 Vector export — resolution-independent, opens in browsers & vector editors.
@@ -510,12 +510,12 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                     <>Choosing the export engine…</>
                   ) : engine.engine === 'webcodecs' ? (
                     <>Engine: <strong>WebCodecs → WebM (VP9)</strong> — frame-exact timeline, explicit bitrate, rendered locally (no upload)</>
-                  ) : engine.engine === 'mediarecorder' && videoFormat ? (
+                  ) : engine.engine === 'mediarecorder' && videoالصيغة ? (
                     <>
-                      Engine: <strong>MediaRecorder → {videoFormat.label}</strong>
+                      Engine: <strong>MediaRecorder → {videoالصيغة.label}</strong>
                       {engine.reason.includes('page audio') ? (
                         <> — renders the page audio</>
-                      ) : videoFormat.extension === 'webm' ? (
+                      ) : videoالصيغة.extension === 'webm' ? (
                         <> — this browser can’t encode MP4, so Canvix produces WebM (plays everywhere)</>
                       ) : null}
                       {' '}· rendered locally (no upload)
@@ -555,7 +555,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           {pages.length > 1 && format !== 'mp4' && format !== 'gif' && (
             <label className="flex items-center justify-between rounded-xl border border-black/10 px-4 py-3 cursor-pointer">
               <span className="text-sm font-medium">
-                {format === 'pdf' || format === 'pptx' ? 'Include all pages' : 'Download all pages'}
+                {format === 'pdf' || format === 'pptx' ? 'Include all pages' : 'تنزيل all pages'}
                 <span className="block text-[11px] text-muted-foreground font-normal">{format === 'pdf' || format === 'pptx' ? `${pages.length} pages in one ${format.toUpperCase()} file` : `${pages.length} files, one per page`}</span>
               </span>
               <input type="checkbox" checked={allPages} onChange={(e) => setAllPages(e.target.checked)} className="accent-[#00C4CC] h-4 w-4" />
@@ -572,11 +572,11 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancel
+            إلغاء
           </Button>
           <Button className="btn-brand-gradient gap-2 px-6" onClick={run} disabled={busy || (format === 'gif' && gifError !== null)}>
-            {busy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-            {busy ? 'Exporting…' : format === 'gif' ? 'Download GIF' : `Download ${pageCount} ${format.toUpperCase()}`}
+            {busy ? <Loader2 size={15} className="animate-spin" /> : <تنزيل size={15} />}
+            {busy ? 'تصديرing…' : format === 'gif' ? 'تنزيل GIF' : `تنزيل ${pageCount} ${format.toUpperCase()}`}
           </Button>
         </DialogFooter>
       </DialogContent>

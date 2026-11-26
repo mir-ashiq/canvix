@@ -70,7 +70,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
 
   return (
     <header className="h-14 cv-topbar-gradient flex items-center gap-1 px-2 sm:px-3 z-40 shrink-0 shadow-[0_1px_0_rgba(0,0,0,0.15)]">
-      <Button variant="ghost" size="icon" className="rounded-full text-white hover:bg-white/15 hover:text-white shrink-0" onClick={goDashboard} aria-label="Back to home" title="Home">
+      <Button variant="ghost" size="icon" className="rounded-full text-white hover:bg-white/15 hover:text-white shrink-0" onClick={goDashboard} aria-label="العودة للرئيسية" title="الرئيسية">
         <Home size={19} />
       </Button>
 
@@ -84,7 +84,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
       {/* File menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className={item} aria-label="File menu">
+          <button className={item} aria-label="قائمة الملف">
             File <ChevronDown size={12} className="opacity-70" />
           </button>
         </DropdownMenuTrigger>
@@ -132,12 +132,12 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
       </DropdownMenu>
 
       {/* Magic Layers */}
-      <button className={cn(item, 'hidden sm:flex')} onClick={() => setMagicLayersOpen(true)} aria-label="Magic Layers">
+      <button className={cn(item, 'hidden sm:flex')} onClick={() => setMagicLayersOpen(true)} aria-label="الطبقات السحرية">
         <Wand2 size={13} className="text-white/80" /> Magic Layers
       </button>
 
       {/* Magic Resize */}
-      <button className={cn(item, 'hidden md:flex')} onClick={() => setResizeOpen(true)} aria-label="Magic Resize">
+      <button className={cn(item, 'hidden md:flex')} onClick={() => setResizeOpen(true)} aria-label="تغيير الحجم السحري">
         Magic Resize
       </button>
 
@@ -146,9 +146,9 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           drawing directly, where previously only the Tools panel could */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className={item} aria-label="Editing mode">
+          <button className={item} aria-label="وضع التحرير">
             {mode === 'viewing' ? <Eye size={13} className="text-white/80" /> : mode === 'draw' ? <Brush size={13} className="text-white/80" /> : <MousePointer2 size={13} className="text-white/80" />}
-            {mode === 'viewing' ? 'Viewing' : mode === 'draw' ? 'Draw' : 'Editing'} <ChevronDown size={12} className="opacity-70" />
+            {mode === 'viewing' ? 'عرض' : mode === 'draw' ? 'رسم' : 'Editing'} <ChevronDown size={12} className="opacity-70" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-44 bg-[#16181D] border-white/10 text-white">
@@ -172,7 +172,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           onBlur={() => void onSave()}
           onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
           className="text-sm font-semibold bg-transparent text-white outline-none rounded-lg px-2 py-1.5 hover:bg-white/15 focus:bg-white/20 min-w-0 w-32 sm:w-48 truncate placeholder:text-white/60"
-          aria-label="Design name"
+          aria-label="اسم التصميم"
           maxLength={80}
           placeholder="Untitled design"
         />
@@ -198,13 +198,13 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
       <div className="ml-auto flex items-center gap-0.5 sm:gap-1 shrink-0">
         {/* v0.5: collaborators + connection status */}
         <PresenceAvatars />
-        <Button variant="ghost" size="icon" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={undo} disabled={!canUndo} aria-label="Undo" title="Undo (Ctrl+Z)">
+        <Button variant="ghost" size="icon" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={undo} disabled={!canUndo} aria-label="تراجع" title="تراجع (Ctrl+Z)">
           <Undo2 size={17} />
         </Button>
-        <Button variant="ghost" size="icon" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={redo} disabled={!canRedo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
+        <Button variant="ghost" size="icon" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={redo} disabled={!canRedo} aria-label="إعادة" title="إعادة (Ctrl+Shift+Z)">
           <Redo2 size={17} />
         </Button>
-        <Button variant="ghost" size="icon" className={cn('relative rounded-lg hover:bg-white/15 hover:text-white', commentsOpen ? 'text-white bg-white/15' : 'text-white')} onClick={() => { toggleComments(); if (!commentsOpen && designId) markAllCommentsRead(designId) }} aria-label="Comments" title="Comments">
+        <Button variant="ghost" size="icon" className={cn('relative rounded-lg hover:bg-white/15 hover:text-white', commentsOpen ? 'text-white bg-white/15' : 'text-white')} onClick={() => { toggleComments(); if (!commentsOpen && designId) markAllCommentsRead(designId) }} aria-label="التعليقات" title="التعليقات">
           <MessageCircle size={17} className={cn(commentsOpen && 'fill-white/20')} />
           {unreadCount > 0 && (
             <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#FF5C8A] text-white text-[9px] font-bold flex items-center justify-center">
@@ -212,18 +212,18 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
             </span>
           )}
         </Button>
-        <button className={cn(item, 'hidden sm:flex')} onClick={toggleAnimate} aria-label="Animate">
+        <button className={cn(item, 'hidden sm:flex')} onClick={toggleAnimate} aria-label="تحريك">
           <Zap size={13} className={cn(animateOpen && 'text-[#02C0CC]')} /> Animate
         </button>
-        <button className={cn(item, 'hidden sm:flex')} onClick={() => setPreviewOpen(true)} aria-label="Preview design">
+        <button className={cn(item, 'hidden sm:flex')} onClick={() => setPreviewOpen(true)} aria-label="معاينة التصميم">
           <Play size={14} /> Preview
         </button>
         {/* v0.18 (Wave 3): present with speaker notes */}
         <button
           className={cn(item, 'hidden md:flex')}
           onClick={() => useEditorStore.getState().setPresentOpen(true)}
-          aria-label="Present with speaker notes"
-          title="Present with speaker notes"
+          aria-label="عرض مع ملاحظات المتحدث"
+          title="عرض مع ملاحظات المتحدث"
           data-testid="present-notes-button"
         >
           <Presentation size={14} /> Present
@@ -231,7 +231,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
         <Button size="sm" className="btn-cv-white h-10 px-4 sm:px-5 gap-1.5 font-semibold" onClick={() => setShareOpen(true)}>
           <Share2 size={15} /> <span className="hidden sm:inline">Share</span>
         </Button>
-        <Button size="icon" variant="ghost" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={() => setExportOpen(true)} aria-label="Download" title="Download">
+        <Button size="icon" variant="ghost" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={() => setExportOpen(true)} aria-label="تنزيل" title="تنزيل">
           <Download size={17} />
         </Button>
       </div>

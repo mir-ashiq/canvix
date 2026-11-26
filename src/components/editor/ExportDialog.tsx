@@ -390,7 +390,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           </div>
 
           <div>
-            <h4 className="text-xs font-semibold text-muted-foreground mb-2">Quality</h4>
+            <h4 className="text-xs font-semibold text-muted-foreground mb-2">الجودة</h4>
             {format === 'svg' ? (
               <p className="text-[11px] text-muted-foreground py-3">
                 Vector export — resolution-independent, opens in browsers & vector editors.

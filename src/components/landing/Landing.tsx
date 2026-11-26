@@ -13,7 +13,7 @@ import {
   Sparkles,
   Palette,
   Undo2,
-  Presentation,
+  عرض تقديمي,
   Instagram,
   Printer,
   Video,
@@ -27,7 +27,7 @@ import {
   Check,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
-import { Logo } from '@/components/logo'
+import { شعار } from '@/components/logo'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth/client'
 
@@ -46,7 +46,7 @@ function EditorMockup() {
       <div className="flex h-[calc(100%-37px)]">
         {/* dark rail */}
         <div className="w-12 bg-[#17181D] flex flex-col items-center pt-3 gap-3">
-          {[Presentation, Shapes, Type, ImageIcon, Layers].map((Icon, i) => (
+          {[عرض تقديمي, Shapes, Type, ImageIcon, Layers].map((Icon, i) => (
             <div
               key={i}
               className={`h-8 w-8 rounded-lg flex items-center justify-center ${
@@ -91,43 +91,43 @@ function EditorMockup() {
 const FEATURES = [
   {
     icon: Shapes,
-    title: 'Drag-and-drop editor',
-    text: 'Shapes, lines, graphics, stickers and images — move, resize and rotate everything with buttery-smooth canvas rendering.',
+    title: 'محرر السحب والإفلات',
+    text: 'أشكال وخطوط ورسومات وملصقات وصور؛ حرّك العناصر وغيّر أحجامها ودوّرها بسلاسة.',
   },
   {
     icon: Type,
-    title: 'Beautiful typography',
-    text: '369 hand-picked Google Fonts with on-demand loading, styles and pairings. Bold, italic, spacing, alignment and colors at your fingertips.',
+    title: 'تنسيق نصوص احترافي',
+    text: '369 خطاً مختاراً بعناية، مع خيارات الوزن والميل والمسافات والمحاذاة والألوان.',
   },
   {
     icon: Palette,
-    title: 'Templates for everything',
-    text: 'All 366 templates are free — Instagram posts, stories, pitch decks, posters, logos and thumbnails. Start from a template, make it yours.',
+    title: 'قوالب لكل استخدام',
+    text: 'جميع القوالب الـ366 مجانية: منشورات وقصص إنستغرام وعروض وملصقات وشعارات وصور مصغرة.',
   },
   {
     icon: Layers,
-    title: 'Layers & smart guides',
-    text: 'Reorder layers, lock elements and snap things into perfect alignment with magenta smart guides.',
+    title: 'الطبقات وأدلة المحاذاة',
+    text: 'رتّب الطبقات وثبّت العناصر واستخدم أدلة ذكية لمحاذاة دقيقة.',
   },
   {
     icon: Undo2,
-    title: 'Undo, redo & autosave',
-    text: 'A full history stack with keyboard shortcuts, plus automatic saving so your work is never lost.',
+    title: 'تراجع وإعادة وحفظ تلقائي',
+    text: 'سجل كامل للتعديلات مع اختصارات لوحة المفاتيح وحفظ تلقائي يحمي أعمالك.',
   },
   {
     icon: Download,
-    title: 'Export anywhere',
-    text: 'PNG, JPG, WebP, SVG, PDF, PPTX, even GIF and video — crisp up to 3× resolution. No watermarks, ever.',
+    title: 'تصدير بكل سهولة',
+    text: 'صدّر بصيغ PNG وJPG وWebP وSVG وPDF وPPTX وGIF والفيديو بدقة تصل إلى 3 أضعاف، دون علامة مائية.',
   },
   {
     icon: Smartphone,
-    title: 'Works on every device',
-    text: 'The same editor adapts from desktop workstations to tablets and phones with touch-native interactions.',
+    title: 'يعمل على جميع الأجهزة',
+    text: 'محرر واحد يتكيف مع الحاسوب والأجهزة اللوحية والهواتف ويدعم اللمس.',
   },
   {
     icon: Heart,
-    title: 'Free & open source',
-    text: 'MIT licensed, self-hostable, community-driven. No accounts, no paywalls, no locked premium elements.',
+    title: 'مجاني ومفتوح المصدر',
+    text: 'مرخّص MIT وقابل للاستضافة الذاتية؛ بلا جدران دفع أو عناصر مقفلة.',
   },
 ]
 
@@ -137,57 +137,57 @@ const FEATURES = [
 const BIG_FEATURES = [
   {
     icon: Users,
-    title: 'Real-time collaboration',
-    text: 'Invite anyone with a link and design together live — cursors, selections and edits sync instantly. No seat pricing, no viewer limits, no “upgrade to invite more editors”.',
+    title: 'تعاون مباشر',
+    text: 'ادعُ الآخرين عبر رابط وصمّموا معاً مباشرة، مع مزامنة المؤشرات والتحديدات والتعديلات فورياً.',
     accent: 'from-[#02C0CC] to-[#0090AA]',
   },
   {
     icon: Bot,
-    title: 'AI that works for you',
-    text: 'A design-aware assistant that fixes overlaps and balances layouts automatically, background remover, magic eraser, auto-adjust and more. Bring your own API key — or run the local on-device engines with zero setup.',
+    title: 'ذكاء اصطناعي يعمل لخدمتك',
+    text: 'مساعد ذكي لترتيب التصميم وإزالة الخلفيات والممحاة السحرية والتحسين التلقائي. استخدم مفتاح API الخاص بك أو الأدوات المحلية.',
     accent: 'from-[#7630D7] to-[#9B6BFF]',
   },
   {
     icon: Server,
-    title: 'Self-host in one command',
-    text: 'Your designs live in your own Postgres. One docker compose command and the whole platform — editor, collab, templates — runs on your hardware, forever.',
+    title: 'استضافة ذاتية بأمر واحد',
+    text: 'تبقى تصاميمك في قاعدة بياناتك. شغّل المنصة ومحررها وقوالبها والتعاون على خادمك بأمر Docker واحد.',
     accent: 'from-[#FF5C8A] to-[#FF8A5C]',
   },
 ]
 
 const TEMPLATE_SHOWCASE = [
-  { label: 'Instagram post', from: '#FF5C8A', to: '#FFB84C', icon: Instagram, title: 'MEGA SALE' },
-  { label: 'Story', from: '#B8E986', to: '#7ED957', icon: Instagram, title: 'NEW DROP' },
-  { label: 'Presentation', from: '#FFFFFF', to: '#E8F6F7', icon: Presentation, title: 'Nimbus', dark: true },
-  { label: 'Poster', from: '#FFD166', to: '#FFC93C', icon: Printer, title: 'LIVE MUSIC', dark: true },
-  { label: 'Thumbnail', from: '#0D1117', to: '#161B22', icon: Video, title: 'TOP 10 AI' },
-  { label: 'Logo', from: '#FFFFFF', to: '#F4F5F7', icon: BadgeCheck, title: 'NOVA', dark: true },
+  { label: 'منشور إنستغرام', from: '#FF5C8A', to: '#FFB84C', icon: Instagram, title: 'MEGA SALE' },
+  { label: 'قصة', from: '#B8E986', to: '#7ED957', icon: Instagram, title: 'NEW DROP' },
+  { label: 'عرض تقديمي', from: '#FFFFFF', to: '#E8F6F7', icon: عرض تقديمي, title: 'Nimbus', dark: true },
+  { label: 'ملصق', from: '#FFD166', to: '#FFC93C', icon: Printer, title: 'LIVE MUSIC', dark: true },
+  { label: 'صورة مصغرة', from: '#0D1117', to: '#161B22', icon: Video, title: 'TOP 10 AI' },
+  { label: 'شعار', from: '#FFFFFF', to: '#F4F5F7', icon: BadgeCheck, title: 'NOVA', dark: true },
 ]
 
-/** v0.26: short FAQ answering the questions new visitors actually ask. */
-const FAQ = [
+/** v0.26: short الأسئلة الشائعة answering the questions new visitors actually ask. */
+const الأسئلة الشائعة = [
   {
-    q: 'Is it really free? What’s the catch?',
-    a: 'Really free, MIT licensed. There is no paid tier — no watermarks, no export limits, no locked elements. The hosted instance at canvix.app is the same code you can self-host.',
+    q: 'هل المنصة مجانية حقاً؟ وما المقابل؟',
+    a: 'Really free, MIT الترخيصd. There is no paid tier — no watermarks, no export limits, no locked elements. The hosted instance at TEa.G3 is the same code you can self-host.',
   },
   {
-    q: 'Do I need an account?',
+    q: 'هل أحتاج إلى حساب؟',
     a: 'No. You can open the editor and start designing immediately. Accounts are free and optional — they just keep your designs private and sync-able across devices.',
   },
   {
-    q: 'How does the AI work without spying on me?',
+    q: 'كيف يعمل الذكاء الاصطناعي ويحافظ على خصوصيتي؟',
     a: 'Every AI feature has an on-device engine that runs entirely in your browser. The provider-backed engines run server-side, and you can plug in your own API key so your work never spends anyone else’s quota.',
   },
   {
-    q: 'Can AI agents use Canvix?',
-    a: 'Yes — Canvix ships an MCP server. Connect Claude, Cursor or any MCP client to your account and let the agent create and edit designs for you, scoped to your designs only.',
+    q: 'هل يمكن لوكلاء الذكاء الاصطناعي استخدام TEa.G3؟',
+    a: 'Yes — TEa.G3 ships an MCP server. Connect Claude, Cursor or any MCP client to your account and let the agent الإبداع and edit designs for you, scoped to your designs only.',
   },
   {
-    q: 'What formats can I export?',
+    q: 'ما صيغ التصدير المتاحة؟',
     a: 'PNG, JPG, WebP, SVG, PDF, PPTX, GIF and video — at up to 3× resolution, with no watermarks on any of them.',
   },
   {
-    q: 'How do I self-host it?',
+    q: 'كيف أستضيف المنصة على خادمي؟',
     a: 'git clone, one docker compose command, done. Designs are stored in your own Postgres database; everything else runs statelessly in the container.',
   },
 ]
@@ -218,18 +218,18 @@ export function Landing() {
       {/* ── Nav ── */}
       <header className="sticky top-0 z-50 border-b border-black/5 bg-white/80 backdrop-blur-lg">
         <nav className="mx-auto max-w-7xl px-4 sm:px-6 h-16 flex items-center justify-between">
-          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Canvix home">
-            <Logo size={30} />
+          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="TEa.G3 home">
+            <شعار size={30} />
           </button>
           <div className="hidden md:flex items-center gap-1 text-sm font-medium text-muted-foreground">
-            <a href="#features" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">Features</a>
-            <a href="#collab" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">Collaborate</a>
-            <a href="#templates" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">Templates</a>
-            <a href="#faq" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">FAQ</a>
-            <a href="#opensource" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">Open source</a>
+            <a href="#features" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">المميزات</a>
+            <a href="#collab" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">التعاون</a>
+            <a href="#القوالب" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">القوالب</a>
+            <a href="#faq" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">الأسئلة الشائعة</a>
+            <a href="#opensource" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">مفتوح المصدر</a>
           </div>
           <div className="flex items-center gap-2">
-            <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer">
+            <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer">
               <Button variant="ghost" size="sm" className="rounded-full gap-1.5">
                 <Github size={16} /> <span className="hidden sm:inline">GitHub</span>
               </Button>
@@ -240,7 +240,7 @@ export function Landing() {
               </span>
             )}
             <Button size="sm" className="btn-brand-gradient rounded-full px-4" onClick={goDashboard}>
-              {user ? 'Back to your designs' : 'Start designing'}
+              {user ? 'العودة إلى تصاميمك' : 'ابدأ التصميم'}
             </Button>
           </div>
         </nav>
@@ -255,31 +255,31 @@ export function Landing() {
           <div className="absolute -bottom-40 -left-32 h-96 w-96 rounded-full blur-3xl opacity-20 bg-[#00C4CC] animate-float" style={{ animationDelay: '2s' }} aria-hidden="true" />
           <div className="relative mx-auto max-w-7xl px-4 sm:px-6 pt-16 pb-20 sm:pt-24 sm:pb-28 text-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-1.5 text-xs font-semibold text-[#7D2AE8] shadow-sm animate-fade-up">
-              <Sparkles size={14} /> Free forever · No account needed · MIT licensed · Self-hostable
+              <Sparkles size={14} /> مجاني دائماً · لا يتطلب حساباً · ترخيص MIT · قابل للاستضافة الذاتية
             </div>
             <h1 className="mt-6 text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.05] animate-fade-up delay-100">
-              Design anything.
+              صمّم كل ما تتخيله.
               <br />
-              <span className="text-brand-gradient">Free for everyone.</span>
+              <span className="text-brand-gradient">مجاني للجميع.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-base sm:text-lg text-muted-foreground animate-fade-up delay-200">
-              Canvix is the open-source design tool for social posts, presentations, posters, logos and
-              more — with real-time collaboration and AI that works for you, not against you.
+              TEa.G3 is the open-source design tool for social posts, presentations, posters, logos and
+              more — with real-time collaboration and ذكاء اصطناعي يعمل لخدمتك, not against you.
               Drag, drop, export — right in your browser, on any device.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 animate-fade-up delay-300">
               <Button size="lg" className="btn-brand-gradient rounded-full px-8 text-base h-12 gap-2" onClick={goDashboard}>
-                Start designing — it&apos;s free <ArrowRight size={18} />
+                ابدأ التصميم — it&apos;s free <ArrowRight size={18} />
               </Button>
-              <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer" className="w-full sm:w-auto">
+              <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer" className="w-full sm:w-auto">
                 <Button size="lg" variant="outline" className="rounded-full px-8 text-base h-12 gap-2 w-full sm:w-auto">
-                  <Github size={18} /> Star on GitHub
+                  <Github size={18} /> أضف نجمة على GitHub
                 </Button>
               </a>
             </div>
             {/* hero proof line */}
             <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground animate-fade-up delay-300">
-              {['No credit card, ever', 'No watermarks, ever', 'Export in 8 formats', 'Runs on your server too'].map((t) => (
+              {['لا حاجة لبطاقة مصرفية', 'دون علامات مائية', 'التصدير بـ8 صيغ', 'يعمل على خادمك أيضاً'].map((t) => (
                 <span key={t} className="inline-flex items-center gap-1.5">
                   <Check size={13} className="text-[#12A594]" /> {t}
                 </span>
@@ -295,11 +295,11 @@ export function Landing() {
         <section className="border-y border-black/5 bg-[#FAFAFC]">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 grid grid-cols-2 sm:grid-cols-5 gap-6 text-center">
             {[
-              ['MIT', 'license'],
-              ['369', 'fonts'],
-              ['366', 'templates'],
-              ['160+', 'stickers'],
-              ['562+', 'icons'],
+              ['MIT', 'الترخيص'],
+              ['369', 'الخطوط'],
+              ['366', 'القوالب'],
+              ['160+', 'الملصقات'],
+              ['562+', 'الأيقونات'],
             ].map(([num, label]) => (
               <div key={label}>
                 <div className="text-3xl sm:text-4xl font-extrabold text-brand-gradient">{num}</div>
@@ -314,11 +314,11 @@ export function Landing() {
           <div className="text-center">
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
               What the paid tools charge for,{' '}
-              <span className="text-brand-gradient">Canvix gives away</span>
+              <span className="text-brand-gradient">TEa.G3 gives away</span>
             </h2>
             <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
               The features that cost the most elsewhere — collaboration seats, AI credits, team
-              workspaces — are core parts of Canvix, free and open.
+              workspaces — are core parts of TEa.G3, free and open.
             </p>
           </div>
           <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -337,14 +337,14 @@ export function Landing() {
           </div>
         </section>
 
-        {/* ── Features grid ── */}
+        {/* ── المميزات grid ── */}
         <section id="features" className="bg-[#FAFAFC] border-y border-black/5">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 py-20 sm:py-28">
             <h2 className="text-center text-3xl sm:text-4xl font-extrabold tracking-tight">
-              Everything you need to <span className="text-brand-gradient">create</span>
+              كل ما تحتاجه لـ<span className="text-brand-gradient">الإبداع</span>
             </h2>
             <p className="mt-4 text-center text-muted-foreground max-w-2xl mx-auto">
-              A serious editor, not a toy. Canvix packs the features people actually use from
+              A serious editor, not a toy. TEa.G3 packs the features people actually use from
               commercial design tools — minus the price tag.
             </p>
             <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -364,15 +364,15 @@ export function Landing() {
           </div>
         </section>
 
-        {/* ── Templates ── */}
-        <section id="templates" className="py-20 sm:py-28">
+        {/* ── القوالب ── */}
+        <section id="القوالب" className="py-20 sm:py-28">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="text-center">
               <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-                Start from a <span className="text-brand-gradient">template</span>
+                ابدأ باستخدام <span className="text-brand-gradient">قالب</span>
               </h2>
               <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-                Sized and styled for every platform. Open one, tweak everything — every template is
+                Sized and styled for every platform. Open one, tweak everything — every قالب is
                 free, forever.
               </p>
             </div>
@@ -382,7 +382,7 @@ export function Landing() {
                   key={t.label}
                   onClick={goDashboard}
                   className="group text-left"
-                  aria-label={`Open ${t.label} templates`}
+                  aria-label={`Open ${t.label} القوالب`}
                 >
                   <div
                     className="aspect-[4/5] rounded-xl overflow-hidden shadow-sm group-hover:shadow-xl group-hover:-translate-y-1 transition-all flex flex-col items-center justify-center gap-3 border border-black/5"
@@ -401,45 +401,45 @@ export function Landing() {
             </div>
             <div className="mt-10 text-center">
               <Button variant="outline" className="rounded-full px-6 gap-2" onClick={goDashboard}>
-                Browse all 366 templates <ArrowRight size={16} />
+                Browse all 366 القوالب <ArrowRight size={16} />
               </Button>
             </div>
           </div>
         </section>
 
-        {/* ── FAQ (v0.26) ── */}
+        {/* ── الأسئلة الشائعة (v0.26) ── */}
         <section id="faq" className="bg-[#FAFAFC] border-y border-black/5 py-20 sm:py-28">
           <div className="mx-auto max-w-3xl px-4 sm:px-6">
             <h2 className="text-center text-3xl sm:text-4xl font-extrabold tracking-tight">
-              Questions, <span className="text-brand-gradient">answered</span>
+              أسئلة <span className="text-brand-gradient">وأجوبة</span>
             </h2>
             <div className="mt-10 space-y-3">
-              {FAQ.map((f, i) => (
+              {الأسئلة الشائعة.map((f, i) => (
                 <FaqItem key={f.q} q={f.q} a={f.a} defaultOpen={i === 0} />
               ))}
             </div>
           </div>
         </section>
 
-        {/* ── Open source ── */}
+        {/* ── مفتوح المصدر ── */}
         <section id="opensource" className="mx-auto max-w-7xl px-4 sm:px-6 py-20 sm:py-28">
           <div className="grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-1.5 text-xs font-semibold text-[#7D2AE8] shadow-sm">
-                <Star size={14} /> Built in the open
+                <Star size={14} /> طُوّر بشفافية ومفتوح المصدر
               </div>
               <h2 className="mt-5 text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
-                The design tool that <span className="text-brand-gradient">belongs to you</span>
+                أداة التصميم التي <span className="text-brand-gradient">تملكها أنت</span>
               </h2>
               <p className="mt-5 text-muted-foreground leading-relaxed">
-                Commercial design tools lock your creativity behind subscriptions. Canvix is
-                different — the code is on GitHub, the license is MIT, and every design you make
+                Commercial design tools lock your creativity behind subscriptions. TEa.G3 is
+                different — the code is on GitHub, the الترخيص is MIT, and every design you make
                 is exportable at full quality. Self-host it, fork it, improve it.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row gap-3">
-                <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer">
+                <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer">
                   <Button size="lg" className="btn-brand-gradient rounded-full px-8 gap-2 h-12 w-full sm:w-auto">
-                    <Github size={18} /> View the source
+                    <Github size={18} /> عرض الشيفرة المصدرية
                   </Button>
                 </a>
                 <Button
@@ -448,7 +448,7 @@ export function Landing() {
                   className="rounded-full px-8 h-12 w-full sm:w-auto"
                   onClick={goDashboard}
                 >
-                  Try it now
+                  جرّبها الآن
                 </Button>
               </div>
             </div>
@@ -462,7 +462,7 @@ export function Landing() {
               </div>
               <div className="font-mono text-xs sm:text-sm leading-relaxed bg-[#17181D] p-5 overflow-x-auto">
                 <div className="text-white/40"># clone &amp; run your own Canva alternative</div>
-                <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">git clone https://github.com/mir-ashiq/canvix</span></div>
+                <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">git clone https://github.com/TEaG3/eng-salman</span></div>
                 <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">cd canvix &amp;&amp; bun install</span></div>
                 <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">bun run db:push &amp;&amp; bun run db:seed</span></div>
                 <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">bun run dev</span></div>
@@ -483,7 +483,7 @@ export function Landing() {
               No signup, no credit card, no watermark. Open the editor and start creating right now.
             </p>
             <Button size="lg" className="btn-brand-gradient rounded-full px-10 text-base h-13 gap-2 mt-8 py-3.5" onClick={goDashboard}>
-              Start designing <ArrowRight size={18} />
+              ابدأ التصميم <ArrowRight size={18} />
             </Button>
           </div>
         </section>
@@ -493,18 +493,18 @@ export function Landing() {
       <footer className="mt-auto border-t border-black/5 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Logo size={24} />
+            <شعار size={24} />
             <span className="text-sm text-muted-foreground">
-              © 2026 Canvix · MIT License
+              © 2026 TEa.G3 · MIT License
             </span>
           </div>
           <div className="flex items-center gap-5 text-sm text-muted-foreground">
-            <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors inline-flex items-center gap-1.5">
+            <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors inline-flex items-center gap-1.5">
               <Github size={15} /> GitHub
             </a>
-            <a href="https://github.com/mir-ashiq/canvix#-ai--development-disclosure" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">AI Disclosure</a>
-            <a href="#features" className="hover:text-foreground transition-colors">Features</a>
-            <a href="#faq" className="hover:text-foreground transition-colors">FAQ</a>
+            <a href="https://github.com/TEaG3/eng-salman#-ai--development-disclosure" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">AI Disclosure</a>
+            <a href="#features" className="hover:text-foreground transition-colors">المميزات</a>
+            <a href="#faq" className="hover:text-foreground transition-colors">الأسئلة الشائعة</a>
           </div>
         </div>
       </footer>

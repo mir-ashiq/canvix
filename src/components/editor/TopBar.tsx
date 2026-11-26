@@ -156,10 +156,10 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
             <MousePointer2 size={15} /> Editing — select & edit
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => { setEditingMode('editing'); setTool('draw') }}>
-            <Brush size={15} /> Draw — freehand brush
+            <Brush size={15} /> رسم — فرشاة حرة
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => setEditingMode('viewing')}>
-            <Eye size={15} /> Viewing — read only
+            <Eye size={15} /> عرض — للقراءة فقط
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

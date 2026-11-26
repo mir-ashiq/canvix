@@ -45,41 +45,41 @@ function StarMini({ points, ratio }: { points: number; ratio: number }) {
 }
 
 const BASIC_SHAPES = [
-  { id: 'rect', label: 'Square', icon: Square },
-  { id: 'rounded', label: 'Rounded', icon: null },
-  { id: 'ellipse', label: 'Circle', icon: Circle },
-  { id: 'triangle', label: 'Triangle', icon: Triangle },
-  { id: 'star', label: 'Star', icon: Star },
+  { id: 'rect', label: 'مربع', icon: Square },
+  { id: 'rounded', label: 'مستدير', icon: null },
+  { id: 'ellipse', label: 'دائرة', icon: Circle },
+  { id: 'triangle', label: 'مثلث', icon: Triangle },
+  { id: 'star', label: 'نجمة', icon: Star },
 ] as const
 
 const POLY_TILES: { label: string; sides: number }[] = [
-  { label: 'Pentagon', sides: 5 },
-  { label: 'Hexagon', sides: 6 },
-  { label: 'Heptagon', sides: 7 },
-  { label: 'Octagon', sides: 8 },
-  { label: 'Nonagon', sides: 9 },
-  { label: 'Decagon', sides: 10 },
+  { label: 'خماسي', sides: 5 },
+  { label: 'سداسي', sides: 6 },
+  { label: 'سباعي', sides: 7 },
+  { label: 'ثماني', sides: 8 },
+  { label: 'تساعي', sides: 9 },
+  { label: 'عشاري', sides: 10 },
 ]
 
 /** v0.18 (Wave 3): star variants — parametric, editable post-insert */
 const STAR_TILES: { label: string; points: number; ratio?: number }[] = [
-  { label: '6-point', points: 6 },
-  { label: '8-point', points: 8 },
-  { label: '12-point', points: 12, ratio: 0.72 },
-  { label: '16-point burst', points: 16, ratio: 0.8 },
-  { label: 'Thin spike', points: 5, ratio: 0.3 },
-  { label: 'Soft star', points: 5, ratio: 0.75 },
+  { label: 'سداسي الرؤوس', points: 6 },
+  { label: 'ثماني الرؤوس', points: 8 },
+  { label: '12 رأساً', points: 12, ratio: 0.72 },
+  { label: 'انفجار بـ16 رأساً', points: 16, ratio: 0.8 },
+  { label: 'شوكة رفيعة', points: 5, ratio: 0.3 },
+  { label: 'نجمة ناعمة', points: 5, ratio: 0.75 },
 ]
 
 const GRAPHIC_GROUPS: { name: string; ids: string[] }[] = [
-  { name: 'Decorative', ids: ['heart', 'blob', 'cloud', 'moon', 'sparkle', 'wave'] },
-  { name: 'Badges & labels', ids: ['badge', 'banner', 'ribbon', 'frame', 'speech'] },
-  { name: 'Icons', ids: ['bolt', 'check-circle', 'arrow'] },
+  { name: 'زخرفي', ids: ['heart', 'blob', 'cloud', 'moon', 'sparkle', 'wave'] },
+  { name: 'شارات وملصقات', ids: ['badge', 'banner', 'ribbon', 'frame', 'speech'] },
+  { name: 'أيقونات', ids: ['bolt', 'check-circle', 'arrow'] },
 ]
 
 const TABLE_STYLES: { id: TableStyle; label: string; swatch: React.CSSProperties }[] = [
-  { id: 'classic', label: 'Classic', swatch: { background: '#FFFFFF', border: '1px solid #E0E1E6' } },
-  { id: 'minimal', label: 'Minimal', swatch: { background: '#FFFFFF', borderTop: '2px solid #7630D7' } },
+  { id: 'classic', label: 'كلاسيكي', swatch: { background: '#FFFFFF', border: '1px solid #E0E1E6' } },
+  { id: 'minimal', label: 'بسيط', swatch: { background: '#FFFFFF', borderTop: '2px solid #7630D7' } },
   { id: 'bold', label: 'Bold', swatch: { background: '#F6F2FC', border: '2px solid #7630D7' } },
   { id: 'soft', label: 'Soft', swatch: { background: '#F2FBFC', border: '1px solid #02C0CC' } },
 ]
@@ -376,7 +376,7 @@ export function ElementsPanel() {
         <SectionTitle>Shapes</SectionTitle>
         <div className="grid grid-cols-3 gap-2">
           {FRAME_SHAPES.map((fs) => (
-            <ShapeTile key={fs} label={fs === 'rect' ? 'Rectangle' : fs === 'ellipse' ? 'Ellipse' : fs === 'triangle' ? 'Triangle' : fs === 'hexagon' ? 'Hexagon' : 'Circle'} onClick={() => addFrame(fs)}>
+            <ShapeTile key={fs} label={fs === 'rect' ? 'Rectangle' : fs === 'ellipse' ? 'Ellipse' : fs === 'triangle' ? 'مثلث' : fs === 'hexagon' ? 'سداسي' : 'دائرة'} onClick={() => addFrame(fs)}>
               <FrameIconFor shape={fs} />
             </ShapeTile>
           ))}

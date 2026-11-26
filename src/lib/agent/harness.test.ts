@@ -1474,7 +1474,9 @@ describe('v0.29.3 · loop: planning + fail-closed acks', () => {
     const stackedBands = (stacked as { actions?: { bands?: { name: string; y: number; h: number }[] }[] }).actions?.[0]?.bands
     expect(stackedBands?.map((b) => b.name)).toEqual(['a', 'b'])
     expect(stackedBands?.[0]).toEqual({ name: 'a', y: 65, h: 200 })
-    expect(stackedBands?.[1].y! - (stackedBands![0].y + stackedBands![0].h)).toBeGreaterThanOrEqual(40)
+    if (stackedBands) {
+      expect(stackedBands[1].y - (stackedBands[0].y + stackedBands[0].h)).toBeGreaterThanOrEqual(40)
+    }
     expect(stackedBands?.[1].h).toBe(200)
     expect(stackedBands![1].y + stackedBands![1].h).toBeLessThanOrEqual(1015)
 

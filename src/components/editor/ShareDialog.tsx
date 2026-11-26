@@ -82,7 +82,7 @@ function ShareBody({ designName, link, copied, onCopy }: {
           />
           <Button className="btn-cv h-9 px-4 shrink-0 gap-1.5" onClick={onCopy}>
             {copied ? <Check size={14} /> : <Copy size={14} />}
-            {copied ? 'Copied' : 'Copy link'}
+            {copied ? 'Copied' : 'نسخ الرابط'}
           </Button>
         </div>
 

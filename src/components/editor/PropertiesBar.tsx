@@ -96,7 +96,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
       {/* ── multi-select ─────────────────────────────────────── */}
       {isMulti ? (
         <>
-          <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0">{sel.length} selected</span>
+          <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0">{sel.length} عناصر محددة</span>
           <TBtn onClick={() => state.groupSelection()} disabled={!canGroup} title="تجميع (Ctrl+G)" ariaLabel="تجميع">
             <Group size={15} />
           </TBtn>
@@ -129,7 +129,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
               onChange={(e) => { const v = Number(e.target.value); if (v >= 6 && v <= 400) updateLive(ids, { fontSize: v }) }}
               onBlur={() => update(ids, { fontSize: text.fontSize })}
               className="h-8 w-10 bg-white/[0.06] border-y border-white/10 text-white text-[12px] text-center outline-none focus:border-[#7630D7] [color-scheme:dark]"
-              aria-label="Font size"
+              aria-label="حجم الخط"
             />
             <TBtn onClick={() => update(ids, { fontSize: Math.min(400, text.fontSize + 2) })} title="تكبير حجم الخط" ariaLabel="تكبير حجم الخط" className="!rounded-l-none">
               <Plus size={14} />
@@ -240,7 +240,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
               <TBtn onClick={() => update(ids, { direction: 'ltr' })} dataActive={text.direction !== 'rtl'} title="من اليسار إلى اليمين" ariaLabel="من اليسار إلى اليمين">
                 <span className="text-[11px] font-semibold px-1">LTR</span>
               </TBtn>
-              <TBtn onClick={() => update(ids, { direction: 'rtl' })} dataActive={text.direction === 'rtl'} title="Right to left (Arabic, Hebrew…)" ariaLabel="من اليمين إلى اليسار" data-testid="dir-rtl">
+              <TBtn onClick={() => update(ids, { direction: 'rtl' })} dataActive={text.direction === 'rtl'} title="من اليمين إلى اليسار (العربية والعبرية…)" ariaLabel="من اليمين إلى اليسار" data-testid="dir-rtl">
                 <Languages size={13} />
               </TBtn>
             </div>

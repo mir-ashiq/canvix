@@ -97,23 +97,47 @@ export function heuristicMode(message: string): { mode: AgentMode; confidence: '
     /\b(poster|flyer|menu|logo|banner|thumbnail|deck|presentation|slide|campaign|invitation|infographic|card|graphic|advert|ad|cover|header|brochure|certificate|resume|newsletter|posts?|stor(ies|y)|reels?|story)\b|\b(instagram|insta|tiktok|pinterest|linkedin|facebook|twitter|threads|snapchat|youtube|social[- ]media)\b/
   const buildVerb = /\b(design|create|make|build|generate|add|produce)\b/
   const asksQuestion = /\?\s*$/.test(m) || /^(how|why|what|when|which|who)\b/i.test(m)
+  // v0.32.7: an interrogative OPENER ("why is my poster broken?")
+  // is a question about the artifact, not a create brief — polite
+  // question FORMS ("can you make me a poster?") still create.
+  const interrogative = /^(how|why|what|when|where|which|who)\b/i.test(m)
 
   // v0.32.2 (defect A): an artifact noun + build verb normally means
   // create — but "make the poster title bold" is an EDIT of an
   // existing thing. Exempt messages that pair an edit verb with a
   // reference to an EXISTING element ("the title", "this logo",
   // "existing headline") from the create-first guard.
-  const editVerb = /\b(make|set|change|turn|swap|move|align|center|centre|delete|remove|add|resize|rename|duplicate|rotate|flip|recolor|recolour)\b/
-  const elementRef = /\b(the|this|that|these|those|existing|current|selected)\s+(\w+\s+){0,2}(title|headline|subtitle|texts?|logo|icon|image|images?|photo|picture|shape|element|background|border|caption|body|copy|button|card|badge|label|grid|rows?|columns?|lines?|boxes?|circles?|cup|price|prices|tagline)\b/
+  // v0.32.7 (production report: "ask him something to design and he
+  // only talks"): the fix/improve/update verb family sat in NONE of
+  // these lists — "fix it", "improve it", "update the design" fell to
+  // the model router, and a provider outage (429/502 — exactly when
+  // users retry) let the catch keep the catch-all: DISCUSS. Every
+  // write verb is listed here so write requests classify free.
+  const editVerb = /\b(make|set|change|turn|swap|move|align|center|centre|delete|remove|add|resize|rename|duplicate|rotate|flip|recolor|recolour|fix|improve|update|adjust|tweak|edit|redo|rework|revamp|restyle|rearrange|reorder)\b/
+  // v0.32.7: the artifact family joins the element references —
+  // "update the poster" references the EXISTING artifact, it is not a
+  // create brief ("i want a poster" still creates: no the/this/…).
+  const elementRef = /\b(the|this|that|these|those|existing|current|selected)\s+(\w+\s+){0,2}(title|headline|subtitle|texts?|logo|icon|image|images?|photo|picture|shape|element|background|border|caption|body|copy|button|card|badge|label|grid|rows?|columns?|lines?|boxes?|circles?|cup|price|prices|tagline|posters?|flyers?|menus?|banners?|thumbnails?|decks?|presentations?|slides?|infographics?|graphics?|newsletters?|brochures?|covers?|headers?|posts?|stories|story|reels?|design|layout)\b/
   const editingExisting = editVerb.test(lower) && elementRef.test(lower)
   if (artifactNoun.test(lower) && buildVerb.test(lower) && !asksQuestion && !editingExisting) {
     return { mode: 'create', confidence: 'high' }
   }
 
   // discuss: about the tool/product itself, not the user's design
-  const productWords = /\b(canvix|the (app|editor|product|repo|codebase)|your (architecture|agent|tools?)|this project|github)\b/
+  // v0.32.7: the product guard's verb set grows with the write-verb
+  // family — "improve the app" / "update your code" are product
+  // requests and must stay conversations even though improve/update
+  // are now first-class write verbs for DESIGNS. Product nouns and
+  // artifact nouns never overlap (app/code/repo vs poster/logo…),
+  // the brand may sit between article and noun ("fix the Canvix
+  // agent"), and a product noun followed by a DESIGN noun ("change
+  // the app icon") is an element edit, not product talk.
+  const productWords = /\b(canvix|the (app|editor|product|repo|codebase)|your (architecture|agent|tools?|code)|this project|github)\b/
   const asksAboutProduct = productWords.test(lower) && /\b(how (does|do|is|are)|why|bug|broken|error|architecture|implemented|feature|work)s?\b/.test(lower)
-  const fixTheProduct = /\bfix (the|your) (agent|editor|app|code|bug)|\bagent'?s (tool|loop|architecture)\b/.test(lower)
+  const fixTheProduct =
+    /\b(fix|improve|update|redo|rework|revamp|change) (the|your|my|this|that) (canvix )?(agent|editor|app|code|codebase|bug|repo|product|backend|frontend|server|api|site)(?! (icon|image|images?|logo|title|titles?|texts?|elements?|buttons?|cards?|photos?|pictures?|shapes?|stickers?|badges?|labels?|backgrounds?|banners?|headers?|illustrations?))\b/.test(lower) ||
+    /\bfix (the|your) (canvix )?(agent|editor|app|code|bug)\b/.test(lower) ||
+    /\bagent'?s? (tool|loop|architecture)\b/.test(lower)
   if (asksAboutProduct || fixTheProduct) return { mode: 'discuss', confidence: 'high' }
 
   // review: critique/feedback asks — never modify
@@ -139,7 +163,25 @@ export function heuristicMode(message: string): { mode: AgentMode; confidence: '
   }
 
   // improve: polish/make-professional requests on an existing design
-  if (/\b(make (this|it) (more )?(professional|better|prettier|nicer|polished)|polish|clean up|refine|jazz|spice|tighten)\b/.test(lower)) {
+  // v0.32.7 (production report, the JNV Baramula session): "fix it",
+  // "fix the design it looks like shit", "improve it", "make it look
+  // cool", "it doesn't look cool …" — the ENTIRE fix-family routed
+  // nowhere deterministically. It reached the model router, and on a
+  // provider outage the catch kept the catch-all: DISCUSS. A user who
+  // watches a broken design and asks for a fix during an outage got a
+  // product chat that touched nothing. The fix-family improves the
+  // WHOLE artifact (the intent classifier decides the per-message
+  // intent — add/refine/restyle — inside the run):
+  if (
+    /\b(make (this|it|that) (more )?(professional|better|prettier|nicer|polished|cooler|cool|good|great|awesome)|polish|clean up|refine|jazz|spice|tighten)\b/.test(lower) ||
+    /\b(fix|improve|redo|rework|revamp) (it|this|that|them|everything|up)\b/.test(lower) ||
+    /\b(fix|improve|redo|rework|revamp) (the|my|our|this|that) (design|poster|flyer|banner|menu|deck|presentation|slides?|infographic|cards?|graphics?|layout|page|canvas|look|feel|branding)\b/.test(lower) ||
+    /\bfix (the )?(design|poster|flyer|layout)\b/.test(lower) ||
+    /\bmake (this|it|that) look (better|cooler|nicer|good|great|cool|professional|prettier)\b/.test(lower) ||
+    /\b(doesn'?t|does not|don'?t|didn'?t|not) look (good|great|cool|nice|professional|right|appealing)\b/.test(lower) ||
+    /\blooks? (bad|terrible|awful|boring|plain|ugly|horrible|like (shit|crap|garbage|ass))\b/.test(lower) ||
+    /\bredesign\b/.test(lower)
+  ) {
     return { mode: 'improve', confidence: 'high' }
   }
 
@@ -150,7 +192,7 @@ export function heuristicMode(message: string): { mode: AgentMode; confidence: '
   // v0.32.2: editingExisting ("make the poster title bold") is exempt
   // here too — an artifact noun inside an existing-element reference
   // is still an edit.
-  if (artifactNoun.test(lower) && m.split(/\s+/).length >= 2 && !editingExisting) {
+  if (artifactNoun.test(lower) && m.split(/\s+/).length >= 2 && !editingExisting && !interrogative) {
     return { mode: 'create', confidence: 'high' }
   }
   const createSignals = [
@@ -176,6 +218,37 @@ export function heuristicMode(message: string): { mode: AgentMode; confidence: '
   if (editVerb.test(lower) && m.split(/\s+/).length <= 25) return { mode: 'edit', confidence: 'high' }
 
   return { mode: 'discuss', confidence: 'low' }
+}
+
+/** Design-domain vocabulary for the outage fallback below. Broad by
+ *  design: a typo'd artifact noun ("posetr") must still count as a
+ *  design request — none of these words belong in small talk. */
+const DESIGN_DOMAIN_WORDS =
+  /\b(designs?|designing|designed|posters?|flyers?|menus?|logos?|banners?|thumbnails?|decks?|presentations?|slides?|infographics?|cards?|graphics?|brochures?|newsletters?|stories|story|reels?|campaigns?|invitations?|adverts?|instagram|insta|tiktok|pinterest|linkedin|facebook|twitter|youtube|social[- ]media|canvas|pages?|elements?|texts?|titles?|headlines?|headings?|subtitles?|captions?|images?|photos?|pictures?|icons?|shapes?|stickers?|backgrounds?|colou?rs?|fonts?|typography|layouts?|spacing|margins?|borders?|buttons?|badges?|labels?|grids?|rows?|columns?|brands?|themes?|styles?|make|makes|made|create|creates|created|build|builds|built|add|adds|added|remove|removes|removed|delete|deletes|deleted|move|moves|moved|change|changes|changed|fix|fixes|fixed|fixing|improve|improves|improved|edit|edits|edited|update|updates|updated|adjust|adjusts|adjusted|tweak|tweaks|tweaked|redesign|redesigns|redesigned|polish|polished|refine|refines|refined|restyle|restyles|restyled|draw|draws|drawing|illustrations?|look|looks|looking)\b/
+
+/** v0.32.7 · the provider-outage escape hatch. When the heuristic
+ *  could not classify (confidence 'low' — it recognized no pattern)
+ *  and the model router call FAILED (429/502/network, or unparseable
+ *  output), the old code kept the heuristic catch-all: DISCUSS. So
+ *  "fix my poster" during an outage became a product chat that
+ *  touched nothing — the user watches a broken design and asks for
+ *  a fix, the provider is down BECAUSE everyone is retrying, and
+ *  the agent answers in paragraphs.
+ *
+ *  This deterministic fallback classifies by vocabulary + canvas
+ *  state — no provider, no latency, no failure mode:
+ *    · design-domain vocabulary + empty canvas    → create
+ *      (nothing to damage; the plan-first gate governs the build)
+ *    · design-domain vocabulary + elements exist  → edit
+ *      (surgical: "touch only what the request implies" — the edit
+ *      prompt degrades honestly on an empty canvas)
+ *    · no design vocabulary                       → discuss
+ *      (it really was conversation)
+ */
+export function fallbackMode(message: string, canvasHasElements: boolean): AgentMode {
+  const m = message.trim()
+  if (!m) return 'discuss'
+  return DESIGN_DOMAIN_WORDS.test(m.toLowerCase()) ? (canvasHasElements ? 'edit' : 'create') : 'discuss'
 }
 
 /** System prompt for the model classifier (used when heuristics are

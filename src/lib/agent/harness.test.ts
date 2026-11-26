@@ -26,7 +26,7 @@ import { parseAgentTurn, sseLine, AGENT_GUARDS, AGENT_PROTOCOL_VERSION, type Age
 import { AGENT_TOOL_MAP, AGENT_TOOLS, type ToolContext, type SanitizeResult } from './tools'
 import { runAgentLoop, toolsForMode, loopSystemPrompt } from './loop'
 import { auditDesign, contrastBetween } from './audit'
-import { heuristicMode, parseMode, modeAllowsWrites, MODE_TOOL_RISK } from './router'
+import { heuristicMode, parseMode, modeAllowsWrites, MODE_TOOL_RISK, fallbackMode } from './router'
 import { DESIGN_SKILLS, selectSkills, skillsPromptSection } from './skills'
 import { extractBrief, validateBrief, briefPromptSection, FORMAT_PRESETS, type DesignBrief } from './brief'
 import { serializeDesignContext, contextValidIds, type AgentDesignCtx } from './context'
@@ -1686,6 +1686,94 @@ describe('v0.32.2 · router: the Instagram-post misroute (defect A)', () => {
     expect(heuristicMode('Make the poster title bold').mode).toBe('edit')
     expect(heuristicMode('delete the instagram logo on page 2').mode).toBe('edit')
     expect(heuristicMode('make the existing title bold').mode).toBe('edit')
+  })
+})
+
+describe('v0.32.7 · router: the fix-family misroute (write requests must never depend on a provider)', () => {
+  // Production report (26 Nov 2026, the JNV Baramula session): every
+  // fix/improve phrasing fell through the heuristic lists to the model
+  // router — and during a provider outage (429/502, exactly when users
+  // retry a broken design) the catch kept the catch-all: DISCUSS. The
+  // user asked to fix a design and got product conversation.
+  it('the EXACT messages from the production session are deterministic write modes', () => {
+    expect(heuristicMode('create a poster for my school basket ball competetion. school name : JNV Baramula')).toEqual({ mode: 'create', confidence: 'high' })
+    expect(heuristicMode("it doesn't look cool add desings images stickers and better fonts etc").mode).toBe('improve')
+    expect(heuristicMode('fix it')).toEqual({ mode: 'improve', confidence: 'high' })
+    expect(heuristicMode("don;t stop until you fix the design it looks like shit")).toEqual({ mode: 'improve', confidence: 'high' })
+  })
+
+  it('the fix/improve family classifies high — never the model router, never discuss', () => {
+    for (const msg of [
+      'fix it',
+      'fix this',
+      'fix them',
+      'fix everything',
+      'fix the design',
+      'fix my poster',
+      'fix the layout',
+      'improve it',
+      'improve this',
+      'improve this poster',
+      'improve the design',
+      'redo it',
+      'revamp this design',
+      'make it look cool',
+      'make it look better',
+      'make this look professional',
+      "it doesn't look good",
+      'this does not look nice',
+      'it looks bad',
+      'it looks like shit',
+      'the design looks terrible',
+      'redesign the poster',
+    ]) {
+      expect(heuristicMode(msg), msg).toEqual({ mode: 'improve', confidence: 'high' })
+    }
+  })
+
+  it('element-level fixes stay surgical edits (the intent classifier refines inside the run)', () => {
+    for (const msg of [
+      'fix the title',
+      'fix the typos',
+      'fix the logo',
+      'update the design',
+      'update the poster',
+      'adjust the spacing',
+      'tweak the colors',
+      'change the app icon on the poster',
+    ]) {
+      expect(heuristicMode(msg).mode, msg).toBe('edit')
+    }
+  })
+
+  it('conversations, product talk and questions keep their old modes — the write verbs hijack nothing', () => {
+    expect(heuristicMode('hi')).toEqual({ mode: 'discuss', confidence: 'high' })
+    expect(heuristicMode('how was your day').mode).toBe('discuss')
+    expect(heuristicMode('Why is the Canvix agent broken?').mode).toBe('discuss')
+    expect(heuristicMode('improve the app').mode).toBe('discuss')
+    expect(heuristicMode('fix your code').mode).toBe('discuss')
+    expect(heuristicMode('How does the poster feature work?').mode).not.toBe('create')
+    expect(heuristicMode('What is wrong with this design?').mode).toBe('review')
+    expect(heuristicMode('make it bolder').mode).toBe('edit')
+    // interrogatives are questions about the artifact, not create briefs
+    expect(heuristicMode('why is my poster broken?').mode).not.toBe('create')
+    // polite question FORMS still create
+    expect(heuristicMode('can you make me a poster for my coffee shop?').mode).toBe('create')
+    expect(heuristicMode('make a poster that looks cool').mode).toBe('create')
+    expect(heuristicMode('Design a bold Instagram post for a coffee launch')).toEqual({ mode: 'create', confidence: 'high' })
+  })
+
+  it('fallbackMode — the provider-outage escape hatch classifies by vocabulary + canvas state', () => {
+    // design vocabulary on a POPULATED canvas → surgical edit
+    expect(fallbackMode('fix my poster please', true)).toBe('edit')
+    expect(fallbackMode('fix the posetr on it', true)).toBe('edit') // artifact typo survives on the verb
+    // design vocabulary on an EMPTY canvas → create (nothing to damage)
+    expect(fallbackMode('make me a cool posetr', false)).toBe('create')
+    expect(fallbackMode('add some stikcers', false)).toBe('create')
+    // NO design vocabulary → it really was conversation
+    expect(fallbackMode('how was your day', true)).toBe('discuss')
+    expect(fallbackMode('nice weather today', false)).toBe('discuss')
+    expect(fallbackMode('', true)).toBe('discuss')
   })
 })
 

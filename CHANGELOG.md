@@ -35,6 +35,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   recovery e2e (mocked route, real editor); the live benchmark spec
   (CANVIX_BENCH_LIVE=1, real provider) writes docs/BENCHMARK-v0.32.7.md.
   Fixed: the panel crashed on a partial brief event.
+- **Fixed: the discuss misroute during provider outages** (router.ts).
+  The entire fix/improve family — "fix it", "fix the design", "improve
+  this poster", "make it look cool", "it looks like shit", "redesign
+  the poster" — fell through the heuristic lists to the model router,
+  and when the provider was down (429/502, exactly when users retry a
+  broken design) the catch kept the catch-all: DISCUSS. A write request
+  became a product chat that touched nothing. The fix/improve family
+  now classifies deterministically: whole-artifact fixes route to
+  improve, element-level fixes ("fix the title", "change the app
+  icon") stay edits, product talk ("improve the app", "fix the Canvix
+  agent tool loop") stays discuss, interrogatives never create, and a
+  new fallbackMode() classifies remaining design vocabulary by canvas
+  state (empty → create, populated → edit) whenever the model router
+  fails or answers garbage. +5 regressions from the live JNV Baramula
+  poster session (26 Nov 2026).
 
 ### Changed — v0.32.6: ONE agent, ZERO selectors + the canvas map
 

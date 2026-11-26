@@ -10,7 +10,7 @@ import {
 } from '@/lib/agent/protocol'
 import { fontFamilies } from '@/lib/agent/tools'
 import { serializeDesignContext, type AgentDesignCtx } from '@/lib/agent/context'
-import { heuristicMode, parseMode, ROUTER_SYSTEM, modeAllowsWrites, MODE_TOOL_RISK } from '@/lib/agent/router'
+import { heuristicMode, parseMode, ROUTER_SYSTEM, modeAllowsWrites, MODE_TOOL_RISK, fallbackMode } from '@/lib/agent/router'
 import { runAgentLoop, toolsForMode } from '@/lib/agent/loop'
 import { auditDesign as runDesignAudit } from '@/lib/agent/audit'
 import { selectSkills } from '@/lib/agent/skills'
@@ -350,6 +350,14 @@ async function __canvix_post(req: NextRequest) {
       const h = heuristicMode(message)
       mode = h.mode
       if (h.confidence === 'low') {
+        // v0.32.7 (production report): a WRITE request must never
+        // depend on a provider to be classified. When the heuristic
+        // recognized no pattern and the model router call fails
+        // (429/502/network — exactly when users retry a broken
+        // design) or answers unparseable garbage, the old catch kept
+        // the heuristic catch-all: DISCUSS — "fix my poster" became
+        // a product chat that touched nothing. fallbackMode classifies
+        // deterministically: design vocabulary + canvas state.
         try {
           const modelMode = parseMode(
             await chat([
@@ -357,9 +365,10 @@ async function __canvix_post(req: NextRequest) {
               { role: 'user', content: message.slice(0, 500) },
             ]),
           )
-          if (modelMode) mode = modelMode
+          mode = modelMode ?? fallbackMode(message, (design.elements?.length ?? 0) > 0)
         } catch {
-          /* provider hiccup — the heuristic answer stands */
+          /* provider hiccup — the deterministic fallback stands */
+          mode = fallbackMode(message, (design.elements?.length ?? 0) > 0)
         }
       }
     }

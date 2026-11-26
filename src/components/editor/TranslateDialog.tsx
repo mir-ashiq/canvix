@@ -65,7 +65,7 @@ function collectCellTexts(els: AnyElement[], out: TableCellEntry[] = []): TableC
   return out
 }
 
-/** Canva "Translate" — AI-translate every text element in the design. */
+/** Canva "ترجمة" — AI-translate every text element in the design. */
 export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const pages = useEditorStore((s) => s.pages)
   const translateTexts = useEditorStore((s) => s.translateTexts)
@@ -181,7 +181,7 @@ export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenC
             onClick={() => void run()}
           >
             {busy ? <Loader2 size={15} className="mr-1.5 animate-spin" /> : <Languages size={15} className="mr-1.5" />}
-            {busy ? 'Translating…' : 'Translate'}
+            {busy ? 'Translating…' : 'ترجمة'}
           </Button>
         </div>
       </DialogContent>

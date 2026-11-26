@@ -3,6 +3,30 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+### Fixed — v0.32.7: the funding.json .well-known URL-form mismatch
+
+- **The failure:** `canvix.app/.well-known/funding-manifest-urls` listed
+  the manifest URL in exactly one form (`raw.githubusercontent.com/…`),
+  but the fundingjson.org checkers do **exact-string membership**: the
+  grants-directory crawl looked for the `github.com/…/raw/refs/heads/main/…`
+  form and the official validator was handed the `github.com/…/blob/main/…`
+  form — both reported "manifest URL … was not found in the .well-known
+  list" while the file was live, and the directory listing kept the
+  repository link flagged "Unverified URL".
+- **The fix:** the well-known file now lists every fetchable form of
+  the manifest URL (six lines — the raw forms verified byte-identical,
+  the blob form being GitHub's file view);
+  **canvix.app/funding.json** now serves a byte-identical copy of the
+  manifest (was 404); and the repository itself gained
+  `.well-known/funding-manifest-urls` plus the schema-documented
+  `repositoryUrl.wellKnown` in-repo verification (the official v1.1.0
+  schema's own pattern for repository URLs — github.com cannot serve
+  /.well-known per repository).
+- Guards: the unit test asserts the six-line list, repo↔public file
+  identity and the byte-identical domain copy; e2e smoke + the CI docker
+  job assert both routes serve the exact bytes. Unit 1,748/1,748 (+3);
+  e2e smoke +1 spec.
+
 ### Changed — v0.32.6: ONE agent, ZERO selectors + the canvas map
 
 - **One surface:** the five-tab unified app (Chat / Generate / Write /

@@ -54,8 +54,16 @@ systemctl restart canvix 2>/dev/null || pm2 restart canvix 2>/dev/null || \
 curl -fsS https://canvix.app/api/health            # {"ok":true, "database":{...}, "templates":366}
 curl -fsS https://canvix.app/ -o /dev/null -w '%{http_code}\n'   # 200
 curl -fsS https://canvix.app/.well-known/funding-manifest-urls
-# → must print EXACTLY:
+# → must print EXACTLY (v0.32.7: every fetchable form of the manifest
+#   URL, one per line — the fundingjson.org checkers do exact-string
+#   membership, so a single canonical form was "not found in the list"):
 # https://raw.githubusercontent.com/mir-ashiq/canvix/refs/heads/main/funding.json
+# https://raw.githubusercontent.com/mir-ashiq/canvix/main/funding.json
+# https://github.com/mir-ashiq/canvix/blob/main/funding.json
+# https://github.com/mir-ashiq/canvix/raw/refs/heads/main/funding.json
+# https://github.com/mir-ashiq/canvix/raw/main/funding.json
+# https://canvix.app/funding.json
+curl -fsS https://canvix.app/funding.json           # 200 — the domain-hosted manifest copy
 ```
 
 If health fails or the site is down: restore the snapshot (`rm -rf .next/standalone && cp -a ~/standalone-backup-* .next/standalone`), restart, and investigate offline — the old build keeps serving.

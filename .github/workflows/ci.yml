@@ -261,10 +261,21 @@ jobs:
           # fundingjson.org cross-domain ownership verification: the
           # standalone PRODUCTION server must serve public/.well-known/
           # statically (dev-mode serving is covered by the e2e smoke).
-          BODY=$(curl -fsS http://localhost:3000/.well-known/funding-manifest-urls 2>/dev/null)
-          echo "well-known: $BODY"
-          EXPECTED="https://raw.githubusercontent.com/mir-ashiq/canvix/refs/heads/main/funding.json"
-          [ "$BODY" = "$EXPECTED" ] || { echo "well-known file wrong or missing"; exit 1; }
+          # v0.32.7: the file lists every fetchable form of the manifest
+          # URL — the checkers do exact-string membership, so diff the
+          # served bytes against the committed file (all six forms).
+          curl -fsS http://localhost:3000/.well-known/funding-manifest-urls -o /tmp/wk
+          cat /tmp/wk
+          diff /tmp/wk public/.well-known/funding-manifest-urls \
+            || { echo "well-known file wrong or missing"; exit 1; }
+
+      - name: Funding-manifest domain copy serves (v0.32.7)
+        run: |
+          # canvix.app/funding.json — the domain-hosted manifest copy
+          # (byte-identical to the repository manifest, asserted by the
+          # unit test). The production container must serve it too.
+          curl -fsS http://localhost:3000/funding.json -o /tmp/fj
+          diff /tmp/fj funding.json || { echo "funding.json copy wrong or missing"; exit 1; }
 
       - name: Assert the stack is clean after down
         if: always()

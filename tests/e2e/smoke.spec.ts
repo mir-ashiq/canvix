@@ -15,13 +15,41 @@ test.describe('Canvix smoke', () => {
 
   test('serves the funding.json cross-domain verification file (v0.29.5)', async ({ request }) => {
     // fundingjson.org ownership verification: canvix.app authorizes the
-    // repository manifest at /.well-known/funding-manifest-urls. Serving
-    // this correctly in every environment (dev, CI, Docker, VPS) is what
-    // lets the manifest later carry the wellKnown property honestly.
+    // repository manifest at /.well-known/funding-manifest-urls. The
+    // file lists every fetchable form of the manifest URL (v0.32.7) —
+    // the checkers do exact-string membership, so a single canonical
+    // form was repeatedly "not found in the .well-known list".
     const res = await request.get('/.well-known/funding-manifest-urls')
     expect(res.status()).toBe(200)
     expect(await res.text()).toBe(
-      'https://raw.githubusercontent.com/mir-ashiq/canvix/refs/heads/main/funding.json',
+      [
+        'https://raw.githubusercontent.com/mir-ashiq/canvix/refs/heads/main/funding.json',
+        'https://raw.githubusercontent.com/mir-ashiq/canvix/main/funding.json',
+        'https://github.com/mir-ashiq/canvix/blob/main/funding.json',
+        'https://github.com/mir-ashiq/canvix/raw/refs/heads/main/funding.json',
+        'https://github.com/mir-ashiq/canvix/raw/main/funding.json',
+        'https://canvix.app/funding.json',
+        '',
+      ].join('\n'),
+    )
+  })
+
+  test('serves the domain-hosted funding.json manifest copy (v0.32.7)', async ({ request }) => {
+    // canvix.app/funding.json — the manifest hosted on the domain itself
+    // (byte-identical to the repository manifest, asserted by the unit
+    // test) and listed in the well-known file above.
+    const res = await request.get('/funding.json')
+    expect(res.status()).toBe(200)
+    const body = await res.json()
+    expect(body.$schema).toBe('https://fundingjson.org/schema/v1.1.0.json')
+    expect(body.entity.name).toBe('Ashiq Hussain Mir')
+    const project = body.projects[0]
+    expect(project.webpageUrl.url).toBe('https://canvix.app')
+    expect(project.webpageUrl.wellKnown).toBe(
+      'https://canvix.app/.well-known/funding-manifest-urls',
+    )
+    expect(project.repositoryUrl.wellKnown).toBe(
+      'https://github.com/mir-ashiq/canvix/blob/main/.well-known/funding-manifest-urls',
     )
   })
 

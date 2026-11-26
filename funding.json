@@ -21,7 +21,8 @@
         "wellKnown": "https://canvix.app/.well-known/funding-manifest-urls"
       },
       "repositoryUrl": {
-        "url": "https://github.com/mir-ashiq/canvix"
+        "url": "https://github.com/mir-ashiq/canvix",
+        "wellKnown": "https://github.com/mir-ashiq/canvix/blob/main/.well-known/funding-manifest-urls"
       },
       "licenses": [
         "spdx:MIT"

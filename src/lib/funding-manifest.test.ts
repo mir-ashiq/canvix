@@ -11,6 +11,13 @@
 // CI never depends on the network) plus Canvix-specific invariants.
 // Full official-schema validation (fastjsonschema against the live
 // schema document) is recorded in docs/FUNDING-VALIDATION.md.
+//
+// v0.32.7: the well-known guards now cover every fetchable form of
+// the manifest URL — the directory and the official validator do
+// exact-string membership, and one canonical form was repeatedly
+// "not found in the .well-known list" (see §8 there). The domain
+// copy public/funding.json and the repo-root .well-known file are
+// guarded here byte-for-byte.
 // ─────────────────────────────────────────────────────────────
 
 import { describe, expect, it } from 'vitest'
@@ -18,8 +25,11 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
 const ROOT = path.resolve(__dirname, '../../')
-const manifest = JSON.parse(readFileSync(path.join(ROOT, 'funding.json'), 'utf8')) as Record<string, unknown>
+const manifestRaw = readFileSync(path.join(ROOT, 'funding.json'), 'utf8')
+const manifest = JSON.parse(manifestRaw) as Record<string, unknown>
 const wellKnown = readFileSync(path.join(ROOT, 'public/.well-known/funding-manifest-urls'), 'utf8')
+const repoWellKnown = readFileSync(path.join(ROOT, '.well-known/funding-manifest-urls'), 'utf8')
+const domainManifest = readFileSync(path.join(ROOT, 'public/funding.json'), 'utf8')
 
 const GUID_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/
 const TAG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/
@@ -89,9 +99,47 @@ describe('funding.json — fundingjson.org v1.1.0 contract', () => {
     }
   })
 
-  it('the .well-known verification file authorizes exactly the canonical manifest URL', () => {
+  it('the .well-known verification file authorizes every fetchable form of the manifest URL', () => {
+    // The checkers do exact-string membership, not normalization: the
+    // directory crawl looked for the github.com/raw/refs/heads form and
+    // the official validator was handed the github.com/blob form —
+    // v0.32.6's single raw.githubusercontent form matched neither
+    // ("manifest URL … was not found in the .well-known list"). Every
+    // line below is a fetchable form of the same manifest: the raw
+    // forms serve it byte-identical; the blob form is GitHub's file
+    // view of it; the last is the domain-hosted copy (asserted below).
     const lines = wellKnown.split('\n').map((l) => l.trim()).filter(Boolean)
-    expect(lines).toEqual(['https://raw.githubusercontent.com/mir-ashiq/canvix/refs/heads/main/funding.json'])
+    expect(lines).toEqual([
+      'https://raw.githubusercontent.com/mir-ashiq/canvix/refs/heads/main/funding.json',
+      'https://raw.githubusercontent.com/mir-ashiq/canvix/main/funding.json',
+      'https://github.com/mir-ashiq/canvix/blob/main/funding.json',
+      'https://github.com/mir-ashiq/canvix/raw/refs/heads/main/funding.json',
+      'https://github.com/mir-ashiq/canvix/raw/main/funding.json',
+      'https://canvix.app/funding.json',
+    ])
+  })
+
+  it('the repository .well-known file mirrors the served one byte for byte', () => {
+    // github.com cannot serve /.well-known per repository, so the official
+    // v1.1.0 schema documents the wellKnown proof for repositoryUrl as a
+    // file IN the repository — this one, at the conventional repo path.
+    expect(repoWellKnown).toBe(wellKnown)
+  })
+
+  it('repositoryUrl wellKnown points at the in-repo verification file (activated 2026-11-26)', () => {
+    const p = (manifest.projects as Record<string, unknown>[])[0]
+    expect((p.repositoryUrl as Record<string, unknown>).wellKnown).toBe(
+      'https://github.com/mir-ashiq/canvix/blob/main/.well-known/funding-manifest-urls',
+    )
+  })
+
+  it('public/funding.json is a byte-identical copy of the repository manifest', () => {
+    // canvix.app/funding.json — the manifest hosted on the domain itself
+    // and listed in the well-known file. Drift between the two copies
+    // would publish two different manifests under the same listing.
+    expect(domainManifest).toBe(manifestRaw)
+    const copy = JSON.parse(domainManifest) as Record<string, unknown>
+    expect(copy.$schema).toBe('https://fundingjson.org/schema/v1.1.0.json')
   })
 
   it('wellKnown ownership claim is ACTIVE and points at the live verification file (activated 2026-11-24)', () => {

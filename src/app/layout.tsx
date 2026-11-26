@@ -7,7 +7,7 @@ import { Toaster } from "@/components/ui/toaster";
  * indexed — no og:image, twitter:card "summary" (text-only card), no
  * canonical, no sitemap. This block fixes all four. metadataBase makes
  * every generated URL (canonical, og:image, sitemap) absolute and correct
- * in production; SITE_URL is the deployed origin (canvix.app).
+ * in production; SITE_URL should be set to the deployed TEa.G3 origin.
  */
 const SITE_URL =
   process.env.SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "https://canvix.app";
@@ -116,7 +116,7 @@ export default function RootLayout({
               description:
                 "منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر — تطوير المطور العراقي TEa.G3.",
               image: `${SITE_URL}/og.png`,
-              logo: `${SITE_URL}/canvix.svg`,
+              logo: `${SITE_URL}/tea-g3.svg`,
               offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
               isAccessibleForFree: true,
               featureList:

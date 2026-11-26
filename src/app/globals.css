@@ -116,12 +116,16 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    direction: rtl;
+  }
   body {
     @apply bg-background text-foreground;
+    font-family: 'Noto Sans Arabic', 'Inter', sans-serif;
   }
 }
 
-/* ── Canvix brand utilities ─────────────────────────────────── */
+/* ── TEa.G3 brand utilities ────────────────────────────────── */
 
 :root {
   /* core brand */

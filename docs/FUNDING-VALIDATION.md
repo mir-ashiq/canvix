@@ -113,6 +113,9 @@ github.com cannot serve `/.well-known` per repository.
 | All five GitHub URL forms fetchable | `curl -sL` + sha256 per form | ✅ 200 each; raw forms byte-identical (`c4ca1020…d13fda`), blob form = GitHub's HTML file view |
 | Repo-root `.well-known` ≡ `public/.well-known` (bytes) | unit test | ✅ |
 | `public/funding.json` ≡ `funding.json` (bytes) | unit test | ✅ |
-| Dev-server serving of both routes | e2e smoke (CI e2e job) | ⏳ UNVERIFIED until the v0.32.7 CI run |
-| Production-container serving of both routes | CI docker job (diff) | ⏳ UNVERIFIED until the v0.32.7 CI run |
-| Live `https://canvix.app` serving of both routes | `curl` after the VPS auto-deploy | ⏳ UNVERIFIED until the auto-deploy of this commit |
+| Repo-root `.well-known/funding-manifest-urls` live on GitHub | blob + raw forms of the pushed file | ✅ 200 each; raw forms byte-identical to the committed file (2026-11-26) |
+| Local standalone serving of both routes | booted `.next/standalone/server.js` (the same server the VPS runs), `curl` + `cmp` | ✅ both 200, byte-identical (2026-11-26) |
+| Live `https://canvix.app` serving of both routes | `curl` after the VPS auto-deploy of `56915c9` | ✅ both 200, byte-identical to the committed files; `/api/health` ok:true, 366 templates (2026-11-26) |
+| Official directory validator re-run with the failing blob-form hosted URL | `https://dir.fundingjson.org/validate` (headless browser), hosted URL `https://github.com/mir-ashiq/canvix/blob/main/funding.json` | ✅ **"Manifest is valid"** — no well-known error (2026-11-26) |
+| Dev-server serving of both routes | e2e smoke (CI e2e job, run 45883835560, commit `56915c9`) | ✅ e2e completed successfully (12m 49s) — both funding smoke specs green |
+| Production-container serving of both routes | CI docker job (run 45883835560) | ✅ docker completed successfully (2m 0s) — served bytes diff-identical to the committed files |

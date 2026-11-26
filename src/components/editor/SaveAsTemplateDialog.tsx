@@ -85,7 +85,7 @@ function SaveAsTemplateForm({ onOpenChange }: { onOpenChange: (open: boolean) =>
 
         <div className="space-y-3">
           <div>
-            <label className="text-sm font-medium" htmlFor="tpl-name">Template name</label>
+            <label className="text-sm font-medium" htmlFor="tpl-name">اسم القالب</label>
             <Input
               id="tpl-name"
               value={name}
@@ -96,7 +96,7 @@ function SaveAsTemplateForm({ onOpenChange }: { onOpenChange: (open: boolean) =>
             />
           </div>
           <div>
-            <span className="text-sm font-medium">Category</span>
+            <span className="text-sm font-medium">الفئة</span>
             <div className="flex gap-1.5 flex-wrap mt-1.5">
               {TEMPLATE_CATEGORIES.map((c) => (
                 <button

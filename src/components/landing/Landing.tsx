@@ -158,7 +158,7 @@ const BIG_FEATURES = [
 const TEMPLATE_SHOWCASE = [
   { label: 'منشور إنستغرام', from: '#FF5C8A', to: '#FFB84C', icon: Instagram, title: 'MEGA SALE' },
   { label: 'قصة', from: '#B8E986', to: '#7ED957', icon: Instagram, title: 'NEW DROP' },
-  { label: 'عرض تقديمي', from: '#FFFFFF', to: '#E8F6F7', icon: عرض تقديمي, title: 'Nimbus', dark: true },
+  { label: 'عرض تقديمي', from: '#FFFFFF', to: '#E8F6F7', icon: Presentation, title: 'Nimbus', dark: true },
   { label: 'ملصق', from: '#FFD166', to: '#FFC93C', icon: Printer, title: 'LIVE MUSIC', dark: true },
   { label: 'صورة مصغرة', from: '#0D1117', to: '#161B22', icon: Video, title: 'TOP 10 AI' },
   { label: 'شعار', from: '#FFFFFF', to: '#F4F5F7', icon: BadgeCheck, title: 'NOVA', dark: true },
@@ -219,7 +219,7 @@ export function Landing() {
       <header className="sticky top-0 z-50 border-b border-black/5 bg-white/80 backdrop-blur-lg">
         <nav className="mx-auto max-w-7xl px-4 sm:px-6 h-16 flex items-center justify-between">
           <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="TEa.G3 home">
-            <شعار size={30} />
+            <Logo size={30} />
           </button>
           <div className="hidden md:flex items-center gap-1 text-sm font-medium text-muted-foreground">
             <a href="#features" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">المميزات</a>
@@ -493,7 +493,7 @@ export function Landing() {
       <footer className="mt-auto border-t border-black/5 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <شعار size={24} />
+            <Logo size={24} />
             <span className="text-sm text-muted-foreground">
               © 2026 TEa.G3 · MIT License
             </span>

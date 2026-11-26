@@ -3,13 +3,13 @@
 import { Link2, Check, Copy, Eye, Info, QrCode } from 'lucide-react'
 import { useState } from 'react'
 import { useEditorStore } from '@/store/editor-store'
-import { designShareUrl } from '@/lib/design-url'
+import { designمشاركةUrl } from '@/lib/design-url'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/hooks/use-toast'
 
 /**
- * v0.11.7 (F6): the Share dialog documents the REAL access model instead of
+ * v0.11.7 (F6): the مشاركة dialog documents the REAL access model instead of
  * offering a decorative Only-me/Public selector that nothing enforced.
  * The rules (src/lib/auth/design-guard.ts):
  *   • ownerless design (created signed-out) → anyone with the link can edit
@@ -20,20 +20,20 @@ import { toast } from '@/hooks/use-toast'
  * decided by the deployment (LAN, VPN, reverse-proxy auth).
  */
 
-/** Canva-style Share dialog — copy link + the honest access model. */
-export function ShareDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+/** Canva-style مشاركة dialog — copy link + the honest access model. */
+export function مشاركةDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const designId = useEditorStore((s) => s.designId)
   const designName = useEditorStore((s) => s.designName)
   const [copied, setCopied] = useState(false)
 
   // v0.11.4: canonical share URLs — /design/<id> (legacy /?design=<id> links keep working)
-  const link = designId ? designShareUrl(designId) : ''
+  const link = designId ? designمشاركةUrl(designId) : ''
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(link)
       setCopied(true)
-      toast({ title: 'Share link copied to clipboard' })
+      toast({ title: 'مشاركة link copied to clipboard' })
       setTimeout(() => setCopied(false), 1800)
     } catch {
       toast({ title: 'Could not copy — select and copy manually', description: link })
@@ -43,13 +43,13 @@ export function ShareDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="rounded-[28px] bg-[#16181D] border-white/10 text-white sm:max-w-md">
-        <ShareBody designName={designName} link={link} copied={copied} onCopy={() => void copy()} />
+        <مشاركةBody designName={designName} link={link} copied={copied} onCopy={() => void copy()} />
       </DialogContent>
     </Dialog>
   )
 }
 
-function ShareBody({ designName, link, copied, onCopy }: {
+function مشاركةBody({ designName, link, copied, onCopy }: {
   designName: string
   link: string
   copied: boolean
@@ -63,7 +63,7 @@ function ShareBody({ designName, link, copied, onCopy }: {
     <>
       <DialogHeader>
         <DialogTitle className="text-lg font-bold flex items-center gap-2">
-          Share “{designName || 'Untitled design'}”
+          مشاركة “{designName || 'Untitled design'}”
         </DialogTitle>
         <DialogDescription className="text-white/60">
           Canvix is local-first: the link points back to your Canvix instance.
@@ -77,12 +77,12 @@ function ShareBody({ designName, link, copied, onCopy }: {
             readOnly
             value={link}
             className="flex-1 min-w-0 bg-transparent outline-none text-[13px] text-white/80 truncate"
-            aria-label="Share link"
+            aria-label="مشاركة link"
             onFocus={(e) => e.currentTarget.select()}
           />
           <Button className="btn-cv h-9 px-4 shrink-0 gap-1.5" onClick={onCopy}>
             {copied ? <Check size={14} /> : <Copy size={14} />}
-            {copied ? 'Copied' : 'Copy link'}
+            {copied ? 'Copied' : 'نسخ الرابط'}
           </Button>
         </div>
 

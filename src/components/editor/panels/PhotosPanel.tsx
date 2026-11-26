@@ -53,14 +53,14 @@ interface StockPhotoTile {
 type SearchError = { kind: 'no-provider' } | { kind: 'service'; message: string }
 
 const CATEGORIES = [
-  { id: 'all', label: 'All photos' },
-  { id: 'nature', label: 'Nature' },
-  { id: 'business', label: 'Business' },
-  { id: 'people', label: 'People' },
-  { id: 'food', label: 'Food' },
-  { id: 'travel', label: 'Travel' },
-  { id: 'texture', label: 'Textures' },
-  { id: 'abstract', label: 'Abstract' },
+  { id: 'all', label: 'كل الصور' },
+  { id: 'nature', label: 'الطبيعة' },
+  { id: 'business', label: 'الأعمال' },
+  { id: 'people', label: 'الأشخاص' },
+  { id: 'food', label: 'الطعام' },
+  { id: 'travel', label: 'السفر' },
+  { id: 'texture', label: 'الأنسجة' },
+  { id: 'abstract', label: 'تجريدي' },
 ]
 
 const TAGS: Record<string, string[]> = {
@@ -199,7 +199,7 @@ export function PhotosPanel() {
   // v0.11.6 (F2): clicking a category tab EXITS results mode — clears the
   // query (and with it the visible search box, now controlled), the stock
   // results and any error. Before, the query kept filtering the bundled
-  // grid, so "All photos" showed the stale 6-photo result set instead of
+  // grid, so "كل الصور" showed the stale 6-photo result set instead of
   // the 42-photo library until the panel was closed and reopened.
   function pickCategory(id: string) {
     setCat(id)
@@ -374,7 +374,7 @@ export function PhotosPanel() {
         Stock photos come from {providers.length > 0 ? providers.map(providerLabel).join(' and ') : 'the configured provider'} under
         their free licenses (Pexels License / Pixabay Content License) — inserted photos are downloaded
         into your media library and attribution stays on the element. Bundled photos are AI-generated
-        for Canvix.
+        for TEa.G3.
       </p>
     </PanelShell>
   )

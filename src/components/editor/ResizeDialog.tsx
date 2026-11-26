@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Wand2, Copy, Loader2, Square } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { createDesign } from '@/components/dashboard/hooks'
-import { magicRelayoutPages, RESIZE_PRESETS, type ResizePreset } from '@/lib/magic'
+import { magicRelayoutPages, RESIZE_PRESETS, type تغيير الحجمPreset } from '@/lib/magic'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,16 +12,16 @@ import { cn } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
 import { useAppStore } from '@/store/app-store'
 
-const GROUP_LABELS: Record<ResizePreset['group'], string> = {
+const GROUP_LABELS: Record<تغيير الحجمPreset['group'], string> = {
   story: 'Story & vertical video',
   post: 'Social posts',
   doc: 'Docs & decks',
   print: 'Print',
 }
 
-/** Canva Magic Resize dialog — re-layout the current design for any channel,
+/** Canva Magic تغيير الحجم dialog — re-layout the current design for any channel,
  *  in place or as copies (Magic Switch "Copy & resize"). */
-export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+export function تغيير الحجمDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const width = useEditorStore((s) => s.width)
   const height = useEditorStore((s) => s.height)
   const pages = useEditorStore((s) => s.pages)
@@ -58,7 +58,7 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   }
 
   /** Magic Switch: create a resized COPY for every checked channel. */
-  const copyAndResize = async () => {
+  const copyAndتغيير الحجم = async () => {
     if (!selected.length || !designId) return
     setBusy(true)
     let made = 0
@@ -94,10 +94,10 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       <DialogContent className="rounded-[28px] bg-[#16181D] border-white/10 text-white sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-lg font-bold flex items-center gap-2">
-            <Wand2 size={17} className="text-[#02C0CC]" /> Magic Resize
+            <Wand2 size={17} className="text-[#02C0CC]" /> Magic تغيير الحجم
           </DialogTitle>
           <DialogDescription className="text-white/60">
-            Resize this design for every channel. Pick sizes, then copy & resize — your elements are
+            تغيير الحجم this design for every channel. Pick sizes, then copy & resize — your elements are
             re-laid-out automatically.
           </DialogDescription>
         </DialogHeader>
@@ -128,7 +128,7 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                       >
                         {active && (
                           <svg viewBox="0 0 12 12" className="w-3 h-3">
-                            <path d="M2 6l2.5 2.5L10 3" fill="none" stroke="#7630D7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M2 6l2.5 2.5L10 3" fill="none" stroke="#7630D7" strokeالعرض="2" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
                         )}
                       </span>
@@ -146,11 +146,11 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           ))}
 
           <div>
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-2">Custom size</h3>
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-2">حجم مخصص</h3>
             <div className="flex items-center gap-2">
               <Input
                 type="number"
-                placeholder="Width"
+                placeholder="العرض"
                 value={custom.w}
                 onChange={(e) => setCustom((c) => ({ ...c, w: e.target.value }))}
                 className="bg-white/5 border-white/10 text-white h-10 [color-scheme:dark]"
@@ -159,14 +159,14 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               <span className="text-white/40">×</span>
               <Input
                 type="number"
-                placeholder="Height"
+                placeholder="الارتفاع"
                 value={custom.h}
                 onChange={(e) => setCustom((c) => ({ ...c, h: e.target.value }))}
                 className="bg-white/5 border-white/10 text-white h-10 [color-scheme:dark]"
                 aria-label="Custom height"
               />
               <Button className="btn-cv h-10 px-4 shrink-0" onClick={applyCustom}>
-                Resize
+                تغيير الحجم
               </Button>
             </div>
           </div>
@@ -179,14 +179,14 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             className="h-11 flex-1 rounded-xl border-white/15 bg-white/5 hover:bg-white/10 hover:text-white"
             disabled={selected.length !== 1}
             onClick={() => applyInPlace(selected[0].w, selected[0].h)}
-            title={selected.length === 1 ? `Resize this design to ${selected[0].w}×${selected[0].h}` : 'Check exactly one size to resize in place'}
+            title={selected.length === 1 ? `تغيير الحجم this design to ${selected[0].w}×${selected[0].h}` : 'Check exactly one size to resize in place'}
           >
-            <Square size={15} className="mr-1.5" /> Resize in place
+            <Square size={15} className="mr-1.5" /> تغيير الحجم in place
           </Button>
           <Button
             className="btn-cv h-11 flex-1 rounded-xl"
             disabled={!selected.length || busy}
-            onClick={() => void copyAndResize()}
+            onClick={() => void copyAndتغيير الحجم()}
           >
             {busy ? <Loader2 size={15} className="mr-1.5 animate-spin" /> : <Copy size={15} className="mr-1.5" />}
             Copy & resize {selected.length > 1 ? `(${selected.length})` : ''}

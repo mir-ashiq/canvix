@@ -43,6 +43,11 @@ export interface ToolContext {
   height: number
   /** fonts available in the catalog (family names) */
   fonts: Set<string>
+  /** v0.32.6 · the CANVAS MAP: existing elements' occupied vertical
+   *  bands (merged, disjoint — see plan-repair.ts). The plan solver
+   *  fits new sections into the FREE space between them so nothing
+   *  is planned on top of existing content. */
+  occupied?: { y: number; h: number; label?: string }[]
 }
 
 export type SanitizeResult =
@@ -167,7 +172,7 @@ export const AGENT_TOOLS: AgentTool[] = [
     // 40+ steps. A plan is displayed to the user and echoed back.
     name: 'plan_layout',
     description:
-      'Plan the composition before building: page background, sections with y-ranges and heights, and what each section contains. REQUIRED as the first call of a create run — reserve a vertical band per section (headline, tagline, features, mockup, CTA, footer) with ≥40px gaps so text never stacks.',
+      'Plan the composition before building: page background, sections with y-ranges and heights, and what each section contains. REQUIRED as the first call of a create run — reserve a vertical band per section (headline, tagline, features, mockup, CTA, footer). The SERVER computes the exact y-positions: with ≥40px gaps into the safe area, and on a canvas that already has content, into the FREE space between existing elements (never on top of them) — supply names, heights and order; approximate y is fine.',
     risk: 'read',
     argsSpec: '{background?: "#RRGGBB", sections: [{name: string, y: number, height: number, contains: string}], notes?: string}',
     sanitize: (args, ctx) => {
@@ -210,7 +215,16 @@ export const AGENT_TOOLS: AgentTool[] = [
       //   · cannot fit          → honest infeasibility with the exact
       //                           math (the model shrinks or drops
       //                           sections — never a fabrication)
-      const repair = repairPlanBands(parsed.map((p) => ({ name: p.name, y: p.y, h: p.h })), H)
+      // v0.32.6 · the CANVAS MAP: on a canvas that already has
+      // content, ctx.occupied carries the existing elements' bands;
+      // the solver fits the requested sections into the FREE space
+      // between them — the plan can never reserve space on top of
+      // something that is already there.
+      const repair = repairPlanBands(
+        parsed.map((p) => ({ name: p.name, y: p.y, h: p.h })),
+        H,
+        { occupied: ctx.occupied },
+      )
       if (!repair.ok) {
         return {
           ok: false,
@@ -230,10 +244,16 @@ export const AGENT_TOOLS: AgentTool[] = [
       const notes = typeof args.notes === 'string' ? args.notes.trim().slice(0, 200) : ''
       if (notes) lines.push(`notes: ${notes}`)
 
+      // the canvas map disclosure: what is already on the page and
+      // where the free space is — visible to the user AND the model
+      const occupied = ctx.occupied ?? []
+      const mapNote = occupied.length
+        ? `CANVAS MAP — existing elements occupy y ${occupied.map((o) => `${Math.round(o.y)}–${Math.round(o.y + o.h)}${o.label ? ` (${o.label})` : ''}`).join(', ')}; your sections were fitted into the FREE space (never on top of them).`
+        : ''
       const repairedNote = repair.repairs.length
         ? `PLAN AUTO-REPAIRED (your heights, order and contents were kept; the SERVER computed valid positions): ${repair.repairs.join('; ')}. Build inside these exact bands — do not recompute them.`
         : 'Bands verified: non-overlapping, ≥40px gaps, inside the safe area. Build inside these exact bands.'
-      const observation = `PLAN RECORDED (${lines.length} lines):\n${lines.join('\n')}\n${repairedNote}`
+      const observation = `${mapNote ? `${mapNote}\n` : ''}PLAN RECORDED (${lines.length} lines):\n${lines.join('\n')}\n${repairedNote}`
       return {
         ok: true,
         actions: [{ type: '__planLayout', lines, bands: repair.bands }],

@@ -150,37 +150,6 @@ async function selectViaLayers(page: Page, label: string) {
   await page.getByText(label, { exact: true }).click()
 }
 
-/** open a registry app from the Apps rail */
-async function openApp(page: Page, appName: string) {
-  await page.getByRole('button', { name: 'Apps', exact: true }).click()
-  await page.getByText(appName, { exact: true }).first().click()
-}
-
-/** v0.32.1: the six AI apps consolidated into ONE "Canvix AI" app —
- *  open it and switch to the named mode tab (Chat / Generate /
- *  Write / Image / Theme). The tab contents are the original,
- *  unchanged app components. */
-async function openUnifiedAI(page: Page, tab: string) {
-  await openApp(page, 'Canvix AI')
-  await page.getByRole('tab', { name: tab, exact: true }).click()
-}
-
-const MOCK_THEME = {
-  theme: {
-    name: 'Nordic calm',
-    mood: 'cool editorial',
-    palette: [
-      { hex: '#0B1220', role: 'background' },
-      { hex: '#16233A', role: 'surface' },
-      { hex: '#F5F7FA', role: 'ink' },
-      { hex: '#C3CCDA', role: 'inkSoft' },
-      { hex: '#5B8DEF', role: 'accent' },
-      { hex: '#9BB8F5', role: 'accentSoft' },
-    ],
-    fonts: { heading: 'Montserrat', body: 'Inter' },
-  },
-}
-
 const MOCK_NOTES = {
   notes: [
     { page: 1, text: 'Welcome the room, land the one number that matters, tease the demo.' },
@@ -250,40 +219,13 @@ test.describe('Wave 4 — AI Power-Up', () => {
     expect(d.pages[1].notes).toContain('margin story')
   })
 
-  test('AI theme: palette preview applies design-wide with contrast guards', async ({ page }) => {
-    await register(page, 'theme')
-    const designId = await createDesign(page, 'w4 theme', [
-      textEl({ text: 'Headline', fontSize: 72 }),
-      textEl({ id: 'w4_body', text: 'Body copy here', y: 240, fontSize: 24, bold: false }),
-      imageEl({ x: 120, y: 400 }),
-    ])
-    await openEditor(page, designId)
-
-    await page.route('**/api/ai/theme', (route) => route.fulfill({ json: MOCK_THEME }))
-    await openUnifiedAI(page, 'Theme')
-
-    await page.getByLabel('Theme mood').fill('nordic calm, cool editorial')
-    await page.getByRole('button', { name: 'Generate' }).click()
-
-    // the preview: six role rows + the font pairing
-    await expect(page.getByText('Nordic calm', { exact: true })).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByText('Montserrat + Inter')).toBeVisible()
-    await expect(page.getByText('Background', { exact: true })).toBeVisible()
-
-    await page.getByRole('button', { name: 'Apply theme' }).click()
-
-    // document truth: background + text recolored, image untouched
-    const applied = await waitForDoc(
-      page,
-      designId,
-      (d) => (d.pages[0].elements as any[]).some((e) => e.fill === '#F5F7FA'),
-      'the applied theme'
-    )
-    const els = applied.pages[0].elements
-    expect(els.find((e) => e.type === 'text' && e.fontSize === 72)?.fill).toBe('#F5F7FA') // heading ink
-    expect(els.find((e) => e.type === 'text' && e.fontSize === 24)?.fill).toBe('#C3CCDA') // body inkSoft
-    expect(els.find((e) => e.type === 'image')?.src).toContain('data:image/png;base64,') // untouched
-  })
+  // v0.32.6: the AI-theme TAB test is retired WITH its tab — the
+  // five-tab unified app (Chat / Generate / Write / Image / Theme)
+  // became ONE selector-free agent (AssistantApp: it classifies
+  // every message itself and does everything by itself). The theme
+  // route (/api/ai/theme) remains available as an API; theming a
+  // design through the app is now a plain agent request ("recolor
+  // this design…") pinned by the unified-ai-reproduction spec.
 
   test('local image tools: upscaler really enlarges; brush eraser + alt UI are wired', async ({ page }) => {
     await register(page, 'local')

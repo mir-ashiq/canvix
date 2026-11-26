@@ -66,6 +66,25 @@ const design: AgentDesignCtx = {
   otherPages: ['p1: 4 elements', 'p2: 7 elements'],
 }
 
+/** v0.32.6 · the same fixture compacted to the top 240px. Same
+ *  ids/texts/overlaps (update flows keep their targets), but the
+ *  canvas has real FREE space (y 240..1015) so a plan of additions
+ *  fits the canvas map. The spread-out original left only 415px of
+ *  contiguous free space — a full-composition plan on it is now
+ *  (correctly) infeasible, which is what a real improve run on a
+ *  nearly-full canvas should honestly say. */
+const compactDesign: AgentDesignCtx = {
+  ...design,
+  elements: [
+    { id: 'el-1', type: 'rect', x: 0, y: 0, width: 100, height: 100, fill: '#FF0000' },
+    { id: 'el-2', type: 'rect', x: 40, y: 20, width: 100, height: 100, fill: '#00FF00' },
+    { id: 'txt-1', type: 'text', x: 0, y: 60, width: 400, height: 60, text: 'Hello', fontSize: 48, fill: '#111111' },
+    { id: 'txt-2', type: 'text', x: 0, y: 150, width: 400, height: 60, text: 'World', fontSize: 32, fill: '#222222' },
+    { id: 'grp-1', type: 'group', x: 10, y: 0, width: 150, height: 100 },
+    { id: 'img-1', type: 'image', x: 0, y: 140, width: 300, height: 100 },
+  ],
+}
+
 /** scripted chat: pops replies in order; records every request */
 function scriptedChat(replies: string[]) {
   const calls: { role: string; content: string }[][] = []
@@ -282,7 +301,7 @@ describe('harness · tool matrix', () => {
     ])
     const result = await runAgentLoop({
       chat,
-      design,
+      design: compactDesign,
       mode: 'create',
       request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
@@ -314,7 +333,7 @@ describe('harness · tool matrix', () => {
     ])
     const result = await runAgentLoop({
       chat,
-      design,
+      design: compactDesign,
       mode: 'create',
       request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
@@ -344,7 +363,7 @@ describe('harness · tool matrix', () => {
     ])
     const result = await runAgentLoop({
       chat,
-      design,
+      design: compactDesign,
       mode: 'create',
       request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
@@ -368,7 +387,7 @@ describe('harness · tool matrix', () => {
     ])
     const result = await runAgentLoop({
       chat,
-      design,
+      design: compactDesign,
       mode: 'create',
       request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
@@ -591,7 +610,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
     ])
     const result = await runAgentLoop({
       chat,
-      design,
+      design: compactDesign,
       mode: 'create',
       request: 'Design a bold Instagram post for a coffee launch',
       brief,
@@ -628,7 +647,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
     const events: AgentEvent[] = []
     const result = await runAgentLoop({
       chat,
-      design,
+      design: compactDesign,
       mode: 'create',
       request: 'Design a bold Instagram post for a coffee launch',
       brief,
@@ -737,7 +756,11 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
     }
     const result = await runAgentLoop({
       chat,
-      design,
+      // v0.32.6: the canvas map — C builds on a canvas that already
+      // has content; the compact fixture leaves real free space so
+      // the plan records (the spread-out original left 415px, and a
+      // 540px composition honestly did not fit)
+      design: compactDesign,
       mode: 'create',
       request: 'Design a bold Instagram post for a coffee launch',
       emit: () => {},
@@ -763,12 +786,12 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
     ])
     const result = await runAgentLoop({
       chat,
-      design,
+      design: compactDesign,
       mode: 'improve',
       request: 'Make this design more professional',
       emit: () => {},
       awaitApply: async () => ({ ok: true }),
-      refreshedContext: () => design,
+      refreshedContext: () => compactDesign,
     })
     expect(result.toolCalls).toBe(4)
     expect(result.summary).toContain('fixed')
@@ -828,7 +851,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
     let declined = false
     const result = await runAgentLoop({
       chat,
-      design,
+      design: compactDesign,
       mode: 'create',
       request: 'Design a bold Instagram post for a coffee launch',
       emit: () => {},
@@ -838,7 +861,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
         return false
       },
       awaitApply: async () => ({ ok: true }),
-      refreshedContext: () => design,
+      refreshedContext: () => compactDesign,
       validateBriefOnClient: async () => ({ satisfied: true, unmet: [] }),
     })
     // every write tool applied except the declined clear_page; the
@@ -889,7 +912,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
         if (n === 5) signal.aborted = true
         return turn('add_sticker', { emoji: '⭐', n }) // distinct args — no cycle guard
       },
-      design,
+      design: compactDesign,
       mode: 'create',
       request: 'Design a bold Instagram post for a coffee launch',
       emit: () => {},
@@ -963,7 +986,7 @@ describe('harness · lifecycle flows (Cases A–F)', () => {
     replies.push(done('Long run complete'))
     const result = await runAgentLoop({
       chat: scriptedChat(replies).chat,
-      design,
+      design: compactDesign,
       mode: 'create',
       request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
@@ -1343,7 +1366,7 @@ describe('v0.29.3 · loop: vision critique BEFORE completion', () => {
     }
     const result = await runAgentLoop({
       chat,
-      design,
+      design: compactDesign,
       mode: 'create',
       request: 'Design a bold Instagram post for a coffee launch',
       emit: (e) => events.push(e),
@@ -2397,5 +2420,140 @@ describe('v0.32.5 · honest outcome classification (a failure is never a green c
     expect(turnOutcome({ mode: 'create', verification: undefined, content: 'Stopped after 3 infeasible plans — ask the user for a smaller composition.', appliedActions: 0 })).toBe('failure')
     // discuss/review turns apply nothing BY DESIGN — not failures
     expect(turnOutcome({ mode: 'discuss', verification: undefined, content: 'This poster uses a strong vertical hierarchy…', appliedActions: 0 })).toBe('unknown')
+  })
+})
+
+// ═════════════════════════════════════════════════════════════
+// v0.32.6 · the CANVAS MAP — "when the user asks it to do
+// something it first maps the background and what's present and
+// all that geometrically so that overlap won't happen and it will
+// know where to put everything by using geometry and math and
+// boundaries." Existing elements become occupied bands; plans are
+// fitted into the FREE space between them, deterministically.
+// ═════════════════════════════════════════════════════════════
+
+describe('v0.32.6 · the canvas map — plans fit the FREE space, never on top', () => {
+  const mapCtx = (occupied: { y: number; h: number; label?: string }[]): ToolContext => ({
+    ...ctx,
+    occupied,
+  })
+  // a 1080 canvas (safe y 65..1015) with existing content:
+  // headline y 65–365, card row y 405–805 → free: 365–405 (40px,
+  // unusable for two bands), 805–1015 (210px usable)
+  const occupied = [
+    { y: 65, h: 300, label: 'COFFEE LAUNCH' },
+    { y: 405, h: 400, label: 'Artisan Roast' },
+  ]
+
+  it('the solver fits sections into the LARGEST fitting free interval', async () => {
+    const { repairPlanBands } = await import('./plan-repair')
+    const r = repairPlanBands(
+      [
+        { name: 'offer', y: 400, h: 100 },
+        { name: 'fineprint', y: 950, h: 50 },
+      ],
+      1080,
+      { occupied },
+    )
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    // both sections live inside 805..1015 — never on the occupied bands
+    for (const b of r.bands) {
+      expect(b.y).toBeGreaterThanOrEqual(805)
+      expect(b.y + b.h).toBeLessThanOrEqual(1015)
+    }
+    expect(r.bands[0].y).toBe(805)
+    expect(r.bands[1].y - (r.bands[0].y + r.bands[0].h)).toBeGreaterThanOrEqual(40)
+    expect(r.repairs.join(' ')).toContain('free space')
+  })
+
+  it('sections that cannot fit the free space are INFEASIBLE with the exact map', async () => {
+    const { repairPlanBands } = await import('./plan-repair')
+    const r = repairPlanBands(
+      [
+        { name: 'offer', y: 400, h: 200 },
+        { name: 'cards', y: 700, h: 300 },
+        { name: 'footer', y: 950, h: 60 },
+      ],
+      1080,
+      { occupied },
+    )
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    // the error carries the occupancy map and the largest free interval
+    expect(r.infeasible).toContain('existing elements occupy y 65–365 (COFFEE LAUNCH)')
+    expect(r.infeasible).toContain('y 405–805 (Artisan Roast)')
+    expect(r.infeasible).toContain('largest free interval is 210px')
+    expect(r.infeasible).toContain('Move or clear existing elements')
+  })
+
+  it('canvasMap merges close elements into disjoint occupied bands', async () => {
+    const { canvasMap } = await import('./context')
+    const d = {
+      name: 'Map test', width: 1080, height: 1080, pageCount: 1, currentPageIndex: 0,
+      // two elements 35px apart merge (a 40px band cannot fit between)
+      elements: [
+        { id: 'a', type: 'text', y: 65, height: 200, text: 'Headline' },
+        { id: 'b', type: 'rect', y: 300, height: 100 },
+        { id: 'c', type: 'text', y: 900, fontSize: 60, text: 'Footer line' },
+      ],
+      colorsInUse: [], otherPages: [],
+    } as never as AgentDesignCtx
+    const map = canvasMap(d)
+    expect(map).toEqual([
+      { y: 65, h: 335, label: 'Headline' },
+      { y: 900, h: 60, label: 'Footer line' },
+    ])
+  })
+
+  it('plan_layout on an occupied canvas discloses the CANVAS MAP and fits the free space', () => {
+    const tool = AGENT_TOOL_MAP.get('plan_layout')
+    expect(tool).toBeTruthy()
+    const res = tool!.sanitize(
+      { sections: [{ name: 'offer', y: 380, height: 100, contains: 'limited time' }, { name: 'legal', y: 980, height: 50, contains: 'terms' }] },
+      mapCtx(occupied),
+    )
+    expect(res.ok).toBe(true)
+    const obs = String((res as { observation?: string }).observation)
+    expect(obs).toContain('CANVAS MAP')
+    expect(obs).toContain('y 65–365 (COFFEE LAUNCH)')
+    expect(obs).toContain('fitted into the FREE space')
+    const bands = (res as { actions?: { bands?: { name: string; y: number; h: number }[] }[] }).actions?.[0]?.bands
+    for (const b of bands ?? []) {
+      expect(b.y).toBeGreaterThanOrEqual(805)
+      expect(b.y + b.h).toBeLessThanOrEqual(1015)
+    }
+  })
+
+  it('the loop maps the design it is GIVEN: plans on a design with elements avoid them', async () => {
+    const events: AgentEvent[] = []
+    const occupiedDesign: AgentDesignCtx = {
+      name: 'Half-built poster', width: 1080, height: 1080, pageCount: 1, currentPageIndex: 0,
+      elements: [
+        { id: 'txt-1', type: 'text', y: 65, height: 300, text: 'EXISTING HEADLINE' },
+      ],
+      colorsInUse: [], otherPages: [],
+    }
+    const { chat } = scriptedChat([
+      turn('plan_layout', { sections: [{ name: 'offer', y: 100, height: 100, contains: 'sale' }] }),
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      done('Planned around the existing headline.'),
+    ])
+    const result = await runAgentLoop({
+      chat, design: occupiedDesign, mode: 'improve',
+      request: 'Add an offer banner under the headline',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    expect(result.summary).toContain('Planned around')
+    // the CANVAS MAP rides the OBSERVATION (disclosed to the model
+    // AND the user), the fitted band rides the plan event
+    const obs = events.find((e) => e.type === 'observation') as { message?: string } | undefined
+    expect(obs?.message).toContain('CANVAS MAP')
+    expect(obs?.message).toContain('EXISTING HEADLINE')
+    const plan = events.find((e) => e.type === 'plan') as { steps?: string[] } | undefined
+    // the single band was fitted BELOW the occupied headline: free
+    // space starts at y=365 (headline occupies 65–365)
+    expect(plan?.steps?.join('\n')).toContain('y=365')
   })
 })

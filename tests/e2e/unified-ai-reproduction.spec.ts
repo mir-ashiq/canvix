@@ -154,10 +154,10 @@ test.describe('Unified Canvix AI reproduction (v0.32.2 fix)', () => {
       })
     })
 
-    // ── Canvix AI → Chat (default tab) → the reproduction prompt ──
+    // ── Canvix AI (the one agent, no tabs) → the reproduction prompt ──
     await page.getByRole('button', { name: 'Apps', exact: true }).click()
     await page.getByText('Canvix AI', { exact: true }).first().click()
-    await page.getByPlaceholder('Describe what to design or change…').fill(PROMPT)
+    await page.getByPlaceholder('Describe what to design or change — the agent figures out the rest…').fill(PROMPT)
     await page.getByRole('button', { name: 'Send', exact: true }).click()
 
     // the ORIGINAL request reached the route, verbatim, UNPINNED (Auto)
@@ -288,7 +288,7 @@ test.describe('v0.32.5 · the P0 regression — zero-action failures and follow-
 
     await page.getByRole('button', { name: 'Apps', exact: true }).click()
     await page.getByText('Canvix AI', { exact: true }).first().click()
-    await page.getByPlaceholder('Describe what to design or change…').fill(PROMPT)
+    await page.getByPlaceholder('Describe what to design or change — the agent figures out the rest…').fill(PROMPT)
     await page.getByRole('button', { name: 'Send', exact: true }).click()
 
     // the honest amber failure status — the disclosed failure
@@ -339,7 +339,7 @@ test.describe('v0.32.5 · the P0 regression — zero-action failures and follow-
     await page.getByText('Canvix AI', { exact: true }).first().click()
 
     // turn 1: the production coffee prompt
-    await page.getByPlaceholder('Describe what to design or change…').fill(PROMPT)
+    await page.getByPlaceholder('Describe what to design or change — the agent figures out the rest…').fill(PROMPT)
     await page.getByRole('button', { name: 'Send', exact: true }).click()
     await waitForDoc(
       page,
@@ -349,7 +349,7 @@ test.describe('v0.32.5 · the P0 regression — zero-action failures and follow-
     )
 
     // turn 2: the production follow-up, in the SAME conversation
-    await page.getByPlaceholder('Describe what to design or change…').fill('Create by yourself')
+    await page.getByPlaceholder('Describe what to design or change — the agent figures out the rest…').fill('Create by yourself')
     await page.getByRole('button', { name: 'Send', exact: true }).click()
 
     // the follow-up request reached the route VERBATIM, with the

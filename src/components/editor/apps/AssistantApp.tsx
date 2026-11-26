@@ -24,12 +24,12 @@
 // ─────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bot, Loader2, Send, Sparkles, User, Square, Undo2, ShieldAlert, ListChecks, Eye, Gauge, Scissors, CheckCircle2 } from 'lucide-react'
+import { Bot, Loader2, Send, Sparkles, User, Square, Undo2, ShieldAlert, ListChecks, Gauge, Scissors, CheckCircle2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { turnOutcome } from '@/lib/agent/outcome'
 import type { AnyElement, TextElement } from '@/lib/types'
 import { useEditorStore } from '@/store/editor-store'
 import { AppHeader, type AppPanelProps } from './registry'
-import { cn } from '@/lib/utils'
 import { applyDesignAction, describeAction, type DesignAction } from '@/lib/design-actions'
 import { useAICapabilities } from '@/hooks/use-ai-capabilities'
 import type { AgentEvent, AgentMode } from '@/lib/agent/protocol'
@@ -72,16 +72,6 @@ const SUGGESTIONS = [
   'Add a CTA button',
   'Build a 3-slide pitch deck for a startup idea',
   'Explain what fonts this design uses',
-]
-
-const MODE_CHIPS: { id: AgentMode | 'auto'; label: string }[] = [
-  { id: 'auto', label: 'Auto' },
-  { id: 'create', label: 'Create' },
-  { id: 'edit', label: 'Edit' },
-  { id: 'review', label: 'Review' },
-  { id: 'improve', label: 'Improve' },
-  { id: 'explain', label: 'Explain' },
-  { id: 'plan', label: 'Plan' },
 ]
 
 const READ_ONLY_MODES: AgentMode[] = ['review', 'explain', 'plan', 'discuss']
@@ -307,8 +297,6 @@ export function AssistantApp({ onClose }: AppPanelProps) {
   const [liveSkills, setLiveSkills] = useState<string[]>([])
   const [liveBrief, setLiveBrief] = useState<DesignBrief | null>(null)
   const [liveUsage, setLiveUsage] = useState<{ turns: number; toolCalls: number; elapsedMs: number; modelCalls: number } | null>(null)
-  /** the pinned mode chip ('auto' = classify per message) */
-  const [pinnedMode, setPinnedMode] = useState<AgentMode | 'auto'>('auto')
   /** pending destructive confirmation */
   const [pendingConfirm, setPendingConfirm] = useState<{ tool: string; actions: DesignAction[]; callId: string } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -404,9 +392,11 @@ export function AssistantApp({ onClose }: AppPanelProps) {
     setLiveUsage(null)
     confirmedRef.current = new Set()
 
-    // the heuristic pre-classification shows a mode hint even before
-    // the server answers (the pinned chip wins when set)
-    const expectedMode = pinnedMode === 'auto' ? heuristicMode(text).mode : pinnedMode
+    // v0.32.6: NO mode selector — the agent classifies every message
+    // itself and does everything by itself (create, edit, review,
+    // explain…). The hint shows what it classified before the server
+    // answers.
+    const expectedMode = heuristicMode(text).mode
     setLiveMode(expectedMode)
 
     const controller = new AbortController()
@@ -429,7 +419,6 @@ export function AssistantApp({ onClose }: AppPanelProps) {
           message: text,
           history,
           design: buildDesignContext(),
-          ...(pinnedMode !== 'auto' ? { mode: pinnedMode } : {}),
           confirmed: [...confirmedRef.current],
         }),
       })
@@ -657,27 +646,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
         </div>
       )}
 
-      {/* mode chips */}
-      <div className="flex items-center gap-1 px-3 py-2 border-b border-white/5 overflow-x-auto" data-testid="agent-modes">
-        {MODE_CHIPS.map((chip) => {
-          const active = pinnedMode === chip.id
-          const readOnly = chip.id !== 'auto' && READ_ONLY_MODES.includes(chip.id as AgentMode)
-          return (
-            <button
-              key={chip.id}
-              onClick={() => setPinnedMode(chip.id)}
-              className={cn(
-                'shrink-0 px-2.5 h-7 rounded-full text-[11px] font-semibold transition-colors',
-                active ? 'bg-[#7630D7] text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white',
-              )}
-              title={readOnly ? 'Read-only: the agent cannot modify the design' : chip.id === 'auto' ? 'Classify each message automatically' : undefined}
-            >
-              {readOnly && <Eye size={10} className="inline mr-1 -mt-0.5" />}
-              {chip.label}
-            </button>
-          )
-        })}
-      </div>
+
 
       {/* thread */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 space-y-3 pr-0.5 px-3 py-3" data-testid="agent-thread">
@@ -907,7 +876,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
               }
             }}
             rows={1}
-            placeholder={pinnedMode !== 'auto' && READ_ONLY_MODES.includes(pinnedMode) ? `Ask for ${pinnedMode} (the design won't be modified)…` : 'Describe what to design or change…'}
+            placeholder="Describe what to design or change — the agent figures out the rest…"
             className="flex-1 resize-none max-h-28 rounded-xl bg-white/[0.05] border border-white/10 px-3 py-2 text-[12.5px] text-white placeholder:text-white/30 outline-none focus:border-[#7630D7]"
             data-testid="agent-input"
           />
@@ -922,9 +891,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
           </button>
         </div>
         <div className="flex items-center justify-between mt-1.5 text-[10px] text-white/30">
-          <span>
-            {pinnedMode === 'auto' ? 'Auto mode' : `${pinnedMode}${READ_ONLY_MODES.includes(pinnedMode as AgentMode) ? ' · read-only' : ''}`} · full editor access
-          </span>
+          <span>One agent — it maps the canvas, plans the geometry, builds, checks and verifies by itself</span>
           {canUndo && <span>Undo available in the toolbar</span>}
         </div>
       </div>

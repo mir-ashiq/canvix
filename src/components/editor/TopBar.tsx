@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Home, MessageCircle, Play, Presentation, Share2, ChevronDown, تراجع2, إعادة2, تنزيل, Github, Cloud, Check, Loader2, Ruler, History, Languages, Wand2, Zap, MousePointer2, Brush, Eye, BookMarked } from 'lucide-react'
+import { Home, MessageCircle, Play, Presentation, Share2, ChevronDown, Undo2, Redo2, Download, Github, Cloud, Check, Loader2, Ruler, History, Languages, Wand2, Zap, MousePointer2, Brush, Eye, BookMarked } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
 import { interactionMode } from '@/lib/editor-utils'
@@ -16,27 +16,27 @@ import { SaveAsTemplateDialog } from './SaveAsTemplateDialog'
 import { TranslateDialog } from './TranslateDialog'
 import { MagicLayersDialog } from './MagicLayersDialog'
 import { PresenceAvatars } from './PresenceAvatars'
-import { useالتعليقاتStore } from '@/lib/comments-store'
-import { markAllالتعليقاتRead } from '@/hooks/use-comments'
+import { useCommentsStore } from '@/lib/comments-store'
+import { markAllCommentsRead } from '@/hooks/use-comments'
 import { ContextToolbar } from './PropertiesBar'
 
-/** Canva-2026 editor topbar: 56px cyan→purple gradient, white text, File/Resize/تحرير left, Preview/Share right. */
+/** Canva-2026 editor topbar: 56px cyan→purple gradient, white text, File/Resize/Editing left, Preview/Share right. */
 export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; onShortcuts: () => void }) {
   const goDashboard = useAppStore((s) => s.goDashboard)
   const name = useEditorStore((s) => s.designName)
   const rename = useEditorStore((s) => s.rename)
   const undo = useEditorStore((s) => s.undo)
   const redo = useEditorStore((s) => s.redo)
-  const canتراجع = useEditorStore((s) => s.past.length > 0)
-  const canإعادة = useEditorStore((s) => s.future.length > 0)
+  const canUndo = useEditorStore((s) => s.past.length > 0)
+  const canRedo = useEditorStore((s) => s.future.length > 0)
   const dirty = useEditorStore((s) => s.dirty)
   const saving = useEditorStore((s) => s.saving)
   const savedAt = useEditorStore((s) => s.savedAt)
   const editingMode = useEditorStore((s) => s.editingMode)
-  const setتحريرMode = useEditorStore((s) => s.setتحريرMode)
+  const setEditingMode = useEditorStore((s) => s.setEditingMode)
   // v0.11.6 (F3): the mode control also needs the active tool — both derive
   // from the same store via interactionMode(), so the top bar can never
-  // read "تحرير" while the canvas is in رسم mode again
+  // read "Editing" while the canvas is in Draw mode again
   const tool = useEditorStore((s) => s.tool)
   const setTool = useEditorStore((s) => s.setTool)
   const setPreviewOpen = useEditorStore((s) => s.setPreviewOpen)
@@ -45,11 +45,11 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
   const showRulers = useEditorStore((s) => s.showRulers)
   const toggleRulers = useEditorStore((s) => s.toggleRulers)
   const commentsOpen = useEditorStore((s) => s.commentsOpen)
-  const toggleالتعليقات = useEditorStore((s) => s.toggleالتعليقات)
+  const toggleComments = useEditorStore((s) => s.toggleComments)
   const animateOpen = useEditorStore((s) => s.animateOpen)
-  const toggleتحريك = useEditorStore((s) => s.toggleتحريك)
+  const toggleAnimate = useEditorStore((s) => s.toggleAnimate)
   const designId = useEditorStore((s) => s.designId)
-  const unreadCount = useالتعليقاتStore((s) => s.unreadIds.size)
+  const unreadCount = useCommentsStore((s) => s.unreadIds.size)
 
   const [exportOpen, setExportOpen] = useState(false)
   const [resizeOpen, setResizeOpen] = useState(false)
@@ -81,10 +81,10 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
         </div>
       ) : (
         <>
-      {/* قائمة الملف */}
+      {/* File menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className={item} aria-label="قائمة الملف">
+          <button className={item} aria-label="File menu">
             File <ChevronDown size={12} className="opacity-70" />
           </button>
         </DropdownMenuTrigger>
@@ -96,16 +96,16 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
             <Cloud size={15} /> Save changes
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => setResizeOpen(true)}>
-            <Play size={15} /> تغيير الحجم السحري
+            <Play size={15} /> Magic Resize
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => setMagicLayersOpen(true)}>
-            <Wand2 size={15} /> الطبقات السحرية — edit a flat design
+            <Wand2 size={15} /> Magic Layers — edit a flat design
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => setTranslateOpen(true)}>
             <Languages size={15} /> Translate design…
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={toggleRulers}>
-            <Ruler size={15} /> {showRulers ? 'إخفاء المساطر' : 'إظهار المساطر'}
+            <Ruler size={15} /> {showRulers ? 'Hide rulers' : 'Show rulers'}
             <span className="ml-auto text-[10px] text-white/40 font-semibold">⇧R</span>
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => setVersionsOpen(true)}>
@@ -117,7 +117,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-white/10" />
           <DropdownMenuItem className="gap-2" onClick={() => setExportOpen(true)}>
-            <تنزيل size={15} /> تنزيل
+            <Download size={15} /> Download
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-white/10" />
           <DropdownMenuItem className="gap-2" onClick={onShortcuts}>
@@ -131,35 +131,35 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* الطبقات السحرية */}
-      <button className={cn(item, 'hidden sm:flex')} onClick={() => setMagicLayersOpen(true)} aria-label="الطبقات السحرية">
-        <Wand2 size={13} className="text-white/80" /> الطبقات السحرية
+      {/* Magic Layers */}
+      <button className={cn(item, 'hidden sm:flex')} onClick={() => setMagicLayersOpen(true)} aria-label="Magic Layers">
+        <Wand2 size={13} className="text-white/80" /> Magic Layers
       </button>
 
-      {/* تغيير الحجم السحري */}
-      <button className={cn(item, 'hidden md:flex')} onClick={() => setResizeOpen(true)} aria-label="تغيير الحجم السحري">
-        تغيير الحجم السحري
+      {/* Magic Resize */}
+      <button className={cn(item, 'hidden md:flex')} onClick={() => setResizeOpen(true)} aria-label="Magic Resize">
+        Magic Resize
       </button>
 
-      {/* تحرير / رسم / عرض mode — v0.11.6 (F3): ONE derivation
+      {/* Editing / Draw / Viewing mode — v0.11.6 (F3): ONE derivation
           (interactionMode) drives this label, and the menu can activate
           drawing directly, where previously only the Tools panel could */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className={item} aria-label="تحرير mode">
+          <button className={item} aria-label="Editing mode">
             {mode === 'viewing' ? <Eye size={13} className="text-white/80" /> : mode === 'draw' ? <Brush size={13} className="text-white/80" /> : <MousePointer2 size={13} className="text-white/80" />}
-            {mode === 'viewing' ? 'عرض' : mode === 'draw' ? 'رسم' : 'تحرير'} <ChevronDown size={12} className="opacity-70" />
+            {mode === 'viewing' ? 'Viewing' : mode === 'draw' ? 'Draw' : 'Editing'} <ChevronDown size={12} className="opacity-70" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-44 bg-[#16181D] border-white/10 text-white">
-          <DropdownMenuItem className="gap-2" onClick={() => { setتحريرMode('editing'); setTool('select') }}>
-            <MousePointer2 size={15} /> تحرير — select & edit
+          <DropdownMenuItem className="gap-2" onClick={() => { setEditingMode('editing'); setTool('select') }}>
+            <MousePointer2 size={15} /> Editing — select & edit
           </DropdownMenuItem>
-          <DropdownMenuItem className="gap-2" onClick={() => { setتحريرMode('editing'); setTool('draw') }}>
-            <Brush size={15} /> رسم — freehand brush
+          <DropdownMenuItem className="gap-2" onClick={() => { setEditingMode('editing'); setTool('draw') }}>
+            <Brush size={15} /> Draw — freehand brush
           </DropdownMenuItem>
-          <DropdownMenuItem className="gap-2" onClick={() => setتحريرMode('viewing')}>
-            <Eye size={15} /> عرض — read only
+          <DropdownMenuItem className="gap-2" onClick={() => setEditingMode('viewing')}>
+            <Eye size={15} /> Viewing — read only
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -170,16 +170,16 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           value={name}
           onChange={(e) => rename(e.target.value)}
           onBlur={() => void onSave()}
-          onKeyDown={(e) => e.key === 'اضغط Enter' && e.currentTarget.blur()}
+          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
           className="text-sm font-semibold bg-transparent text-white outline-none rounded-lg px-2 py-1.5 hover:bg-white/15 focus:bg-white/20 min-w-0 w-32 sm:w-48 truncate placeholder:text-white/60"
           aria-label="Design name"
           maxLength={80}
-          placeholder="تصميم بلا عنوان"
+          placeholder="Untitled design"
         />
         <span className="hidden md:inline-flex items-center gap-1 text-xs text-white/85 shrink-0">
           {saving ? (
             <>
-              <Loader2 size={12} className="animate-spin" /> جارٍ الحفظ…
+              <Loader2 size={12} className="animate-spin" /> Saving…
             </>
           ) : dirty ? (
             <>
@@ -198,13 +198,13 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
       <div className="ml-auto flex items-center gap-0.5 sm:gap-1 shrink-0">
         {/* v0.5: collaborators + connection status */}
         <PresenceAvatars />
-        <Button variant="ghost" size="icon" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={undo} disabled={!canتراجع} aria-label="تراجع" title="تراجع (Ctrl+Z)">
-          <تراجع2 size={17} />
+        <Button variant="ghost" size="icon" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={undo} disabled={!canUndo} aria-label="Undo" title="Undo (Ctrl+Z)">
+          <Undo2 size={17} />
         </Button>
-        <Button variant="ghost" size="icon" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={redo} disabled={!canإعادة} aria-label="إعادة" title="إعادة (Ctrl+Shift+Z)">
-          <إعادة2 size={17} />
+        <Button variant="ghost" size="icon" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={redo} disabled={!canRedo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
+          <Redo2 size={17} />
         </Button>
-        <Button variant="ghost" size="icon" className={cn('relative rounded-lg hover:bg-white/15 hover:text-white', commentsOpen ? 'text-white bg-white/15' : 'text-white')} onClick={() => { toggleالتعليقات(); if (!commentsOpen && designId) markAllالتعليقاتRead(designId) }} aria-label="التعليقات" title="التعليقات">
+        <Button variant="ghost" size="icon" className={cn('relative rounded-lg hover:bg-white/15 hover:text-white', commentsOpen ? 'text-white bg-white/15' : 'text-white')} onClick={() => { toggleComments(); if (!commentsOpen && designId) markAllCommentsRead(designId) }} aria-label="Comments" title="Comments">
           <MessageCircle size={17} className={cn(commentsOpen && 'fill-white/20')} />
           {unreadCount > 0 && (
             <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#FF5C8A] text-white text-[9px] font-bold flex items-center justify-center">
@@ -212,18 +212,18 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
             </span>
           )}
         </Button>
-        <button className={cn(item, 'hidden sm:flex')} onClick={toggleتحريك} aria-label="تحريك">
-          <Zap size={13} className={cn(animateOpen && 'text-[#02C0CC]')} /> تحريك
+        <button className={cn(item, 'hidden sm:flex')} onClick={toggleAnimate} aria-label="Animate">
+          <Zap size={13} className={cn(animateOpen && 'text-[#02C0CC]')} /> Animate
         </button>
-        <button className={cn(item, 'hidden sm:flex')} onClick={() => setPreviewOpen(true)} aria-label="معاينة التصميم">
+        <button className={cn(item, 'hidden sm:flex')} onClick={() => setPreviewOpen(true)} aria-label="Preview design">
           <Play size={14} /> Preview
         </button>
         {/* v0.18 (Wave 3): present with speaker notes */}
         <button
           className={cn(item, 'hidden md:flex')}
           onClick={() => useEditorStore.getState().setPresentOpen(true)}
-          aria-label="عرض مع ملاحظات المتحدث"
-          title="عرض مع ملاحظات المتحدث"
+          aria-label="Present with speaker notes"
+          title="Present with speaker notes"
           data-testid="present-notes-button"
         >
           <Presentation size={14} /> Present
@@ -231,8 +231,8 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
         <Button size="sm" className="btn-cv-white h-10 px-4 sm:px-5 gap-1.5 font-semibold" onClick={() => setShareOpen(true)}>
           <Share2 size={15} /> <span className="hidden sm:inline">Share</span>
         </Button>
-        <Button size="icon" variant="ghost" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={() => setExportOpen(true)} aria-label="تنزيل" title="تنزيل">
-          <تنزيل size={17} />
+        <Button size="icon" variant="ghost" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={() => setExportOpen(true)} aria-label="Download" title="Download">
+          <Download size={17} />
         </Button>
       </div>
 

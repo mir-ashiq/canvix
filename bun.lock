@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "canvix",
+      "name": "tea-g3",
       "dependencies": {
         "@imgly/background-removal": "^1.7.0",
         "@prisma/adapter-pg": "^6.16.0",

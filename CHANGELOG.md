@@ -3,6 +3,31 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+### Added — v0.32.4: deterministic design correctness
+
+- **Hard plan validation:** plan_layout REJECTS invalid geometry
+  (gaps < 40px computed for real — the old 24px overlap slack is
+  gone; bands beyond the page; negative y) with the exact numbers;
+  safe-area intrusion stays a warning. Validated bands ride the
+  plan action.
+- **Duplicate detection in the quality audit:** near-twin texts
+  (same normalized text + overlapping boxes / centers < 80px) and
+  layered twin shapes (same type/size/fill + centers < 24px) are
+  reported with both ids; intentional repetition (3-card rows,
+  distant repeats) passes; nothing is auto-deleted.
+- **Plan adherence:** an empty planned section is a finding.
+- **Wrap-up audits too:** guard exits with applied changes run the
+  audit once and disclose the residue — the live coffee run's
+  duplicate survived precisely because the wrap-up path skipped it.
+- **Per-design run ledger** (`DesignAgentRun`, migration 0015):
+  compact rows of what each run did, fed into the next run's system
+  prompt; best-effort, never blocks a run.
+- **list_fonts is real:** the sanitizer has pointed at it since
+  v0.29 but the tool never existed. Read tool over the 369-family
+  catalog (query + cap); the prompt's font sample shows the total.
+- **Margin advisory:** text deep in the 6% margin (>40px) is
+  disclosed; full-bleed shapes are a design choice, not a finding.
+
 ### Added — v0.32.3: plan-first, geometry ground truth, conversation memory
 
 - **Conversation history reaches the loop:** `LoopDeps.history`

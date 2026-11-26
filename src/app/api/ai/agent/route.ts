@@ -19,6 +19,7 @@ import { critiqueWithVision } from '@/lib/agent/vision'
 import { getClientForSlotForUser } from '@/lib/ai/provider'
 import { getSessionUser } from '@/lib/auth/session'
 import { getDesignProvenance } from '@/lib/design-provenance'
+import { db } from '@/lib/db'
 
 export const runtime = 'nodejs'
 export const maxDuration = 800
@@ -366,8 +367,30 @@ async function __canvix_post(req: NextRequest) {
           // find this bridge (protocol detail: rides an observation)
           emit({ v: AGENT_PROTOCOL_VERSION, type: 'observation', stepIndex: 0, message: `__runId:${runId}` })
 
+          // v0.32.4: per-design run ledger — the last few runs in
+          // THIS design (mode, request, actions, outcome) enter the
+          // system prompt. Best-effort: a ledger failure must never
+          // break the run itself.
+          let ledgerLines: string[] = []
+          if (design.designId) {
+            try {
+              const rows = await db.designAgentRun.findMany({
+                where: { designId: design.designId },
+                orderBy: { createdAt: 'desc' },
+                take: 3,
+              })
+              ledgerLines = rows.map(
+                (r) =>
+                  `${r.mode} "${r.request.slice(0, 80)}" → ${r.toolCalls} action(s): ${r.summary.slice(0, 160)}${r.findings ? ` [residue to fix: ${r.findings.slice(0, 140)}]` : ''}`,
+              )
+            } catch {
+              /* best-effort — run without the ledger */
+            }
+          }
+
+          let loopResult: Awaited<ReturnType<typeof runAgentLoop>> | null = null
           try {
-            await runAgentLoop({
+            loopResult = await runAgentLoop({
               chat,
               design,
               mode,
@@ -378,6 +401,9 @@ async function __canvix_post(req: NextRequest) {
               // v0.32.3: the conversation this request arrives in —
               // the loop's model sees the prior turns verbatim
               history,
+              // v0.32.4: what the agent's recent runs did to THIS
+              // design — grounded execution memory
+              ledger: ledgerLines,
               brief,
               skills,
               emit,
@@ -437,7 +463,12 @@ async function __canvix_post(req: NextRequest) {
               refreshedContext: () => bridge.latestDesign,
               // v0.29: audit the freshest design snapshot the panel acked
               // (v0.29.3: the brief rides along for strip detection)
-              auditDesign: () => runDesignAudit(bridge.latestDesign ?? design, brief),
+              // v0.29: audit the freshest design snapshot the panel acked
+              // (v0.29.3: the brief rides along for strip detection;
+              // v0.32.4: so do the run's validated plan bands — the
+              // audit checks duplicate elements, margins and that no
+              // planned section was left empty)
+              auditDesign: (bands) => runDesignAudit(bridge.latestDesign ?? design, brief, bands),
               validateBriefOnClient: async () => {
                 // consume an early answer first, then wait for a live one
                 if (bridge.pendingBriefResult) {
@@ -461,6 +492,31 @@ async function __canvix_post(req: NextRequest) {
             })
           } finally {
             bridges.delete(runId)
+            // v0.32.4: persist the run ledger row — what THIS run did,
+            // so the next run in this design starts with grounded
+            // execution memory. Best-effort: the run's outcome is
+            // already streamed; a ledger write failure never
+            // surfaces as an agent error.
+            if (design.designId) {
+              try {
+                await db.designAgentRun.create({
+                  data: {
+                    designId: design.designId,
+                    mode,
+                    request: message.slice(0, 240),
+                    summary: String(loopResult?.summary ?? '').slice(0, 600),
+                    toolCalls: loopResult?.toolCalls ?? 0,
+                    findings:
+                      (loopResult?.findings ?? [])
+                        .map((f) => `${f.severity} ${f.issue}`)
+                        .join(' | ')
+                        .slice(0, 1200) || null,
+                  },
+                })
+              } catch {
+                /* best-effort ledger */
+              }
+            }
           }
         } catch (err) {
           emit({

@@ -1,3 +1,4 @@
+- v0.32.4 — deterministic design correctness: hard plan validation (real ≥40px gaps, bounds), duplicate-text/shape detection, plan adherence, wrap-up audit disclosure, per-design run ledger (0015), the phantom list_fonts tool made real.
 # Canvix Roadmap — where we are, what's next
 
 > **Status date:** 2026-11-25 · **Changelog state:** v0.31.0 · `package.json` 0.31.0 · **latest published GitHub release:** v0.31.0 · **Test posture:** 1,693 unit tests across 127 test files (verified full run, 25 Nov, the v0.31.0 release run) · 39 e2e spec files + the plugins & stock-video gated suites · CI gates every PR (`lint-unit` incl. production build + `e2e` running all three suites) · `npm audit` **0 vulnerabilities**.

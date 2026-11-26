@@ -100,9 +100,16 @@ function effectiveBackdrop(text: AgentElementCtx, els: AgentElementCtx[], pageBg
 }
 
 /** Worst N issues, human-readable and FIXABLE (the model acts on these). */
+export interface PlanBand {
+  name: string
+  y: number
+  h: number
+}
+
 export function auditDesign(
   d: AgentDesignCtx,
   brief?: { requiredColors?: { hex: string; tier?: string }[] } | null,
+  planBands?: PlanBand[],
 ): string[] {
   const issues: string[] = []
   const els = d.elements ?? []
@@ -230,6 +237,107 @@ export function auditDesign(
       issues.push(
         `Required color ${req.hex.toUpperCase()} appears only as a bare decorative strip (${stripExample}) — use it as the page background, a text fill, or a real panel/card fill instead.`,
       )
+    }
+  }
+
+  // 8. DUPLICATE TEXT (v0.32.4): the same normalized text twice with
+  //    boxes that overlap or centers within 80px — the near-twin the
+  //    live coffee run left behind (a human had to remove it).
+  //    Distant repeats (page furniture, repeated distant labels) are
+  //    intentional and NOT flagged — proximity is the discriminator.
+  const norm = (t: string | undefined) => String(t ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+  let dupTextHits = 0
+  for (let i = 0; i < texts.length; i++) {
+    for (let j = i + 1; j < texts.length; j++) {
+      const a = texts[i]
+      const b = texts[j]
+      const na = norm(a.text)
+      if (!na || na !== norm(b.text)) continue
+      const ba = box(a)
+      const bb = box(b)
+      const cx = (e: { x: number; y: number; w: number; h: number }) => ({ x: e.x + e.w / 2, y: e.y + e.h / 2 })
+      const ca = cx(ba)
+      const cb = cx(bb)
+      const near = Math.hypot(ca.x - cb.x, ca.y - cb.y) < 80
+      const overlapped = coverage(a, b) > 0.2 || coverage(b, a) > 0.2
+      if (!near && !overlapped) continue
+      dupTextHits += 1
+      if (dupTextHits <= 3) {
+        issues.push(
+          `Duplicate text: "${na.slice(0, 30)}" exists twice (text#${a.id} at (${Math.round(ba.x)},${Math.round(ba.y)}) and text#${b.id} at (${Math.round(bb.x)},${Math.round(bb.y)})) — delete one (delete_elements) or move the other where it belongs.`,
+        )
+      }
+    }
+  }
+  if (dupTextHits > 3) issues.push(`…and ${dupTextHits - 3} more duplicate text pairs.`)
+
+  // 9. DUPLICATE SHAPES (v0.32.4): same type + same size (±2px) +
+  //    same fill + centers within 24px — a layered twin, almost
+  //    always a re-add artifact. Repeated cards at different x are
+  //    intentional and pass (their centers are far apart).
+  const shapes = els.filter((e) => e && e.type !== 'text')
+  let dupShapeHits = 0
+  for (let i = 0; i < shapes.length; i++) {
+    for (let j = i + 1; j < shapes.length; j++) {
+      const a = shapes[i]
+      const b = shapes[j]
+      if (a.type !== b.type) continue
+      const fa = a.fill ?? ''
+      const fb = b.fill ?? ''
+      if (fa !== fb) continue
+      const ba = box(a)
+      const bb = box(b)
+      if (Math.abs(ba.w - bb.w) > 2 || Math.abs(ba.h - bb.h) > 2) continue
+      if (Math.hypot(ba.x - bb.x, ba.y - bb.y) > 24) continue
+      dupShapeHits += 1
+      if (dupShapeHits <= 2) {
+        issues.push(
+          `Duplicate shape: ${a.type}#${a.id} and ${b.type}#${b.id} are stacked at the same position with the same size and fill — delete one (delete_elements; approval will be asked).`,
+        )
+      }
+    }
+  }
+
+  // 10. TEXT IN THE MARGIN (v0.32.4, advisory): text hugging a page
+  //     edge by >40px inside the 6% margin zone — a readability
+  //     risk, not a hard failure (shapes may full-bleed by design).
+  if (d.width && d.height) {
+    const mx = d.width * 0.06
+    const my = d.height * 0.06
+    let marginHits = 0
+    for (const t of texts) {
+      const b = box(t)
+      const intrusions: string[] = []
+      if (b.x < mx - 40) intrusions.push(`left (x=${Math.round(b.x)}, safe ≥ ${Math.round(mx)})`)
+      if (b.y < my - 40) intrusions.push(`top (y=${Math.round(b.y)}, safe ≥ ${Math.round(my)})`)
+      if (b.x + b.w > d.width! - mx + 40) intrusions.push(`right (ends ${Math.round(b.x + b.w)}, safe ≤ ${Math.round(d.width! - mx)})`)
+      if (b.y + b.h > d.height! - my + 40) intrusions.push(`bottom (ends ${Math.round(b.y + b.h)}, safe ≤ ${Math.round(d.height! - my)})`)
+      if (intrusions.length) {
+        marginHits += 1
+        if (marginHits <= 2) {
+          issues.push(`Text "${String(t.text ?? '').slice(0, 24)}" sits deep inside the page margin: ${intrusions.join(', ')} — move it into the safe area.`)
+        }
+      }
+    }
+  }
+
+  // 11. PLAN ADHERENCE (v0.32.4): every planned section band should
+  //     hold at least one element — an empty band means the build
+  //     diverged from the validated plan (missing section).
+  if (planBands?.length) {
+    let emptyBands = 0
+    for (const band of planBands) {
+      const has = els.some((e) => {
+        const b = box(e)
+        const iy = Math.max(0, Math.min(b.y + b.h, band.y + band.h) - Math.max(b.y, band.y))
+        return iy > 0
+      })
+      if (!has) {
+        emptyBands += 1
+        if (emptyBands <= 3) {
+          issues.push(`Planned section "${band.name}" (y ${Math.round(band.y)}..${Math.round(band.y + band.h)}) is empty — build it, or the canvas no longer matches the plan.`)
+        }
+      }
     }
   }
 

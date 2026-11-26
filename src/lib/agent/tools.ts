@@ -130,6 +130,36 @@ export const AGENT_TOOLS: AgentTool[] = [
     }),
   },
   {
+    // v0.32.4: the sanitizer's font errors have pointed at
+    // "list_fonts" since v0.29 — but the tool never existed, so the
+    // model was directed at a phantom. The catalog holds 369
+    // families; the system prompt shows a sample, this tool streams
+    // the rest (searchable, capped) — progressive capability
+    // discovery without bloating every turn.
+    name: 'list_fonts',
+    description: `List available font families (${FONTS.length} in the catalog). Optional {query} filters by substring (case-insensitive); {limit} caps the count (default 60, max 120). Use EXACT names in add_text/set_text_style.`,
+    risk: 'read',
+    argsSpec: '{query?: string, limit?: 1-120}',
+    sanitize: (args, _ctx) => {
+      const query = typeof args.query === 'string' ? args.query.trim().toLowerCase() : ''
+      const limitRaw = num(args, 'limit')
+      const limit = limitRaw === null ? 60 : Math.max(1, Math.min(120, Math.round(limitRaw)))
+      let families = FONTS.map((f) => f.family)
+      if (query) families = families.filter((f) => f.toLowerCase().includes(query))
+      const slice = families.slice(0, limit)
+      const head = query
+        ? `Fonts matching "${query}" (${slice.length}${families.length > slice.length ? ` of ${families.length}` : ''}):`
+        : `Font families (${slice.length}${families.length > slice.length ? ` of ${families.length} — refine with {query}` : ''}):`
+      return {
+        ok: true,
+        actions: [],
+        observation: families.length
+          ? `${head} ${slice.join(', ')}.`
+          : `No font family matches "${query}". Try the system prompt's sample, or query a shorter substring.`,
+      }
+    },
+  },
+  {
     // v0.29.3: brief-to-layout planning. The model reserves the
     // composition BEFORE building — the failed production runs
     // placed text reactively (add → overlap → move → overlap…) for
@@ -164,25 +194,51 @@ export const AGENT_TOOLS: AgentTool[] = [
       if (bg) lines.unshift(`page background ${bg}`)
       const notes = typeof args.notes === 'string' ? args.notes.trim().slice(0, 200) : ''
       if (notes) lines.push(`notes: ${notes}`)
-      // sanity: sections inside the page, in order, not stacked
-      const sorted = [...sectionsRaw]
+      // v0.32.4: HARD geometry validation — the plan protocol
+      // promises ≥40px gaps and bands inside the page; the plan is
+      // now REJECTED when it violates either (the model retries
+      // with a corrected plan; sanitize errors are retryable, not
+      // strikes). Safe-area intrusion stays a WARNING (content can
+      // sit inside bands that start slightly high; the audit flags
+      // actual text that hugs the edge). This closes the old `- 24`
+      // slack that let sections overlap by up to 24px.
+      const bands = sectionsRaw
+        .filter((s) => s && typeof s === 'object')
         .map((s) => s as Record<string, unknown>)
-        .map((s) => ({ y: num(s, 'y') ?? 0, h: num(s, 'height') ?? 0 }))
-        .sort((a, b) => a.y - b.y)
+        .map((s) => ({
+          name: typeof s.name === 'string' ? s.name.trim().slice(0, 40) : '',
+          y: num(s, 'y') ?? 0,
+          h: num(s, 'height') ?? 0,
+        }))
+        .filter((b) => b.h > 0)
+      const sorted = [...bands].sort((a, b) => a.y - b.y)
       const problems: string[] = []
+      const warnings: string[] = []
       if (sorted.length) {
+        if (sorted[0].y < 0) problems.push(`section 1 starts at y=${Math.round(sorted[0].y)} — negative y`)
         const last = sorted[sorted.length - 1]
-        if (last.y + last.h > H * 1.02) problems.push(`the last section ends at y=${Math.round(last.y + last.h)} — beyond the ${H}px page`)
+        if (last.y + last.h > H) problems.push(`the last section ends at y=${Math.round(last.y + last.h)} — beyond the ${H}px page`)
         for (let i = 1; i < sorted.length; i++) {
-          if (sorted[i].y < sorted[i - 1].y + sorted[i - 1].h - 24) {
-            problems.push(`sections ${i} and ${i + 1} overlap or have <24px gap at y=${Math.round(sorted[i].y)}`)
+          const gap = sorted[i].y - (sorted[i - 1].y + sorted[i - 1].h)
+          if (gap < 40) {
+            problems.push(`sections "${sorted[i - 1].name}" and "${sorted[i].name}" need ≥40px gap; found ${Math.round(gap)}px at y=${Math.round(sorted[i].y)}`)
           }
         }
+        const safeTop = Math.round(H * 0.06)
+        const safeBottom = Math.round(H * 0.94)
+        if (sorted[0].y < safeTop) warnings.push(`the first band starts at y=${Math.round(sorted[0].y)}, inside the 6% top margin (${safeTop}px) — prefer starting at y=${safeTop}`)
+        if (last.y + last.h > safeBottom) warnings.push(`the last band ends at y=${Math.round(last.y + last.h)}, inside the 6% bottom margin (ends ${safeBottom}px) — prefer ending by y=${safeBottom}`)
       }
-      const observation = `PLAN RECORDED (${lines.length} lines):\n${lines.join('\n')}${problems.length ? `\nPLAN WARNINGS: ${problems.join('; ')} — revise the bands before building.` : '\nBands verified non-overlapping.'}`
+      if (problems.length) {
+        return {
+          ok: false,
+          error: `Invalid plan: ${problems.join('; ')}. Revise plan_layout so the bands tile the page top-to-bottom, each fully inside 0..${H} with ≥40px gaps between sections.`,
+        }
+      }
+      const observation = `PLAN RECORDED (${lines.length} lines):\n${lines.join('\n')}${warnings.length ? `\nPLAN WARNINGS: ${warnings.join('; ')} — revise the bands before building.` : '\nBands verified: non-overlapping, ≥40px gaps, inside the page.'}`
       return {
         ok: true,
-        actions: [{ type: '__planLayout', lines }],
+        actions: [{ type: '__planLayout', lines, bands }],
         observation,
       }
     },

@@ -378,3 +378,98 @@ compaction-keeps-the-head, the geometry block's computed numbers, the
 plan-first bounce + redirect, planned-runs-never-bounced,
 edit-runs-exempt). 14 scripted create-run tests updated to encode
 plan-first (their models now plan before building).
+
+---
+
+# v0.32.4 — deterministic design correctness
+
+**The ask (external review of v0.32.3):** telling the model to follow
+a plan is not enforcing a geometrically valid plan; the live run
+still left a duplicated subline that a human follow-up had to
+remove. The next milestone must enforce correctness in the
+orchestration and validation layers, not add prompt instructions.
+
+All five review findings were verified in source before coding:
+
+| Finding | Verdict |
+| --- | --- |
+| plan validator permitted 24px overlap + never rejected | CONFIRMED — `sorted[i].y < prev.y + prev.h - 24`, problems were warnings with `ok: true` |
+| no duplicate-element detection in the audit | CONFIRMED — the live coffee run's residue could not be caught |
+| plan-first advisory after one bounce | CONFIRMED by design (anti-deadlock); now backed by a HARD validator |
+| memory = 12 chat turns, no execution ledger | CONFIRMED — added a per-design run ledger |
+| knowledge scoped (40-font sample) | CONFIRMED — and the sanitizer pointed at a **`list_fonts` tool that never existed** (a phantom tool) |
+
+## 1. Hard plan validation (`tools.ts`)
+
+`plan_layout` now REJECTS invalid geometry with the exact numbers:
+gaps computed as `current.y - (prev.y + prev.h)` must be ≥ 40px
+(39px is rejected, 40 accepted — boundary tested), bands must lie
+inside `0..H` (the `H × 1.02` slack is gone), negative y rejected.
+Safe-area intrusion stays a WARNING (content may sit inside a band
+that starts high; the audit flags text that actually hugs the edge).
+Sanitize errors are retryable, not strikes — the model fixes the
+bands and resends. The validated plan's structured bands now ride
+the `__planLayout` action.
+
+## 2. Duplicate detection (`audit.ts`)
+
+- **Duplicate texts**: identical normalized text (case/whitespace
+  insensitive) with overlapping boxes or centers within 80px — the
+  near-twin the live run left. Distant repeats (page furniture,
+  symmetric CTAs) are NOT flagged.
+- **Duplicate shapes**: same type + size (±2px) + fill + centers
+  within 24px — layered twins (re-add artifacts). Repeated cards at
+  different x pass (intentional repetition, tested).
+- Findings name both element ids; nothing is auto-deleted — the
+  model decides, and deletion still needs user approval.
+- **Text deep in the 6% margin** (>40px intrusion) is disclosed as
+  advisory; shallow bleed and full-bleed shapes are not flagged.
+
+## 3. Plan adherence
+
+The quality audit receives the run's validated bands and reports
+any planned section that holds no element ("build it, or the canvas
+no longer matches the plan").
+
+## 4. The wrap-up hole (found during verification)
+
+The live duplicate survived because the cycle-guard WRAP-UP path
+skipped the audit that the done path runs. `guardExit` now audits
+too: a guard exit with applied changes runs the audit once and
+DISCLOSES the residue in the summary + verification ("disclosed,
+unfixed") — no fix round (the run is ending), but the next message
+gets named, targetable findings.
+
+## 5. Per-design run ledger (Prisma `DesignAgentRun`, migration 0015)
+
+One compact row per run (mode, request, action count, summary,
+disclosed findings). The route reads the last 3 rows into the next
+run's system prompt as "YOUR RECENT RUNS IN THIS DESIGN" — grounded
+execution memory of what the agent itself did, distinct from the
+chat history (what the user said). The canvas state stays the
+authority. Ledger I/O is best-effort: a ledger failure can never
+break a run. Migration 0015 was verified statement-exact against
+`prisma migrate diff`.
+
+## 6. The phantom `list_fonts` tool (now real)
+
+The sanitizer's font errors have said "Full list via list_fonts"
+since v0.29 — the tool never existed; the model was being directed
+at a phantom. `list_fonts` is now a read tool over the 369-family
+catalog (substring query, capped listing), and the system prompt's
+font sample carries the real total + the discovery pointer.
+
+## Verification-then-stop (unchanged chain, stronger checks)
+
+brief contract → quality audit (now with duplicates, margins, plan
+adherence) → grounded vision critique → honest INCOMPLETE framing —
+plus the wrap-up disclosure above.
+
+## Evidence
+
+1,733/1,733 unit (9 new regressions: twin texts flagged, 3-card row
+and distant repeats not flagged, layered twin shapes flagged,
+margin advisory with shallow-bleed tolerance, empty-section
+adherence, wrap-up residue disclosure, list_fonts search/cap/no-
+match, ledger rendering + absence, hard validator boundaries incl.
+the 39/40px edge and beyond-page rejection). Live re-test below.

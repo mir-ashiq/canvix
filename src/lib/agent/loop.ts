@@ -59,12 +59,19 @@ export interface LoopDeps {
    *  meaning). Compaction never drops this head, only the long
    *  tool-observation middle. */
   history?: { role: 'user' | 'assistant'; content: string }[]
+  /** v0.32.4: per-design run ledger lines (route-fetched, compact) —
+   *  what the agent's recent runs in THIS design did. Rendered into
+   *  the system prompt after the design context; the canvas state
+   *  stays the authority, the ledger explains how it got there. */
+  ledger?: string[]
   /** the run's brief contract (extracted by the route) */
   brief?: DesignBrief | null
   /** v0.29: local quality audit of the latest design snapshot
    *  (contrast/overlap/overflow heuristics). The loop runs ONE
-   *  auto-fix round on its findings before accepting done. */
-  auditDesign?: () => string[] | Promise<string[]>
+   *  auto-fix round on its findings before accepting done.
+   *  v0.32.4: receives the run's validated plan bands so the audit
+   *  can also check plan adherence (empty planned sections). */
+  auditDesign?: (bands?: { name: string; y: number; h: number }[]) => string[] | Promise<string[]>
   /** v0.29.3: ask the CLIENT to screenshot the live canvas (the real
    *  render) — resolved with a dataURL, or null on timeout/absence
    *  (fail-closed: visual verification is then DISCLOSED as
@@ -123,8 +130,14 @@ export function loopSystemPrompt(deps: {
   mode: AgentMode
   brief?: DesignBrief | null
   skills?: DesignSkill[]
+  /** v0.32.4: compact per-design run ledger — what THIS design's
+   *  agent runs did recently (mode, request, actions, outcome). The
+   *  canvas state stays the authority; the ledger explains how it
+   *  got there, so follow-ups build on prior work instead of
+   *  re-deriving it. */
+  ledger?: string[]
 }): string {
-  const { design, ctx, mode, brief, skills } = deps
+  const { design, ctx, mode, brief, skills, ledger } = deps
   const W = design.width ?? 1080
   const H = design.height ?? 1080
   const margin = 0.06
@@ -152,7 +165,10 @@ export function loopSystemPrompt(deps: {
     'TOOLS (risk: read | write | destructive):',
     toolsPromptSectionFor(mode),
     '',
-    `Fonts available (use EXACT names): ${fontFamilies().slice(0, 40).join(', ')}…`,
+    // v0.32.4: 369 families exist — a 40-name sample hid the rest.
+    // Show 60 + the total and point at the (now real) list_fonts
+    // tool for search: progressive discovery, not a bloated prompt.
+    `Fonts available (use EXACT names; ${fontFamilies().length} total — list_fonts {query} searches the rest): ${fontFamilies().slice(0, 60).join(', ')}…`,
     '',
   ]
 
@@ -165,13 +181,23 @@ export function loopSystemPrompt(deps: {
     lines.push(
       'LAYOUT PLANNING (required first step):',
       '· Call plan_layout FIRST with your composition: page background, sections with y-ranges, what each contains (headline band, tagline, feature cards row, mockup, CTA, footer).',
-      '· Reserve a vertical band per section with ≥40px gaps so nothing stacks or crowds; the brief texts each get their section.',
+      '· Reserve a vertical band per section with ≥40px gaps so nothing stacks or crowds; the brief texts each get their section. Invalid plans (gaps under 40px, bands beyond the page) are REJECTED with the exact numbers — fix the bands and resend.',
       '· Set the page background EARLY with set_background (a required background color belongs there, not in strips).',
       '· Build section by section after the plan. NEVER add bare decorative bars/strips just to include a required color — use colors as the page background, text fills, or real panel/card fills.',
       '· A realistic editor mockup = a large native panel (rounded rect, glass fill, border) CONTAINING inner native elements (toolbar bar, sidebar, canvas area, buttons) — not one empty rectangle.',
       '· Feature cards = one semi-transparent rect + its text per card. Glassmorphism = rgba fills with visible borders.',
       '',
     )
+  }
+
+  // v0.32.4: the per-design run ledger — what the agent did in THIS
+  // design recently. The canvas state above stays the authority; the
+  // ledger explains how it got there (so "another one like the last
+  // run" or "finish what you started" has grounded history).
+  if (ledger?.length) {
+    lines.push('YOUR RECENT RUNS IN THIS DESIGN (most recent first — the state above is still the authority):')
+    for (const entry of ledger.slice(0, 4)) lines.push(`· ${entry}`)
+    lines.push('')
   }
 
   const skillSection = skillsPromptSection(skills ?? [])
@@ -285,6 +311,10 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
   /** v0.32.3: has plan_layout run in this run? Once it has, writes
    *  proceed freely — the gate never fires again. */
   let planHasRun = false
+  /** v0.32.4: the validated plan's structured bands (from the
+   *  __planLayout action) — passed to the quality audit so it can
+   *  check plan adherence (empty planned sections). */
+  const planBands: { name: string; y: number; h: number }[] = []
 
   const toolCtx: ToolContext = {
     validIds: contextValidIds(design),
@@ -294,7 +324,7 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
   }
 
   const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
-    { role: 'system', content: loopSystemPrompt({ design, ctx: toolCtx, mode, brief, skills }) },
+    { role: 'system', content: loopSystemPrompt({ design, ctx: toolCtx, mode, brief, skills, ledger: deps.ledger }) },
     // v0.32.3: the conversation this request arrives in — prior
     // user/assistant turns, verbatim (route-sanitized). The model
     // knows what it already did in this chat.
@@ -323,14 +353,39 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
 
   /** v0.32.2 (progress requirement): guard exits must be HONEST about
    *  what actually happened — a create/improve run that changed
-   *  nothing is INCOMPLETE, never a wrapped-up success. */
-  const guardExit = (base: string): { summary: string; verification: string | undefined } =>
-    (mode === 'create' || mode === 'improve') && designChanges === 0
-      ? {
-          summary: `INCOMPLETE — no design changes were made. ${base}`,
-          verification: 'NOT completed — the run ended without applying any design change; nothing was created.',
+   *  nothing is INCOMPLETE, never a wrapped-up success.
+   *  v0.32.4: a guard exit that ends a run WITH applied changes now
+   *  also runs the quality audit once and DISCLOSES the residue in
+   *  the summary — the live coffee run left a duplicate subline
+   *  precisely because the wrap-up path skipped the audit that the
+   *  done path runs. No fix round here (the run is ending); the
+   *  findings are named so the next message can target them. */
+  const guardExit = async (base: string): Promise<{ summary: string; verification: string | undefined }> => {
+    if ((mode === 'create' || mode === 'improve') && designChanges === 0) {
+      return {
+        summary: `INCOMPLETE — no design changes were made. ${base}`,
+        verification: 'NOT completed — the run ended without applying any design change; nothing was created.',
+      }
+    }
+    if ((mode === 'create' || mode === 'improve') && deps.auditDesign) {
+      try {
+        const issues = (await deps.auditDesign(planBands.length ? planBands : undefined)) ?? []
+        if (issues.length) {
+          const residue = issues.slice(0, 4).map((i) => `· ${i}`).join('\n')
+          const withResidue = `${base}\nQuality audit at wrap-up (fixable residue):\n${residue}`
+          return {
+            summary: withResidue,
+            verification: verification
+              ? `${verification} Quality audit at wrap-up reports ${issues.length} issue(s) — disclosed, unfixed.`
+              : `Quality audit at wrap-up reports ${issues.length} issue(s) — disclosed, unfixed.`,
+          }
         }
-      : { summary: base, verification }
+      } catch {
+        /* best-effort — the guard exit must never hang on the audit */
+      }
+    }
+    return { summary: base, verification }
+  }
 
   while (true) {
     // ── task-driven stops ───────────────────────────────────
@@ -356,11 +411,11 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         message: `Stopped after ${AGENT_GUARDS.strikes} consecutive invalid tool calls — the error under each step explains what to fix; try rephrasing the request.`,
         code: 'STRIKES',
       })
-      const exit = guardExit(summary || 'Stopped after repeated invalid calls.')
+      const exit = await guardExit(summary || 'Stopped after repeated invalid calls.')
       return { summary: exit.summary, steps, toolCalls, verification: exit.verification }
     }
     if (Date.now() - lastProgressAt > AGENT_GUARDS.idleMs) {
-      const exit = guardExit('The run stopped making progress and was wrapped up. Everything applied so far is kept — send a follow-up message to continue.')
+      const exit = await guardExit('The run stopped making progress and was wrapped up. Everything applied so far is kept — send a follow-up message to continue.')
       emit({
         v: AGENT_PROTOCOL_VERSION,
         type: 'done',
@@ -393,7 +448,7 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         message: `The AI provider failed: ${err instanceof Error ? err.message.slice(0, 200) : 'unknown error'}. Applied work is kept — retry to continue.`,
         code: 'PROVIDER',
       })
-      const exit = guardExit(summary)
+      const exit = await guardExit(summary)
       return { summary: exit.summary, steps, toolCalls, verification: exit.verification }
     }
 
@@ -471,7 +526,7 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
       if ((mode === 'create' || mode === 'improve') && deps.auditDesign) {
         let issues: string[] = []
         try {
-          issues = (await deps.auditDesign()) ?? []
+          issues = (await deps.auditDesign(planBands.length ? planBands : undefined)) ?? []
         } catch {
           /* audit is best-effort — never block completion on it */
         }
@@ -630,8 +685,12 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
     // an observation. No apply/ack round trip: a plan changes nothing.
     if (toolName === 'plan_layout' && result.ok) {
       planHasRun = true
-      const planLines = (result.actions as { type: string; lines?: string[] }[])
-        .flatMap((a) => (a && a.type === '__planLayout' && Array.isArray(a.lines) ? a.lines : []))
+      const planActions = (result.actions as { type: string; lines?: string[]; bands?: { name: string; y: number; h: number }[] }[])
+      const planLines = planActions.flatMap((a) => (a && a.type === '__planLayout' && Array.isArray(a.lines) ? a.lines : []))
+      // v0.32.4: keep the structured bands for the quality audit's
+      // plan-adherence check (empty planned sections)
+      planBands.length = 0
+      planBands.push(...planActions.flatMap((a) => (a && a.type === '__planLayout' && Array.isArray(a.bands) ? a.bands : [])))
       const lines = planLines.length ? planLines : ['(model emitted an empty plan)']
       emit({ v: AGENT_PROTOCOL_VERSION, type: 'plan', steps: lines })
       emit({ v: AGENT_PROTOCOL_VERSION, type: 'observation', stepIndex: steps, message: result.observation })
@@ -686,7 +745,7 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
       if (hash === lastCallHash) {
         cycleCount += 1
         if (cycleCount >= AGENT_GUARDS.cycleRepeat - 1) {
-          const exit = guardExit('The run repeated the same operation without effect and was wrapped up. Applied work is kept — describe the next change to continue.')
+          const exit = await guardExit('The run repeated the same operation without effect and was wrapped up. Applied work is kept — describe the next change to continue.')
           emit({
             v: AGENT_PROTOCOL_VERSION,
             type: 'done',

@@ -106,7 +106,7 @@ describe('harness · tool matrix', () => {
       'duplicate_elements', 'group_elements', 'ungroup_elements', 'reorder_layers',
       'animate_elements', 'set_page_transition', 'delete_page', 'set_brand_kit', 'resize_design',
       'mask_image', 'adjust_image', 'measure_text', 'set_text_spans', 'export_design',
-      'add_stock_video', 'validate_brief', 'plan_layout',
+      'add_stock_video', 'validate_brief', 'plan_layout', 'list_fonts',
     ]
     for (const t of AGENT_TOOLS) expect(covered, `add harness cases for new tool "${t.name}"`).toContain(t.name)
     expect(covered).toHaveLength(AGENT_TOOLS.length)
@@ -264,7 +264,7 @@ describe('harness · tool matrix', () => {
   })
   it('read tools are exactly the state/measure/validate/plan set', () => {
     const reads = AGENT_TOOLS.filter((t) => t.risk === 'read').map((t) => t.name)
-    expect(reads.sort()).toEqual(['get_page_state', 'goto_page', 'measure_text', 'plan_layout', 'validate_brief'])
+    expect(reads.sort()).toEqual(['get_page_state', 'goto_page', 'list_fonts', 'measure_text', 'plan_layout', 'validate_brief'])
   })
 
   it('CASE G: quality audit — one self-critique fix round before done is accepted', async () => {
@@ -1107,7 +1107,7 @@ describe('audit heuristics (v0.29)', () => {
       elements: [{ id: 'b1', type: 'text', text: 'Dark', fill: '#111122', fontSize: 48, x: 0, y: 0, width: 600, height: 90 }],
     })
     expect(flagged.join('\n')).toContain('Low contrast')
-    expect(auditDesign({ width: 1080, height: 1080, background: '#FFFFFF', elements: [{ id: 'c1', type: 'text', text: 'OK', fill: '#111111', fontSize: 32, x: 0, y: 0, width: 300, height: 60 }] })).toEqual([])
+    expect(auditDesign({ width: 1080, height: 1080, background: '#FFFFFF', elements: [{ id: 'c1', type: 'text', text: 'OK', fill: '#111111', fontSize: 32, x: 100, y: 100, width: 300, height: 60 }] })).toEqual([])
   })
 })
 
@@ -1439,7 +1439,7 @@ describe('v0.29.3 · loop: planning + fail-closed acks', () => {
         background: '#090B1A',
         sections: [
           { name: 'headline', y: 60, height: 140, contains: 'CANVIX' },
-          { name: 'tagline', y: 220, height: 80, contains: 'Design Beyond Limits.' },
+          { name: 'tagline', y: 240, height: 80, contains: 'Design Beyond Limits.' },
         ],
       }),
       turn('set_background', { kind: 'solid', from: '#090B1A' }),
@@ -1452,7 +1452,7 @@ describe('v0.29.3 · loop: planning + fail-closed acks', () => {
     expect(result.steps).toBe(2) // plan_layout + set_background each count as a step
   })
 
-  it('plan_layout rejects stacked bands with actionable guidance', () => {
+  it('plan_layout rejects stacked bands with actionable guidance (v0.32.4: hard reject, not a warning)', () => {
     const tool = AGENT_TOOL_MAP.get('plan_layout')
     expect(tool).toBeTruthy()
     const res = tool!.sanitize(
@@ -1464,8 +1464,50 @@ describe('v0.29.3 · loop: planning + fail-closed acks', () => {
       },
       ctx,
     )
-    expect(res.ok).toBe(true)
-    expect(String((res as { observation?: string }).observation)).toContain('PLAN WARNINGS')
+    // the 24px overlap slack is gone: gap = 250 - 300 = -50 → REJECTED
+    expect(res.ok).toBe(false)
+    expect(String((res as { error?: string }).error)).toContain('≥40px gap')
+    expect(String((res as { error?: string }).error)).toContain('"a" and "b"')
+    // 39px gap: still rejected — the boundary is 40, sharp on both sides
+    const res39 = tool!.sanitize(
+      {
+        sections: [
+          { name: 'a', y: 100, height: 200, contains: 'x' },
+          { name: 'b', y: 339, height: 100, contains: 'y' },
+        ],
+      },
+      ctx,
+    )
+    expect(res39.ok).toBe(false)
+    // 40px gap: accepted
+    const res40 = tool!.sanitize(
+      {
+        sections: [
+          { name: 'a', y: 100, height: 200, contains: 'x' },
+          { name: 'b', y: 340, height: 100, contains: 'y' },
+        ],
+      },
+      ctx,
+    )
+    expect(res40.ok).toBe(true)
+    // a band beyond the page: rejected with the exact numbers
+    const resBeyond = tool!.sanitize(
+      {
+        sections: [
+          { name: 'a', y: 100, height: 200, contains: 'x' },
+          { name: 'b', y: 340, height: 2000, contains: 'y' },
+        ],
+      },
+      ctx,
+    )
+    expect(resBeyond.ok).toBe(false)
+    expect(String((resBeyond as { error?: string }).error)).toContain('beyond the')
+    // the structured bands ride the action for the plan-adherence audit
+    const actions = (res40 as { actions?: { bands?: { name: string; y: number; h: number }[] }[] }).actions
+    expect(actions?.[0]?.bands).toEqual([
+      { name: 'a', y: 100, h: 200 },
+      { name: 'b', y: 340, h: 100 },
+    ])
   })
 
   it('a failed (timed-out) apply ack tells the model the action was NOT applied — fail closed', async () => {
@@ -1941,5 +1983,185 @@ describe('v0.32.3 · plan-first gate (create runs)', () => {
     expect(calls.some((c) => c.some((m) => m.role === 'user' && m.content.startsWith('PLAN FIRST —')))).toBe(false)
     expect(result.toolCalls).toBe(1)
     expect(result.summary).not.toContain('INCOMPLETE')
+  })
+})
+
+// ═════════════════════════════════════════════════════════════
+// v0.32.4 · deterministic design correctness: hard plan validation,
+// duplicate detection, plan adherence, wrap-up audit, list_fonts,
+// run ledger rendering
+// ═════════════════════════════════════════════════════════════
+
+describe('v0.32.4 · duplicate detection (the live coffee-run residue, now caught)', () => {
+  const base = { width: 1080, height: 1920, background: '#090B1A' }
+
+  it('near-twin texts (same text, overlapping boxes) are flagged with both ids', () => {
+    const issues = auditDesign({
+      ...base,
+      elements: [
+        { id: 'a', type: 'text', text: 'Experience the perfect balance', fill: '#FFFFFF', fontSize: 32, x: 90, y: 186, width: 700, height: 120 },
+        { id: 'b', type: 'text', text: 'experience the\nperfect balance', fill: '#FFFFFF', fontSize: 32, x: 90, y: 164, width: 700, height: 120 },
+      ],
+    })
+    const hit = issues.find((i) => i.startsWith('Duplicate text'))
+    expect(hit).toBeTruthy()
+    expect(hit).toContain('#a')
+    expect(hit).toContain('#b')
+  })
+
+  it('the 3-card row (same size + fill, different x) is NOT flagged — intentional repetition', () => {
+    const card = (x: number, id: string) => ({ id, type: 'rect', x, y: 300, width: 280, height: 360, fill: 'rgba(255,255,255,0.08)' })
+    const label = (x: number, id: string, text: string) => ({ id, type: 'text', text, fill: '#FFFFFF', fontSize: 24, x, y: 430, width: 240, height: 60 })
+    const issues = auditDesign({
+      ...base,
+      elements: [
+        card(90, 'c1'), card(400, 'c2'), card(710, 'c3'),
+        label(110, 't1', 'Freshly Roasted'), label(420, 't2', 'Single Origin'), label(730, 't3', 'Smooth Crema'),
+      ],
+    })
+    expect(issues.filter((i) => i.startsWith('Duplicate'))).toEqual([])
+  })
+
+  it('distant identical texts (page furniture) are NOT flagged', () => {
+    const issues = auditDesign({
+      ...base,
+      elements: [
+        { id: 'a', type: 'text', text: 'Shop Now', fill: '#FFFFFF', fontSize: 28, x: 100, y: 800, width: 200, height: 60 },
+        { id: 'b', type: 'text', text: 'Shop Now', fill: '#FFFFFF', fontSize: 28, x: 780, y: 800, width: 200, height: 60 },
+      ],
+    })
+    expect(issues.filter((i) => i.startsWith('Duplicate text'))).toEqual([])
+  })
+
+  it('a layered twin shape (same size + fill + position) is flagged', () => {
+    const twin = (id: string, y: number) => ({ id, type: 'rect', x: 100, y, width: 280, height: 200, fill: '#8B5CF6' })
+    const issues = auditDesign({
+      ...base,
+      elements: [twin('r1', 300), twin('r2', 296)],
+    })
+    const hit = issues.find((i) => i.startsWith('Duplicate shape'))
+    expect(hit).toBeTruthy()
+    expect(hit).toContain('#r1')
+    expect(hit).toContain('#r2')
+  })
+
+  it('text deep in the page margin is disclosed (advisory), shallow bleed is not', () => {
+    const issues = auditDesign({
+      ...base,
+      elements: [
+        { id: 'deep', type: 'text', text: 'Edge hugger', fill: '#FFFFFF', fontSize: 40, x: 20, y: 54, width: 400, height: 90 },
+      ],
+    })
+    expect(issues.some((i) => i.includes('inside the page margin') && i.includes('top') && i.includes('left'))).toBe(true)
+    const shallow = auditDesign({
+      ...base,
+      elements: [
+        { id: 'sh', type: 'text', text: 'Fine', fill: '#FFFFFF', fontSize: 40, x: 95, y: 100, width: 400, height: 90 },
+      ],
+    })
+    expect(shallow.filter((i) => i.includes('page margin'))).toEqual([])
+  })
+})
+
+describe('v0.32.4 · plan adherence (the build must fill the plan)', () => {
+  const base = { width: 1080, height: 1920, background: '#090B1A' }
+
+  it('an empty planned section is reported; filled sections pass', () => {
+    const els = [
+      { id: 'h', type: 'text', text: 'COFFEE', fill: '#FFFFFF', fontSize: 96, x: 90, y: 100, width: 800, height: 200 },
+      { id: 'f', type: 'text', text: 'Shop Now', fill: '#FFD166', fontSize: 28, x: 90, y: 800, width: 300, height: 60 },
+    ]
+    const withPlan = auditDesign({ ...base, elements: els }, null, [
+      { name: 'headline', y: 100, h: 200 },
+      { name: 'features', y: 350, h: 400 },
+      { name: 'cta', y: 800, h: 200 },
+    ])
+    expect(withPlan.some((i) => i.includes('Planned section "features"') && i.includes('empty'))).toBe(true)
+    expect(withPlan.some((i) => i.includes('"headline"'))).toBe(false)
+    // no plan → no adherence check at all
+    expect(auditDesign({ ...base, elements: els }).some((i) => i.startsWith('Planned section'))).toBe(false)
+  })
+})
+
+describe('v0.32.4 · guard exits audit their residue (the wrap-up hole)', () => {
+  const emptyDesign: AgentDesignCtx = {
+    name: 'Untitled', width: 1080, height: 1920, pageCount: 1,
+    currentPageIndex: 0, elements: [], colorsInUse: [], otherPages: [],
+  }
+
+  it('a cycle-guard wrap-up runs the audit and DISCLOSES fixable residue', async () => {
+    const events: AgentEvent[] = []
+    // model: plan → build a duplicate text → repeat the identical call
+    // 3× → the cycle guard wraps the run up
+    const { chat } = scriptedChat([
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 130, height: 200, contains: 'Hero' }] }),
+      turn('add_text', { text: 'Twin', fontSize: 64, y: 150, color: '#FFFFFF', x: 100 }),
+      turn('add_text', { text: 'Twin', fontSize: 64, y: 150, color: '#FFFFFF', x: 100 }),
+      turn('add_text', { text: 'Twin', fontSize: 64, y: 150, color: '#FFFFFF', x: 100 }),
+      turn('add_text', { text: 'Twin', fontSize: 64, y: 150, color: '#FFFFFF', x: 100 }),
+    ])
+    let auditedDesign: AgentDesignCtx | null = null
+    const result = await runAgentLoop({
+      chat, design: emptyDesign, mode: 'create',
+      request: 'Design a poster',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+      refreshedContext: () => auditedDesign ?? emptyDesign,
+      auditDesign: (bands) => {
+        // the audit sees what the run actually built: the twin pair
+        auditedDesign = {
+          ...emptyDesign,
+          elements: [
+            { id: 't1', type: 'text', text: 'Twin', x: 100, y: 150, width: 300, height: 90, fontSize: 64, fill: '#FFFFFF' },
+            { id: 't2', type: 'text', text: 'Twin', x: 100, y: 150, width: 300, height: 90, fontSize: 64, fill: '#FFFFFF' },
+          ],
+        }
+        return auditDesign(auditedDesign, null, bands?.length ? bands : undefined)
+      },
+    })
+    expect(result.summary).toContain('wrapped up')
+    expect(result.summary).toContain('Quality audit at wrap-up')
+    expect(result.summary).toContain('Duplicate text')
+    expect(result.verification).toContain('disclosed, unfixed')
+  })
+})
+
+describe('v0.32.4 · list_fonts (the phantom tool, now real)', () => {
+  it('lists and filters the 369-family catalog with a cap', () => {
+    const tool = AGENT_TOOL_MAP.get('list_fonts')
+    expect(tool).toBeTruthy()
+    const all = tool!.sanitize({ limit: 10 }, ctx)
+    expect(all.ok).toBe(true)
+    expect(String((all as { observation?: string }).observation)).toContain('Font families')
+    expect(String((all as { observation?: string }).observation)).toContain('of 369')
+    const query = tool!.sanitize({ query: 'mono', limit: 20 }, ctx)
+    expect(query.ok).toBe(true)
+    const obs = String((query as { observation?: string }).observation)
+    expect(obs).toContain('matching "mono"')
+    expect(obs.toLowerCase()).toContain('mono')
+    const none = tool!.sanitize({ query: 'zzzznope' }, ctx)
+    expect(none.ok).toBe(true)
+    expect(String((none as { observation?: string }).observation)).toContain('No font family matches')
+  })
+})
+
+describe('v0.32.4 · run ledger renders into the system prompt', () => {
+  it('recent runs appear as grounded history; absent ledger stays silent', () => {
+    const withLedger = loopSystemPrompt({
+      design, ctx, mode: 'create',
+      ledger: [
+        'create "Design a bold Instagram post for a coffee launch" → 24 action(s): Coffee-launch Instagram post built (brief validated).',
+        'edit "Remove the duplicates" → 2 action(s): Duplicate subline and card removed.',
+      ],
+    })
+    expect(withLedger).toContain('YOUR RECENT RUNS IN THIS DESIGN')
+    expect(withLedger).toContain('coffee launch')
+    expect(withLedger).toContain('Duplicate subline')
+    expect(withLedger).toContain('the state above is still the authority')
+    const without = loopSystemPrompt({ design, ctx, mode: 'create' })
+    expect(without).not.toContain('YOUR RECENT RUNS IN THIS DESIGN')
+    // the font sample now carries the real catalog size + discovery pointer
+    expect(without).toContain('369 total')
+    expect(without).toContain('list_fonts')
   })
 })

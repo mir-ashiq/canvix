@@ -32,18 +32,18 @@ datasource db {
 // no OAuth, no external provider) so self-hosting stays free forever.
 // Passwords are scrypt hashes from node:crypto (see src/lib/auth/passwords.ts).
 model User {
-  id           String    @id @default(cuid())
+  id           String           @id @default(cuid())
   // lowercase, 3–32 chars, [a-z0-9_-] (enforced in src/lib/auth/validate.ts)
-  username     String    @unique
+  username     String           @unique
   passwordHash String
   // v0.16 (A1): admin console access. "user" | "admin". Effective admin ALSO
   // honours the CANVIX_ADMIN_USERS env bootstrap (src/lib/admin/guard.ts) so
   // the first admin exists without CLI surgery; this column is what the
   // console manages afterwards.
-  role         String    @default("user")
-  createdAt    DateTime  @default(now())
-  designs      Design[]  @relation("DesignOwner")
-  folders      Folder[]  @relation("FolderOwner")
+  role         String           @default("user")
+  createdAt    DateTime         @default(now())
+  designs      Design[]         @relation("DesignOwner")
+  folders      Folder[]         @relation("FolderOwner")
   sessions     Session[]
   aiProviders  UserAIProvider[]
   apiKeys      ApiKey[]
@@ -98,15 +98,15 @@ model Session {
 // delete, so the 401 reason can say "revoked" and the audit trail
 // (lastUsedAt) survives.
 model ApiKey {
-  id        String    @id // sha256(token) hex
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String    @id // sha256(token) hex
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   label      String
   // CSV of API_KEY_SCOPES, or 'all' (sugar for every current scope)
-  scopes    String    @default("designs:read")
-  createdAt DateTime  @default(now())
+  scopes     String    @default("designs:read")
+  createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
-  expiresAt DateTime?
+  expiresAt  DateTime?
   revokedAt  DateTime?
 
   @@index([userId])
@@ -114,18 +114,18 @@ model ApiKey {
 
 // A user design / project — the core artifact of Canvix.
 model Design {
-  id         String          @id @default(cuid())
-  name       String          @default("Untitled design")
-  width      Int             @default(1080)
-  height     Int             @default(1080)
+  id         String            @id @default(cuid())
+  name       String            @default("Untitled design")
+  width      Int               @default(1080)
+  height     Int               @default(1080)
   // Structured document: { pages: PageData[], ... } — stored as native jsonb
-  pages      Json            @default("[]")
-  thumbnail  String?         // small dataURL preview
-  source     String          @default("blank") // blank | template:<id> | duplicate:<id> | resize:<id>
+  pages      Json              @default("[]")
+  thumbnail  String? // small dataURL preview
+  source     String            @default("blank") // blank | template:<id> | duplicate:<id> | resize:<id>
   // v0.9: owning account. null = link-accessible design (pre-accounts
   // behaviour — anonymous editing keeps working for legacy + shared links).
   ownerId    String?
-  owner      User?           @relation("DesignOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  owner      User?             @relation("DesignOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   // v0.9.1: anonymous attribution — sha256 of the canvix_anon cookie that
   // was set when an anonymous browser created this design. adopt-all only
   // claims rows whose anonKey matches the caller's cookie, so one account
@@ -137,18 +137,23 @@ model Design {
   // filed under. null = "All designs" (the root; unchanged pre-v0.14
   // behaviour). Deleting a folder unfiles its designs (SetNull) — a
   // folder delete never destroys work.
-  folderId    String?
-  folder      Folder?         @relation("DesignFolder", fields: [folderId], references: [id], onDelete: SetNull)
+  folderId   String?
+  folder     Folder?           @relation("DesignFolder", fields: [folderId], references: [id], onDelete: SetNull)
   // soft delete (dashboard Trash) — null = live design
-  deletedAt   DateTime?
+  deletedAt  DateTime?
   versions   DesignVersion[]
   // v0.32 (Unified Canvix AI): the brief contract an autonomous
   // generation was verified against, persisted on the applied design —
   // chat-agent refinements of the SAME design merge it into their run
   // brief so verified requirements survive refinement
-  provenance  DesignProvenance? @relation("DesignProvenance")
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  provenance DesignProvenance? @relation("DesignProvenance")
+  // v0.32.4: per-design agent run ledger — compact records of what
+  // each Canvix AI run did (mode, request, actions, outcome), fed
+  // back into the next run's context. The canvas state stays the
+  // authority; this explains how it got there.
+  agentRuns  DesignAgentRun[]  @relation("DesignAgentRuns")
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
 
   @@index([ownerId])
   @@index([anonKey])
@@ -263,12 +268,12 @@ model DesignEvent {
 // exclusive to one design: every heartbeat for a second design failed with
 // P2002 (production incident 2026-10-29).
 model Presence {
-  id        String // = participant id
-  designId  String
-  name      String
-  color     String
-  cursor    Json? // { page: number, x: number, y: number, selection?: string[] }
-  lastSeen  DateTime @default(now()) @updatedAt
+  id       String // = participant id
+  designId String
+  name     String
+  color    String
+  cursor   Json? // { page: number, x: number, y: number, selection?: string[] }
+  lastSeen DateTime @default(now()) @updatedAt
 
   @@id([designId, id])
   @@index([designId, lastSeen])
@@ -276,7 +281,7 @@ model Presence {
 
 // Canvas-anchored comment threads (author identity is the local participant).
 model Comment {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   designId    String
   pageId      String
   x           Float // anchor in page coordinates (fraction of page size, 0..1)
@@ -287,9 +292,9 @@ model Comment {
   authorColor String
   body        String
   parentId    String? // reply threading
-  resolved    Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  resolved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([designId, createdAt])
   @@index([designId, resolved])
@@ -368,9 +373,9 @@ model PluginInstall {
 }
 
 model PluginAsset {
-  id        String         @id @default(cuid())
+  id        String        @id @default(cuid())
   installId String
-  install   PluginInstall  @relation(fields: [installId], references: [id], onDelete: Cascade)
+  install   PluginInstall @relation(fields: [installId], references: [id], onDelete: Cascade)
   path      String
   mime      String
   bytes     Bytes
@@ -399,12 +404,12 @@ model AppConfig {
 // table × days × status codes. Rows older than 90 days are swept lazily.
 // CANVIX_TRAFFIC=0 opts an instance out entirely.
 model TrafficStat {
-  id        BigInt   @id @default(autoincrement())
-  day       DateTime // UTC midnight
-  route     String // logical route name, e.g. "GET /api/designs"
-  method    String
-  status    Int
-  hits      Int      @default(0)
+  id     BigInt   @id @default(autoincrement())
+  day    DateTime // UTC midnight
+  route  String // logical route name, e.g. "GET /api/designs"
+  method String
+  status Int
+  hits   Int      @default(0)
 
   @@unique([day, route, method, status])
   @@index([day])
@@ -416,9 +421,9 @@ model TrafficStat {
 // the two surfaces that mean "someone used Canvix today" (design list /
 // editor open), so it adds no extra auth resolution anywhere.
 model DailyActive {
-  id    BigInt  @id @default(autoincrement())
+  id    BigInt   @id @default(autoincrement())
   day   DateTime
-  actor  String
+  actor String
 
   @@unique([day, actor])
 }
@@ -464,4 +469,26 @@ model BrandKitRecord {
 
   @@index([ownerId])
   @@index([anonKey])
+}
+
+// ── v0.32.4: per-design agent run ledger ──────────────────────
+// One row per Canvix AI run on a design (create/edit/improve/
+// review). Compact by design: mode + request + action count + the
+// run's own summary (trimmed). The route reads the last few rows
+// into the next run's system prompt as "YOUR RECENT RUNS IN THIS
+// DESIGN" — grounded memory of what the agent itself did, distinct
+// from the chat history (what the user said). findings keeps the
+// disclosed audit/vision residue so a follow-up can target it.
+model DesignAgentRun {
+  id        String   @id @default(cuid())
+  designId  String
+  design    Design   @relation("DesignAgentRuns", fields: [designId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  mode      String // create | edit | improve | review | plan
+  request   String   @db.VarChar(240)
+  summary   String   @db.VarChar(600)
+  toolCalls Int      @default(0)
+  findings  String?  @db.VarChar(1200)
+
+  @@index([designId, createdAt])
 }

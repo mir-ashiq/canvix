@@ -11,7 +11,7 @@ import { TEMPLATE_CATEGORIES } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 /**
- * v0.17 (Wave 2): "Save as template" — persist the open document as a
+ * v0.17 (Wave 2): "حفظ كقالب" — persist the open document as a
  * reusable template (server-side, attributed like designs: account or
  * anon cookie). Appears in the editor File menu.
  *

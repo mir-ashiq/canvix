@@ -6,13 +6,13 @@ import { useEditorStore } from '@/store/editor-store'
 import { ANIMATION_KINDS, TRANSITION_KINDS } from '@/lib/animations'
 import { SFX_PACK, isSfxId } from '@/lib/assets/sfx-pack'
 import { playSfx } from '@/lib/sfx'
-import type { Animationالاتجاه, Animationمنحنى الحركة, AnimationKind, AnimationSpeed, ElementAnimation, PageTransition } from '@/lib/types'
+import type { AnimationDirection, AnimationEasing, AnimationKind, AnimationSpeed, ElementAnimation, PageTransition } from '@/lib/types'
 import { SPEED_PRESETS } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
 
-const EASINGS: { id: Animationمنحنى الحركة; label: string }[] = [
+const EASINGS: { id: AnimationEasing; label: string }[] = [
   { id: 'linear', label: 'خطي' },
   { id: 'easeIn', label: 'تسارع تدريجي' },
   { id: 'easeOut', label: 'تباطؤ تدريجي' },
@@ -20,7 +20,7 @@ const EASINGS: { id: Animationمنحنى الحركة; label: string }[] = [
   { id: 'spring', label: 'ارتداد' },
 ]
 
-const DIRECTIONS: { id: Animationالاتجاه; label: string; icon: typeof ArrowLeft }[] = [
+const DIRECTIONS: { id: AnimationDirection; label: string; icon: typeof ArrowLeft }[] = [
   { id: 'left', label: 'من اليسار', icon: ArrowLeft },
   { id: 'right', label: 'من اليمين', icon: ArrowRight },
   { id: 'up', label: 'من الأسفل', icon: ArrowUp },

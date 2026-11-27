@@ -1,5 +1,5 @@
-const CACHE_NAME = 'tea-g3-shell-v2'
-const APP_SHELL = ['/', '/offline.html', '/manifest.webmanifest', '/tea-g3.svg']
+const CACHE_NAME = 'midad-shell-v3'
+const APP_SHELL = ['/', '/offline.html', '/manifest.webmanifest', '/midad.svg']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -12,7 +12,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key.startsWith('tea-g3-') && key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys.filter((key) => (key.startsWith('tea-g3-') || key.startsWith('midad-')) && key !== CACHE_NAME).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   )
 })
@@ -42,7 +42,7 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  if (url.pathname === '/manifest.webmanifest' || url.pathname === '/tea-g3.svg' || url.pathname.startsWith('/_next/static/')) {
+  if (url.pathname === '/manifest.webmanifest' || url.pathname === '/midad.svg' || url.pathname.startsWith('/_next/static/')) {
     event.respondWith(
       caches.match(request).then((cached) => {
         if (cached) return cached

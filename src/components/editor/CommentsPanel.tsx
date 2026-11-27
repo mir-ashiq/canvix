@@ -57,7 +57,7 @@ export function CommentsPanel() {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 pt-4 pb-3 shrink-0">
         <h2 className="font-bold text-sm text-white flex items-center gap-2">
-          <MessageSquare size={15} className="text-[#02C0CC]" /> Comments
+          <MessageSquare size={15} className="text-[#02C0CC]" /> التعليقات
         </h2>
         <Button
           variant="ghost"
@@ -161,7 +161,7 @@ function ThreadCard({
       setReplyText('')
       setReplyOpen(false)
     } catch {
-      toast({ title: 'تعذر إرسال الرد.' })
+      toast({ title: 'تعذّر إرسال الرد.' })
     } finally {
       setBusy(false)
     }
@@ -182,7 +182,7 @@ function ThreadCard({
         window.dispatchEvent(new CustomEvent('canvix:comments-changed'))
       }
     } catch {
-      toast({ title: 'تعذر تحديث التعليق.' })
+      toast({ title: 'تعذّر تحديث التعليق.' })
     }
   }
 
@@ -198,7 +198,7 @@ function ThreadCard({
         window.dispatchEvent(new CustomEvent('canvix:comments-changed'))
       }
     } catch {
-      toast({ title: 'تعذر حذف التعليق.' })
+      toast({ title: 'تعذّر حذف التعليق.' })
     }
   }
 
@@ -225,7 +225,7 @@ function ThreadCard({
             <span className="text-[10px] text-white/35 shrink-0">{timeAgo(root.createdAt)}</span>
             {root.resolved && (
               <span className="text-[9px] font-semibold text-emerald-300/80 flex items-center gap-0.5 shrink-0">
-                <Check size={9} /> resolved
+                <Check size={9} /> تم الحل
               </span>
             )}
           </div>
@@ -259,7 +259,7 @@ function ThreadCard({
                 setReplyOpen((v) => !v)
               }}
             >
-              <Reply size={10} /> Reply
+              <Reply size={10} /> رد
             </button>
             <button
               className="text-[10px] font-semibold text-white/50 hover:text-white px-1.5 py-0.5 rounded flex items-center gap-1 cursor-pointer"
@@ -278,7 +278,7 @@ function ThreadCard({
                   void deleteComment()
                 }}
               >
-                <Trash2 size={10} /> Delete
+                <Trash2 size={10} /> حذف
               </button>
             )}
             <span className="ml-auto text-[9px] text-white/25 shrink-0">الصفحة {pageIndex + 1}</span>

@@ -28,8 +28,7 @@
   },
   "dependencies": {
     "@imgly/background-removal": "^1.7.0",
-    "@prisma/adapter-pg": "^6.16.0",
-    "@prisma/client": "^6.16.0",
+    "@prisma/client": "^6.19.3",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-dropdown-menu": "^2.1.15",
     "@radix-ui/react-popover": "^1.1.14",
@@ -43,8 +42,7 @@
     "konva": "^10.9.1",
     "lucide-react": "^0.525.0",
     "next": "^16.4.6",
-    "pg-cloudflare": "^1.4.1",
-    "prisma": "^6.16.0",
+    "prisma": "^6.19.3",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -52,7 +50,8 @@
     "sharp": "^0.35.5",
     "tailwind-merge": "^3.3.1",
     "z-ai-web-dev-sdk": "^0.0.18",
-    "zustand": "^5.1.0"
+    "zustand": "^5.1.0",
+    "@prisma/adapter-d1": "^6.19.3"
   },
   "devDependencies": {
     "@netlify/plugin-nextjs": "^5.16.6",

@@ -32,6 +32,7 @@ export default defineConfig({
         url: 'http://localhost:3000',
         timeout: 180_000,
         reuseExistingServer: true,
+        env: { TEAG3_ACCOUNTS_ENABLED: 'true' },
         stdout: 'ignore',
       },
 })

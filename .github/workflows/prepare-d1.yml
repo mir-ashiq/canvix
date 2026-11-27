@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - midad-d1-migration
+  workflow_dispatch:
 
 permissions:
   contents: write

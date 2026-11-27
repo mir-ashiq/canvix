@@ -3189,3 +3189,33 @@ describe('v0.33 · the full-circle honesty: a run cannot claim stickers it never
     expect(String(result.verification)).toContain('Brief contract validated')
   })
 })
+
+describe('v0.33.1 · the live-repro convergence fixes', () => {
+  it('the illustration default size is page-adaptive: ≥10% focal size on tall canvases', () => {
+    // square 1080: the classic default already clears the threshold
+    // (√(10% of 1080²) = 342 < 420)
+    const square = AGENT_TOOL_MAP.get('add_illustration')!.sanitize({ query: 'rocket launch' }, ctx)
+    expect(square.ok).toBe(true)
+    if (square.ok) expect((square.actions[0] as { size?: number }).size).toBe(420)
+    // a 1240×1754 poster: 420px was 8.1% of the page and the run churned
+    // six attempts against the feature gate — the default is now ≥466
+    const tall = AGENT_TOOL_MAP.get('add_illustration')!.sanitize(
+      { query: 'rocket launch' },
+      { ...ctx, width: 1240, height: 1754 },
+    )
+    expect(tall.ok).toBe(true)
+    if (tall.ok) expect((tall.actions[0] as { size?: number }).size).toBeGreaterThanOrEqual(466)
+  })
+
+  it('the illustration unmet message names the exact px math and the resize path', async () => {
+    const { extractBrief, validateBrief } = await import('./brief')
+    const brief = extractBrief('a poster with a central technology illustration')
+    const r = validateBrief(brief, {
+      texts: [], colors: [], width: 1240, height: 1754,
+      elements: [{ type: 'image', x: 0, y: 0, width: 300, height: 300 }],
+    })
+    expect(r.satisfied).toBe(false)
+    expect(r.unmet.some((u) => u.includes('467×467'))).toBe(true)
+    expect(r.unmet.some((u) => u.includes('update_elements'))).toBe(true)
+  })
+})

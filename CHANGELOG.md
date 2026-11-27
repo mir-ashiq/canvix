@@ -3,6 +3,25 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+### Fixed — v0.33.1: the live-repro convergence — the focal-size default and the unmet-message math
+
+The v0.33.0 live reproduction (49 steps · 36 actions, brief validated
+with a real photo focal, honest audit disclosure) exposed two
+convergence defects, both fixed:
+
+- **The illustration default size was fixed at 420px** — 8.1% of a
+  1240×1754 poster, under the feature contract's ≥10% focal
+  threshold, and the model churned six attempts trying to satisfy a
+  size it was never told. add_illustration now defaults to the
+  page-adaptive focal size (max(420, ceil(√(10% of the page)))).
+- **The illustration unmet message carried no math.** It now names
+  the exact minimum (e.g. "at least 467×467px, 10% of 1240×1754")
+  and the resize path (add_illustration defaults to it, or
+  update_elements {width, height}).
+
+Harness: +2 regression tests (the adaptive default on square vs
+poster canvases; the unmet-message math + resize path) — 1,779/1,779.
+
 ### feat(v0.33.0): the design-quality architecture — server-resolved assets, the visual-feature contract, asset-visibility audit, the native effects surface
 
 One brief, one review ("a program that places elements at

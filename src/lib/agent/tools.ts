@@ -1021,6 +1021,12 @@ export const AGENT_TOOLS: AgentTool[] = [
       const x = num(args, 'x')
       const y = num(args, 'y')
       const size = num(args, 'size')
+      // v0.33.1 · the live repro finding: the fixed 420px default put
+      // the illustration at 8.1% of a 1240×1754 poster — under the
+      // feature contract's ≥10% focal threshold, and the run churned
+      // six attempts trying to satisfy a size it was never told. The
+      // default is now page-adaptive: at least the ≥10% focal size.
+      const defaultSize = clamp(Math.max(420, Math.ceil(Math.sqrt(0.1 * ctx.width * ctx.height))), 60, 800)
       return {
         ok: true,
         actions: [
@@ -1030,10 +1036,10 @@ export const AGENT_TOOLS: AgentTool[] = [
             name: hit.name,
             ...(x !== null ? { x: clamp(x, -ctx.width, ctx.width) } : {}),
             ...(y !== null ? { y: clamp(y, -ctx.height, ctx.height) } : {}),
-            ...(size !== null ? { size: clamp(size, 60, 800) } : {}),
+            ...(size !== null ? { size: clamp(size, 60, 800) } : { size: defaultSize }),
           },
         ],
-        observation: `Illustration "${hit.name}" (${hit.pack} pack) added${size !== null ? ` at ${Math.round(clamp(size, 60, 800))}px` : ''}.`,
+        observation: `Illustration "${hit.name}" (${hit.pack} pack) added${size !== null ? ` at ${Math.round(clamp(size, 60, 800))}px` : ` at ${defaultSize}px (≥10% focal size for this page)`}.`,
       }
     },
   },

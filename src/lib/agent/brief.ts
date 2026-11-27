@@ -505,9 +505,21 @@ export function validateBrief(
   let features: BriefValidationResult['checked']['features']
   if (brief.requiredFeatures?.length && state.elements?.length) {
     features = validateFeatures(brief.requiredFeatures, state.elements, state.width, state.height)
-    for (const f of features) {
-      if (!f.found) unmet.push(`Required element missing: ${f.label} — build it from NATIVE elements (rect panels, semi-transparent fills, borders, text).`)
-    }
+    brief.requiredFeatures.forEach((f, i) => {
+      if (features?.[i]?.found) return
+      // v0.33.1 · the live repro finding: the model churned six
+      // attempts against the illustration threshold without ever
+      // being told the exact size. The unmet message now carries the
+      // page-specific math and the resize path.
+      if (f.kind === 'illustration') {
+        const min = Math.ceil(Math.sqrt(0.1 * state.width * state.height))
+        unmet.push(
+          `Required element missing: a dominant illustration — an image/illustration/photo element of at least ${min}×${min}px (10% of ${state.width}×${state.height}). Add one with add_illustration (it defaults to the focal size), or enlarge an existing image with update_elements {width, height} ≥ ${min}.`,
+        )
+        return
+      }
+      unmet.push(`Required element missing: ${f.label} — build it from NATIVE elements (rect panels, semi-transparent fills, borders, text).`)
+    })
   }
   let dimensions: BriefValidationResult['checked']['dimensions']
   if (brief.dimensions && brief.dimensions.tier === 'mandatory') {

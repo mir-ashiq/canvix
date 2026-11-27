@@ -144,6 +144,7 @@ test.describe('MIDAD mobile touch targets', () => {
     // context explicitly so the desktop proof above keeps its own defaults.
     const iPhone = devices['iPhone 13']
     const context = await browser.newContext({
+      baseURL: process.env.BASE_URL ?? 'http://localhost:3000',
       viewport: iPhone.viewport,
       deviceScaleFactor: iPhone.deviceScaleFactor,
       isMobile: iPhone.isMobile,

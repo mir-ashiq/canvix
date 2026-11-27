@@ -85,6 +85,10 @@ export type ToolRisk = 'read' | 'write' | 'destructive'
 export type AgentEvent =
   | { v: number; type: 'start'; intent: AgentMode; plan?: string[]; runId?: string }
   | { v: number; type: 'mode'; mode: AgentMode; reason: string }
+  /** v0.32.7: what this message wants DONE to the existing design —
+   *  add / replace / reposition / restyle / redesign / remove /
+   *  refine / review (deterministic classification, intent.ts) */
+  | { v: number; type: 'intent'; intent: string; reason: string }
   | { v: number; type: 'skill'; id: string; name: string }
   | { v: number; type: 'brief'; brief: Record<string, unknown> }
   | { v: number; type: 'plan'; steps: string[] }
@@ -104,8 +108,11 @@ export type AgentEvent =
    *  down; defined here so both sides share the shape */
   | { v: number; type: 'ack'; callId: string; ok: boolean; message?: string }
   | { v: number; type: 'observation'; stepIndex: number; message: string }
-  /** periodic run telemetry — turns, tool calls, wall ms, model calls */
-  | { v: number; type: 'usage'; turns: number; toolCalls: number; elapsedMs: number; modelCalls: number }
+  /** periodic run telemetry — turns, tool calls, wall ms, model calls.
+   *  v0.32.7: prompt/completion tokens when the gateway reports them
+   *  (the route's final usage event carries the run total; absent when
+   *  the provider does not report usage — never estimated). */
+  | { v: number; type: 'usage'; turns: number; toolCalls: number; elapsedMs: number; modelCalls: number; promptTokens?: number; completionTokens?: number }
   /** v0.29.3: the loop asks the CLIENT to screenshot the live canvas
    *  (the export pipeline's captureStage) mid-run, BEFORE completion —
    *  the grounded vision critique runs on the real render, not the

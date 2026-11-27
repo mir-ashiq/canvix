@@ -59,10 +59,14 @@ interface Turn {
   appliedActions?: number
   baseline?: number
   mode?: AgentMode
+  /** v0.32.7: what the run wanted done to the existing design
+   *  (add / replace / reposition / restyle / redesign / remove /
+   *  refine / review — deterministic, intent.ts) */
+  intent?: string
   plan?: string[]
   findings?: Finding[]
   verification?: string
-  usage?: { turns: number; toolCalls: number; elapsedMs: number; modelCalls: number }
+  usage?: { turns: number; toolCalls: number; elapsedMs: number; modelCalls: number; promptTokens?: number; completionTokens?: number }
 }
 
 const SUGGESTIONS = [
@@ -127,6 +131,12 @@ function buildDesignContext() {
       width: Math.round(el.width),
       height: Math.round(el.height),
       locked: el.locked,
+    }
+    // v0.32.7: rotation rides the context — the server's spatial map
+    // expands rotated elements to their true AABB footprint
+    if ('rotation' in el && typeof (el as { rotation?: unknown }).rotation === 'number') {
+      const rot = (el as { rotation: number }).rotation
+      if (Math.abs(rot) >= 0.5) base.rotation = Math.round(rot * 10) / 10
     }
     if (el.type === 'text') {
       const t = el as TextElement
@@ -321,9 +331,11 @@ export function AssistantApp({ onClose }: AppPanelProps) {
   const [liveSteps, setLiveSteps] = useState<RunStep[]>([])
   /** live mode + skills + brief of the in-flight run */
   const [liveMode, setLiveMode] = useState<AgentMode | null>(null)
+  /** v0.32.7: the live run's edit intent (add/replace/restyle/…) */
+  const [liveIntent, setLiveIntent] = useState<string | null>(null)
   const [liveSkills, setLiveSkills] = useState<string[]>([])
   const [liveBrief, setLiveBrief] = useState<DesignBrief | null>(null)
-  const [liveUsage, setLiveUsage] = useState<{ turns: number; toolCalls: number; elapsedMs: number; modelCalls: number } | null>(null)
+  const [liveUsage, setLiveUsage] = useState<{ turns: number; toolCalls: number; elapsedMs: number; modelCalls: number; promptTokens?: number; completionTokens?: number } | null>(null)
   /** pending destructive confirmation */
   const [pendingConfirm, setPendingConfirm] = useState<{ tool: string; actions: DesignAction[]; callId: string } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -436,6 +448,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
     let appliedCount = 0
     let summary = ''
     let mode = expectedMode
+    let turnIntent: string | undefined
     let plan: string[] | undefined
     let findings: Finding[] | undefined
     let verification: string | undefined
@@ -475,6 +488,12 @@ export function AssistantApp({ onClose }: AppPanelProps) {
             mode = event.mode
             setLiveMode(event.mode)
             break
+          case 'intent':
+            // v0.32.7: what this message wants DONE to the existing
+            // design — shown live under the mode
+            turnIntent = event.intent
+            setLiveIntent(event.intent)
+            break
           case 'skill':
             setLiveSkills((s) => [...s, event.name])
             break
@@ -503,7 +522,14 @@ export function AssistantApp({ onClose }: AppPanelProps) {
             break
           }
           case 'usage':
-            setLiveUsage({ turns: event.turns, toolCalls: event.toolCalls, elapsedMs: event.elapsedMs, modelCalls: event.modelCalls })
+            setLiveUsage({
+              turns: event.turns,
+              toolCalls: event.toolCalls,
+              elapsedMs: event.elapsedMs,
+              modelCalls: event.modelCalls,
+              ...(event.promptTokens !== undefined ? { promptTokens: event.promptTokens } : {}),
+              ...(event.completionTokens !== undefined ? { completionTokens: event.completionTokens } : {}),
+            })
             break
           case 'capture': {
             // v0.29.3: the loop asks for the REAL rendered canvas
@@ -613,6 +639,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
           content: summary || 'Done.',
           steps: collectedSteps,
           appliedActions: appliedCount,
+          intent: turnIntent,
           baseline,
           mode,
           plan,
@@ -623,7 +650,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
       ])
     } catch (err) {
       const msg = err instanceof Error && err.name === 'AbortError' ? 'Stopped — applied work is kept.' : err instanceof Error ? err.message : 'The agent failed.'
-      setTurns((ts) => [...ts, { role: 'assistant', content: msg, steps: collectedSteps, appliedActions: appliedCount, baseline, mode }])
+      setTurns((ts) => [...ts, { role: 'assistant', content: msg, steps: collectedSteps, appliedActions: appliedCount, baseline, mode, intent: turnIntent }])
     } finally {
       setBusy(false)
       setLiveSteps([])
@@ -725,7 +752,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
                 {turn.steps && turn.steps.length > 0 && (
                   <details className="rounded-xl border border-white/8 bg-white/[0.03] overflow-hidden">
                     <summary className="px-3 py-2 text-[11px] font-semibold text-white/60 cursor-pointer flex items-center gap-1.5">
-                      <ListChecks size={12} /> {turn.steps.length} steps · {turn.appliedActions ?? 0} actions
+                      <ListChecks size={12} /> {turn.steps.length} steps · {turn.appliedActions ?? 0} actions{turn.intent ? ` · ${turn.intent}` : ''}
                     </summary>
                     <ol className="px-3 pb-2 space-y-1.5">
                       {turn.steps.map((s, j) => (
@@ -801,7 +828,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
                   <div className="flex items-center gap-2 text-[10px] text-white/35">
                     <Gauge size={10} />
                     <span>
-                      {turn.usage.turns} turns · {turn.usage.toolCalls} tools · {Math.round(turn.usage.elapsedMs / 1000)}s · {turn.usage.modelCalls} model calls
+                      {turn.usage.turns} turns · {turn.usage.toolCalls} tools · {Math.round(turn.usage.elapsedMs / 1000)}s · {turn.usage.modelCalls} model calls{turn.usage.promptTokens !== undefined ? ` · ${((turn.usage.promptTokens + (turn.usage.completionTokens ?? 0)) / 1000).toFixed(1)}k tokens` : ''}
                     </span>
                   </div>
                 )}
@@ -826,20 +853,22 @@ export function AssistantApp({ onClose }: AppPanelProps) {
             <div className="min-w-0 flex-1 space-y-2">
               {liveMode && (
                 <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/40">
-                  <span>{liveMode} mode</span>
+                  <span>
+                {liveMode} mode{liveIntent ? ` · ${liveIntent}` : ''}
+              </span>
                   {liveSkills.map((s) => (
                     <span key={s} className="px-1.5 rounded bg-[#02C0CC]/10 text-[#02C0CC] normal-case">{s}</span>
                   ))}
                 </div>
               )}
-              {liveBrief && (liveBrief.requiredTexts.length > 0 || liveBrief.requiredColors.length > 0) && (
+              {liveBrief && ((liveBrief.requiredTexts ?? []).length > 0 || (liveBrief.requiredColors ?? []).length > 0) && (
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-white/50 mb-1">Brief contract (exact)</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {liveBrief.requiredTexts.map((t, i) => (
+                    {(liveBrief.requiredTexts ?? []).map((t, i) => (
                       <span key={i} className="px-1.5 py-0.5 rounded bg-white/8 text-[10.5px] text-white/80 font-medium">&ldquo;{t.text}&rdquo;</span>
                     ))}
-                    {liveBrief.requiredColors.map((c, i) => (
+                    {(liveBrief.requiredColors ?? []).map((c, i) => (
                       <span key={i} className="px-1.5 py-0.5 rounded bg-white/8 text-[10.5px] text-white/80 font-mono flex items-center gap-1">
                         <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: c.hex }} />
                         {c.hex.toUpperCase()}

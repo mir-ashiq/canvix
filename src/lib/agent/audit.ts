@@ -24,6 +24,7 @@
  */
 import type { AgentDesignCtx, AgentElementCtx } from './context'
 import { parseColor } from './brief'
+import { elementBoxes, intentionalOverlaps, isIntentional, hierarchyLines } from './spatial'
 
 const HEX = /^#?[0-9a-f]{6}$/i
 
@@ -164,9 +165,20 @@ export function auditDesign(
     }
   }
 
-  // 3. element overlaps (client-computed) — hard readability failures
-  for (const o of (d.overlaps ?? []).slice(0, 3)) issues.push(`Elements overlap: ${o} — move or resize one of them.`)
-  if ((d.overlaps ?? []).length > 3) issues.push(`…and ${(d.overlaps ?? []).length - 3} more overlapping pairs.`)
+  // 3. element overlaps (client-computed) — hard readability failures.
+  //    v0.32.7: INTENTIONAL layering is not a defect — spatial.ts
+  //    classifies container/backdrop/backing-card pairs (a card
+  //    behind its text is layering); only GENUINE collisions remain.
+  if (d.overlaps?.length) {
+    const intentional = intentionalOverlaps(elementBoxes(d), d.width ?? 1080, d.height ?? 1080)
+    const genuine = (d.overlaps ?? []).filter((o) => {
+      const ids = [...o.matchAll(/#([\w-]+)/g)].map((m) => m[1])
+      if (ids.length !== 2) return true // unparseable — keep the finding
+      return !isIntentional(intentional, ids[0], ids[1])
+    })
+    for (const o of genuine.slice(0, 3)) issues.push(`Elements overlap: ${o} — move or resize one of them.`)
+    if (genuine.length > 3) issues.push(`…and ${genuine.length - 3} more overlapping pairs.`)
+  }
 
   // 4. off-canvas elements
   for (const o of (d.offCanvas ?? []).slice(0, 3)) issues.push(`Element is outside the canvas: ${o} — move it back inside ${d.width ?? '?'}x${d.height ?? '?'}.`)
@@ -382,6 +394,39 @@ export function auditDesign(
     }
   }
 
+  // 13. ALIGNMENT (v0.32.7): wide text elements (≥30% page width)
+  //     that claim to span the content column should sit centered
+  //     (x-center within 12px of the page center) — advisory, not
+  //     a hard failure (asymmetric layouts are legitimate).
+  if (d.width) {
+    const cx = d.width / 2
+    const misaligned: string[] = []
+    for (const t of texts) {
+      const b = box(t)
+      if (b.w < 0.3 * d.width!) continue
+      const c = b.x + b.w / 2
+      if (Math.abs(c - cx) > 12) misaligned.push(`"${String(t.text ?? '').slice(0, 24)}" (x-center ${Math.round(c)} vs page center ${Math.round(cx)})`)
+    }
+    if (misaligned.length === 1) {
+      issues.push(`ADVISORY alignment: wide text is off the page center — ${misaligned[0]}; center it (align_elements cx) unless the asymmetry is intentional.`)
+    } else if (misaligned.length > 1) {
+      issues.push(`ADVISORY alignment: ${misaligned.length} wide text elements are off the page center (${misaligned.slice(0, 2).join('; ')}); align them (align_elements cx) unless the asymmetry is intentional.`)
+    }
+  }
+
+  // 14. TYPOGRAPHY (v0.32.7): more than 3 font families on one page
+  //     reads as noise — advisory (decorative pairings are legitimate).
+  const families = new Set(texts.map((t) => t.fontFamily).filter((f): f is string => !!f && f !== 'Poppins'))
+  if (families.size > 3) {
+    issues.push(`ADVISORY typography: ${families.size} font families on one page (${[...families].slice(0, 5).join(', ')}) — reduce to a heading + body pairing (set_text_style / set_font).`)
+  }
+
+  // 15. VISUAL HIERARCHY (v0.32.7): the largest text should clearly
+  //     dominate the body (spatial.ts ladder) — advisory.
+  const hierarchy = hierarchyLines(d)
+  for (const h of hierarchy) {
+    if (h.startsWith('ADVISORY')) issues.push(h)
+  }
   return issues.slice(0, 12)
 }
 

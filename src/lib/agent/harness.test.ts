@@ -26,7 +26,7 @@ import { parseAgentTurn, sseLine, AGENT_GUARDS, AGENT_PROTOCOL_VERSION, type Age
 import { AGENT_TOOL_MAP, AGENT_TOOLS, type ToolContext, type SanitizeResult } from './tools'
 import { runAgentLoop, toolsForMode, loopSystemPrompt } from './loop'
 import { auditDesign, contrastBetween } from './audit'
-import { heuristicMode, parseMode, modeAllowsWrites, MODE_TOOL_RISK } from './router'
+import { heuristicMode, parseMode, modeAllowsWrites, MODE_TOOL_RISK, fallbackMode } from './router'
 import { DESIGN_SKILLS, selectSkills, skillsPromptSection } from './skills'
 import { extractBrief, validateBrief, briefPromptSection, FORMAT_PRESETS, type DesignBrief } from './brief'
 import { serializeDesignContext, contextValidIds, type AgentDesignCtx } from './context'
@@ -346,7 +346,9 @@ describe('harness · tool matrix', () => {
     expect(events.filter((e) => e.type === 'done').length).toBe(1)
     const finalEvent = events[events.length - 1] as { type: string; summary?: string }
     expect(finalEvent.type).toBe('done')
-    expect(String(finalEvent.summary)).toContain('disclosed')
+    // v0.32.7 contract (PR #95): one fix round, then the re-audit is
+    // authoritative — remaining blocking issues end the run INCOMPLETE
+    expect(String(finalEvent.summary)).toContain('INCOMPLETE')
   })
 
   it('CASE I: striking out during the audit fix round discloses instead of failing', async () => {
@@ -1704,6 +1706,94 @@ describe('v0.32.2 · router: the Instagram-post misroute (defect A)', () => {
   })
 })
 
+describe('v0.32.7 · router: the fix-family misroute (write requests must never depend on a provider)', () => {
+  // Production report (26 Nov 2026, the JNV Baramula session): every
+  // fix/improve phrasing fell through the heuristic lists to the model
+  // router — and during a provider outage (429/502, exactly when users
+  // retry a broken design) the catch kept the catch-all: DISCUSS. The
+  // user asked to fix a design and got product conversation.
+  it('the EXACT messages from the production session are deterministic write modes', () => {
+    expect(heuristicMode('create a poster for my school basket ball competetion. school name : JNV Baramula')).toEqual({ mode: 'create', confidence: 'high' })
+    expect(heuristicMode("it doesn't look cool add desings images stickers and better fonts etc").mode).toBe('improve')
+    expect(heuristicMode('fix it')).toEqual({ mode: 'improve', confidence: 'high' })
+    expect(heuristicMode("don;t stop until you fix the design it looks like shit")).toEqual({ mode: 'improve', confidence: 'high' })
+  })
+
+  it('the fix/improve family classifies high — never the model router, never discuss', () => {
+    for (const msg of [
+      'fix it',
+      'fix this',
+      'fix them',
+      'fix everything',
+      'fix the design',
+      'fix my poster',
+      'fix the layout',
+      'improve it',
+      'improve this',
+      'improve this poster',
+      'improve the design',
+      'redo it',
+      'revamp this design',
+      'make it look cool',
+      'make it look better',
+      'make this look professional',
+      "it doesn't look good",
+      'this does not look nice',
+      'it looks bad',
+      'it looks like shit',
+      'the design looks terrible',
+      'redesign the poster',
+    ]) {
+      expect(heuristicMode(msg), msg).toEqual({ mode: 'improve', confidence: 'high' })
+    }
+  })
+
+  it('element-level fixes stay surgical edits (the intent classifier refines inside the run)', () => {
+    for (const msg of [
+      'fix the title',
+      'fix the typos',
+      'fix the logo',
+      'update the design',
+      'update the poster',
+      'adjust the spacing',
+      'tweak the colors',
+      'change the app icon on the poster',
+    ]) {
+      expect(heuristicMode(msg).mode, msg).toBe('edit')
+    }
+  })
+
+  it('conversations, product talk and questions keep their old modes — the write verbs hijack nothing', () => {
+    expect(heuristicMode('hi')).toEqual({ mode: 'discuss', confidence: 'high' })
+    expect(heuristicMode('how was your day').mode).toBe('discuss')
+    expect(heuristicMode('Why is the Canvix agent broken?').mode).toBe('discuss')
+    expect(heuristicMode('improve the app').mode).toBe('discuss')
+    expect(heuristicMode('fix your code').mode).toBe('discuss')
+    expect(heuristicMode('How does the poster feature work?').mode).not.toBe('create')
+    expect(heuristicMode('What is wrong with this design?').mode).toBe('review')
+    expect(heuristicMode('make it bolder').mode).toBe('edit')
+    // interrogatives are questions about the artifact, not create briefs
+    expect(heuristicMode('why is my poster broken?').mode).not.toBe('create')
+    // polite question FORMS still create
+    expect(heuristicMode('can you make me a poster for my coffee shop?').mode).toBe('create')
+    expect(heuristicMode('make a poster that looks cool').mode).toBe('create')
+    expect(heuristicMode('Design a bold Instagram post for a coffee launch')).toEqual({ mode: 'create', confidence: 'high' })
+  })
+
+  it('fallbackMode — the provider-outage escape hatch classifies by vocabulary + canvas state', () => {
+    // design vocabulary on a POPULATED canvas → surgical edit
+    expect(fallbackMode('fix my poster please', true)).toBe('edit')
+    expect(fallbackMode('fix the posetr on it', true)).toBe('edit') // artifact typo survives on the verb
+    // design vocabulary on an EMPTY canvas → create (nothing to damage)
+    expect(fallbackMode('make me a cool posetr', false)).toBe('create')
+    expect(fallbackMode('add some stikcers', false)).toBe('create')
+    // NO design vocabulary → it really was conversation
+    expect(fallbackMode('how was your day', true)).toBe('discuss')
+    expect(fallbackMode('nice weather today', false)).toBe('discuss')
+    expect(fallbackMode('', true)).toBe('discuss')
+  })
+})
+
 describe('v0.32.2 · loop: the original request reaches the model (defect B)', () => {
   const emptyDesign: AgentDesignCtx = {
     name: 'Untitled',
@@ -2511,23 +2601,26 @@ describe('v0.32.6 · the canvas map — plans fit the FREE space, never on top',
     expect(r.infeasible).toContain('Move or clear existing elements')
   })
 
-  it('canvasMap merges close elements into disjoint occupied bands', async () => {
+  it('canvasMap (v0.32.7 2D): section-scale elements block bands; close ones merge; small ones do not', async () => {
     const { canvasMap } = await import('./context')
+    const { freeVerticalBands } = await import('./spatial')
     const d = {
       name: 'Map test', width: 1080, height: 1080, pageCount: 1, currentPageIndex: 0,
-      // two elements 35px apart merge (a 40px band cannot fit between)
       elements: [
-        { id: 'a', type: 'text', y: 65, height: 200, text: 'Headline' },
-        { id: 'b', type: 'rect', y: 300, height: 100 },
-        { id: 'c', type: 'text', y: 900, fontSize: 60, text: 'Footer line' },
+        // two wide elements 35px apart merge (a 40px band cannot fit between)
+        { id: 'a', type: 'text', x: 100, y: 65, width: 800, height: 200, text: 'Headline' },
+        { id: 'b', type: 'rect', x: 100, y: 300, width: 700, height: 100 },
+        // small elements do NOT block a full-width section band
+        { id: 'c', type: 'text', x: 450, y: 900, width: 180, height: 60, fontSize: 60, text: 'Footer line' },
       ],
       colorsInUse: [], otherPages: [],
     } as never as AgentDesignCtx
     const map = canvasMap(d)
-    expect(map).toEqual([
-      { y: 65, h: 335, label: 'Headline' },
-      { y: 900, h: 60, label: 'Footer line' },
-    ])
+    expect(map).toEqual([{ y: 65, h: 335, label: 'Headline' }])
+    // …and they are disclosed as partials instead
+    const bands = freeVerticalBands(d)
+    expect(bands.partials.join(' ')).toContain('Footer line')
+    expect(bands.partials.join(' ')).toContain('180x60')
   })
 
   it('plan_layout on an occupied canvas discloses the CANVAS MAP and fits the free space', () => {
@@ -2541,7 +2634,7 @@ describe('v0.32.6 · the canvas map — plans fit the FREE space, never on top',
     const obs = String((res as { observation?: string }).observation)
     expect(obs).toContain('CANVAS MAP')
     expect(obs).toContain('y 65–365 (COFFEE LAUNCH)')
-    expect(obs).toContain('fitted into the FREE space')
+    expect(obs).toContain('fitted into the FREE vertical space')
     const bands = (res as { actions?: { bands?: { name: string; y: number; h: number }[] }[] }).actions?.[0]?.bands
     for (const b of bands ?? []) {
       expect(b.y).toBeGreaterThanOrEqual(805)
@@ -2554,7 +2647,7 @@ describe('v0.32.6 · the canvas map — plans fit the FREE space, never on top',
     const occupiedDesign: AgentDesignCtx = {
       name: 'Half-built poster', width: 1080, height: 1080, pageCount: 1, currentPageIndex: 0,
       elements: [
-        { id: 'txt-1', type: 'text', y: 65, height: 300, text: 'EXISTING HEADLINE' },
+        { id: 'txt-1', type: 'text', x: 140, y: 65, width: 800, height: 300, text: 'EXISTING HEADLINE' },
       ],
       colorsInUse: [], otherPages: [],
     }
@@ -2733,100 +2826,6 @@ describe('v0.32.8 · the capture event is EMITTED — the panel is actually aske
     expect(String(result.verification)).toContain('UNAVAILABLE')
   })
 })
-
-describe('v0.32.8 · a SECOND audit fix round — the residue after round one gets one more pass', () => {
-  it('round 1 clears 3 issues, round 2 clears the straggler, done is accepted clean', async () => {
-    const events: AgentEvent[] = []
-    let auditCalls = 0
-    const { chat } = scriptedChat([
-      turn('set_background', { kind: 'solid', from: '#090B1A' }),
-      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
-      turn('add_text', { text: 'Dark', fontSize: 40, color: '#111122' }),
-      done('Done attempt 1'),
-      turn('add_text', { text: 'Fix 1', fontSize: 40, color: '#FFFFFF' }),
-      done('Done attempt 2'),
-      turn('add_text', { text: 'Fix 2', fontSize: 40, color: '#FFFFFF' }),
-      done('Done attempt 3 — residue gone'),
-    ])
-    const result = await runAgentLoop({
-      chat,
-      design: compactDesign,
-      mode: 'create',
-      request: 'Design a bold Instagram post for a coffee launch',
-      emit: (e) => events.push(e),
-      awaitApply: async () => ({ ok: true }),
-      auditDesign: async () => {
-        auditCalls += 1
-        return auditCalls <= 2
-          ? ['Low contrast: text "Dark" #111122 on #090B1A is 1.0:1 (needs 3:1) — change the text fill.']
-          : []
-      },
-    })
-    expect(auditCalls).toBe(3)
-    expect(result.toolCalls).toBe(4)
-    expect(events.filter((e) => e.type === 'observation' && e.message.includes('QUALITY AUDIT')).length).toBe(2)
-    const finalEvent = events[events.length - 1] as { verification?: string }
-    expect(String(finalEvent.verification)).toContain('Quality audit passed')
-  })
-
-  it('after the second round the residue is disclosed — bounded, never a loop', async () => {
-    const { chat } = scriptedChat([
-      turn('set_background', { kind: 'solid', from: '#090B1A' }),
-      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
-      turn('add_text', { text: 'Dark', fontSize: 40, color: '#111122' }),
-      done('Done 1'),
-      done('Done 2'),
-      done('Done 3'),
-    ])
-    const result = await runAgentLoop({
-      chat,
-      design: compactDesign,
-      mode: 'create',
-      request: 'Design a bold Instagram post for a coffee launch',
-      emit: () => {},
-      awaitApply: async () => ({ ok: true }),
-      auditDesign: async () => ['Low contrast: text "Dark" #111122 on #090B1A is 1.0:1 (needs 3:1)'],
-    })
-    expect(result.toolCalls).toBe(2)
-    expect(String(result.verification)).toContain('after the fix rounds — disclosed')
-  })
-})
-
-describe('v0.32.8 · the `type#id` alias — the "fix issues" strike-out', () => {
-  it('id lists accept the notation the context, findings and overlaps print everywhere', () => {
-    const update = AGENT_TOOL_MAP.get('update_elements')
-    expect(update).toBeTruthy()
-    const r = update!.sanitize({ ids: ['text#txt-1', 'rect#el-1', 'txt-2'], patch: { fill: '#FFFFFF' } }, ctx)
-    expect(r.ok).toBe(true)
-    if (r.ok) {
-      expect((r.actions[0] as { ids?: string[] }).ids).toEqual(['txt-1', 'el-1', 'txt-2'])
-    }
-    const move = AGENT_TOOL_MAP.get('move_elements')
-    expect(move).toBeTruthy()
-    const m = move!.sanitize({ ids: ['text#nope-xyz'], dx: 10 }, ctx)
-    expect(m.ok).toBe(false) // an unknown bare id is still an honest error
-  })
-
-  it('the edit-mode flow: a "fix issues" run patches by text#id without striking', async () => {
-    const events: AgentEvent[] = []
-    const { chat } = scriptedChat([
-      turn('update_elements', { ids: ['text#txt-1'], patch: { fill: '#FFFFFF' } }),
-      done('Fixed the contrast issue'),
-    ])
-    const result = await runAgentLoop({
-      chat,
-      design: compactDesign,
-      mode: 'edit',
-      request: 'fix issues',
-      emit: (e) => events.push(e),
-      awaitApply: async () => ({ ok: true }),
-    })
-    expect(result.toolCalls).toBe(1)
-    expect(events.some((e) => e.type === 'error')).toBe(false)
-    expect(events[events.length - 1]?.type).toBe('done')
-  })
-})
-
 describe('v0.32.8 · the second-strike recovery note (the "fix issues" strike-out)', () => {
   it('the second consecutive rejection carries the get_page_state note BEFORE the run can die', async () => {
     const events: AgentEvent[] = []
@@ -3217,5 +3216,250 @@ describe('v0.33.1 · the live-repro convergence fixes', () => {
     expect(r.satisfied).toBe(false)
     expect(r.unmet.some((u) => u.includes('467×467'))).toBe(true)
     expect(r.unmet.some((u) => u.includes('update_elements'))).toBe(true)
+  })
+})
+
+// ═════════════════════════════════════════════════════════════
+// v0.32.7 · CONTEXT-AWARE EDITING + PERSISTENT EXECUTION
+// ═════════════════════════════════════════════════════════════
+
+describe('v0.32.7 · the edit intent drives the loop', () => {
+  it('a REFINE instruction never gets the plan-first bounce (the live defect is dead)', async () => {
+    const { chat, calls } = scriptedChat([
+      turn('update_elements', { ids: ['txt-1'], patch: { fill: '#FFFFFF' } }),
+      done('Contrast fixed.'),
+    ])
+    const events: AgentEvent[] = []
+    const result = await runAgentLoop({
+      chat,
+      design: compactDesign,
+      mode: 'improve',
+      request: 'Check the design for overlaps and errors, fix any issues, then stop',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    expect(result.summary).toContain('Contrast fixed.')
+    // the write applied on the FIRST attempt — no plan bounce turn
+    expect(result.toolCalls).toBe(1)
+    expect(events.some((e) => e.type === 'intent')).toBe(true)
+    const intentEvt = events.find((e) => e.type === 'intent') as { intent: string }
+    expect(intentEvt.intent).toBe('refine')
+    // the system prompt carries the EDIT INTENT guidance, not the
+    // full-composition planning boilerplate
+    const sys = calls[0].find((m) => m.role === 'system')?.content ?? ''
+    expect(sys).toContain('REFINE: polish what exists')
+    expect(sys).not.toContain('LAYOUT PLANNING (required first step)')
+  })
+
+  it('an ADD instruction keeps the plan-first gate (additions plan into free space)', async () => {
+    const { chat } = scriptedChat([
+      turn('add_text', { text: 'Too eager', fontSize: 40 }),
+      turn('plan_layout', { sections: [{ name: 'offer', y: 900, height: 100, contains: 'sale' }] }),
+      turn('add_text', { text: 'Sale', fontSize: 40 }),
+      done('Added the offer.'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design: compactDesign,
+      mode: 'improve',
+      request: 'Add an offer banner under the headline',
+      emit: () => {},
+      awaitApply: async () => ({ ok: true }),
+    })
+    // the first write was bounced once (no plan yet) — the gate still
+    // guards ADDITIVE intent on a populated canvas
+    expect(result.toolCalls).toBe(1)
+    expect(result.summary).toContain('Added the offer.')
+  })
+
+  it('a RESTYLE instruction reaches the system prompt as restyle guidance', async () => {
+    const { chat, calls } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      done('Background darkened.'),
+    ])
+    await runAgentLoop({
+      chat,
+      design: compactDesign,
+      mode: 'improve',
+      request: 'Recolor the background to deep navy and increase contrast',
+      emit: () => {},
+      awaitApply: async () => ({ ok: true }),
+    })
+    const sys = calls[0].find((m) => m.role === 'system')?.content ?? ''
+    expect(sys).toContain('RESTYLE: change colors')
+  })
+})
+
+describe('v0.32.7 · blocking audit: no success claim until checks complete', () => {
+  it('a blocking issue after the fix round ends the run INCOMPLETE (advisories do not)', async () => {
+    let auditCalls = 0
+    const { chat } = scriptedChat([
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('add_text', { text: 'Fixable', fontSize: 40 }),
+      done('Poster complete'),
+      turn('add_text', { text: 'Second try', fontSize: 40 }),
+      done('Poster complete again'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design: compactDesign,
+      mode: 'create',
+      request: 'Design a poster',
+      emit: () => {},
+      awaitApply: async () => ({ ok: true }),
+      auditDesign: async () => {
+        auditCalls += 1
+        // round 1: a blocking contrast issue → fix round.
+        // round 2 (re-audit): still blocking → INCOMPLETE, never a pass.
+        return ['Low contrast: text "Hero" on its effective backdrop is 1.2:1 (needs 4.5:1) — change the fill.', 'ADVISORY alignment: wide text is off the page center']
+      },
+    })
+    expect(auditCalls).toBe(2)
+    expect(result.summary).toContain('INCOMPLETE — blocking quality issues remain')
+    expect(result.verification).toContain('NOT verified')
+  })
+
+  it('an advisory-only audit never blocks: fix round only for blockers, pass with advisories', async () => {
+    const { chat } = scriptedChat([
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }] }),
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('add_text', { text: 'Done', fontSize: 40 }),
+      done('Done.')
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design: compactDesign,
+      mode: 'create',
+      request: 'Design a poster',
+      emit: () => {},
+      awaitApply: async () => ({ ok: true }),
+      auditDesign: async () => ['ADVISORY typography: 4 font families on one page'],
+    })
+    expect(result.summary).toBe('Done.')
+    expect(result.verification).toContain('no blocking issues remain (1 advisory/disclosed)')
+  })
+})
+
+describe('v0.32.7 · persistent execution + recovery', () => {
+  it('a provider failure mid-run persists INTERRUPTED state with the applied work', async () => {
+    const snapshots: { status: string; appliedCount: number }[] = []
+    const { chat } = scriptedChat([
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }] }),
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('add_text', { text: 'Half-built', fontSize: 40 }),
+      // the next model call explodes — the 502 mid-run
+      '{not json',
+      JSON.stringify({ done: true, summary: '(never reached)' }),
+    ])
+    const result = await runAgentLoop({
+      chat: async (msgs) => {
+        const reply = chat(msgs)
+        const text = await reply
+        if (text === '{not json') throw new Error('API request failed with status 502: Bad Gateway')
+        return text
+      },
+      design: compactDesign,
+      mode: 'create',
+      request: 'Design a poster',
+      emit: () => {},
+      awaitApply: async () => ({ ok: true }),
+      persistRun: (state) => snapshots.push({ status: state.status, appliedCount: state.applied.length }),
+    })
+    // the run died on the provider error with the applied work kept
+    expect(result.summary).toContain('provider')
+    const last = snapshots[snapshots.length - 1]
+    expect(last.status).toBe('interrupted')
+    expect(last.appliedCount).toBe(2) // set_background + add_text applied; the next model call died
+    expect(snapshots.some((s) => s.status === 'running')).toBe(true)
+  })
+
+  it('recovery lines ride the system prompt: COMPLETE the work, never re-add', async () => {
+    const { chat, calls } = scriptedChat([
+      turn('get_page_state'),
+      done('Recovered: the section was already on the canvas; nothing duplicated.'),
+    ])
+    const events: AgentEvent[] = []
+    await runAgentLoop({
+      chat,
+      design: compactDesign,
+      mode: 'improve',
+      request: 'Continue and finish the design',
+      recovery: [
+        'the interrupted run asked: "Design a poster" (intent: create)',
+        'it applied 3 action(s) — ALL of it is already on the canvas: set_background, add_text',
+        'its plan had 3 section(s): hero (y 60–260), body (y 300–600), cta (y 640–800)',
+      ],
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    const sys = calls[0].find((m) => m.role === 'system')?.content ?? ''
+    expect(sys).toContain('INTERRUPTED RUN RECOVERY')
+    expect(sys).toContain('already on the canvas')
+    expect(sys).toContain('NEVER re-add existing content')
+  })
+})
+
+describe('v0.32.7 · the audit understands layering + design quality', () => {
+  it('a card behind its text is NOT an overlap finding (intentional layering)', async () => {
+    const { auditDesign } = await import('./audit')
+    const issues = auditDesign(
+      {
+        name: 'Layered', width: 1080, height: 1080,
+        elements: [
+          { id: 'card', type: 'rect', x: 100, y: 400, width: 400, height: 200, fill: '#16233A' },
+          { id: 'label', type: 'text', x: 120, y: 440, width: 360, height: 60, text: 'Feature one', fill: '#F5F7FA', fontSize: 28, fontFamily: 'Poppins' },
+        ],
+        overlaps: ['rect#card × text#label (95%)'],
+        colorsInUse: [],
+      } as never as AgentDesignCtx,
+    )
+    expect(issues.some((i) => i.startsWith('Elements overlap'))).toBe(false)
+  })
+
+  it('a genuine same-layer collision IS a finding', async () => {
+    const { auditDesign } = await import('./audit')
+    const issues = auditDesign(
+      {
+        name: 'Clash', width: 1080, height: 1080,
+        elements: [
+          { id: 'a', type: 'text', x: 100, y: 100, width: 500, height: 120, text: 'Headline', fill: '#FFFFFF', fontSize: 60, fontFamily: 'Poppins' },
+          { id: 'b', type: 'rect', x: 300, y: 140, width: 500, height: 200, fill: '#FF5500' },
+        ],
+        overlaps: ['text#a × rect#b (55%)'],
+        colorsInUse: [],
+      } as never as AgentDesignCtx,
+    )
+    expect(issues.some((i) => i.startsWith('Elements overlap'))).toBe(true)
+  })
+
+  it('wide off-center text and font sprawl surface as ADVISORIES (never blocking)', async () => {
+    const { auditDesign } = await import('./audit')
+    const issues = auditDesign(
+      {
+        name: 'Quality', width: 1080, height: 1080,
+        elements: [
+          { id: 't1', type: 'text', x: 40, y: 200, width: 500, height: 80, text: 'Off-center wide text', fill: '#FFFFFF', fontSize: 40, fontFamily: 'Poppins' },
+          { id: 't2', type: 'text', x: 60, y: 400, width: 400, height: 60, text: 'Another one', fill: '#FFFFFF', fontSize: 30, fontFamily: 'Montserrat' },
+          { id: 't3', type: 'text', x: 60, y: 520, width: 400, height: 60, text: 'Third', fill: '#FFFFFF', fontSize: 30, fontFamily: 'Playfair Display' },
+          { id: 't4', type: 'text', x: 60, y: 640, width: 400, height: 60, text: 'Fourth', fill: '#FFFFFF', fontSize: 30, fontFamily: 'Bebas Neue' },
+          { id: 't5', type: 'text', x: 60, y: 760, width: 400, height: 60, text: 'Fifth', fill: '#FFFFFF', fontSize: 30, fontFamily: 'Space Grotesk' },
+        ],
+        overlaps: [],
+        colorsInUse: [],
+      } as never as AgentDesignCtx,
+    )
+    expect(issues.some((i) => i.startsWith('ADVISORY alignment'))).toBe(true)
+    expect(issues.some((i) => i.startsWith('ADVISORY typography'))).toBe(true)
+  })
+
+  it('the design-engine NFC contract: composed accents satisfy exact text', async () => {
+    const { validateBrief } = await import('./brief')
+    // "café" in the brief vs "cafe\u0301" (e + combining acute) on canvas
+    const r = validateBrief(
+      { requiredTexts: [{ text: 'Café Latte Special', tier: 'mandatory' }], requiredColors: [] } as never,
+      { texts: ['Cafe\u0301 Latte Special'], colors: [], elements: [] } as never,
+    )
+    expect(r.satisfied).toBe(true)
   })
 })

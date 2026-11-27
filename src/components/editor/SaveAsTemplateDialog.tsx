@@ -113,7 +113,7 @@ function SaveAsTemplateForm({ onOpenChange }: { onOpenChange: (open: boolean) =>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Card colour</span>
+            <span className="text-sm font-medium">لون البطاقة</span>
             <input
               type="color"
               value={accent}

@@ -739,7 +739,7 @@ export function UpscaleButton({ el }: { el: ImageElement }) {
       setOpen(false)
     } catch (e) {
       toast({
-        title: 'Upscale',
+        title: 'تحسين الدقة',
         description: e instanceof Error ? e.message : 'Could not upscale this image.',
         variant: 'destructive',
       })

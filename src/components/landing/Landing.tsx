@@ -264,7 +264,7 @@ export function Landing() {
               </Button>
               <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer" className="w-full sm:w-auto">
                 <Button size="lg" variant="outline" className="rounded-full px-8 text-base h-12 gap-2 w-full sm:w-auto">
-                  <Github size={18} /> Star on GitHub
+                  <Github size={18} /> نجمة على GitHub
                 </Button>
               </a>
             </div>
@@ -373,7 +373,7 @@ export function Landing() {
                   key={t.label}
                   onClick={goDashboard}
                   className="group text-left"
-                  aria-label={`Open ${t.label} templates`}
+                  aria-label={`فتح قوالب ${t.label}`}
                 >
                   <div
                     className="aspect-[4/5] rounded-xl overflow-hidden shadow-sm group-hover:shadow-xl group-hover:-translate-y-1 transition-all flex flex-col items-center justify-center gap-3 border border-black/5"
@@ -417,7 +417,7 @@ export function Landing() {
           <div className="grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-1.5 text-xs font-semibold text-[#7D2AE8] shadow-sm">
-                <Star size={14} /> Built in the open
+                <Star size={14} /> تطوير مفتوح المصدر
               </div>
               <h2 className="mt-5 text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
                 The design tool that <span className="text-brand-gradient">تملكها أنت</span>
@@ -429,7 +429,7 @@ export function Landing() {
               <div className="mt-8 flex flex-col sm:flex-row gap-3">
                 <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer">
                   <Button size="lg" className="btn-brand-gradient rounded-full px-8 gap-2 h-12 w-full sm:w-auto">
-                    <Github size={18} /> View the source
+                    <Github size={18} /> استعرض الشيفرة
                   </Button>
                 </a>
                 <Button
@@ -438,7 +438,7 @@ export function Landing() {
                   className="rounded-full px-8 h-12 w-full sm:w-auto"
                   onClick={goDashboard}
                 >
-                  Try it now
+                  جرّبه الآن
                 </Button>
               </div>
             </div>
@@ -451,12 +451,12 @@ export function Landing() {
                 <span className="ml-2 text-xs font-medium text-muted-foreground">terminal — TEa.G3</span>
               </div>
               <div className="font-mono text-xs sm:text-sm leading-relaxed bg-[#17181D] p-5 overflow-x-auto">
-                <div className="text-white/40"># clone &amp; run your own Canva alternative</div>
+                <div className="text-white/40"># استنسخ المشروع وشغّل منصتك الخاصة</div>
                 <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">git clone https://github.com/TEaG3/eng-salman</span></div>
                 <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">cd eng-salman &amp;&amp; bun install</span></div>
                 <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">bun run db:push &amp;&amp; bun run db:seed</span></div>
                 <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">bun run dev</span></div>
-                <div className="mt-3 text-[#34C77B]">✓ ready on http://localhost:3000</div>
+                <div className="mt-3 text-[#34C77B]">✓ جاهز على http://localhost:3000</div>
               </div>
             </div>
           </div>
@@ -467,10 +467,10 @@ export function Landing() {
           <div className="absolute inset-0 bg-brand-gradient-soft" aria-hidden="true" />
           <div className="relative mx-auto max-w-3xl px-4 sm:px-6 py-20 sm:py-24 text-center">
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-              Your next design is <span className="text-brand-gradient">one click away</span>
+              تصميمك القادم <span className="text-brand-gradient">على بُعد نقرة واحدة</span>
             </h2>
             <p className="mt-4 text-muted-foreground">
-              No signup, no credit card, no watermark. Open the editor and start creating right now.
+              لا حاجة إلى حساب أو بطاقة دفع، ولا توجد علامة مائية. افتح المحرر وابدأ التصميم الآن.
             </p>
             <Button size="lg" className="btn-brand-gradient rounded-full px-10 text-base h-13 gap-2 mt-8 py-3.5" onClick={goDashboard}>
               ابدأ التصميم <ArrowRight size={18} />
@@ -492,7 +492,7 @@ export function Landing() {
             <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors inline-flex items-center gap-1.5">
               <Github size={15} /> GitHub
             </a>
-            <a href="https://github.com/TEaG3/eng-salman#-ai--development-disclosure" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">AI Disclosure</a>
+            <a href="https://github.com/TEaG3/eng-salman#-ai--development-disclosure" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors">الإفصاح عن استخدام الذكاء الاصطناعي</a>
             <a href="#features" className="hover:text-foreground transition-colors">المميزات</a>
             <a href="#faq" className="hover:text-foreground transition-colors">الأسئلة الشائعة</a>
           </div>

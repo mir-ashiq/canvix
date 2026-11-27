@@ -175,6 +175,74 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # ── Canvas browser acceptance: every pull request ─────────────────
+  # Exercise the real Konva editor in Chromium on every PR. The full
+  # 95-spec browser suite remains on main/manual dispatch; this focused
+  # gate covers design creation/edit/save, rich text, clipboard, grid,
+  # page sizing, guides, and editor depth before merge.
+  canvas-e2e:
+    name: canvas-e2e
+    needs: lint-unit
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: canvix
+          POSTGRES_PASSWORD: canvix
+          POSTGRES_DB: canvix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U canvix"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgresql://canvix:canvix@localhost:5432/canvix
+      CANVIX_RATE_LIMITS: 'off'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Playwright browser (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Set up database (migrations + template seed)
+        run: npm run db:setup
+
+      - name: Run focused canvas acceptance suite
+        run: >-
+          npx playwright test
+          tests/e2e/design-spec-editor.spec.ts
+          tests/e2e/wave3-editor-depth.spec.ts
+          tests/e2e/rich-text.spec.ts
+          tests/e2e/clipboard.spec.ts
+          tests/e2e/distribute.spec.ts
+
+      - name: Upload canvas Playwright traces (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: canvas-playwright-failures
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
   # ── Docker self-host smoke: every PR + main ─────────────────────
   # WP1 (deployment & API trust). Proves the operator story end to
   # end on every PR: `docker compose up` from a clean checkout must

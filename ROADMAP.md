@@ -187,7 +187,7 @@ The entire original phase was displaced by the consolidation programme. Nothing 
 |---|---|---|---|
 | **D5** | ~~Auto version snapshots before destructive ops~~ **✅ shipped v0.24** — template apply, Magic Resize, Translate, Magic Layers and page delete now auto-snapshot the pre-op state (`auto` chip in Version history, 60 s same-reason throttle, preferential prune: old autos evict first, manuals never dropped) | | |
 | **D8** | Tables depth — per-cell font family/size, header styling presets, drag row/col resize | `TableCell` today: `text/fill/bold` only; geometry is pure (`lib/v06-geometry.ts`) | M |
-| **D10** | Spellcheck in the text-editing overlay | The textarea overlay exists; browser spellcheck is nearly free; "Check spelling" pass is the S/M part | S–M |
+| **D10** | Spellcheck in the text-editing overlay | 🟡 **first slice implemented** — native Arabic browser spellcheck in text + table editing, with an in-toolbar on/off toggle; the deeper guided "Check spelling" pass remains open | S–M |
 | — | Wave-3 stretch goals: bezier pen tool, boolean shape ops | Deferred explicitly in v0.18 notes; still wanted | M each |
 
 ### 4.3 Wave 5 remainder — export & sharing professionalisation (the named next wave)

@@ -801,7 +801,7 @@ function FrameToolbar({ frame, ids }: { frame: FrameElement; ids: string[] }) {
         <input type="file" accept="image/*" className="hidden" onChange={onFill} />
       </label>
       <ToolbarPopover trigger={(open) => (
-        <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Frame shape" title="Frame shape">
+        <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="شكل الإطار" title="Frame shape">
           <SquareDashed size={14} /> <span className="text-[12px] hidden lg:inline">الشكل</span>
         </button>
       )}>
@@ -1549,7 +1549,7 @@ function ChartDataEditor({ chart, ids }: { chart: ChartElement; ids: string[] })
               </button>
             </div>
           ))}
-          <p className="text-[10px] text-white/35">Each point is an x, y pair on numeric axes.</p>
+          <p className="text-[10px] text-white/35">تمثل كل نقطة زوجاً من الإحداثيين x وy على محاور رقمية.</p>
         </div>
       ) : (
         <div>

@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, devices, type Page } from '@playwright/test'
 import { extractBrief } from '@/lib/agent/brief'
 import { specFromBrief } from '@/lib/design-spec/from-brief'
 import { compileSpec } from '@/lib/design-engine/compile'
@@ -134,5 +134,61 @@ test.describe('DesignSpec compiled poster in the real editor', () => {
       if (r === original) continue
       expect(persisted).toContain(r)
     }
+  })
+})
+
+
+test.describe('MIDAD mobile touch targets', () => {
+  test.use({ ...devices['iPhone 13'] })
+
+  test('selection handles and contextual actions are sized for touch', async ({ page }) => {
+    const designId = await createDesign(
+      page,
+      `midad_touch_${Date.now().toString(36)}`,
+      [{
+        id: 'touch_text',
+        type: 'text',
+        name: 'Touch text',
+        x: 300,
+        y: 280,
+        width: 480,
+        height: 100,
+        rotation: 0,
+        opacity: 1,
+        locked: false,
+        visible: true,
+        text: 'مداد للمس',
+        fontSize: 48,
+        fontFamily: 'Noto Sans Arabic',
+        bold: false,
+        italic: false,
+        underline: false,
+        strike: false,
+        uppercase: false,
+        fill: '#1F2226',
+        align: 'center',
+        lineHeight: 1.4,
+        letterSpacing: 0,
+        direction: 'rtl',
+      }],
+      1080,
+      720,
+    )
+    await openEditor(page, designId)
+
+    const canvas = page.getByTestId('canvas-stage')
+    await expect(canvas).toHaveAttribute('data-touch-handle-size', '18')
+    const box = (await page.getByLabel('Design canvas').boundingBox())!
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2)
+
+    const toolbar = page.locator('[data-toolbar-variant="mobile"]')
+    await expect(toolbar).toBeVisible({ timeout: 10_000 })
+    const firstAction = toolbar.locator('.cv-tbtn').first()
+    const target = await firstAction.evaluate((el) => {
+      const rect = el.getBoundingClientRect()
+      return { width: rect.width, height: rect.height }
+    })
+    expect(target.width).toBeGreaterThanOrEqual(44)
+    expect(target.height).toBeGreaterThanOrEqual(44)
   })
 })

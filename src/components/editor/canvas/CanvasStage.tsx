@@ -71,6 +71,15 @@ export default function CanvasStage() {
   const commentsOpen = useEditorStore((s) => s.commentsOpen)
 
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 })
+  const [coarsePointer, setCoarsePointer] = useState(false)
+
+  useEffect(() => {
+    const media = window.matchMedia('(pointer: coarse)')
+    const sync = () => setCoarsePointer(media.matches)
+    sync()
+    media.addEventListener('change', sync)
+    return () => media.removeEventListener('change', sync)
+  }, [])
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [guides, setGuides] = useState<GuideLine[]>([])
 
@@ -837,6 +846,8 @@ export default function CanvasStage() {
     <div
       ref={containerRef}
       className="relative w-full h-full overflow-hidden"
+      data-testid="canvas-stage"
+      data-touch-handle-size={coarsePointer ? 18 : 10}
       style={{ touchAction: 'none', cursor: tool === 'draw' && editingMode === 'editing' ? 'crosshair' : editingMode === 'viewing' ? 'default' : undefined }}
     >
       {containerSize.w > 0 && (
@@ -888,11 +899,11 @@ export default function CanvasStage() {
                 borderDash={undefined}
                 anchorStroke={SELECTION_COLOR}
                 anchorFill="#FFFFFF"
-                anchorSize={10 / zoom}
-                anchorCornerRadius={5 / zoom}
+                anchorSize={(coarsePointer ? 18 : 10) / zoom}
+                anchorCornerRadius={(coarsePointer ? 9 : 5) / zoom}
                 anchorStyleFunc={anchorStyleFunc}
                 anchorStrokeWidth={0}
-                rotateAnchorOffset={26 / zoom}
+                rotateAnchorOffset={(coarsePointer ? 38 : 26) / zoom}
                 rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
                 rotationSnapTolerance={4}
                 padding={2 / zoom}

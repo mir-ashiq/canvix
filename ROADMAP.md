@@ -174,7 +174,7 @@ The entire original phase was displaced by the consolidation programme. Nothing 
 
 | Epic | What | Why it matters now | Effort |
 |---|---|---|---|
-| **M1** | Touch-first editing (large handles, 1-finger drag vs 2-finger pan, double-tap zoom, long-press menu) | The only README promise left unchecked; mobile sessions are real traffic | M |
+| **M1** | Touch-first editing (large handles, 1-finger drag vs 2-finger pan, double-tap zoom, long-press menu) | 🟡 **first slice shipped** — coarse-pointer transformer handles are 18px and mobile contextual actions receive 44px targets; gesture-flow work remains open | M |
 | **M2** | Bottom-sheet properties on mobile | Companion to M1; the v0.11.3 responsive groundwork is the seam | M |
 | **M3** | Gesture polish (pinch-rotate, momentum pan, edge-pinch) | "Feels native" parity pass with Canva mobile web | S/M |
 | **M4** | Collab fan-out — Postgres LISTEN/NOTIFY → in-process hub → SSE (kill the per-connection poll loop) | The scaling wall: ~0.31–1.25 q/s per client through a `max=1` pool; fine at tens of editors, a wall at hundreds of viewers. The `?since=` replay cursor already makes the migration safe | L |

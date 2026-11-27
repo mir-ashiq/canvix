@@ -232,6 +232,20 @@
 .cv-tbtn[data-active="true"] { background: rgba(255, 255, 255, 0.18); color: #fff; }
 .cv-tbtn[data-dim="true"] { color: var(--cv-text-3); }
 .cv-tbtn:disabled { opacity: 0.4; pointer-events: none; }
+/* M1 touch-first slice: keep desktop chrome compact while giving
+   coarse-pointer users reliably tappable 44px controls in the mobile bar. */
+@media (pointer: coarse) {
+  [data-toolbar-variant="mobile"] .cv-tbtn {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+  [data-toolbar-variant="mobile"] input[type="number"] {
+    height: 44px;
+    min-width: 48px;
+  }
+}
 
 /* popover panels (spacing / transparency / position) */
 .cv-pop {

@@ -22,6 +22,14 @@
     // the MCP fetch tool on runtimes where we cannot pin DNS ourselves.
     "global_fetch_strictly_public"
   ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "midad-db",
+      "database_id": "65cca51f-5ac0-4123-92b8-c1938a0c721b",
+      "migrations_dir": "prisma/d1-migrations"
+    }
+  ],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"

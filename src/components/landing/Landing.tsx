@@ -171,15 +171,15 @@ const FAQ = [
   },
   {
     q: 'هل أحتاج إلى حساب؟',
-    a: 'لا يوجد تسجيل دخول أو إنشاء حسابات حالياً. افتح TEa.G3 وابدأ التصميم مباشرة؛ تُحفظ أعمالك في هذا المتصفح ويمكنك مشاركة التصميم عبر رابطه.' ,
+    a: 'لا يوجد تسجيل دخول أو إنشاء حسابات حالياً. افتح مداد وابدأ التصميم مباشرة؛ تُحفظ أعمالك في هذا المتصفح ويمكنك مشاركة التصميم عبر رابطه.' ,
   },
   {
     q: 'كيف يعمل الذكاء الاصطناعي مع الحفاظ على خصوصيتي؟',
     a: 'تعمل بعض ميزات الذكاء الاصطناعي محلياً داخل المتصفح. أما المحركات المرتبطة بمزوّد خارجي فتعمل عبر الخادم، ويمكنك استخدام مفتاح API الخاص بك.',
   },
   {
-    q: 'هل يمكن لوكلاء الذكاء الاصطناعي استخدام TEa.G3؟',
-    a: 'نعم، يتضمن TEa.G3 خادماً لبروتوكول MCP لربط أدوات الذكاء الاصطناعي المتوافقة وإدارة التصاميم وفق إعدادات الخادم.',
+    q: 'هل يمكن لوكلاء الذكاء الاصطناعي استخدام مداد؟',
+    a: 'نعم، يتضمن مداد خادماً لبروتوكول MCP لربط أدوات الذكاء الاصطناعي المتوافقة وإدارة التصاميم وفق إعدادات الخادم.',
   },
   {
     q: 'ما صيغ التصدير المتاحة؟',
@@ -216,7 +216,7 @@ export function Landing() {
       {/* ── Nav ── */}
       <header className="sticky top-0 z-50 border-b border-black/5 bg-white/80 backdrop-blur-lg">
         <nav className="mx-auto max-w-7xl px-4 sm:px-6 h-16 flex items-center justify-between">
-          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="الصفحة الرئيسية لـ TEa.G3">
+          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="الصفحة الرئيسية لمداد">
             <Logo size={30} />
           </button>
           <div className="hidden md:flex items-center gap-1 text-sm font-medium text-muted-foreground">
@@ -256,7 +256,7 @@ export function Landing() {
               <span className="text-brand-gradient">مجاني للجميع.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-base sm:text-lg text-muted-foreground animate-fade-up delay-200">
-              TEa.G3 منصة تصميم مفتوحة المصدر للمنشورات والعروض والملصقات والشعارات، مع تعاون مباشر وأدوات ذكاء اصطناعي تساعدك على الإبداع. صمّم واسحب وأفلت وصدّر من المتصفح وعلى أي جهاز.
+              مداد منصة تصميم مفتوحة المصدر للمنشورات والعروض والملصقات والشعارات، مع تعاون مباشر وأدوات ذكاء اصطناعي تساعدك على الإبداع. صمّم واسحب وأفلت وصدّر من المتصفح وعلى أي جهاز.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 animate-fade-up delay-300">
               <Button size="lg" className="btn-brand-gradient rounded-full px-8 text-base h-12 gap-2" onClick={goDashboard}>
@@ -308,7 +308,7 @@ export function Landing() {
               <span className="text-brand-gradient">يقدمه TEa.G3 مجاناً</span>
             </h2>
             <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-              المزايا الأعلى تكلفة في الأدوات الأخرى — مثل التعاون وميزات الذكاء الاصطناعي ومساحات عمل الفرق — متاحة ضمن TEa.G3 مجاناً وبشفافية.
+              المزايا الأعلى تكلفة في الأدوات الأخرى — مثل التعاون وميزات الذكاء الاصطناعي ومساحات عمل الفرق — متاحة ضمن مداد مجاناً وبشفافية.
             </p>
           </div>
           <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -334,7 +334,7 @@ export function Landing() {
               كل ما تحتاجه <span className="text-brand-gradient">لإبداع تصاميمك</span>
             </h2>
             <p className="mt-4 text-center text-muted-foreground max-w-2xl mx-auto">
-              محرر احترافي متكامل، لا مجرد أداة بسيطة. يجمع TEa.G3 الأدوات التي تحتاجها من برامج التصميم التجارية، دون تكلفتها.
+              محرر احترافي متكامل، لا مجرد أداة بسيطة. يجمع مداد الأدوات التي تحتاجها من برامج التصميم التجارية، دون تكلفتها.
             </p>
             <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {FEATURES.map((f) => (
@@ -420,7 +420,7 @@ export function Landing() {
                 أداة التصميم التي <span className="text-brand-gradient">تملكها أنت</span>
               </h2>
               <p className="mt-5 text-muted-foreground leading-relaxed">
-                تضع أدوات التصميم التجارية إبداعك خلف الاشتراكات. أما TEa.G3 فيمنحك حرية الاستخدام والتطوير؛ شيفرته متاحة على GitHub بترخيص MIT، ويمكنك تصدير تصاميمك بجودتها الكاملة أو استضافته وتطوير نسختك الخاصة.
+                تضع أدوات التصميم التجارية إبداعك خلف الاشتراكات. أما مداد فيمنحك حرية الاستخدام والتطوير؛ شيفرته متاحة على GitHub بترخيص MIT، ويمكنك تصدير تصاميمك بجودتها الكاملة أو استضافته وتطوير نسختك الخاصة.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row gap-3">
                 <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer">
@@ -444,7 +444,7 @@ export function Landing() {
                 <span className="h-2.5 w-2.5 rounded-full bg-[#FF5C8A]" />
                 <span className="h-2.5 w-2.5 rounded-full bg-[#FFD166]" />
                 <span className="h-2.5 w-2.5 rounded-full bg-[#34C77B]" />
-                <span className="ml-2 text-xs font-medium text-muted-foreground">terminal — TEa.G3</span>
+                <span className="ml-2 text-xs font-medium text-muted-foreground">terminal — MIDAD</span>
               </div>
               <div className="font-mono text-xs sm:text-sm leading-relaxed bg-[#17181D] p-5 overflow-x-auto">
                 <div className="text-white/40"># استنسخ المشروع وشغّل منصتك الخاصة</div>
@@ -481,7 +481,7 @@ export function Landing() {
           <div className="flex items-center gap-3">
             <Logo size={24} />
             <span className="text-sm text-muted-foreground">
-              © 2026 TEa.G3 · ترخيص MIT
+              مداد · تطوير TEa.G3 · ترخيص MIT
             </span>
           </div>
           <div className="flex items-center gap-5 text-sm text-muted-foreground">

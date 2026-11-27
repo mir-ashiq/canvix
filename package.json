@@ -2,7 +2,7 @@
   "name": "tea-g3",
   "version": "0.31.0",
   "private": false,
-  "description": "TEa.G3 — منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر، تطوير المطور العراقي.",
+  "description": "MIDAD (مِداد) — منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر، تطوير TEa.G3.",
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
     "build": "node scripts/build.mjs",

@@ -14,8 +14,14 @@ const latinFont = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700
  * every generated URL (canonical, og:image, sitemap) absolute and correct
  * in production; SITE_URL should be set to the deployed TEa.G3 origin.
  */
+const VERCEL_ORIGIN = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  : process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : undefined;
+
 const SITE_URL =
-  process.env.SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL;
+  process.env.SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? VERCEL_ORIGIN;
 
 export const metadata: Metadata = {
   metadataBase: SITE_URL ? new URL(SITE_URL) : undefined,

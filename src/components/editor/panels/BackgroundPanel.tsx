@@ -4,19 +4,19 @@ import { useEditorStore } from '@/store/editor-store'
 import { GRADIENT_PRESETS, SOLID_SWATCHES } from '@/lib/editor-utils'
 import { ColorPicker } from './color-picker'
 
-export function الخلفيةPanel() {
+export function BackgroundPanel() {
   const page = useEditorStore((s) => s.pages[s.currentPage])
-  const setالخلفية = useEditorStore((s) => s.setPageالخلفية)
+  const setPageBackground = useEditorStore((s) => s.setPageBackground)
   const bg = page?.background
 
   const applySolid = (color: string) => {
     if (bg?.type === 'solid' && bg.color === color) return
-    setالخلفية({ type: 'solid', color })
+    setPageBackground({ type: 'solid', color })
   }
 
   const applyGradient = (from: string, to: string, angle: number) => {
     if (bg?.type === 'gradient' && bg.from === from && bg.to === to && bg.angle === angle) return
-    setالخلفية({ type: 'gradient', from, to, angle })
+    setPageBackground({ type: 'gradient', from, to, angle })
   }
 
   return (

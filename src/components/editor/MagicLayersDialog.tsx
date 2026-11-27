@@ -161,7 +161,7 @@ export function MagicLayersDialog({ open, onOpenChange }: { open: boolean; onOpe
       const rec = await reconstructDesign(analysis, imageUrl, width, height, [...discarded])
       applyReconstruction(rec)
       toast({
-        title: 'Magic Layers created',
+        title: 'تم إنشاء الطبقات السحرية',
         description: `${rec.elements.length} editable layers extracted — each element can be selected, moved and restyled.`,
       })
       close(false)
@@ -270,8 +270,8 @@ export function MagicLayersDialog({ open, onOpenChange }: { open: boolean; onOpe
               <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#00C4CC] to-[#7630D7] flex items-center justify-center">
                 <Upload size={22} className="text-white" />
               </div>
-              <div className="text-sm font-semibold">Upload a flat design</div>
-              <div className="text-xs text-white/50">PNG, JPG or WebP — drop it here or click to browse</div>
+              <div className="text-sm font-semibold">ارفع تصميماً مسطحاً</div>
+              <div className="text-xs text-white/50">PNG أو JPG أو WebP — اسحب الملف إلى هنا أو انقر لاختياره</div>
             </button>
             <input
               ref={fileInputRef}
@@ -295,7 +295,7 @@ export function MagicLayersDialog({ open, onOpenChange }: { open: boolean; onOpe
                   <MousePointer2 size={16} className="text-[#c39bff]" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold">Analyze the selected image</div>
+                  <div className="text-sm font-semibold">تحليل الصورة المحددة</div>
                   <div className="text-xs text-white/50 truncate">
                     Uses the image currently selected on your canvas
                   </div>
@@ -325,7 +325,7 @@ export function MagicLayersDialog({ open, onOpenChange }: { open: boolean; onOpe
             )}
             <Loader2 size={28} className="animate-spin text-[#02C0CC]" />
             <div className="text-sm font-semibold">Detecting layers…</div>
-            <div className="text-xs text-white/50">Reading text, photos, shapes and the background.</div>
+            <div className="text-xs text-white/50">جارٍ تحليل النصوص والصور والأشكال والخلفية.</div>
           </div>
         )}
 

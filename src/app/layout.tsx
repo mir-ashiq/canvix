@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { PWARegister } from "@/components/PWARegister";
 
 const arabicFont = Noto_Sans_Arabic({ subsets: ["arabic", "latin"], weight: ["400", "500", "600", "700", "800"], variable: "--font-noto-sans-arabic", display: "swap" });
 const latinFont = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], variable: "--font-inter", display: "swap" });
@@ -42,7 +43,9 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "المطور العراقي TEa.G3" }],
   alternates: { canonical: "/" },
-  icons: { icon: "/tea-g3.svg" },
+  manifest: "/manifest.webmanifest",
+  icons: { icon: "/tea-g3.svg", apple: "/tea-g3.svg" },
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "TEa.G3" },
   openGraph: {
     title: "TEa.G3 — تطوير المطور العراقي",
     description:
@@ -131,6 +134,7 @@ export default function RootLayout({
             }),
           }}
         />
+        <PWARegister />
         {children}
         <Toaster />
       </body>

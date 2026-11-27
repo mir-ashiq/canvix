@@ -1,5 +1,5 @@
 {
-  // Canvix on Cloudflare Workers — via @opennextjs/cloudflare.
+  // TEa.G3 on Cloudflare Workers — via @opennextjs/cloudflare.
   // Docs: https://opennext.js.org/cloudflare  •  repo guide: research/CLOUDFLARE-WORKERS-PORTABILITY.md
   //
   // Build:     npm run preview   (local workerd preview)
@@ -9,7 +9,7 @@
   //            npx wrangler secret put ZAI_API_KEY    (optional AI provider)
   "$schema": "node_modules/wrangler/config-schema.json",
   "main": ".open-next/worker.js",
-  "name": "canvix",
+  "name": "tea-g3",
   // Matches Prisma's current Cloudflare guide. Any date ≥ 2025-04-01
   // auto-populates process.env from vars/secrets; ≥ 2024-09-23 enables
   // nodejs_compat v2 (fuller Node API surface for node:crypto etc.).
@@ -31,7 +31,7 @@
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "canvix"
+      "service": "tea-g3"
     }
   ],
   "observability": {

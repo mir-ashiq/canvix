@@ -1217,7 +1217,7 @@ export function Dashboard() {
           {csvTarget?.fields?.length ? (
             <>
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                <div className="text-[11px] font-bold text-white/45 uppercase tracking-wide mb-1.5">Expected columns</div>
+                <div className="text-[11px] font-bold text-white/45 uppercase tracking-wide mb-1.5">الأعمدة المطلوبة</div>
                 <div className="flex gap-1.5 flex-wrap">
                   {csvTarget.fields.map((f) => (
                     <code key={f.key} className="text-[11px] px-2 py-0.5 rounded-md bg-[#02C0CC]/10 border border-[#02C0CC]/25 text-[#7DE9E1]">{f.key}</code>
@@ -1289,7 +1289,7 @@ export function Dashboard() {
           <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus onKeyDown={(e) => e.key === 'Enter' && doRename()} className="bg-white/[0.06] border-white/10 text-white" />
           <DialogFooter>
             <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setRenameTarget(null)}>إلغاء</Button>
-            <Button className="btn-cv" onClick={doRename}>Save</Button>
+            <Button className="btn-cv" onClick={doRename}>حفظ</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

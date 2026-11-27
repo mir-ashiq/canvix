@@ -211,7 +211,7 @@ export function ColorMenu({ value, onChange, gradient, onGradient, title = 'Colo
                     {/* angle (linear only) */}
                     {gradient.type === 'linear' && (
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-white/50 w-8 shrink-0">Angle</span>
+                        <span className="text-[10px] text-white/50 w-8 shrink-0">الزاوية</span>
                         <input
                           type="range"
                           min={0}

@@ -26,7 +26,7 @@ import {
   type SpanStylePatch,
 } from '@/lib/rich-text'
 import type { TextSpan } from '@/lib/types'
-import { Bold, Check, Italic, Link2, Strikethrough, Underline, X } from 'lucide-react'
+import { Bold, Check, Italic, Link2, SpellCheck, Strikethrough, Underline, X } from 'lucide-react'
 
 /** canva-measured tokens */
 const GUIDE_COLOR = '#9954FF' // rgb(153,84,255) — measured 2026-09-03
@@ -94,6 +94,9 @@ export default function CanvasStage() {
   /** true while the textarea has a NON-collapsed selection (drives the
    *  toolbar buttons' disabled state) */
   const [hasSelRange, setHasSelRange] = useState(false)
+  // Native browser spellchecking for Arabic-first text editing. The toolbar
+  // toggle changes the actual textarea attribute, not just its appearance.
+  const [spellCheckEnabled, setSpellCheckEnabled] = useState(true)
   /** link popover */
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkDraft, setLinkDraft] = useState('')
@@ -1035,6 +1038,17 @@ export default function CanvasStage() {
             if (!(e.target as HTMLElement).closest('input')) e.preventDefault()
           }}
         >
+          <button
+            className="cv-tbtn"
+            title={spellCheckEnabled ? 'Turn spell check off' : 'Turn spell check on'}
+            aria-label="Toggle spell check"
+            aria-pressed={spellCheckEnabled}
+            data-testid="editor-spellcheck-toggle"
+            data-active={spellCheckEnabled ? 'true' : undefined}
+            onClick={() => setSpellCheckEnabled((enabled) => !enabled)}
+          >
+            <SpellCheck size={15} />
+          </button>
           <button className="cv-tbtn" title="Bold" aria-label="Bold selection" data-active={selState?.bold === 'all' ? 'true' : undefined} disabled={!hasSelRange} onClick={() => applyRichStyle({ bold: selState?.bold !== 'all' })}>
             <Bold size={14} />
           </button>
@@ -1122,6 +1136,8 @@ export default function CanvasStage() {
             style={editSpans ? { ...textareaStyle, color: 'transparent', caretColor: editingText.fill } : textareaStyle}
             value={editValue}
             autoFocus
+            spellCheck={spellCheckEnabled}
+            lang="ar"
             onChange={(e) => {
               const v = e.target.value
               const prev = textEditRef.current
@@ -1167,6 +1183,8 @@ export default function CanvasStage() {
           style={cellStyle}
           value={editValue}
           autoFocus
+          spellCheck={spellCheckEnabled}
+          lang="ar"
           onChange={(e) => {
             setEditValue(e.target.value)
             // live-update the cell so the rest of the table reflects typing

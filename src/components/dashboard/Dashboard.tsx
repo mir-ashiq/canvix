@@ -18,7 +18,6 @@ import {
   Square,
   FileImage,
   Github,
-  Shield,
   LayoutGrid,
   LayoutTemplate,
   FolderOpen,
@@ -27,14 +26,10 @@ import {
   Info,
   Heart,
   AlertTriangle,
-  LogIn,
-  LogOut,
-  FolderInput,
   Folder,
   FolderPlus,
   FolderMinus,
   Check,
-  UserRound,
   Maximize,
   Smartphone,
   Monitor,
@@ -48,9 +43,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DesignPreview } from '@/components/design-preview'
 import { McpCard } from '@/components/dashboard/McpCard'
-import { AuthDialog } from '@/components/auth/AuthDialog'
-import { ProfilePanel } from '@/components/dashboard/ProfilePanel'
-import { useAuth, adoptAllDesigns, adoptDesign } from '@/lib/auth/client'
 import { TEMPLATES } from '@/lib/templates'
 import { createPage, TEMPLATE_CATEGORIES, type TemplateRecord } from '@/lib/types'
 import { PRESET_SIZES, PRESET_GROUPS, type SizePreset } from '@/lib/editor-utils'
@@ -184,19 +176,6 @@ export function Dashboard() {
   const { folders, refresh: refreshFolders } = useFolders()
   const isMobile = useIsMobile()
   const [helpOpen, setHelpOpen] = useState(false)
-
-  // v0.9: accounts — free forever, username + password
-  const { user, login, register, logout, refresh: refreshAuth } = useAuth()
-  const [authOpen, setAuthOpen] = useState(false)
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
-  // v0.23: the profile dialog — account card + BYOK AI providers
-  const [profileOpen, setProfileOpen] = useState(false)
-  const [adopting, setAdopting] = useState(false)
-  // v0.9.1: the BULK action only claims designs attributed to THIS browser
-  // (server enforces the same). Legacy (pre-accounts) designs are claimable
-  // one-by-one, or deliberately in bulk via the explicit legacy item below.
-  const mineCount = (designs ?? []).filter((d) => d.mine === true).length
-  const legacyCount = (designs ?? []).filter((d) => d.ownerId === null && d.claimable === true && d.mine !== true).length
 
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<string>('all')
@@ -508,16 +487,6 @@ export function Dashboard() {
           </button>
         ))}
         <div className="mt-auto flex flex-col items-center gap-2">
-          {user?.admin && (
-            <a
-              href="/admin"
-              className="w-9 h-9 rounded-full text-white/50 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors"
-              aria-label="Admin console"
-              title="Admin console"
-            >
-              <Shield size={18} />
-            </a>
-          )}
           <a
             href="https://github.com/TEaG3/eng-salman"
             target="_blank"
@@ -564,125 +533,14 @@ export function Dashboard() {
             >
               <Plus size={16} /> <span className="hidden sm:inline">Custom size</span>
             </Button>
-            {/* ── account area (v0.9: real accounts, free forever) ── */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className="h-10 w-10 rounded-full bg-gradient-to-br from-[#02C0CC] to-[#7630D7] text-white text-[13px] font-extrabold flex items-center justify-center shrink-0 hover:brightness-110 transition-all"
-                  aria-label="Account menu"
-                  title={user ? `Signed in as ${user.username}` : 'سجّل الدخول — مجاناً للأبد'}
-                  // v0.26 perf: warm the profile dialog's two API calls the
-                  // moment the user shows intent (menu open) — the dialog
-                  // itself then renders from the prefetched data instead of
-                  // starting its requests on click (~2 network round-trips
-                  // saved on the reported "5–6 s to open profile")
-                  onPointerEnter={() => {
-                    if (!user) return
-                    void fetch('/api/profile/ai-providers', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => {})
-                    void fetch('/api/keys', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => {})
-                  }}
-                >
-                  {user ? user.username.slice(0, 2).toUpperCase() : 'CV'}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64 bg-[#16181D] border-white/10 text-white">
-                <div className="px-3 py-2.5 border-b border-white/[0.07]">
-                  {user ? (
-                    <>
-                      <div className="text-[13px] font-semibold text-[#00C4CC]">@{user.username}</div>
-                      <div className="text-[11px] text-white/45">Your designs are private to your account</div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-[13px] font-semibold">You are browsing anonymously</div>
-                      <div className="text-[11px] text-white/45">Free account — keep your designs yours</div>
-                    </>
-                  )}
-                </div>
-                {user ? (
-                  <>
-                    {mineCount > 0 && (
-                      <DropdownMenuItem
-                        className="gap-2"
-                        disabled={adopting}
-                        onClick={async () => {
-                          setAdopting(true)
-                          try {
-                            const adopted = await adoptAllDesigns()
-                            await refresh()
-                            toast({ title: `${adopted} design${adopted === 1 ? '' : 's'} moved into your account` })
-                          } catch {
-                            toast({ title: 'تعذّر استيراد التصاميم', variant: 'destructive' })
-                          } finally {
-                            setAdopting(false)
-                          }
-                        }}
-                      >
-                        <FolderInput size={14} /> {adopting ? 'جارٍ استيراد التصاميم…' : `Save my designs to this account (${mineCount})`}
-                      </DropdownMenuItem>
-                    )}
-                    {legacyCount > 0 && (
-                      <DropdownMenuItem
-                        className="gap-2"
-                        disabled={adopting}
-                        onClick={async () => {
-                          const ok = window.confirm(
-                            `Adopt ${legacyCount} legacy design${legacyCount === 1 ? '' : 's'} created before accounts existed?\n\n` +
-                              'نفّذ ذلك فقط إذا كانت نسخة TEa.G3 هذه أو التصاميم المشتركة ملكك — ' +
-                              'on a shared deployment, legacy designs may include other people\u2019s work.',
-                          )
-                          if (!ok) return
-                          setAdopting(true)
-                          try {
-                            const adopted = await adoptAllDesigns(true)
-                            await Promise.all([refreshAuth(), refresh()])
-                            toast({ title: `${adopted} design${adopted === 1 ? '' : 's'} moved into your account` })
-                          } catch {
-                            toast({ title: 'تعذّر استيراد التصاميم', variant: 'destructive' })
-                          } finally {
-                            setAdopting(false)
-                          }
-                        }}
-                      >
-                        <FolderInput size={14} /> Adopt legacy (pre-accounts) designs ({legacyCount})
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem className="gap-2" onClick={() => setProfileOpen(true)}>
-                      <UserRound size={14} /> Profile &amp; AI keys
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="gap-2" onClick={() => void logout().then(() => { void refreshAuth(); void refresh() })}>
-                      <LogOut size={14} /> Sign out
-                    </DropdownMenuItem>
-                  </>
-                ) : (
-                  <>
-                    <DropdownMenuItem className="gap-2" onClick={() => { setAuthMode('login'); setAuthOpen(true) }}>
-                      <LogIn size={14} /> Sign in
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="gap-2" onClick={() => { setAuthMode('register'); setAuthOpen(true) }}>
-                      <LogIn size={14} /> Create a free account
-                    </DropdownMenuItem>
-                  </>
-                )}
-                <div className="my-1 border-t border-white/[0.07]" />
-                <DropdownMenuItem className="gap-2" onClick={() => setHelpOpen(true)}>
-                  <CircleHelp size={14} /> Help &amp; shortcuts
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2" onClick={goLanding}>
-                  <Info size={14} /> About TEa.G3
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2" asChild>
-                  <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer">
-                    <Github size={14} /> GitHub repository
-                  </a>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2" asChild>
-                  <a href="https://github.com/TEaG3/eng-salman/stargazers" target="_blank" rel="noreferrer">
-                    <Heart size={14} /> Star the project
-                  </a>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <button
+              onClick={() => setHelpOpen(true)}
+              className="h-10 w-10 rounded-full bg-white/[0.06] border border-white/10 text-white/75 flex items-center justify-center shrink-0 hover:bg-white/10 transition-colors"
+              aria-label="المساعدة"
+              title="المساعدة والاختصارات"
+            >
+              <CircleHelp size={18} />
+            </button>
           </div>
         </div>
       </header>
@@ -1002,21 +860,6 @@ export function Dashboard() {
                         <DropdownMenuItem onClick={() => openDesign(d.id)}>
                           <Pencil size={14} className="mr-2" /> Open
                         </DropdownMenuItem>
-                        {user && d.ownerId === null && d.claimable && (
-                          <DropdownMenuItem
-                            onClick={async () => {
-                              const r = await adoptDesign(d.id)
-                              if (r.ok) {
-                                await refresh()
-                                toast({ title: `“${d.name}” moved into your account` })
-                              } else {
-                                toast({ title: r.error ?? 'Could not save this design', variant: 'destructive' })
-                              }
-                            }}
-                          >
-                            <FolderInput size={14} className="mr-2" /> Save to my account
-                          </DropdownMenuItem>
-                        )}
                         <DropdownMenuItem onClick={() => { setRenameTarget({ id: d.id, name: d.name }); setRenameValue(d.name) }}>
                           <Pencil size={14} className="mr-2" /> Rename
                         </DropdownMenuItem>
@@ -1497,25 +1340,6 @@ export function Dashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* ── v0.9: account sign-in / sign-up ── */}
-      <AuthDialog
-        open={authOpen}
-        onOpenChange={setAuthOpen}
-        initialMode={authMode}
-        onAuthed={() => {
-          // the session changed — re-read auth state AND the dashboard scope
-          // (v0.14 D6: folders were claimed into the account on login)
-          void refreshAuth()
-          void refresh()
-          void refreshFolders()
-        }}
-      />
-
-      {/* ── v0.23: profile — account card + BYOK AI providers ── */}
-      {user ? (
-        <ProfilePanel open={profileOpen} onOpenChange={setProfileOpen} user={user} />
-      ) : null}
     </div>
   )
 }

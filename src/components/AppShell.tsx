@@ -28,7 +28,12 @@ function DeepLinkHandler() {
   useEffect(() => {
     try {
       const designId = readDesignIdFromLocation()
-      if (!designId) return
+      if (!designId) {
+        if (new URLSearchParams(window.location.search).get('app') === '1') {
+          useAppStore.getState().goDashboard()
+        }
+        return
+      }
       const openEditor = useAppStore.getState().openEditor
       void fetch(`/api/designs/${encodeURIComponent(designId)}`)
         .then((r) => (r.ok ? r.json() : null))

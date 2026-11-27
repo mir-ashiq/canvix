@@ -200,8 +200,8 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         })
         downloadVideo(result, base)
         toast({
-          title: `Video downloaded (${result.extension.toUpperCase()})`,
-          description: `${result.frames} frames · ${result.durationSec.toFixed(1)}s · rendered locally in your browser`,
+          title: `تم تنزيل الفيديو (${result.extension.toUpperCase()})`,
+          description: `${result.frames} إطار · ${result.durationSec.toFixed(1)} ثانية · تم التصيير محلياً في متصفحك`,
         })
         onOpenChange(false)
         return
@@ -226,8 +226,8 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         })
         downloadGif(result, base)
         toast({
-          title: 'GIF downloaded',
-          description: `${result.frames} frames · ${result.durationSec.toFixed(1)}s · ${(result.bytes / 1048576).toFixed(1)} MB · loops forever · rendered locally in your browser`,
+          title: 'تم تنزيل GIF',
+          description: `${result.frames} إطار · ${result.durationSec.toFixed(1)} ثانية · ${(result.bytes / 1048576).toFixed(1)} ميغابايت · يتكرر باستمرار · تم التصيير محلياً في متصفحك`,
         })
         onOpenChange(false)
         return
@@ -255,8 +255,8 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         })
         downloadPptx(result, `${base}.pptx`)
         toast({
-          title: `PPTX downloaded (${result.pages} slide${result.pages > 1 ? 's' : ''})`,
-          description: `${result.natives} editable elements · ${result.rasters} snapshot${result.rasters === 1 ? '' : 's'}${result.notes ? ` · ${result.notes} notes page${result.notes === 1 ? '' : 's'}` : ''} — opens in PowerPoint, Keynote and Google Slides.`,
+          title: `تم تنزيل PPTX (${result.pages} شريحة)`, 
+          description: `${result.natives} عنصر قابل للتحرير · ${result.rasters} صورة معاينة${result.notes ? ` · ${result.notes} صفحة ملاحظات` : ''} — يفتح في PowerPoint وKeynote وGoogle Slides.`,
         })
         onOpenChange(false)
         return
@@ -279,8 +279,8 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           if (svgs.length > 1) await new Promise((r) => setTimeout(r, 380))
         }
         toast({
-          title: `SVG downloaded (${svgs.length} file${svgs.length > 1 ? 's' : ''})`,
-          description: 'Text keeps font-family references — viewers fall back to installed fonts.',
+          title: `تم تنزيل SVG (${svgs.length} ملف)`, 
+          description: 'يحتفظ النص بمراجع عائلات الخطوط، وتُستخدم الخطوط المثبتة عند عدم توفرها.',
         })
         onOpenChange(false)
         return
@@ -309,8 +309,8 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         })
         downloadPdf(result, `${base}.pdf`)
         toast({
-          title: `PDF downloaded (${result.pages} page${result.pages > 1 ? 's' : ''})`,
-          description: 'Vector text — selectable & searchable, fonts embedded when available.',
+          title: `تم تنزيل PDF (${result.pages} صفحة)`, 
+          description: 'نص متجهي قابل للتحديد والبحث، مع تضمين الخطوط عند توفرها.',
         })
         onOpenChange(false)
         return
@@ -366,7 +366,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
         <div className="space-y-5 py-2">
           <div>
-            <h4 className="text-xs font-semibold text-muted-foreground mb-2">File type</h4>
+            <h4 className="text-xs font-semibold text-muted-foreground mb-2">نوع الملف</h4>
             <div className="grid grid-cols-3 gap-1.5">
               {FORMATS.filter((f) => f.id !== 'webp' || webpSupported === true).map((f) => {
                 const Ico = f.icon
@@ -414,7 +414,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                 {pagesHaveAutoplayVideo(pages) ? (
                   <p>Autoplay videos export with their moving content frame-accurately — non-autoplay videos keep their poster.</p>
                 ) : null}
-                <p>GIFs are <strong>silent</strong> — the format has no audio track. Capped at 25 MB and 1 800 frames; the export stops with advice if it would exceed either.</p>
+                <p>ملفات GIF <strong>بلا صوت</strong> لأن هذا التنسيق لا يدعم المسار الصوتي. الحد الأقصى 25 ميغابايت و1800 إطار؛ وسيتوقف التصدير مع إظهار تنبيه إذا تجاوز أحد الحدين.</p>
                 <div>
                   <div className="grid grid-cols-3 gap-2">
                     {GIF_SIZES.map((sz) => (
@@ -474,7 +474,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                   </div>
                   {gifRangeMode === 'range' && (
                     <div className="flex items-center gap-2 pl-6">
-                      <span>Pages</span>
+                      <span>الصفحات</span>
                       <input
                         type="number"
                         min={1}

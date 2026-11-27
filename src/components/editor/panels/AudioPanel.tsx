@@ -285,7 +285,7 @@ export function AudioPanel() {
                 <Info size={13} className="mt-0.5 shrink-0" />
                 <span>
                   Sound search is off on this server — the operator sets a free{' '}
-                  <strong>Freesound</strong> key on the admin AI &amp; models page (or{' '}
+                  <strong>Freesound</strong> مفتاحاً من صفحة إدارة الذكاء الاصطناعي والنماذج (أو{' '
                   <code className="rounded bg-black/20 px-1">FREESOUND_API_KEY</code>). Results are
                   Creative Commons 0 by default. The Sound library above works without any key.
                 </span>

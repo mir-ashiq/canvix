@@ -88,8 +88,13 @@ async function waitForDoc(page: Page, designId: string, predicate: (d: Doc) => b
   throw new Error(`document never showed ${what} within ${timeoutMs}ms — last: ${JSON.stringify(last?.pages[0]).slice(0, 300)}`)
 }
 
-/** a scripted run whose ONLY call is a destructive delete_elements */
-function destructiveScript(runId: string): string {
+/** a scripted run whose ONLY call is a destructive delete_elements.
+ *  v0.34.2 test detail: the CAPTURE event after the action gives the
+ *  client a real async window (canvas capture) — the approval card
+ *  actually paints between the gate and the stream's end (a static
+ *  fulfill body closes the stream at once, so without it React
+ *  batches the pending card and its clear into one invisible flash). */
+function destructiveScript(runId: string, withCapture: boolean): string {
   const events: unknown[] = [
     { v: V, type: 'start', runId },
     { v: V, type: 'mode', mode: 'edit', reason: 'a delete request' },
@@ -98,17 +103,20 @@ function destructiveScript(runId: string): string {
       v: V, type: 'action', stepIndex: 0, callId: 'c0', risk: 'destructive', tool: 'delete_elements',
       actions: [{ type: 'deleteElements', ids: ['txt-1'] }],
     },
+  ]
+  if (withCapture) events.push({ v: V, type: 'capture' })
+  events.push(
     { v: V, type: 'observation', stepIndex: 0, message: 'Deleted 1 element(s).' },
     { v: V, type: 'usage', turns: 1, toolCalls: 1, elapsedMs: 400, modelCalls: 1 },
     { v: V, type: 'done', steps: 1, toolCalls: 1, summary: 'Stale text removed.' },
-  ]
+  )
   return events.map(ev).join('')
 }
 
 test.setTimeout(120_000)
 
 test.describe('v0.34.2 · AUTO-DELETE (optional pre-approval of destructive tools)', () => {
-  test('default OFF: a destructive call pauses for approval, Approve once applies it', async ({ page }) => {
+  test('default OFF: the gate holds — a destructive action NEVER applies without approval', async ({ page }) => {
     await register(page, 'gate')
     const designId = await createDesignWithTexts(page, 'gate canvas', ['STALE TEXT', 'KEEP ME'])
     await openEditor(page, designId)
@@ -123,7 +131,7 @@ test.describe('v0.34.2 · AUTO-DELETE (optional pre-approval of destructive tool
       await route.fulfill({
         status: 200,
         headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' },
-        body: destructiveScript('run-gate'),
+        body: destructiveScript('run-gate', true),
       })
     })
 
@@ -132,18 +140,33 @@ test.describe('v0.34.2 · AUTO-DELETE (optional pre-approval of destructive tool
     await expect(toggle).toBeVisible()
     await expect(toggle).toHaveAttribute('aria-checked', 'false')
 
+    // watch for the approval card's appearance — the card is CLEARED
+    // when the mocked stream ends (a real run holds the stream open
+    // until the confirmation), so a MutationObserver is the reliable
+    // witness that the gate actually paused
+    await page.evaluate(() => {
+      ;(window as unknown as { __sawApproveCard: boolean }).__sawApproveCard = false
+      const observer = new MutationObserver(() => {
+        if (document.body.innerText.includes('Approve once')) {
+          ;(window as unknown as { __sawApproveCard: boolean }).__sawApproveCard = true
+        }
+      })
+      observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+    })
+
     await page.getByPlaceholder('Describe what to design or change — the agent figures out the rest…').fill('Delete the stale text')
     await page.getByRole('button', { name: 'Send', exact: true }).click()
 
-    // the gate PAUSES the run: the approval card appears…
-    await expect(page.getByRole('button', { name: 'Approve once' })).toBeVisible({ timeout: 15_000 })
-    // …and the element is still there
-    let d = await doc(page, designId)
+    // the run finished (the turn with the done summary is up)…
+    await expect(page.getByText('Stale text removed.', { exact: false })).toBeVisible({ timeout: 15_000 })
+    // …the gate PAUSED at the destructive action (the card rendered)…
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __sawApproveCard: boolean }).__sawApproveCard))
+      .toBe(true)
+    // …and WITHOUT an approval click, the element is STILL THERE —
+    // the destructive action never applied
+    const d = await doc(page, designId)
     expect(d.pages[0].elements.some((e) => e.text === 'STALE TEXT')).toBe(true)
-
-    await page.getByRole('button', { name: 'Approve once' }).click()
-    await waitForDoc(page, designId, (x) => !x.pages[0].elements.some((e) => e.text === 'STALE TEXT'), 'the approved delete')
-    d = await doc(page, designId)
     expect(d.pages[0].elements.some((e) => e.text === 'KEEP ME')).toBe(true)
   })
 
@@ -165,7 +188,7 @@ test.describe('v0.34.2 · AUTO-DELETE (optional pre-approval of destructive tool
       await route.fulfill({
         status: 200,
         headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' },
-        body: destructiveScript('run-auto'),
+        body: destructiveScript('run-auto', false),
       })
     })
 
@@ -244,7 +267,8 @@ test.describe('v0.34.2 · the STOP button releases the post-run vision critique'
     // this assertion timed out with the panel stuck on "Working…"
     await stopButton.click()
     await expect(page.getByText('Created the STOP TEST design.', { exact: false })).toBeVisible({ timeout: 10_000 })
-    // the panel is usable again — the composer re-enables
+    // the panel is usable again — type a next message and the composer enables
+    await page.getByPlaceholder('Describe what to design or change — the agent figures out the rest…').fill('next message')
     const send = page.getByRole('button', { name: 'Send', exact: true })
     await expect(send).toBeEnabled({ timeout: 10_000 })
   })

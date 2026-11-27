@@ -753,7 +753,7 @@ export function Dashboard() {
               )}
               aria-pressed={activeFolder === null}
             >
-              <LayoutGrid size={14} /> كل التصاميم
+              <LayoutGrid size={14} /> جميع التصاميم
             </button>
             {(folders ?? []).map((f) => (
               <span
@@ -1051,14 +1051,14 @@ export function Dashboard() {
               <div className="space-y-1.5">
                 {[
                   ['Ctrl+Z / Ctrl+Shift+Z', 'Undo / redo'],
-                  ['Ctrl+D', 'Duplicate'],
+                  ['Ctrl+D', 'إنشاء نسخة'],
                   ['Ctrl+G / Ctrl+Shift+G', 'Group / ungroup'],
                   ['Ctrl+A', 'Select all'],
                   ['Ctrl+L', 'Lock / unlock'],
                   ['Ctrl+Alt+S', 'Save a version snapshot'],
                   ['Shift+R', 'Show / hide rulers'],
                   ['V', 'Select tool'],
-                  ['Delete', 'Delete selection'],
+                  ['حذف', 'Delete selection'],
                   ['Double-click text', 'Edit text inline'],
                   ['Double-click layer', 'Rename a layer'],
                   ['Space + drag', 'Pan the canvas'],

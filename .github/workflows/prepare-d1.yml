@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - midad-d1-migration
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -24,19 +23,26 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies and refresh lockfile
+      - name: Refresh package lock
         run: npm install --package-lock-only --ignore-scripts
 
+      - name: Install exact locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
       - name: Validate Prisma D1 schema
-        run: npx prisma validate
+        run: ./node_modules/.bin/prisma validate
 
       - name: Generate Prisma client
-        run: npx prisma generate
+        run: ./node_modules/.bin/prisma generate
 
       - name: Generate initial D1 migration
         run: |
           mkdir -p prisma/d1-migrations
-          npx prisma migrate diff             --from-empty             --to-schema prisma/schema.prisma             --script             --output prisma/d1-migrations/0001_initial.sql
+          ./node_modules/.bin/prisma migrate diff \
+            --from-empty \
+            --to-schema-datamodel prisma/schema.prisma \
+            --script \
+            --output prisma/d1-migrations/0001_initial.sql
 
       - name: Commit generated migration and lockfile
         run: |

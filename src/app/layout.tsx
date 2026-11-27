@@ -12,7 +12,7 @@ const latinFont = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700
  * indexed — no og:image, twitter:card "summary" (text-only card), no
  * canonical, no sitemap. This block fixes all four. metadataBase makes
  * every generated URL (canonical, og:image, sitemap) absolute and correct
- * in production; SITE_URL should be set to the deployed TEa.G3 origin.
+ * in production; SITE_URL should be set to the deployed MIDAD origin.
  */
 const VERCEL_ORIGIN = process.env.VERCEL_PROJECT_PRODUCTION_URL
   ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
@@ -26,17 +26,18 @@ const SITE_URL =
 export const metadata: Metadata = {
   metadataBase: SITE_URL ? new URL(SITE_URL) : undefined,
   title: {
-    default: "TEa.G3 — تطوير المطور العراقي",
-    template: "%s — TEa.G3",
+    default: "مِداد — منصة التصميم العربية",
+    template: "%s — مِداد",
   },
   description:
-    "TEa.G3 منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر. صمّم المنشورات والعروض والملصقات والشعارات بسهولة عبر محرر السحب والإفلات.",
-  applicationName: "TEa.G3",
+    "مِداد منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر. صمّم المنشورات والعروض والملصقات والشعارات بسهولة عبر محرر السحب والإفلات.",
+  applicationName: "MIDAD",
   keywords: [
-    "TEa.G3",
+    "MIDAD",
+    "مداد",
     "تصميم جرافيكي",
     "منصة تصميم عربية",
-    "تطوير المطور العراقي",
+    "تطوير TEa.G3",
     "design tool",
     "open source",
     "canva alternative",
@@ -47,16 +48,16 @@ export const metadata: Metadata = {
     "free design tool",
     "self hosted design tool",
   ],
-  authors: [{ name: "المطور العراقي TEa.G3" }],
+  authors: [{ name: "TEa.G3" }],
   alternates: { canonical: "/" },
   manifest: "/manifest.webmanifest",
-  icons: { icon: "/tea-g3.svg", apple: "/tea-g3.svg" },
-  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "TEa.G3" },
+  icons: { icon: "/midad.svg", apple: "/midad.svg" },
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "مداد" },
   openGraph: {
-    title: "TEa.G3 — تطوير المطور العراقي",
+    title: "مِداد | MIDAD — منصة التصميم العربية",
     description:
-      "منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر — تطوير المطور العراقي TEa.G3.",
-    siteName: "TEa.G3",
+      "منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر — تطوير TEa.G3.",
+    siteName: "MIDAD",
     type: "website",
     url: "/",
     images: [
@@ -64,15 +65,15 @@ export const metadata: Metadata = {
         url: "/og.png",
         width: 1200,
         height: 630,
-        alt: "TEa.G3 — تطوير المطور العراقي",
+        alt: "مِداد | MIDAD — منصة التصميم العربية",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "TEa.G3 — تطوير المطور العراقي",
+    title: "مِداد | MIDAD — منصة التصميم العربية",
     description:
-      "منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر — تطوير المطور العراقي TEa.G3.",
+      "منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر — تطوير TEa.G3.",
     images: ["/og.png"],
   },
   robots: {
@@ -122,19 +123,19 @@ export default function RootLayout({
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebApplication",
-              name: "TEa.G3",
+              name: "MIDAD",
               url: SITE_URL,
               applicationCategory: "DesignApplication",
               operatingSystem: "Web",
               description:
-                "منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر — تطوير المطور العراقي TEa.G3.",
+                "منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر — تطوير TEa.G3.",
               image: `${SITE_URL}/og.png`,
-              logo: `${SITE_URL}/tea-g3.svg`,
+              logo: `${SITE_URL}/midad.svg`,
               offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
               isAccessibleForFree: true,
               featureList:
                 "Drag-and-drop editor; 366 free templates; PNG, JPG, WebP, SVG, PDF, PPTX, video and GIF export; AI magic edit, magic write, background removal and translate with your own API keys; real-time collaboration; MCP server for AI agents; self-hosting with Docker",
-              author: { "@type": "Person", name: "المطور العراقي TEa.G3" },
+              author: { "@type": "Organization", name: "TEa.G3" },
               license: "https://opensource.org/licenses/MIT",
               sameAs: ["https://github.com/TEaG3/eng-salman"],
             }),

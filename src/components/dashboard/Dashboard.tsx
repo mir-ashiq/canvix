@@ -195,7 +195,7 @@ export function Dashboard() {
     try {
       return csvToFieldRows(parseCsv(csvText), csvTarget.fields.map((f) => f.key))
     } catch (err) {
-      return { rows: [], missing: [], error: err instanceof Error ? err.message : 'CSV parse failed' }
+      return { rows: [], missing: [], error: err instanceof Error ? err.message : 'تعذّر تحليل ملف CSV' }
     }
   }, [csvTarget, csvText])
 
@@ -210,12 +210,12 @@ export function Dashboard() {
       })
       if (!res.ok) throw new Error('fill failed')
       const body = (await res.json()) as { created?: { id: string }[] }
-      toast({ title: `Created ${body.created?.length ?? 0} design${(body.created?.length ?? 0) === 1 ? '' : 's'} from “${csvTarget.name}”` })
+      toast({ title: `تم إنشاء ${body.created?.length ?? 0} تصميم من «${csvTarget.name}»` })
       setCsvTarget(null)
       setCsvText('')
       await refresh()
     } catch {
-      toast({ title: 'Bulk fill failed — try fewer rows', variant: 'destructive' })
+      toast({ title: 'تعذّر إنشاء التصاميم دفعة واحدة — جرّب عدداً أقل من الصفوف', variant: 'destructive' })
     } finally {
       setCsvBusy(false)
     }
@@ -250,7 +250,7 @@ export function Dashboard() {
     try {
       await restoreDesign(id)
       await Promise.all([refresh(), refreshTrash()])
-      toast({ title: `“${name}” restored` })
+      toast({ title: `تمت استعادة «${name}»` })
     } catch {
       toast({ title: 'تعذّرت استعادة التصميم', variant: 'destructive' })
     }
@@ -260,7 +260,7 @@ export function Dashboard() {
     try {
       await deleteDesignForever(id)
       await refreshTrash()
-      toast({ title: `“${name}” deleted forever` })
+      toast({ title: `تم حذف «${name}» نهائياً` })
     } catch {
       toast({ title: 'تعذّر حذف التصميم', variant: 'destructive' })
     }
@@ -412,7 +412,7 @@ export function Dashboard() {
       if (dialog.mode === 'create') {
         const folder = await createFolder(name)
         await refreshFolders()
-        toast({ title: `Folder “${folder.name}” created` })
+        toast({ title: `تم إنشاء المجلد «${folder.name}»` })
       } else {
         await renameFolder(dialog.id, name)
         await refreshFolders()
@@ -425,14 +425,14 @@ export function Dashboard() {
 
   const doDeleteFolder = async (id: string, name: string) => {
     const ok = window.confirm(
-      `Delete the folder “${name}”?\n\nThe designs inside are NOT deleted — they return to All designs.`,
+      `هل تريد حذف المجلد «${name}»؟\n\nلن تُحذف التصاميم الموجودة داخله، بل ستعود إلى كل التصاميم.`,
     )
     if (!ok) return
     try {
       await deleteFolder(id)
       if (activeFolder === id) setActiveFolder(null)
       await Promise.all([refreshFolders(), refresh()])
-      toast({ title: `Folder “${name}” deleted — its designs are in All designs` })
+      toast({ title: `تم حذف المجلد «${name}» — التصاميم موجودة ضمن كل التصاميم` })
     } catch {
       toast({ title: 'تعذّر حذف المجلد', variant: 'destructive' })
     }
@@ -444,8 +444,8 @@ export function Dashboard() {
       await Promise.all([refresh(), refreshFolders()])
       toast({
         title: folderId
-          ? `“${name}” moved to “${(folders ?? []).find((f) => f.id === folderId)?.name ?? 'folder'}”`
-          : `“${name}” moved to All designs`,
+          ? `تم نقل «${name}» إلى «${(folders ?? []).find((f) => f.id === folderId)?.name ?? 'مجلد'}`
+          : `تم نقل «${name}» إلى كل التصاميم`,
       })
     } catch (error) {
       apiErrorToast(error, 'تعذّر نقل التصميم')
@@ -455,12 +455,12 @@ export function Dashboard() {
   return (
     <div className="min-h-screen flex bg-[#1F142E] text-[#EDEEF2]">
       {/* ── Canva-style left rail (desktop) ── */}
-      <nav className="hidden md:flex w-[72px] shrink-0 flex-col items-center bg-[#1C1229] border-r border-white/[0.06] py-3 gap-1 sticky top-0 h-screen" aria-label="Primary">
+      <nav className="hidden md:flex w-[72px] shrink-0 flex-col items-center bg-[#1C1229] border-r border-white/[0.06] py-3 gap-1 sticky top-0 h-screen" aria-label="التنقل الرئيسي">
         <button
           onClick={() => setCustomOpen(true)}
           className="h-9 w-9 rounded-full bg-[#7630D7] hover:bg-[#8B5CF6] text-white flex items-center justify-center shadow-lg shadow-[#7630D7]/40 transition-colors"
-          aria-label="Create a design"
-          title="Create a design"
+          aria-label="إنشاء تصميم"
+          title="إنشاء تصميم"
         >
           <Plus size={20} />
         </button>
@@ -491,8 +491,8 @@ export function Dashboard() {
             target="_blank"
             rel="noreferrer"
             className="w-9 h-9 rounded-full text-white/50 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors"
-            aria-label="GitHub repository"
-            title="GitHub repository"
+            aria-label="مستودع GitHub"
+            title="مستودع GitHub"
           >
             <Github size={18} />
           </a>
@@ -521,7 +521,7 @@ export function Dashboard() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="ابحث في تصاميمك"
               className="pl-10 h-10 rounded-full bg-white/[0.06] border-white/10 text-white placeholder:text-white/35 focus-visible:ring-[#7630D7]/50 focus-visible:border-[#7630D7]/60"
-              aria-label="Search designs"
+              aria-label="البحث في التصاميم"
             />
           </div>
           <div className="ml-auto flex items-center gap-2">
@@ -530,7 +530,7 @@ export function Dashboard() {
               className="btn-cv rounded-full px-4 gap-1.5 h-10"
               onClick={() => setCustomOpen(true)}
             >
-              <Plus size={16} /> <span className="hidden sm:inline">Custom size</span>
+              <Plus size={16} /> <span className="hidden sm:inline">مقاس مخصص</span>
             </Button>
             <button
               onClick={() => setHelpOpen(true)}
@@ -548,15 +548,15 @@ export function Dashboard() {
         {/* ── Hero — canva “What will you design today?” ── */}
         <section className="pt-8 pb-2">
           <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-center">
-            What will you <span className="text-brand-gradient">design</span> today?
+            ما الذي تريد <span className="text-brand-gradient">تصميمه</span> اليوم؟
           </h1>
-          <p className="mt-2 text-center text-sm text-white/50">Free, open-source, and yours forever.</p>
+          <p className="mt-2 text-center text-sm text-white/50">مجاني ومفتوح المصدر، ويبقى لك دائماً.</p>
         </section>
 
         {/* ── Start a new design ── */}
         <section className="pt-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold">Start a new design</h2>
+            <h2 className="text-xl font-bold">ابدأ تصميماً جديداً</h2>
           </div>
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-3">
             {PRESET_SIZES.map((preset, i) => {
@@ -581,13 +581,13 @@ export function Dashboard() {
               onClick={() => { setSizesOpen(true); setSizeQuery('') }}
               disabled={creating}
               className="group flex flex-col items-center gap-2 rounded-2xl border border-dashed border-white/20 bg-transparent p-4 hover:border-[#7630D7]/60 hover:bg-[#1C1E28] transition-all disabled:opacity-50"
-              aria-label="Browse all design sizes"
+              aria-label="استعراض جميع مقاسات التصميم"
             >
               <span className="h-10 w-10 rounded-xl bg-brand-gradient-soft text-[#A78BFA] flex items-center justify-center group-hover:scale-110 transition-transform">
                 <Maximize size={19} />
               </span>
-              <span className="text-[13px] font-semibold text-center leading-tight">More sizes</span>
-              <span className="text-[11px] text-white/40">60+ presets</span>
+              <span className="text-[13px] font-semibold text-center leading-tight">مقاسات أخرى</span>
+              <span className="text-[11px] text-white/40">أكثر من 60 مقاساً جاهزاً</span>
             </button>
           </div>
         </section>
@@ -606,7 +606,7 @@ export function Dashboard() {
                     : 'bg-transparent border-white/12 text-white/60 hover:border-white/30 hover:text-white'
                 )}
               >
-                <LayoutGrid size={14} /> All
+                <LayoutGrid size={14} /> الكل
               </button>
               {TEMPLATE_CATEGORIES.map((c) => {
                 const Icon = CATEGORY_ICONS[c.id] ?? LayoutGrid
@@ -653,7 +653,7 @@ export function Dashboard() {
                         onClick={(e) => { e.stopPropagation(); setCsvTarget(t); setCsvText('') }}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setCsvTarget(t); setCsvText('') } }}
                         className="absolute top-2 left-2 h-7 px-2 rounded-full bg-[#02C0CC] text-[#083344] text-[10px] font-bold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                        title="Bulk-fill with CSV"
+                        title="إنشاء تصاميم متعددة من ملف CSV"
                       >
                         <FileSpreadsheet size={12} /> CSV
                       </span>
@@ -669,16 +669,16 @@ export function Dashboard() {
 
         {/* ── Brand kit ── */}
         <section id="cv-brand" className="pt-12 scroll-mt-20">
-          <h2 className="text-xl font-bold">Brand kit</h2>
+          <h2 className="text-xl font-bold">هوية العلامة التجارية</h2>
           <div className="mt-4 rounded-2xl border border-white/10 bg-[#16171D] p-5 flex flex-col sm:flex-row items-center gap-6">
             <div className="flex gap-2">
               {(['#7630D7', '#02C0CC', '#FF5C8A', '#1F142E', '#FFD166'] as const).map((c) => (
-                <span key={c} className="h-10 w-10 rounded-xl border border-white/15" style={{ background: c }} aria-label={`Brand color ${c}`} />
+                <span key={c} className="h-10 w-10 rounded-xl border border-white/15" style={{ background: c }} aria-label={`لون الهوية ${c}`} />
               ))}
             </div>
             <div className="flex-1 text-center sm:text-left">
-              <div className="text-sm font-semibold">Set your brand colors &amp; fonts in the editor</div>
-              <div className="text-xs text-white/40 mt-0.5">Open any design → Brand tab. Saved locally, applied anywhere.</div>
+              <div className="text-sm font-semibold">اضبط ألوان الهوية وخطوطها من المحرر</div>
+              <div className="text-xs text-white/40 mt-0.5">افتح أي تصميم ← تبويب الهوية. تُحفظ محلياً وتُطبّق في أي تصميم.</div>
             </div>
             <Button
               variant="outline"
@@ -686,7 +686,7 @@ export function Dashboard() {
               onClick={() => {
                 const first = filteredDesigns[0] ?? null
                 if (first) void openDesign(first.id)
-                else toast({ title: 'Open a design first, then click the Brand tab' })
+                else toast({ title: 'افتح تصميماً أولاً، ثم اختر تبويب الهوية' })
               }}
             >
               Open editor
@@ -702,7 +702,7 @@ export function Dashboard() {
           <section className="mt-6 rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 flex items-start gap-3">
             <AlertTriangle className="size-5 text-amber-300 shrink-0 mt-0.5" />
             <div className="text-sm">
-              <p className="font-semibold text-amber-200">Database needs attention</p>
+              <p className="font-semibold text-amber-200">تحتاج قاعدة البيانات إلى معالجة</p>
               <p className="text-white/70 mt-1">
                 Designs and templates can’t be saved until the database is set up on this host.
                 Run <code className="rounded bg-black/40 px-1.5 py-0.5 text-amber-200">npm run db:setup</code> in the project
@@ -720,11 +720,11 @@ export function Dashboard() {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <h2 className="text-xl font-bold">
               {activeFolder
-                ? (folders ?? []).find((f) => f.id === activeFolder)?.name ?? 'Folder'
-                : 'Recent designs'}
+                ? (folders ?? []).find((f) => f.id === activeFolder)?.name ?? 'مجلد'
+                : 'التصاميم الأخيرة'}
             </h2>
             {/* v0.4: canva-style sort control */}
-            <div className="flex items-center gap-1 rounded-full border border-white/10 p-0.5" role="group" aria-label="Sort designs">
+            <div className="flex items-center gap-1 rounded-full border border-white/10 p-0.5" role="group" aria-label="ترتيب التصاميم">
               {(['recent', 'name'] as const).map((mode) => (
                 <button
                   key={mode}
@@ -735,14 +735,14 @@ export function Dashboard() {
                   )}
                   aria-pressed={sort === mode}
                 >
-                  {mode === 'recent' ? 'Recent' : 'Name'}
+                  {mode === 'recent' ? 'الأحدث' : 'الاسم'}
                 </button>
               ))}
             </div>
           </div>
 
           {/* v0.14 (D6): folder chips — All designs + the caller's folders. */}
-          <div className="mt-3 flex items-center gap-2 flex-wrap" role="group" aria-label="Design folders">
+          <div className="mt-3 flex items-center gap-2 flex-wrap" role="group" aria-label="مجلدات التصاميم">
             <button
               onClick={() => setActiveFolder(null)}
               className={cn(
@@ -753,7 +753,7 @@ export function Dashboard() {
               )}
               aria-pressed={activeFolder === null}
             >
-              <LayoutGrid size={14} /> All designs
+              <LayoutGrid size={14} /> الكل designs
             </button>
             {(folders ?? []).map((f) => (
               <span
@@ -787,10 +787,10 @@ export function Dashboard() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-40 bg-[#16181D] border-white/10 text-white">
                     <DropdownMenuItem onClick={() => openRenameFolder(f.id, f.name)}>
-                      <Pencil size={14} className="mr-2" /> Rename
+                      <Pencil size={14} className="mr-2" /> إعادة تسمية
                     </DropdownMenuItem>
                     <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => void doDeleteFolder(f.id, f.name)}>
-                      <Trash2 size={14} className="mr-2" /> Delete folder
+                      <Trash2 size={14} className="mr-2" /> حذف المجلد
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -799,9 +799,9 @@ export function Dashboard() {
             <button
               onClick={openCreateFolder}
               className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium border border-dashed border-white/20 text-white/50 hover:border-white/40 hover:text-white transition-colors"
-              aria-label="New folder"
+              aria-label="مجلد جديد"
             >
-              <FolderPlus size={14} /> New folder
+              <FolderPlus size={14} /> مجلد جديد
             </button>
           </div>
           {loading ? (
@@ -819,11 +819,11 @@ export function Dashboard() {
               <div className="mx-auto h-14 w-14 rounded-2xl bg-brand-gradient-soft flex items-center justify-center text-[#A78BFA]">
                 {activeFolder ? <Folder size={24} /> : <Plus size={24} />}
               </div>
-              <p className="mt-4 font-semibold">{activeFolder ? 'This folder is empty' : 'No designs yet'}</p>
+              <p className="mt-4 font-semibold">{activeFolder ? 'هذا المجلد فارغ' : 'لا توجد تصاميم بعد'}</p>
               <p className="mt-1 text-sm text-white/45">
                 {activeFolder
-                  ? 'Open a design’s ⋯ menu and “Move to folder”, or create something new — it lands here.'
-                  : 'Pick a preset or template above to get started.'}
+                  ? 'افتح قائمة ⋯ للتصميم واختر «نقل إلى مجلد»، أو أنشئ تصميماً جديداً ليظهر هنا.'
+                  : 'اختر مقاساً جاهزاً أو قالباً من الأعلى للبدء.'}
               </p>
             </div>
           ) : (
@@ -857,17 +857,17 @@ export function Dashboard() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-44 bg-[#16181D] border-white/10 text-white">
                         <DropdownMenuItem onClick={() => openDesign(d.id)}>
-                          <Pencil size={14} className="mr-2" /> Open
+                          <Pencil size={14} className="mr-2" /> فتح
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => { setRenameTarget({ id: d.id, name: d.name }); setRenameValue(d.name) }}>
-                          <Pencil size={14} className="mr-2" /> Rename
+                          <Pencil size={14} className="mr-2" /> إعادة تسمية
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => void doDuplicate(d)}>
-                          <Copy size={14} className="mr-2" /> Duplicate
+                          <Copy size={14} className="mr-2" /> إنشاء نسخة
                         </DropdownMenuItem>
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger className="gap-2">
-                            <Folder size={14} /> Move to folder
+                            <Folder size={14} /> نقل إلى مجلد
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent className="w-44 bg-[#16181D] border-white/10 text-white">
                             {(folders ?? []).length === 0 ? (
@@ -894,14 +894,14 @@ export function Dashboard() {
                               <>
                                 <DropdownMenuSeparator className="bg-white/10" />
                                 <DropdownMenuItem onClick={() => void doMoveDesign(d.id, null, d.name)}>
-                                  <FolderMinus size={14} className="mr-2" /> Remove from folder
+                                  <FolderMinus size={14} className="mr-2" /> إزالة من المجلد
                                 </DropdownMenuItem>
                               </>
                             )}
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
                         <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => setDeleteTarget(d.id)}>
-                          <Trash2 size={14} className="mr-2" /> Delete
+                          <Trash2 size={14} className="mr-2" /> حذف
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -931,7 +931,7 @@ export function Dashboard() {
             aria-controls="trash-list"
           >
             <ChevronDown size={18} className={cn('text-white/50 transition-transform', trashOpen ? '' : '-rotate-90')} />
-            <h2 className="text-xl font-bold group-hover:text-[#A78BFA] transition-colors">Trash</h2>
+            <h2 className="text-xl font-bold group-hover:text-[#A78BFA] transition-colors">سلة المحذوفات</h2>
             {trash !== null && (
               <span className="text-xs text-white/40 font-medium">· {trash.length} item{trash.length === 1 ? '' : 's'}</span>
             )}
@@ -982,7 +982,7 @@ export function Dashboard() {
                             className="h-7 w-7 rounded-lg text-white/60 hover:bg-white/10 hover:text-white"
                             onClick={() => void doRestore(d.id, d.name)}
                             aria-label={`Restore ${d.name}`}
-                            title="Restore"
+                            title="استعادة"
                           >
                             <RotateCcw size={14} />
                           </Button>
@@ -992,7 +992,7 @@ export function Dashboard() {
                             className="h-7 w-7 rounded-lg text-white/60 hover:bg-red-500/15 hover:text-red-400"
                             onClick={() => void doDeleteForever(d.id, d.name)}
                             aria-label={`Delete ${d.name} forever`}
-                            title="Delete forever"
+                            title="حذف نهائي"
                           >
                             <Trash2 size={14} />
                           </Button>
@@ -1012,7 +1012,7 @@ export function Dashboard() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-white/40">
           <div className="flex items-center gap-2.5">
             <Logo size={20} />
-            <span>© 2026 · MIT License</span>
+            <span>© 2026 · رخصة MIT</span>
           </div>
           <a
             href="https://github.com/TEaG3/eng-salman"
@@ -1030,8 +1030,8 @@ export function Dashboard() {
       <button
         onClick={() => setHelpOpen(true)}
         className="fixed bottom-5 right-5 z-50 h-12 w-12 rounded-full bg-[#7630D7] hover:bg-[#8B5CF6] text-white flex items-center justify-center shadow-xl shadow-[#7630D7]/40 transition-colors"
-        aria-label="Get help"
-        title="Get help"
+        aria-label="الحصول على المساعدة"
+        title="الحصول على المساعدة"
       >
         <CircleHelp size={22} />
       </button>
@@ -1041,13 +1041,13 @@ export function Dashboard() {
         <DialogContent className="rounded-[28px] sm:max-w-md bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <CircleHelp size={18} className="text-[#02C0CC]" /> Help &amp; shortcuts
+              <CircleHelp size={18} className="text-[#02C0CC]" /> المساعدة والاختصارات
             </DialogTitle>
-            <DialogDescription className="text-white/55">Everything you need to design faster.</DialogDescription>
+            <DialogDescription className="text-white/55">كل ما تحتاجه لتصميم أسرع.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 max-h-[60vh] overflow-y-auto cv-scroll-dark">
             <div>
-              <div className="text-[12px] font-bold text-white/85 mb-2 uppercase tracking-wide">Editor shortcuts</div>
+              <div className="text-[12px] font-bold text-white/85 mb-2 uppercase tracking-wide">اختصارات المحرر</div>
               <div className="space-y-1.5">
                 {[
                   ['Ctrl+Z / Ctrl+Shift+Z', 'Undo / redo'],
@@ -1073,15 +1073,15 @@ export function Dashboard() {
               </div>
             </div>
             <div>
-              <div className="text-[12px] font-bold text-white/85 mb-2 uppercase tracking-wide">Where things live</div>
+              <div className="text-[12px] font-bold text-white/85 mb-2 uppercase tracking-wide">دليل أقسام المحرر</div>
               <ul className="text-[12px] text-white/70 space-y-1.5 leading-relaxed">
-                <li>· <b className="text-white/90">Templates / Elements / Text</b> — left rail in the editor</li>
-                <li>· <b className="text-white/90">الهوية</b> — colors, palettes, fonts &amp; logos (saved locally)</li>
-                <li>· <b className="text-white/90">Apps</b> — charts, QR codes, icons, palettes &amp; placeholder text</li>
-                <li>· <b className="text-white/90">Uploads</b> — drop images onto the canvas anytime</li>
-                <li>· <b className="text-white/90">Layers</b> — rename (double-click), reorder, lock &amp; hide</li>
-                <li>· <b className="text-white/90">File menu</b> — rulers, version history &amp; downloads</li>
-                <li>· <b className="text-white/90">Crop</b> — select an image → Crop button or right-click</li>
+                <li>· <b className="text-white/90">القوالب / العناصر / النص</b> — الشريط الجانبي في المحرر</li>
+                <li>· <b className="text-white/90">الهوية</b> — الألوان ولوحات الألوان والخطوط والشعارات (تُحفظ محلياً)</li>
+                <li>· <b className="text-white/90">التطبيقات</b> — المخططات ورموز QR والأيقونات ولوحات الألوان والنصوص التجريبية</li>
+                <li>· <b className="text-white/90">الملفات المرفوعة</b> — أضف الصور إلى مساحة العمل في أي وقت</li>
+                <li>· <b className="text-white/90">الطبقات</b> — إعادة التسمية (بالنقر المزدوج) والترتيب والقفل والإخفاء</li>
+                <li>· <b className="text-white/90">قائمة ملف</b> — المساطر وسجل الإصدارات والتنزيلات</li>
+                <li>· <b className="text-white/90">القص</b> — حدّد صورة ثم اختر زر القص أو انقر بزر الفأرة الأيمن</li>
               </ul>
             </div>
             <a
@@ -1090,7 +1090,7 @@ export function Dashboard() {
               rel="noreferrer"
               className="flex items-center gap-2 text-[12px] text-[#02C0CC] hover:underline"
             >
-              <Github size={13} /> Still stuck? Ask in GitHub discussions
+              <Github size={13} /> هل تحتاج إلى مساعدة إضافية؟ اطرح سؤالك في نقاشات GitHub
             </a>
           </div>
         </DialogContent>
@@ -1100,28 +1100,28 @@ export function Dashboard() {
       <Dialog open={customOpen} onOpenChange={setCustomOpen}>
         <DialogContent className="rounded-[28px] sm:max-w-sm bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle>Create a custom design</DialogTitle>
-            <DialogDescription className="text-white/55">Pick any pixel size — you can resize later.</DialogDescription>
+            <DialogTitle>إنشاء تصميم بمقاس مخصص</DialogTitle>
+            <DialogDescription className="text-white/55">اختر أي مقاس بالبكسل، ويمكنك تغييره لاحقاً.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-sm font-medium" htmlFor="custom-w">Width (px)</label>
+              <label className="text-sm font-medium" htmlFor="custom-w">العرض (بكسل)</label>
               <Input id="custom-w" type="number" min={40} max={8000} value={customW} onChange={(e) => setCustomW(e.target.value)} className="mt-1 bg-white/[0.06] border-white/10 text-white [color-scheme:dark]" />
             </div>
             <div>
-              <label className="text-sm font-medium" htmlFor="custom-h">Height (px)</label>
+              <label className="text-sm font-medium" htmlFor="custom-h">الارتفاع (بكسل)</label>
               <Input id="custom-h" type="number" min={40} max={8000} value={customH} onChange={(e) => setCustomH(e.target.value)} className="mt-1 bg-white/[0.06] border-white/10 text-white [color-scheme:dark]" />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setCustomOpen(false)}>Cancel</Button>
+            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setCustomOpen(false)}>إلغاء</Button>
             <Button
               className="btn-cv"
               onClick={() => {
                 const w = parseInt(customW, 10)
                 const h = parseInt(customH, 10)
                 if (!Number.isFinite(w) || !Number.isFinite(h) || w < 40 || h < 40 || w > 8000 || h > 8000) {
-                  toast({ title: 'Size must be between 40 and 8000 px', variant: 'destructive' })
+                  toast({ title: 'يجب أن يكون المقاس بين 40 و8000 بكسل', variant: 'destructive' })
                   return
                 }
                 setCustomOpen(false)
@@ -1288,7 +1288,7 @@ export function Dashboard() {
           </DialogHeader>
           <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus onKeyDown={(e) => e.key === 'Enter' && doRename()} className="bg-white/[0.06] border-white/10 text-white" />
           <DialogFooter>
-            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setRenameTarget(null)}>Cancel</Button>
+            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setRenameTarget(null)}>إلغاء</Button>
             <Button className="btn-cv" onClick={doRename}>Save</Button>
           </DialogFooter>
         </DialogContent>
@@ -1304,7 +1304,7 @@ export function Dashboard() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setDeleteTarget(null)}>إلغاء</Button>
             <Button variant="destructive" onClick={() => deleteTarget && doDelete(deleteTarget)}>Move to Trash</Button>
           </DialogFooter>
         </DialogContent>
@@ -1332,7 +1332,7 @@ export function Dashboard() {
             aria-label="Folder name"
           />
           <DialogFooter>
-            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setFolderDialog(null)}>Cancel</Button>
+            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setFolderDialog(null)}>إلغاء</Button>
             <Button className="btn-cv" onClick={() => void doFolderSubmit()}>
               {folderDialog?.mode === 'rename' ? 'Save' : 'Create'}
             </Button>

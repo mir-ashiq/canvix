@@ -43,7 +43,7 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
   const applyInPlace = (w: number, h: number) => {
     resizeDesign(w, h)
-    toast({ title: `Magic-resized to ${w}×${h}`, description: 'Elements re-laid-out to fit the new canvas.' })
+    toast({ title: `تم تغيير المقاس إلى ${w}×${h}`, description: 'أُعيد ترتيب العناصر لتناسب مساحة التصميم الجديدة.' })
     onOpenChange(false)
   }
 
@@ -51,7 +51,7 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     const w = parseInt(custom.w, 10)
     const h = parseInt(custom.h, 10)
     if (!w || !h || w < 50 || h < 50 || w > 8000 || h > 8000) {
-      toast({ title: 'Enter a size between 50 and 8000 px', variant: 'destructive' })
+      toast({ title: 'أدخل مقاساً بين 50 و8000 بكسل', variant: 'destructive' })
       return
     }
     applyInPlace(w, h)
@@ -94,7 +94,7 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       <DialogContent className="rounded-[28px] bg-[#16181D] border-white/10 text-white sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-lg font-bold flex items-center gap-2">
-            <Wand2 size={17} className="text-[#02C0CC]" /> Magic Resize
+            <Wand2 size={17} className="text-[#02C0CC]" /> تغيير الحجم السحري
           </DialogTitle>
           <DialogDescription className="text-white/60">
             Resize this design for every channel. Pick sizes, then copy & resize — your elements are
@@ -154,7 +154,7 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                 value={custom.w}
                 onChange={(e) => setCustom((c) => ({ ...c, w: e.target.value }))}
                 className="bg-white/5 border-white/10 text-white h-10 [color-scheme:dark]"
-                aria-label="Custom width"
+                aria-label="العرض المخصص"
               />
               <span className="text-white/40">×</span>
               <Input
@@ -163,7 +163,7 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                 value={custom.h}
                 onChange={(e) => setCustom((c) => ({ ...c, h: e.target.value }))}
                 className="bg-white/5 border-white/10 text-white h-10 [color-scheme:dark]"
-                aria-label="Custom height"
+                aria-label="الارتفاع المخصص"
               />
               <Button className="btn-cv h-10 px-4 shrink-0" onClick={applyCustom}>
                 Resize
@@ -179,9 +179,9 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             className="h-11 flex-1 rounded-xl border-white/15 bg-white/5 hover:bg-white/10 hover:text-white"
             disabled={selected.length !== 1}
             onClick={() => applyInPlace(selected[0].w, selected[0].h)}
-            title={selected.length === 1 ? `Resize this design to ${selected[0].w}×${selected[0].h}` : 'Check exactly one size to resize in place'}
+            title={selected.length === 1 ? `تغيير مقاس التصميم إلى ${selected[0].w}×${selected[0].h}` : 'اختر مقاساً واحداً فقط لتغيير المقاس مباشرة'}
           >
-            <Square size={15} className="mr-1.5" /> Resize in place
+            <Square size={15} className="mr-1.5" /> تغيير المقاس مباشرة
           </Button>
           <Button
             className="btn-cv h-11 flex-1 rounded-xl"

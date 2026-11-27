@@ -455,10 +455,10 @@ export function BrandPanel() {
       </div>
 
       <div className="mt-6 rounded-xl border border-dashed border-white/15 p-4 text-center">
-        <div className="text-white/70 text-sm font-semibold">Brand kit preview</div>
+        <div className="text-white/70 text-sm font-semibold">معاينة الهوية البصرية</div>
         <div className="mt-2 rounded-lg p-3" style={{ background: local.colors[0], color: '#fff' }}>
-          <div style={{ fontFamily: local.headingFont, fontWeight: 800, fontSize: 20, lineHeight: 1.1 }}>Aa Your brand heading</div>
-          <div style={{ fontFamily: local.bodyFont, fontSize: 12, marginTop: 6, opacity: 0.85 }}>Body text in your brand voice — consistent everywhere.</div>
+          <div style={{ fontFamily: local.headingFont, fontWeight: 800, fontSize: 20, lineHeight: 1.1 }}>Aa عنوان علامتك التجارية</div>
+          <div style={{ fontFamily: local.bodyFont, fontSize: 12, marginTop: 6, opacity: 0.85 }}>نص أساسي بأسلوب علامتك التجارية — متناسق في جميع المواضع.</div>
         </div>
       </div>
 

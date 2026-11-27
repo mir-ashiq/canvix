@@ -105,4 +105,4 @@ fi
 echo "  [3/3] seeding the template library…"
 npx tsx prisma/seed.ts || exit 1
 
-echo "── done. Your database is ready: 110 templates, all free. ──"
+echo "── done. Your database is ready: 366 templates, all free. ──"

@@ -44,7 +44,7 @@ export function Logo({ className, size = 32 }: { className?: string; size?: numb
           color: 'transparent',
         }}
       >
-        canvix
+        TEa.G3
       </span>
     </span>
   )

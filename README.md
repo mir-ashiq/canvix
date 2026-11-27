@@ -23,12 +23,21 @@
 
 ## ✨ What is TEa.G3?
 
-TEa.G3 is a browser-based design tool that lets anyone create social media posts,
+TEa.G3 is an Arabic-first, installable Web App for creating social media posts,
 presentations, posters, logos and thumbnails — with a drag-and-drop editor, a
-366-template library and one-click export. It runs entirely on your own infrastructure, stores designs
-in your own database, and exports files locally in your browser. Free accounts
-keep your designs yours; anonymous link-editing keeps working too. No
-watermarks, no paywalls.
+366-template library and one-click export. It runs in the browser, stores designs
+in the configured database, and exports files locally in your browser. The current
+public release is account-free: no sign-up, no login and no account requirement.
+Anonymous designs are associated with the creating browser and can be shared by link.
+No watermarks, no paywalls.
+
+## الوضع الحالي للنسخة العامة
+
+- **دون حسابات أو تسجيل دخول:** واجهتا الدخول والتسجيل معطلتان، كما أن واجهات API الخاصة بهما ترفض الطلبات افتراضياً.
+- **ابدأ مباشرة:** يمكن إنشاء التصاميم وتعديلها وتصديرها دون حساب.
+- **حفظ ومشاركة:** تُحفظ التصاميم في قاعدة بيانات النشر وتُنسب إلى متصفح منشئها؛ ويمكن فتح التصميم ومشاركته عبر رابطه.
+- **تطبيق ويب قابل للتثبيت:** يتضمن TEa.G3 manifest وService Worker وواجهة مستقلة مع صفحة احتياطية عند انقطاع الاتصال.
+- يمكن تفعيل الحسابات مؤقتاً لبيئات الاختبار الخاصة فقط عبر `TEAG3_ACCOUNTS_ENABLED=true`؛ لا تضبط هذا المتغير في النشر العام الحالي.
 
 ## 🆓 Free forever — the promise
 
@@ -41,8 +50,7 @@ is a design tool that never asks you for a credit card:
 - All **exports** (PNG, JPG, WebP, SVG, PDF, PPTX, video, GIF) are free and unwatermarked
 - All **AI features** (magic edit, magic write, background removal, translate)
   run against your own API keys, so there is nothing for us to meter
-- **Accounts are free** — username + password, no email, no verification,
-  no external provider; a self-hoster runs the whole thing for $0
+- **No account required** — the public release opens directly in anonymous mode; no username, password, email or sign-in.
 - **Self-hosting** is first-class: your server, your database, your rules
 - The license is **MIT** — you can even fork it and build a business on it
 

@@ -158,6 +158,18 @@ test.describe('Rich text (v0.15 R1)', () => {
     await expect(editor).toBeVisible({ timeout: 10_000 })
     await expect(editor).toHaveValue('Hello rich world')
 
+    // Native Arabic spellcheck is enabled by default and the toolbar
+    // toggle changes the live textarea setting without ending the edit.
+    const spellCheckToggle = page.getByTestId('editor-spellcheck-toggle')
+    await expect(spellCheckToggle).toHaveAttribute('aria-pressed', 'true')
+    await expect(editor).toHaveAttribute('spellcheck', 'true')
+    await spellCheckToggle.click()
+    await expect(spellCheckToggle).toHaveAttribute('aria-pressed', 'false')
+    await expect(editor).toHaveAttribute('spellcheck', 'false')
+    await spellCheckToggle.click()
+    await expect(spellCheckToggle).toHaveAttribute('aria-pressed', 'true')
+    await expect(editor).toHaveAttribute('spellcheck', 'true')
+
     // ── select the first word (Home, then Shift+Right ×5) ──
     await editor.press('Home')
     for (let i = 0; i < 5; i++) await editor.press('Shift+ArrowRight')

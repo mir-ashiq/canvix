@@ -438,7 +438,7 @@ export function BrandPanel() {
           aria-label="Upload logo"
         >
           <Plus size={16} />
-          <span className="text-[9px] mt-1">Logo</span>
+          <span className="text-[9px] mt-1">الشعار</span>
         </button>
         <input
           ref={logoInputRef}

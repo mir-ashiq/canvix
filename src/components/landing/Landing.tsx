@@ -29,7 +29,6 @@ import {
 import { useAppStore } from '@/store/app-store'
 import { Logo } from '@/components/logo'
 import { Button } from '@/components/ui/button'
-import { useAuth } from '@/lib/auth/client'
 
 // ── Editor mockup (pure CSS, zero assets) ────────────────────
 
@@ -172,7 +171,7 @@ const FAQ = [
   },
   {
     q: 'هل أحتاج إلى حساب؟',
-    a: 'لا. يمكنك فتح المحرر والبدء بالتصميم فوراً. الحسابات مجانية واختيارية، وتساعدك على حفظ تصاميمك ومزامنتها بين أجهزتك.',
+    a: 'لا يوجد تسجيل دخول أو إنشاء حسابات حالياً. افتح TEa.G3 وابدأ التصميم مباشرة؛ تُحفظ أعمالك في هذا المتصفح ويمكنك مشاركة التصميم عبر رابطه.' ,
   },
   {
     q: 'كيف يعمل الذكاء الاصطناعي مع الحفاظ على خصوصيتي؟',
@@ -180,7 +179,7 @@ const FAQ = [
   },
   {
     q: 'هل يمكن لوكلاء الذكاء الاصطناعي استخدام TEa.G3؟',
-    a: 'نعم، يتضمن TEa.G3 خادماً لبروتوكول MCP. يمكنك ربط Claude أو Cursor أو أي عميل MCP بحسابك لإدارة تصاميمك.',
+    a: 'نعم، يتضمن TEa.G3 خادماً لبروتوكول MCP لربط أدوات الذكاء الاصطناعي المتوافقة وإدارة التصاميم وفق إعدادات الخادم.',
   },
   {
     q: 'ما صيغ التصدير المتاحة؟',
@@ -211,7 +210,6 @@ function FaqItem({ q, a, defaultOpen = false }: { q: string; a: string; defaultO
 
 export function Landing() {
   const goDashboard = useAppStore((s) => s.goDashboard)
-  const { user } = useAuth()
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -234,13 +232,8 @@ export function Landing() {
                 <Github size={16} /> <span className="hidden sm:inline">GitHub</span>
               </Button>
             </a>
-            {user && (
-              <span className="hidden sm:inline text-xs font-medium text-muted-foreground">
-                @{user.username}
-              </span>
-            )}
             <Button size="sm" className="btn-brand-gradient rounded-full px-4" onClick={goDashboard}>
-              {user ? 'العودة إلى تصاميمك' : 'ابدأ التصميم'}
+              ابدأ التصميم
             </Button>
           </div>
         </nav>
@@ -255,10 +248,10 @@ export function Landing() {
           <div className="absolute -bottom-40 -left-32 h-96 w-96 rounded-full blur-3xl opacity-20 bg-[#00C4CC] animate-float" style={{ animationDelay: '2s' }} aria-hidden="true" />
           <div className="relative mx-auto max-w-7xl px-4 sm:px-6 pt-16 pb-20 sm:pt-24 sm:pb-28 text-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-1.5 text-xs font-semibold text-[#7D2AE8] shadow-sm animate-fade-up">
-              <Sparkles size={14} /> Free forever · No account needed · MIT licensed · Self-hostable
+              <Sparkles size={14} /> مجاني · دون تسجيل دخول · مفتوح المصدر · قابل للاستضافة الذاتية
             </div>
             <h1 className="mt-6 text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.05] animate-fade-up delay-100">
-              Design anything.
+              صمّم ما تتخيّله.
               <br />
               <span className="text-brand-gradient">مجاني للجميع.</span>
             </h1>

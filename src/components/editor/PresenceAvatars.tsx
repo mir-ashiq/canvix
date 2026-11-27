@@ -86,13 +86,13 @@ export function PresenceAvatars() {
           </button>
         </PopoverTrigger>
         <PopoverContent align="end" className="w-64 rounded-2xl bg-[#16181D] border-white/10 text-white p-3">
-          <div className="text-xs font-semibold text-white/60 mb-2">In this design</div>
+          <div className="text-xs font-semibold text-white/60 mb-2">في هذا التصميم</div>
           <div className="space-y-1.5">
             <div className="flex items-center gap-2.5 rounded-lg bg-white/[0.06] p-2">
               <AvatarChip name={initials(me.name)} color={me.color} title={me.name} size={30} />
               <div className="min-w-0 flex-1">
                 <div className="text-[13px] font-semibold truncate">{me.name} (you)</div>
-                <div className="text-[11px] text-white/45">Editing</div>
+                <div className="text-[11px] text-white/45">يحرّر الآن</div>
               </div>
             </div>
             {collaborators.map((c) => (

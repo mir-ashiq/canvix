@@ -107,6 +107,11 @@ export const GRAPHICS: GraphicDef[] = [
     path: 'M50 88 C22 66 4 48 4 28 C4 12 17 2 31 2 C40 2 47 7 50 13 C53 7 60 2 69 2 C83 2 96 12 96 28 C96 48 78 66 50 88 Z',
   },
   {
+    id: 'star',
+    name: 'Star',
+    path: 'M50 2 L62 34 L96 35 L69 56 L78 90 L50 70 L22 90 L31 56 L4 35 L38 34 Z',
+  },
+  {
     id: 'burst',
     name: 'Starburst',
     path: 'M50 0 L58 14 L74 8 L76 26 L92 30 L84 44 L96 54 L82 64 L88 80 L70 78 L64 94 L50 84 L36 94 L30 78 L12 80 L18 64 L4 54 L16 44 L8 30 L24 26 L26 8 L42 14 Z',

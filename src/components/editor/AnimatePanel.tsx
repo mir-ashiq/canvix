@@ -90,7 +90,7 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 pt-4 pb-3 shrink-0">
         <h2 className="font-bold text-sm text-white flex items-center gap-2">
-          <Zap size={15} className="text-[#02C0CC]" /> Animate
+          <Zap size={15} className="text-[#02C0CC]" /> التحريك
         </h2>
         <Button
           variant="ghost"
@@ -235,7 +235,7 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                   {/* Sound wave: transition SFX — the 16 offline pack sounds,
                       auditioned inline, stored on the transition config */}
                   <SfxPicker
-                    label="Transition sound"
+                    label="صوت الانتقال"
                     value={pageTransition.sfxId}
                     onChange={(sfxId) => setPageTransition({ ...pageTransition, ...(sfxId ? { sfxId } : { sfxId: undefined }) })}
                   />
@@ -250,16 +250,16 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                 className="flex-1 btn-brand-gradient gap-1.5"
                 onClick={() => setPreviewOpen(true)}
               >
-                <Play size={12} /> Preview animations
+                <Play size={12} /> معاينة الحركات
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
                 className="text-white/70 hover:bg-white/10 hover:text-white gap-1.5"
                 onClick={() => clearPageAnimations()}
-                title="Remove all animations from this page"
+                title="إزالة جميع الحركات من هذه الصفحة"
               >
-                <RotateCcw size={12} /> Clear
+                <RotateCcw size={12} /> مسح
               </Button>
             </div>
           </div>
@@ -273,13 +273,13 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                 <Zap size={26} className="mx-auto text-white/20 mb-2" />
                 <div className="text-[13px] font-semibold text-white/60">حدد عنصراً</div>
                 <p className="text-[11px] text-white/40 mt-1">
-                  Pick one or more elements on the canvas, then choose an animation.
+                  حدد عنصراً أو أكثر على مساحة التصميم، ثم اختر الحركة.
                 </p>
               </div>
             ) : (
               <>
                 <p className="text-[11px] text-white/50">
-                  Animating {selectedIds.length} element{selectedIds.length > 1 ? 's' : ''}
+                  جارٍ تحريك {selectedIds.length} عنصر
                 </p>
 
                 <div className="grid grid-cols-3 gap-1.5">
@@ -380,7 +380,7 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                     {/* Sound wave: element animation SFX — fires when the
                         animation triggers (at its delay) in preview/present */}
                     <SfxPicker
-                      label="Entrance sound"
+                      label="صوت الظهور"
                       value={selectedAnim.sfxId}
                       onChange={(sfxId) => patchAnim({ ...(sfxId ? { sfxId } : { sfxId: undefined }) })}
                     />
@@ -448,15 +448,15 @@ function SfxPicker({ label, value, onChange }: { label: string; value: string | 
         <button
           onClick={() => value && playSfx(value, 0.8)}
           disabled={!value}
-          title={value ? 'Audition this sound' : 'Pick a sound first'}
-          aria-label={`Audition ${label}`}
+          title={value ? 'استمع إلى هذا الصوت' : 'اختر صوتاً أولاً'}
+          aria-label={`استمع إلى ${label}`}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/10 text-white/60 transition-colors hover:text-white hover:border-white/25 disabled:opacity-40"
         >
           <Volume2 size={13} />
         </button>
       </div>
       <p className="mt-1 text-[9px] leading-snug text-white/30">
-        Plays in Preview and Present. For video export, insert the sound from the Audio panel as an autoplay element instead.
+        يُشغّل الصوت في المعاينة والعرض. لتصدير الفيديو، أضف الصوت من لوحة الصوت كعنصر تشغيل تلقائي.
       </p>
     </div>
   )

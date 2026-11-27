@@ -490,7 +490,7 @@ is right here.
 
 ```bash
 git clone https://github.com/TEaG3/eng-salman.git
-cd tea-g3
+cd eng-salman
 npm install            # or: bun install
 
 # set up the database (get a connection string first — see below)

@@ -184,8 +184,8 @@ export function VideosPanel() {
           ) : results && results.length === 0 && !busy ? (
             <div className="py-10 text-center">
               <VideoOff size={24} className="mx-auto text-white/25 mb-2" />
-              <p className="text-[12.5px] text-white/50 font-medium">No stock videos matched</p>
-              <p className="text-[11.5px] text-white/35 mt-1">Try other keywords.</p>
+              <p className="text-[12.5px] text-white/50 font-medium">لم نعثر على مقاطع فيديو مطابقة</p>
+              <p className="text-[11.5px] text-white/35 mt-1">جرّب كلمات بحث أخرى.</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2.5">

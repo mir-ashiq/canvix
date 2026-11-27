@@ -413,6 +413,10 @@ async function __canvix_post(req: NextRequest) {
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         let closed = false
+        // v0.34.2: set by the abort listener below — the finally uses
+        // it so a user-stopped run finalizes as 'stopped' (never
+        // 'interrupted': recovery must not resume a deliberate stop)
+        let clientAborted = false
         const emit = (event: AgentEvent) => {
           if (closed) return
           try {
@@ -425,6 +429,24 @@ async function __canvix_post(req: NextRequest) {
         req.signal.addEventListener('abort', () => {
           const bridge = bridges.get(runId)
           if (bridge) bridge.aborted = true
+          clientAborted = true
+          // v0.34.2 · THE STOP BUTTON FIX, server side: release EVERY
+          // pending bridge waiter at once. The old flow left them
+          // dangling — a run stopped during a confirm/apply/capture
+          // window kept waiting up to its 45–120s timeouts before the
+          // loop noticed the abort at its next between-step check.
+          // Now the loop wakes within milliseconds.
+          for (const resolve of bridge?.confirms.values() ?? []) resolve(false)
+          bridge?.confirms.clear()
+          for (const ack of bridge?.acks.splice(0) ?? []) ack({ ok: false, message: 'the run was stopped' })
+          if (bridge?.briefResult) {
+            bridge.briefResult(null)
+            bridge.briefResult = null
+          }
+          if (bridge?.capture) {
+            bridge.capture(null)
+            bridge.capture = null
+          }
         })
 
         try {
@@ -603,6 +625,11 @@ async function __canvix_post(req: NextRequest) {
               },
               awaitConfirm: (tool) =>
                 new Promise<boolean>((resolve) => {
+                  // v0.34.2: a stopped run never waits on the client
+                  if (bridge.aborted || req.signal.aborted) {
+                    resolve(false)
+                    return
+                  }
                   bridge.confirms.set(tool, resolve)
                   // safety: never hang forever on a silent client
                   setTimeout(() => {
@@ -614,6 +641,11 @@ async function __canvix_post(req: NextRequest) {
                 }),
               awaitApply: () =>
                 new Promise<{ ok: boolean; message?: string }>((resolve) => {
+                  // v0.34.2: a stopped run never waits on the client
+                  if (bridge.aborted || req.signal.aborted) {
+                    resolve({ ok: false, message: 'the run was stopped — the document was not verified as changed' })
+                    return
+                  }
                   bridge.acks.push((ack) => resolve({ ok: ack.ok, message: ack.message }))
                   // v0.29.3 — FAIL CLOSED: a timed-out apply ack now
                   // resolves ok:false. The old "ack timeout — assumed
@@ -634,6 +666,11 @@ async function __canvix_post(req: NextRequest) {
               // visual verification was unavailable (never pretends).
               captureCanvas: () =>
                 new Promise<string | null>((resolve) => {
+                  // v0.34.2: a stopped run never waits on the client
+                  if (bridge.aborted || req.signal.aborted) {
+                    resolve(null)
+                    return
+                  }
                   bridge.capture = (r) => resolve(r?.image ?? null)
                   setTimeout(() => {
                     if (bridge.capture) {
@@ -663,6 +700,8 @@ async function __canvix_post(req: NextRequest) {
                   bridge.pendingBriefResult = null
                   return r
                 }
+                // v0.34.2: a stopped run never waits on the client
+                if (bridge.aborted || req.signal.aborted) return null
                 return new Promise<{ satisfied: boolean; unmet: string[] } | null>((resolve) => {
                   bridge.briefResult = resolve
                   // the client answers on the bridge; give it a generous
@@ -701,6 +740,11 @@ async function __canvix_post(req: NextRequest) {
             if (design.designId) {
               try {
                 const interrupted = loopResult === null
+                // v0.34.2: a client-aborted run finalizes as STOPPED
+                // even when the loop threw after the abort (emit to a
+                // closed stream) — 'interrupted' would make recovery
+                // resume a deliberate stop
+                const finalStatus = clientAborted ? 'stopped' : interrupted ? 'interrupted' : undefined
                 if (runRowId) {
                   await db.designAgentRun.update({
                     where: { id: runRowId },
@@ -712,7 +756,7 @@ async function __canvix_post(req: NextRequest) {
                           .map((f) => `${f.severity} ${f.issue}`)
                           .join(' | ')
                           .slice(0, 1200) || null,
-                      ...(interrupted ? { status: 'interrupted' } : {}),
+                      ...(finalStatus ? { status: finalStatus } : {}),
                     },
                   })
                 } else {

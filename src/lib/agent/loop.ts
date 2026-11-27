@@ -261,7 +261,7 @@ export function loopSystemPrompt(deps: {
     const maxSections = Math.floor((usableH + PLAN_MIN_GAP) / (PLAN_MIN_BAND + PLAN_MIN_GAP))
     lines.push(
       'LAYOUT PLANNING (required first step):',
-      `· This page fits at most ${maxSections} planned sections (safe area y ${safeTopY}–${safeBottomY}px, ${usableH}px tall: sections ≥${PLAN_MIN_BAND}px with ≥${PLAN_MIN_GAP}px gaps; oversized plans are auto-scaled to fit and the scaling disclosed).`,
+      `· This page fits at most ${maxSections} planned sections (safe area y ${safeTopY}–${safeBottomY}px, ${usableH}px tall: sections ≥${PLAN_MIN_BAND}px with ≥${PLAN_MIN_GAP}px gaps; oversized plans are auto-scaled to fit, malformed args are synthesized, floor-infeasible plans are truncated to what fits — every repair is disclosed, so send the plan you MEAN and build inside the bands you get).`,
       '· Call plan_layout FIRST with your composition: page background, sections with y-ranges, what each contains (headline band, tagline, feature cards row, mockup, CTA, footer).',
       '· Reserve a vertical band per section with ≥40px gaps so nothing stacks or crowds; the brief texts each get their section. The SERVER computes the exact y-positions — with ≥40px gaps into the safe area, and on a canvas that already has content, into the FREE space between existing elements (never on top of them).',
       '· Set the page background EARLY with set_background (a required background color belongs there, not in strips).',
@@ -596,6 +596,12 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
   while (true) {
     // ── task-driven stops ───────────────────────────────────
     if (signal?.aborted) {
+      // v0.34.2: a user-stopped run persists as STOPPED. The old
+      // early return skipped persist entirely, leaving the ledger
+      // row 'running' forever — excluded from both the run ledger
+      // (NOT status 'running') and recovery, so the applied work
+      // vanished from the design's run context.
+      persist('stopped')
       emit({ v: AGENT_PROTOCOL_VERSION, type: 'aborted', reason: signal.reason ?? 'Stopped by user' })
       return { summary: summary || 'Stopped by the user.', steps, toolCalls, verification }
     }
@@ -1097,12 +1103,14 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         planRejections += 1
         telemetry({ tool: 'plan_layout', outcome: 'rejected', attempt: planRejections, detail: String((result as { error?: string }).error ?? '').slice(0, 300) })
         if (planRejections >= AGENT_GUARDS.planRejections) {
-          // v0.32.8: with the solver scaling oversized plans, a
-          // rejection means a MALFORMED section or a floor-infeasible
-          // composition — the message points at the fixable cause,
-          // never at the user's brief.
+          // v0.34.2: with arg synthesis (missing name/y/height are
+          // synthesized + disclosed) and the truncating solver
+          // (floor-infeasible compositions are truncated + disclosed),
+          // a rejection now means the sections were unusable at all or
+          // the canvas is genuinely full — the message points at the
+          // remaining causes, never at the user's brief.
           const exit = await guardExitWithTelemetry(
-            `Stopped after ${planRejections} rejected plan_layout calls — each error above names what to fix (a missing section name, non-numeric y/height, or a composition that cannot fit even at the ${PLAN_MIN_BAND}px minimum band). Resend ONE valid plan_layout: numeric y and height per named section, at most ${Math.floor((toolCtx.height * 0.88 + PLAN_MIN_GAP) / (PLAN_MIN_BAND + PLAN_MIN_GAP))} sections on this page.`,
+            `Stopped after ${planRejections} rejected plan_layout calls — each error above names the remaining cause (sections must be an array of {name, y, height, contains} objects or plain names, or the canvas is genuinely full). Resend ONE valid plan_layout, or move/clear existing elements first.`,
             'plan-infeasible',
           )
           emit({ v: AGENT_PROTOCOL_VERSION, type: 'done', summary: exit.summary, steps, toolCalls, verification: exit.verification })

@@ -16,7 +16,7 @@
 
 import { FONTS } from '@/lib/fonts/catalog'
 import type { ToolRisk } from './protocol'
-import { repairPlanBands } from './plan-repair'
+import { PLAN_MARGIN, PLAN_MIN_BAND, solvePlanBandsTruncating } from './plan-repair'
 // v0.33 · the native asset libraries are PURE data — the SERVER
 // resolves queries against them (fail-closed at the boundary). The
 // NEON 2027 incident: unknown concepts were acked as success on the
@@ -203,27 +203,43 @@ export const AGENT_TOOLS: AgentTool[] = [
     sanitize: (args, ctx) => {
       const sectionsRaw = args.sections
       if (!Array.isArray(sectionsRaw) || sectionsRaw.length === 0) {
-        return { ok: false, error: '"sections" must be a non-empty array: [{name, y, height, contains}].' }
+        return { ok: false, error: '"sections" must be a non-empty array: [{name, y, height, contains}] — plain string names are also accepted.' }
       }
       const H = ctx.height
-      // parse the requested sections (name + numeric y/height + the
-      // model's own `contains` notes). Malformed entries are hard
-      // errors — GEOMETRY, however, is no longer the model's job.
+      // v0.34.2 · THE KASHMIR INCIDENT: a reasonable create brief died
+      // at THREE rejected plan_layout calls with ZERO elements — the
+      // model sent sections with missing names or non-numeric y/height,
+      // and a composition that could not fit even at the 56px floor.
+      // Forcing the model to re-send well-formed ARGUMENTS repeated
+      // the v0.32.4 bug (reject → retry → reject) one level up: the
+      // name is a display label, y is only an ordering hint and the
+      // SERVER computes geometry anyway — so malformed arguments are
+      // now SYNTHESIZED and disclosed, never rejected. plan_layout
+      // rejects only when there is nothing at all to plan.
+      const synth: string[] = []
+      const entries = sectionsRaw.slice(0, 12)
+      if (sectionsRaw.length > 12) synth.push(`kept the first 12 of ${sectionsRaw.length} sections (12 is the maximum)`)
+      const defaultH = Math.max(PLAN_MIN_BAND, Math.floor((H * (1 - 2 * PLAN_MARGIN)) / Math.max(1, entries.length)))
       const parsed: { name: string; y: number; h: number; contains: string }[] = []
-      for (const s of sectionsRaw.slice(0, 12)) {
-        if (!s || typeof s !== 'object') continue
-        const sec = s as Record<string, unknown>
-        const name = typeof sec.name === 'string' ? sec.name.trim().slice(0, 40) : ''
-        const y = num(sec, 'y')
-        const height = num(sec, 'height')
+      for (let i = 0; i < entries.length; i++) {
+        const s = entries[i]
+        // a bare string entry is accepted as a section NAME — models
+        // degrade to ["hero", "cta"] when the object shape escapes them
+        const sec: Record<string, unknown> =
+          s && typeof s === 'object' ? (s as Record<string, unknown>) : typeof s === 'string' ? { name: s } : {}
+        const rawName = typeof sec.name === 'string' ? sec.name.trim().slice(0, 40) : ''
+        const name = rawName || `Section ${parsed.length + 1}`
+        if (!rawName) synth.push(`section ${i + 1}: name synthesized → "${name}"`)
+        const yRaw = num(sec, 'y')
+        const y = yRaw !== null ? yRaw : i // stacking order — the solver recomputes positions anyway
+        if (yRaw === null) synth.push(`section "${name}": non-numeric/missing y → stacking order ${i}`)
+        const hRaw = num(sec, 'height')
+        const h = hRaw !== null && hRaw > 0 ? hRaw : defaultH
+        if (!(hRaw !== null && hRaw > 0)) synth.push(`section "${name}": non-numeric/missing height → ${defaultH}px equal split`)
         const contains = typeof sec.contains === 'string' ? sec.contains.trim().slice(0, 80) : ''
-        if (!name) return { ok: false, error: 'Each section needs a "name".' }
-        if (y === null || height === null || height <= 0) {
-          return { ok: false, error: `Section "${name}" needs numeric y and height (> 0).` }
-        }
-        parsed.push({ name, y, h: Math.round(height), contains })
+        parsed.push({ name, y, h: Math.round(h), contains })
       }
-      if (!parsed.length) return { ok: false, error: '"sections" contained no usable entries.' }
+      if (!parsed.length) return { ok: false, error: '"sections" contained no usable entries — send [{name, y, height, contains}] objects or plain string names.' }
 
       // v0.32.5 · THE P0 REGRESSION FIX: the v0.32.4 validator
       // rejected bad geometry and told the model to redo the gap
@@ -245,16 +261,19 @@ export const AGENT_TOOLS: AgentTool[] = [
       // the solver fits the requested sections into the FREE space
       // between them — the plan can never reserve space on top of
       // something that is already there.
-      const repair = repairPlanBands(
+      // v0.34.2 · the TRUNCATING solver: a floor-infeasible
+      // composition (more sections than the page can host) is
+      // truncated to the first fitting prefix — DISCLOSED — instead
+      // of rejected (the rejection path was the Kashmir run's death:
+      // three honest errors, zero elements). Only a canvas where
+      // even ONE section cannot fit stays infeasible.
+      const repair = solvePlanBandsTruncating(
         parsed.map((p) => ({ name: p.name, y: p.y, h: p.h })),
         H,
         { occupied: ctx.occupied },
       )
       if (!repair.ok) {
-        return {
-          ok: false,
-          error: `${repair.infeasible} Resend plan_layout with smaller section heights (keep the names and order).`,
-        }
+        return { ok: false, error: repair.infeasible }
       }
 
       // the plan lines are the REPAIRED geometry — the authoritative
@@ -286,7 +305,16 @@ export const AGENT_TOOLS: AgentTool[] = [
       const repairedNote = repair.repairs.length
         ? `PLAN AUTO-REPAIRED (your heights, order and contents were kept; the SERVER computed valid positions): ${repair.repairs.join('; ')}. Build inside these exact bands — do not recompute them.`
         : 'Bands verified: non-overlapping, ≥40px gaps, inside the safe area. Build inside these exact bands.'
-      const observation = `${mapNote}PLAN RECORDED (${lines.length} lines):\n${lines.join('\n')}\n${repairedNote}`
+      // v0.34.2 · disclosure of what the server synthesized (missing
+      // names / y / heights) and what it dropped (floor-infeasible
+      // compositions truncated to the first fitting prefix)
+      const synthNote = synth.length
+        ? `\nARGS SYNTHESIZED (your intent was kept; the server filled the missing fields — match the spec next time): ${synth.join('; ')}.`
+        : ''
+      const truncNote = repair.truncated
+        ? `\nPLAN TRUNCATED: ${repair.truncated.from} → ${repair.truncated.to} sections (the page cannot host ${repair.truncated.from} at the ${PLAN_MIN_BAND}px minimum band). Merge the dropped sections' content into the kept sections — do NOT re-send the dropped sections.`
+        : ''
+      const observation = `${mapNote}PLAN RECORDED (${lines.length} lines):\n${lines.join('\n')}${synthNote}${truncNote}\n${repairedNote}`
       return {
         ok: true,
         actions: [{ type: '__planLayout', lines, bands: repair.bands }],

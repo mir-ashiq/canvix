@@ -70,6 +70,36 @@ export interface PlanRepairInfeasible {
 
 export type PlanRepairResult = PlanRepairOk | PlanRepairInfeasible
 
+/** v0.34.2 · the truncating wrapper — plan_layout never gives up.
+ *
+ * The Kashmir incident: a reasonable travel-ad brief died at THREE
+ * rejected plan_layout calls with ZERO elements because the model
+ * sent more sections than the page can host at the PLAN_MIN_BAND
+ * floor. Scaling cannot rescue a floor-infeasible composition —
+ * but DROPPING trailing sections can: fewer sections at the same
+ * floor always fits (order and contents kept, the drop DISCLOSED).
+ * Run death is strictly worse than a truncated-but-disclosed plan.
+ *
+ * Returns the first fitting prefix; only a request where even ONE
+ * section cannot fit stays infeasible (that canvas is genuinely
+ * full — the honest reject nobody can truncate their way out of).
+ */
+export function solvePlanBandsTruncating(
+  requested: PlanSection[],
+  H: number,
+  opts?: { minGap?: number; margin?: number; occupied?: OccupiedBand[] },
+): PlanRepairResult & { truncated?: { from: number; to: number } } {
+  let last = repairPlanBands(requested, H, opts)
+  if (last.ok || requested.length <= 1) return last
+  for (let keep = requested.length - 1; keep >= 1; keep--) {
+    last = repairPlanBands(requested.slice(0, keep), H, opts)
+    if (last.ok) {
+      return { ...last, truncated: { from: requested.length, to: keep } }
+    }
+  }
+  return last
+}
+
 export const PLAN_MIN_GAP = 40
 export const PLAN_MARGIN = 0.06
 /** v0.32.8 · the smallest band the solver will ever produce. Below

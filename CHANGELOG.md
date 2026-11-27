@@ -3,7 +3,53 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-<<<<<<< HEAD
+### feat(v0.34.2): AUTO-DELETE (optional), the plan that never dies, the Stop button that finally stops
+
+Two production reports from the same day, three fixes at the cause:
+
+- **AUTO-DELETE (optional, default OFF).** A toggle in the Canvix AI
+  composer pre-approves the destructive tools (`delete_elements`,
+  `clear_page`, `delete_page`) for the whole run: no approval dialog,
+  server-side `awaitConfirm` skipped via `body.confirmed` — and a
+  mid-run flip auto-answers any gate that still asks. Off by default,
+  persisted per browser; Undo agent work and version history remain
+  the safety net. Fixes along the way: the SECOND destructive call of
+  an approved tool used to wait 120s on the server for a confirmation
+  the client never showed, time out as "declined" — while the client
+  had already applied it (a divergence); every auto/applied
+  destructive the server was not pre-told about now answers its
+  confirm explicitly.
+- **THE PLAN THAT NEVER DIES (the Kashmir incident).** A premium
+  travel-ad brief ended at "3 steps · 0 actions — stopped after 3
+  rejected plan_layout calls": missing section names, non-numeric
+  y/height, more sections than the page can host. The v0.32.4 lesson
+  (never make the model redo geometry) now covers ARGUMENTS too —
+  names are labels and y is an ordering hint, so both are SYNTHESIZED
+  and disclosed (a bare string entry becomes a name); floor-infeasible
+  compositions are TRUNCATED to the first fitting prefix by the new
+  `solvePlanBandsTruncating` wrapper (order kept, drop disclosed).
+  plan_layout now rejects only when the sections are unusable at all
+  or the canvas is genuinely full — the bounded rejection budget
+  stays as the honest stop.
+- **THE STOP BUTTON.** The client-side abort worked mid-stream; three
+  server/client dead-ends did not: (1) the post-run vision critique
+  rode its own unabortable fetch — Stop during it did nothing and the
+  panel stayed busy forever; it now rides the run's AbortSignal.
+  (2) An abort left every pending bridge waiter (confirm/ack/brief/
+  capture) dangling up to 45–120s before the loop noticed; the abort
+  listener now releases them all at once, and the bridge promises
+  never register on a stopped run. (3) An aborted run persisted as
+  `running` forever (excluded from the ledger AND recovery); it now
+  persists and finalizes as `stopped` — recovery never resumes a
+  deliberate stop.
+
+Tests: the truncation contract replaces the old reject pin; +4 unit
+regressions (arg synthesis, the Kashmir loop run that now builds, the
+genuinely-full honest stop, stop-persist); +3 e2e (mocked SSE): the
+approval gate default, auto-delete without asking (incl. body.confirmed),
+Stop releasing a hanging critique. 1,850/1,850 unit; CHANGELOG's
+leftover `<<<<<<< HEAD` merge markers from PR #95 resolved.
+
 ### Fixed — v0.33.1: the live-repro convergence — the focal-size default and the unmet-message math
 
 The v0.33.0 live reproduction (49 steps · 36 actions, brief validated
@@ -156,7 +202,7 @@ second audit round, the id alias, the recovery note) — 1,759/1,759.
   identity and the byte-identical domain copy; e2e smoke + the CI docker
   job assert both routes serve the exact bytes. Unit 1,748/1,748 (+3);
   e2e smoke +1 spec.
-=======
+
 ### Changed — v0.32.7: spatial intelligence, intent, persistence, resilience
 
 - **2D spatial map** (spatial.ts): rotation-aware AABBs, z-order,
@@ -204,7 +250,6 @@ second audit round, the id alias, the recovery note) — 1,759/1,759.
   state (empty → create, populated → edit) whenever the model router
   fails or answers garbage. +5 regressions from the live JNV Baramula
   poster session (26 Nov 2026).
->>>>>>> pr-95
 
 ### Changed — v0.32.6: ONE agent, ZERO selectors + the canvas map
 

@@ -346,7 +346,32 @@ export function AssistantApp({ onClose }: AppPanelProps) {
   const abortRef = useRef<AbortController | null>(null)
   const runIdRef = useRef<string | null>(null)
   const confirmedRef = useRef<Set<string>>(new Set())
+  /** the tools the SERVER got in this run's body.confirmed (pre-approved) */
+  const serverConfirmedRef = useRef<Set<string>>(new Set())
   const briefRef = useRef<DesignBrief | null>(null)
+  // v0.34.2 · AUTO-DELETE (optional, default OFF): the user may let the
+  // agent run the destructive tools (delete_elements / clear_page /
+  // delete_page) WITHOUT the per-call approval gate. Pre-approved for
+  // the whole run when on at send time; a mid-run flip auto-approves
+  // the calls that still ask. Persisted per browser.
+  const DESTRUCTIVE_TOOLS = ['delete_elements', 'clear_page', 'delete_page'] as const
+  const [autoDelete, setAutoDelete] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      return window.localStorage.getItem('canvix-agent-autodelete') === '1'
+    } catch {
+      return false
+    }
+  })
+  const autoDeleteRef = useRef(autoDelete)
+  useEffect(() => {
+    autoDeleteRef.current = autoDelete
+    try {
+      window.localStorage.setItem('canvix-agent-autodelete', autoDelete ? '1' : '0')
+    } catch {
+      /* private mode — the toggle just won't persist */
+    }
+  }, [autoDelete])
   const { configured: aiConfigured, loaded: aiLoaded } = useAICapabilities()
   const canUndo = useEditorStore((s) => s.past.length > 0)
 
@@ -414,7 +439,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
 
   /** Phase 7: visual critique of the current canvas (honest about
    *  availability). Appends findings to the finished turn. */
-  const visionCritique = useCallback(async (brief: DesignBrief | null): Promise<{ findings: Finding[]; note: string } | null> => {
+  const visionCritique = useCallback(async (brief: DesignBrief | null, signal?: AbortSignal): Promise<{ findings: Finding[]; note: string } | null> => {
     let dataUrl = ''
     try {
       const { captureStage } = await import('@/components/editor/canvas/canvas-bridge')
@@ -427,6 +452,10 @@ export function AssistantApp({ onClose }: AppPanelProps) {
       const res = await fetch('/api/ai/agent/vision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // v0.34.2: the critique is abortable — Stop during the
+        // post-run pass used to do nothing (the button only aborted
+        // the already-finished agent stream)
+        signal,
         body: JSON.stringify({
           image: dataUrl,
           brief: brief
@@ -459,6 +488,18 @@ export function AssistantApp({ onClose }: AppPanelProps) {
     setLiveBrief(null)
     setLiveUsage(null)
     confirmedRef.current = new Set()
+    // v0.34.2 · AUTO-DELETE pre-approval: with the toggle on, the
+    // destructive tools enter the run pre-confirmed — the server skips
+    // awaitConfirm (body.confirmed) and the client applies without the
+    // dialog. "Undo agent work" and version history remain the safety
+    // net behind every delete.
+    if (autoDeleteRef.current) {
+      for (const t of DESTRUCTIVE_TOOLS) confirmedRef.current.add(t)
+    }
+    // what the SERVER knows as pre-approved this run (body.confirmed)
+    // — the action handler answers a confirm only for tools NOT in
+    // this set (the server gates every destructive it was not told about)
+    serverConfirmedRef.current = new Set(confirmedRef.current)
 
     // v0.32.6: NO mode selector — the agent classifies every message
     // itself and does everything by itself (create, edit, review,
@@ -592,10 +633,24 @@ export function AssistantApp({ onClose }: AppPanelProps) {
               return
             }
             if (event.risk === 'destructive') {
-              if (confirmedRef.current.has(event.tool)) {
-                // user already approved this tool this run
+              // v0.34.2 · who may apply without the dialog:
+              //  · the tool was pre-approved server-side (body.confirmed
+              //    — an approve-once from earlier, or AUTO-DELETE at send)
+              //  · AUTO-DELETE flipped on mid-run (the server still asks;
+              //    the answer below releases it)
+              // Any destructive the SERVER did not get in body.confirmed
+              // gets its confirm answered explicitly — the old flow let
+              // the second clear_page of a run wait on a dialog that was
+              // never shown and time out as "declined" while the client
+              // had already applied it.
+              const serverApproved = serverConfirmedRef.current.has(event.tool)
+              if (serverApproved || confirmedRef.current.has(event.tool) || autoDeleteRef.current) {
                 const ack = await applyActions(actions)
                 if (ack.ok) appliedCount += actions.length
+                if (!serverApproved) {
+                  confirmedRef.current.add(event.tool)
+                  await bridgePost({ confirm: { tool: event.tool, ok: true } })
+                }
                 await bridgePost({ ack: { ok: ack.ok, message: ack.message, design: buildDesignContext() } })
               } else {
                 // pause for the user — the route's awaitConfirm waits
@@ -648,7 +703,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
       // was created", not a critique of a blank page.
       let critiqueNote: string | undefined
       if ((mode === 'create' || mode === 'improve') && summary && appliedCount > 0 && !controller.signal.aborted) {
-        const critique = await visionCritique(runBrief ?? briefRef.current)
+        const critique = await visionCritique(runBrief ?? briefRef.current, controller.signal)
         if (critique) {
           critiqueNote = critique.note
           if (critique.findings.length) {
@@ -976,8 +1031,31 @@ export function AssistantApp({ onClose }: AppPanelProps) {
           </button>
         </div>
         <div className="flex items-center justify-between mt-1.5 text-[10px] text-white/30">
-          <span>One agent — it maps the canvas, plans the geometry, builds, checks and verifies by itself</span>
-          {canUndo && <span>Undo available in the toolbar</span>}
+          <div className="flex items-center gap-2 min-w-0">
+            {/* v0.34.2 · AUTO-DELETE: optional pre-approval of the destructive tools */}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoDelete}
+              onClick={() => setAutoDelete((v) => !v)}
+              title="When on, the agent may delete elements and pages without asking for approval each time. Off by default. Undo agent work and version history remain the safety net."
+              data-testid="agent-autodelete"
+              className={`flex items-center gap-1.5 px-2 h-5 rounded-full border transition-colors shrink-0 ${
+                autoDelete
+                  ? 'bg-red-500/20 border-red-400/40 text-red-200'
+                  : 'border-white/10 text-white/40 hover:text-white/70'
+              }`}
+            >
+              <span
+                className={`w-3.5 h-2 rounded-full transition-colors ${autoDelete ? 'bg-red-400/80' : 'bg-white/15'}`}
+              />
+              Auto-delete
+            </button>
+            <span className="truncate hidden sm:inline">
+              It maps the canvas, plans the geometry, builds, checks and verifies by itself
+            </span>
+          </div>
+          {canUndo && <span className="shrink-0">Undo available</span>}
         </div>
       </div>
     </div>

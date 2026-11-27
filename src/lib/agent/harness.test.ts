@@ -1562,21 +1562,125 @@ describe('v0.29.3 · loop: planning + fail-closed acks', () => {
     expect(ob![2].y + ob![2].h).toBeLessThanOrEqual(1015)
     expect(String((oversized as { observation?: string }).observation)).toContain('AUTO-REPAIRED')
 
-    // truly INFEASIBLE remains for compositions that cannot fit even at
-    // the 56px floor: 12 sections floor to 672px + 440px of gaps =
-    // 1112px > the 950px safe area — rejected with the exact math. No
-    // strikes: the loop's separate plan budget handles it (pinned below).
-    const infeasible = tool!.sanitize(
+    // v0.34.2 · THE KASHMIR INCIDENT: a composition that cannot fit
+    // even at the 56px floor (12 sections on this canvas) is no longer
+    // REJECTED — the old honest error ended a real run at THREE
+    // rejections with ZERO elements. The TRUNCATING solver keeps the
+    // first fitting prefix (10 sections here) and DISCLOSES the drop.
+    const truncated = tool!.sanitize(
       {
         sections: Array.from({ length: 12 }, (_, i) => ({ name: `s${i + 1}`, y: 65 + i * 100, height: 140, contains: 'x' })),
       },
       ctx,
     )
+    expect(truncated.ok).toBe(true)
+    const tb = (truncated as { actions?: { bands?: { name: string; y: number; h: number }[] }[] }).actions?.[0]?.bands
+    expect(tb?.length).toBe(10)
+    expect(tb?.[0].name).toBe('s1')
+    expect(tb?.[9].name).toBe('s10')
+    expect(tb![9].y + tb![9].h).toBeLessThanOrEqual(1015)
+    const truncObs = String((truncated as { observation?: string }).observation)
+    expect(truncObs).toContain('PLAN TRUNCATED')
+    expect(truncObs).toContain('12 → 10 sections')
+    expect(truncObs).toContain('Merge the dropped sections')
+
+    // truly INFEASIBLE survives only when even ONE section cannot fit:
+    // an occupied canvas with no free window — the honest reject (the
+    // model must move or clear existing elements, never re-argue math).
+    const fullCtx: ToolContext = { ...ctx, occupied: [{ y: 0, h: 1079, label: 'existing content' }] }
+    const infeasible = tool!.sanitize(
+      {
+        sections: [{ name: 'a', y: 100, height: 200, contains: 'x' }],
+      },
+      fullCtx,
+    )
     expect(infeasible.ok).toBe(false)
     const err = String((infeasible as { error?: string }).error)
     expect(err).toContain('Infeasible plan')
-    expect(err).toContain('56px minimum band')
-    expect(err).toContain('at most 10 sections')
+    expect(err).toContain('Move or clear existing elements')
+  })
+
+  it('plan_layout SYNTHESIZES malformed args instead of rejecting them (v0.34.2: the Kashmir run died at three rejected plan_layout calls with zero actions)', () => {
+    const tool = AGENT_TOOL_MAP.get('plan_layout')
+    expect(tool).toBeTruthy()
+    // the exact failure shapes from the production run: missing names,
+    // non-numeric y / height — every one is now ACCEPTED with the
+    // missing fields synthesized and DISCLOSED (name = label, y =
+    // ordering hint: the server computes geometry anyway)
+    const res = tool!.sanitize(
+      {
+        sections: [
+          { height: '200', contains: 'KASHMIR headline' },
+          { name: 'cta', y: 'auto', contains: 'EXPLORE NOW' },
+        ],
+      },
+      ctx,
+    )
+    expect(res.ok).toBe(true)
+    const obs = String((res as { observation?: string }).observation)
+    expect(obs).toContain('ARGS SYNTHESIZED')
+    expect(obs).toContain('name synthesized')
+    expect(obs).toContain('non-numeric/missing y')
+    expect(obs).toContain('non-numeric/missing height')
+    const bands = (res as { actions?: { bands?: { name: string; y: number; h: number }[] }[] }).actions?.[0]?.bands
+    expect(bands?.length).toBe(2)
+    expect(bands?.[0].name).toBe('Section 1')
+    expect(bands?.[1].name).toBe('cta')
+
+    // bare STRING entries are accepted as names — models degrade to
+    // ["hero", "cta"] when the object shape escapes them
+    const strings = tool!.sanitize({ sections: ['hero', 'cta'] }, ctx)
+    expect(strings.ok).toBe(true)
+    const sb = (strings as { actions?: { bands?: { name: string; y: number; h: number }[] }[] }).actions?.[0]?.bands
+    expect(sb?.map((b) => b.name)).toEqual(['hero', 'cta'])
+
+    // the only hard rejects left: nothing to plan at all
+    const noArray = tool!.sanitize({ sections: 'hero' }, ctx)
+    expect(noArray.ok).toBe(false)
+    const empty = tool!.sanitize({ sections: [] }, ctx)
+    expect(empty.ok).toBe(false)
+  })
+
+  it('THE KASHMIR REGRESSION: a malformed plan no longer ends the run — the loop synthesizes, plans and BUILDS (v0.34.2)', async () => {
+    const events: AgentEvent[] = []
+    const { chat } = scriptedChat([
+      // the exact production failure shape: missing name, non-numeric
+      // y/height — rejected three times in a row on v0.34.1, killing
+      // the run at zero actions. Now: synthesized + disclosed, and the
+      // run proceeds to build.
+      turn('plan_layout', { sections: [{ contains: 'KASHMIR hero' }, { name: 'cta', y: 'auto', height: 'big' }] }),
+      turn('add_text', { text: 'KASHMIR', x: 0, y: 100, width: 1080, fontSize: 120, bold: true, color: '#FFFFFF' }),
+      done('Built the Kashmir ad'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'create',
+      request: 'Create a premium travel advertisement promoting Kashmir',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    // the malformed plan was ACCEPTED (synthesized), not rejected —
+    // planRejections never fired, the run never wrapped
+    expect(events.some((e) => e.type === 'plan')).toBe(true)
+    expect(events.some((e) => e.type === 'aborted' || e.type === 'error')).toBe(false)
+    expect(result.summary).toContain('Built the Kashmir ad')
+  })
+
+  it('a user STOP persists the run as stopped (v0.34.2: the ledger row used to stay running forever)', async () => {
+    const persisted: { status?: string }[] = []
+    const { chat } = scriptedChat([turn('get_page_state', {})])
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'create',
+      request: 'Design a travel ad',
+      emit: () => {},
+      persistRun: (s) => persisted.push(s as { status?: string }),
+      signal: { aborted: true, reason: 'Stopped by user' },
+    })
+    expect(result.summary).toContain('Stopped by the user')
+    expect(persisted.some((p) => p.status === 'stopped')).toBe(true)
   })
 
   it('a failed (timed-out) apply ack tells the model the action was NOT applied — fail closed', async () => {
@@ -2375,14 +2479,24 @@ describe('v0.32.5 · the P0 regression — recoverable geometry must not kill a 
     expect(calls.some((c) => c.some((m) => m.content.includes('AUTO-REPAIRED')))).toBe(true)
   })
 
-  it('three FLOOR-INFEASIBLE plans stop honestly with the exact math — bounded, never an infinite retry', async () => {
+  it('three plans on a GENUINELY FULL canvas stop honestly — bounded, never an infinite retry', async () => {
     const events: AgentEvent[] = []
-    // v0.32.8: oversized plans are SCALED, not rejected — a plan only
-    // stays infeasible when it cannot fit even at the 56px floor (12
-    // sections = 672px of floor + 440px of gaps > the 950px safe area).
-    // Three of those still stop the run honestly.
+    // v0.34.2: an empty canvas can no longer produce an infeasible plan —
+    // oversized plans scale (v0.32.8), malformed args synthesize, and
+    // floor-infeasible compositions truncate to the fitting prefix. The
+    // rejection budget now fires only when the canvas is GENUINELY full:
+    // existing elements leave no free window even for ONE section. Three
+    // of those still stop the run honestly.
+    const fullDesign: AgentDesignCtx = {
+      name: 'Untitled', width: 1080, height: 1080, pageCount: 1,
+      currentPageIndex: 0,
+      // stacked 1080-wide rects with <40px spacing merge into ONE occupied
+      // band covering the whole page — nothing fits anywhere
+      elements: Array.from({ length: 27 }, (_, i) => ({ id: `r${i}`, type: 'rect', x: 0, y: i * 40, width: 1080, height: 40, fill: '#222222' })),
+      colorsInUse: [], otherPages: [],
+    }
     const infeasible = () => ({
-      sections: Array.from({ length: 12 }, (_, i) => ({ name: `s${i + 1}`, y: 65 + i * 100, height: 140, contains: 'x' })),
+      sections: [{ name: 'a', y: 100, height: 200, contains: 'x' }],
     })
     const { chat } = scriptedChat([
       turn('plan_layout', infeasible()),
@@ -2394,12 +2508,13 @@ describe('v0.32.5 · the P0 regression — recoverable geometry must not kill a 
       done('Should not get here'),
     ])
     const result = await runAgentLoop({
-      chat, design: emptyDesign, mode: 'create',
+      chat, design: fullDesign, mode: 'create',
       request: 'Design a poster',
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
     })
     expect(result.summary).toContain('rejected plan_layout calls')
+    expect(result.summary).toContain('genuinely full')
     expect(result.summary).toContain('INCOMPLETE') // guardExit honesty: zero changes
     expect(result.toolCalls).toBe(0) // nothing applied after the honest stop
     const last = events[events.length - 1]

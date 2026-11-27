@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "TEa.G3 — تطوير المطور العراقي",
-  "short_name": "TEa.G3",
+  "name": "مِداد — منصة التصميم العربية",
+  "short_name": "مداد",
   "description": "منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر.",
   "lang": "ar",
   "dir": "rtl",
@@ -15,7 +15,7 @@
   "categories": ["design", "graphics", "productivity"],
   "icons": [
     {
-      "src": "/tea-g3.svg",
+      "src": "/midad.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
@@ -26,7 +26,7 @@
       "name": "ابدأ تصميماً جديداً",
       "short_name": "تصميم جديد",
       "url": "/?new=1",
-      "icons": [{ "src": "/tea-g3.svg", "sizes": "any", "type": "image/svg+xml" }]
+      "icons": [{ "src": "/midad.svg", "sizes": "any", "type": "image/svg+xml" }]
     }
   ]
 }

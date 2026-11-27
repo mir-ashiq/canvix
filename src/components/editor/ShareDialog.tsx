@@ -33,10 +33,10 @@ export function ShareDialog({ open, onOpenChange }: { open: boolean; onOpenChang
     try {
       await navigator.clipboard.writeText(link)
       setCopied(true)
-      toast({ title: 'Share link copied to clipboard' })
+      toast({ title: 'تم نسخ رابط المشاركة' })
       setTimeout(() => setCopied(false), 1800)
     } catch {
-      toast({ title: 'Could not copy — select and copy manually', description: link })
+      toast({ title: 'تعذّر النسخ — حدّد الرابط وانسخه يدوياً', description: link })
     }
   }
 
@@ -77,7 +77,7 @@ function ShareBody({ designName, link, copied, onCopy }: {
             readOnly
             value={link}
             className="flex-1 min-w-0 bg-transparent outline-none text-[13px] text-white/80 truncate"
-            aria-label="Share link"
+            aria-label="رابط المشاركة"
             onFocus={(e) => e.currentTarget.select()}
           />
           <Button className="btn-cv h-9 px-4 shrink-0 gap-1.5" onClick={onCopy}>
@@ -90,7 +90,7 @@ function ShareBody({ designName, link, copied, onCopy }: {
             is handed out — this is the contract the server actually enforces */}
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 space-y-2">
           <div className="text-xs font-semibold text-white/75 flex items-center gap-1.5">
-            <Info size={13} className="text-[#02C0CC] shrink-0" /> Who can open this link
+            <Info size={13} className="text-[#02C0CC] shrink-0" /> من يستطيع فتح هذا الرابط؟
           </div>
           <ul className="text-[11px] leading-relaxed text-white/55 space-y-1.5 list-none">
             <li className="flex gap-2">
@@ -103,14 +103,14 @@ function ShareBody({ designName, link, copied, onCopy }: {
             <li className="flex gap-2">
               <span aria-hidden className="text-white/35">•</span>
               <span>
-                <strong className="text-white/75">Ownerless designs</strong> (created while signed out) stay editable by
+                <strong className="text-white/75">التصاميم غير المرتبطة بحساب</strong> (التي أُنشئت دون تسجيل دخول) تبقى قابلة للتحرير بواسطة
                 everyone with the link — the pre-accounts behaviour, kept on purpose so existing shares never break.
               </span>
             </li>
             <li className="flex gap-2">
               <span aria-hidden className="text-white/35">•</span>
               <span>
-                <strong className="text-white/75">Owned designs</strong> open read-only for everyone except the owner:
+                <strong className="text-white/75">التصاميم المرتبطة بمالك</strong> تُفتح للآخرين بوضع القراءة فقط، باستثناء المالك:
                 an honest view-only banner in the editor, and every save answers 403.
               </span>
             </li>
@@ -127,7 +127,7 @@ function ShareBody({ designName, link, copied, onCopy }: {
         </div>
 
         <p className="text-[11px] text-white/40 flex items-center gap-1.5">
-          <QrCode size={13} /> In the open-source spirit — access control lives in your deployment, not our cloud.
+          <QrCode size={13} /> وفق مبدأ المصدر المفتوح — تتحكم في صلاحيات الوصول ضمن استضافتك، لا عبر خوادمنا.
         </p>
       </div>
     </>

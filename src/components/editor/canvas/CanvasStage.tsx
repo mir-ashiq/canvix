@@ -1183,7 +1183,7 @@ export default function CanvasStage() {
           style={cellStyle}
           value={editValue}
           autoFocus
-          spellCheck={spellCheckEnabled}
+          spellCheck={true}
           lang="ar"
           onChange={(e) => {
             setEditValue(e.target.value)

@@ -85,39 +85,39 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button className={item} aria-label="قائمة الملف">
-            File <ChevronDown size={12} className="opacity-70" />
+            ملف <ChevronDown size={12} className="opacity-70" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56 bg-[#16181D] border-white/10 text-white">
           <DropdownMenuItem className="gap-2" onClick={goDashboard}>
-            <Home size={15} /> Home
+            <Home size={15} /> الرئيسية
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => void onSave()}>
-            <Cloud size={15} /> Save changes
+            <Cloud size={15} /> حفظ التغييرات
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => setResizeOpen(true)}>
-            <Play size={15} /> Magic Resize
+            <Play size={15} /> تغيير الحجم السحري
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => setMagicLayersOpen(true)}>
-            <Wand2 size={15} /> Magic Layers — edit a flat design
+            <Wand2 size={15} /> الطبقات السحرية — تحرير التصميم
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => setTranslateOpen(true)}>
-            <Languages size={15} /> Translate design…
+            <Languages size={15} /> ترجمة التصميم…
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={toggleRulers}>
-            <Ruler size={15} /> {showRulers ? 'Hide rulers' : 'Show rulers'}
+            <Ruler size={15} /> {showRulers ? 'إخفاء المساطر' : 'إظهار المساطر'}
             <span className="ml-auto text-[10px] text-white/40 font-semibold">⇧R</span>
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => setVersionsOpen(true)}>
-            <History size={15} /> Version history
+            <History size={15} /> سجل الإصدارات
           </DropdownMenuItem>
           {/* v0.17 (Wave 2): save the open design as a reusable template */}
           <DropdownMenuItem className="gap-2" onClick={() => setSaveTplOpen(true)}>
-            <BookMarked size={15} /> Save as template…
+            <BookMarked size={15} /> حفظ كقالب…
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-white/10" />
           <DropdownMenuItem className="gap-2" onClick={() => setExportOpen(true)}>
-            <Download size={15} /> Download
+            <Download size={15} /> تنزيل
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-white/10" />
           <DropdownMenuItem className="gap-2" onClick={onShortcuts}>
@@ -125,7 +125,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" asChild>
             <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer">
-              <Github size={15} /> GitHub repository
+              <Github size={15} /> مستودع GitHub
             </a>
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -133,7 +133,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
 
       {/* Magic Layers */}
       <button className={cn(item, 'hidden sm:flex')} onClick={() => setMagicLayersOpen(true)} aria-label="الطبقات السحرية">
-        <Wand2 size={13} className="text-white/80" /> Magic Layers
+        <Wand2 size={13} className="text-white/80" /> الطبقات السحرية
       </button>
 
       {/* Magic Resize */}
@@ -148,18 +148,18 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
         <DropdownMenuTrigger asChild>
           <button className={item} aria-label="وضع التحرير">
             {mode === 'viewing' ? <Eye size={13} className="text-white/80" /> : mode === 'draw' ? <Brush size={13} className="text-white/80" /> : <MousePointer2 size={13} className="text-white/80" />}
-            {mode === 'viewing' ? 'عرض' : mode === 'draw' ? 'Draw' : 'Editing'} <ChevronDown size={12} className="opacity-70" />
+            {mode === 'viewing' ? 'عرض' : mode === 'draw' ? 'رسم' : 'تحرير'} <ChevronDown size={12} className="opacity-70" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-44 bg-[#16181D] border-white/10 text-white">
           <DropdownMenuItem className="gap-2" onClick={() => { setEditingMode('editing'); setTool('select') }}>
-            <MousePointer2 size={15} /> Editing — select & edit
+            <MousePointer2 size={15} /> تحرير — تحديد وتعديل
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => { setEditingMode('editing'); setTool('draw') }}>
-            <Brush size={15} /> Draw — freehand brush
+            <Brush size={15} /> رسم — فرشاة حرة
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2" onClick={() => setEditingMode('viewing')}>
-            <Eye size={15} /> Viewing — read only
+            <Eye size={15} /> عرض — قراءة فقط
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -174,20 +174,20 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           className="text-sm font-semibold bg-transparent text-white outline-none rounded-lg px-2 py-1.5 hover:bg-white/15 focus:bg-white/20 min-w-0 w-32 sm:w-48 truncate placeholder:text-white/60"
           aria-label="اسم التصميم"
           maxLength={80}
-          placeholder="Untitled design"
+          placeholder="تصميم بلا عنوان"
         />
         <span className="hidden md:inline-flex items-center gap-1 text-xs text-white/85 shrink-0">
           {saving ? (
             <>
-              <Loader2 size={12} className="animate-spin" /> Saving…
+              <Loader2 size={12} className="animate-spin" /> جارٍ الحفظ…
             </>
           ) : dirty ? (
             <>
-              <Cloud size={12} /> Unsaved
+              <Cloud size={12} /> تغييرات غير محفوظة
             </>
           ) : savedAt ? (
             <>
-              <Check size={12} /> All changes saved
+              <Check size={12} /> تم حفظ جميع التغييرات
             </>
           ) : null}
         </span>
@@ -198,10 +198,10 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
       <div className="ml-auto flex items-center gap-0.5 sm:gap-1 shrink-0">
         {/* v0.5: collaborators + connection status */}
         <PresenceAvatars />
-        <Button variant="ghost" size="icon" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={undo} disabled={!canUndo} aria-label="تراجع" title="Undo (Ctrl+Z)">
+        <Button variant="ghost" size="icon" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={undo} disabled={!canUndo} aria-label="تراجع" title="تراجع (Ctrl+Z)">
           <Undo2 size={17} />
         </Button>
-        <Button variant="ghost" size="icon" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={redo} disabled={!canRedo} aria-label="إعادة" title="Redo (Ctrl+Shift+Z)">
+        <Button variant="ghost" size="icon" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={redo} disabled={!canRedo} aria-label="إعادة" title="إعادة (Ctrl+Shift+Z)">
           <Redo2 size={17} />
         </Button>
         <Button variant="ghost" size="icon" className={cn('relative rounded-lg hover:bg-white/15 hover:text-white', commentsOpen ? 'text-white bg-white/15' : 'text-white')} onClick={() => { toggleComments(); if (!commentsOpen && designId) markAllCommentsRead(designId) }} aria-label="التعليقات" title="التعليقات">
@@ -213,10 +213,10 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           )}
         </Button>
         <button className={cn(item, 'hidden sm:flex')} onClick={toggleAnimate} aria-label="تحريك">
-          <Zap size={13} className={cn(animateOpen && 'text-[#02C0CC]')} /> Animate
+          <Zap size={13} className={cn(animateOpen && 'text-[#02C0CC]')} /> تحريك
         </button>
         <button className={cn(item, 'hidden sm:flex')} onClick={() => setPreviewOpen(true)} aria-label="معاينة التصميم">
-          <Play size={14} /> Preview
+          <Play size={14} /> معاينة
         </button>
         {/* v0.18 (Wave 3): present with speaker notes */}
         <button
@@ -226,10 +226,10 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           title="عرض مع ملاحظات المتحدث"
           data-testid="present-notes-button"
         >
-          <Presentation size={14} /> Present
+          <Presentation size={14} /> تقديم
         </button>
         <Button size="sm" className="btn-cv-white h-10 px-4 sm:px-5 gap-1.5 font-semibold" onClick={() => setShareOpen(true)}>
-          <Share2 size={15} /> <span className="hidden sm:inline">Share</span>
+          <Share2 size={15} /> <span className="hidden sm:inline">مشاركة</span>
         </Button>
         <Button size="icon" variant="ghost" className="rounded-lg text-white hover:bg-white/15 hover:text-white" onClick={() => setExportOpen(true)} aria-label="تنزيل" title="تنزيل">
           <Download size={17} />

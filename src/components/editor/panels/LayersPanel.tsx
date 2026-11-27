@@ -26,17 +26,17 @@ function elementIcon(el: AnyElement) {
 
 function elementLabel(el: AnyElement): string {
   if (el.name) return el.name
-  if (el.type === 'text') return (el.text || 'Text').slice(0, 26) || 'Text'
+  if (el.type === 'text') return (el.text || 'نص').slice(0, 26) || 'نص'
   if (el.type === 'sticker') return `Sticker ${el.char}`
-  if (el.type === 'image') return 'Image'
-  if (el.type === 'line') return 'Line'
-  if (el.type === 'stroke') return 'Stroke'
-  if (el.type === 'path') return 'Graphic'
-  if (el.type === 'group') return 'Group'
-  if (el.type === 'table') return 'Table'
-  if (el.type === 'frame') return el.src ? 'Frame' : 'Empty frame'
-  if (el.type === 'embed') return 'Embed card'
-  if (el.type === 'chart') return CHART_KIND_LABELS[el.kind] ?? 'Chart'
+  if (el.type === 'image') return 'صورة'
+  if (el.type === 'line') return 'خط'
+  if (el.type === 'stroke') return 'رسم حر'
+  if (el.type === 'path') return 'عنصر رسومي'
+  if (el.type === 'group') return 'مجموعة'
+  if (el.type === 'table') return 'جدول'
+  if (el.type === 'frame') return el.src ? 'إطار' : 'إطار فارغ'
+  if (el.type === 'embed') return 'بطاقة مضمنة'
+  if (el.type === 'chart') return CHART_KIND_LABELS[el.kind] ?? 'مخطط'
   return el.type.charAt(0).toUpperCase() + el.type.slice(1)
 }
 
@@ -69,12 +69,12 @@ export function LayersPanel() {
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 pt-4 pb-3 border-b border-white/[0.07]">
-        <h3 className="font-bold text-sm">Layers</h3>
-        <p className="text-xs text-white/50 mt-0.5">Top of the list is the front-most element.</p>
+        <h3 className="font-bold text-sm">الطبقات</h3>
+        <p className="text-xs text-white/50 mt-0.5">العنصر في أعلى القائمة يظهر في المقدمة.</p>
       </div>
       <div className="flex-1 overflow-y-auto cv-scroll-dark p-2">
         {ordered.length === 0 && (
-          <div className="text-center text-xs text-white/40 pt-10">Nothing on this page yet.<br />Add text, shapes or images.</div>
+          <div className="text-center text-xs text-white/40 pt-10">لا توجد عناصر في هذه الصفحة بعد.<br />أضف نصاً أو أشكالاً أو صوراً.</div>
         )}
         {ordered.map((el) => {
           const Icon = elementIcon(el)
@@ -102,13 +102,13 @@ export function LayersPanel() {
                     if (e.key === 'Escape') setRenaming(null)
                   }}
                   className="flex-1 min-w-0 bg-white/10 border border-[#7630D7] rounded-md px-1.5 py-0.5 text-[13px] outline-none"
-                  aria-label="Layer name"
+                  aria-label="اسم الطبقة"
                   maxLength={60}
                 />
               ) : (
                 <span
                   className={cn('flex-1 truncate', !el.visible && 'opacity-40')}
-                  title="Double-click to rename"
+                  title="انقر نقراً مزدوجاً لإعادة التسمية"
                   onDoubleClick={(e) => {
                     e.stopPropagation()
                     setRenaming({ id: el.id, value: el.name ?? elementLabel(el) })
@@ -119,35 +119,35 @@ export function LayersPanel() {
               )}
 
               <div className="hidden group-hover:flex items-center gap-0.5">
-                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10" title="Bring to front" aria-label="Bring to front" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'front') }}>
+                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10" title="إحضار إلى المقدمة" aria-label="إحضار إلى المقدمة" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'front') }}>
                   <ChevronsUp size={13} />
                 </button>
-                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10" title="Move up" aria-label="Move up" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'up') }}>
+                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10" title="تحريك للأعلى" aria-label="تحريك للأعلى" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'up') }}>
                   <ChevronUp size={13} />
                 </button>
-                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10" title="Move down" aria-label="Move down" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'down') }}>
+                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10" title="تحريك للأسفل" aria-label="تحريك للأسفل" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'down') }}>
                   <ChevronDown size={13} />
                 </button>
-                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10" title="Send to back" aria-label="Send to back" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'back') }}>
+                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10" title="إرسال إلى الخلف" aria-label="إرسال إلى الخلف" onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 'back') }}>
                   <ChevronsDown size={13} />
                 </button>
-                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-red-500/20 hover:text-red-400" title="Delete" aria-label="Delete layer" onClick={(e) => { e.stopPropagation(); setSelection([el.id]); deleteSelection() }}>
+                <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-red-500/20 hover:text-red-400" title="حذف" aria-label="حذف الطبقة" onClick={(e) => { e.stopPropagation(); setSelection([el.id]); deleteSelection() }}>
                   <Trash2 size={13} />
                 </button>
               </div>
 
               <button
                 className={cn('h-6 w-6 flex items-center justify-center rounded hover:bg-white/10 shrink-0', !el.locked && 'opacity-0 group-hover:opacity-100', el.locked && 'opacity-100')}
-                title={el.locked ? 'Unlock' : 'Lock'}
-                aria-label={el.locked ? 'Unlock layer' : 'Lock layer'}
+                title={el.locked ? 'إلغاء القفل' : 'قفل'}
+                aria-label={el.locked ? 'إلغاء قفل الطبقة' : 'قفل الطبقة'}
                 onClick={(e) => { e.stopPropagation(); setLock([el.id], !el.locked) }}
               >
                 {el.locked ? <Lock size={12} /> : <LockOpen size={12} />}
               </button>
               <button
                 className={cn('h-6 w-6 flex items-center justify-center rounded hover:bg-white/10 shrink-0', el.visible && 'opacity-0 group-hover:opacity-100', !el.visible && 'opacity-100')}
-                title={el.visible ? 'Hide' : 'Show'}
-                aria-label={el.visible ? 'Hide layer' : 'Show layer'}
+                title={el.visible ? 'إخفاء' : 'إظهار'}
+                aria-label={el.visible ? 'إخفاء الطبقة' : 'إظهار الطبقة'}
                 onClick={(e) => { e.stopPropagation(); setVisible([el.id], !el.visible) }}
               >
                 {el.visible ? <Eye size={13} /> : <EyeOff size={13} />}

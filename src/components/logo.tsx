@@ -1,7 +1,10 @@
+import { useId } from 'react'
 import { cn } from '@/lib/utils'
 
 /** MIDAD gradient emblem — a drop of ink and a flowing stroke */
 export function LogoMark({ className, size = 36 }: { className?: string; size?: number }) {
+  const gradientId = useId().replace(/:/g, '')
+
   return (
     <svg
       width={size}
@@ -13,13 +16,13 @@ export function LogoMark({ className, size = 36 }: { className?: string; size?: 
       aria-hidden="true"
     >
       <defs>
-        <linearGradient id="midad-grad" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+        <linearGradient id={gradientId} x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
           <stop offset="0" stopColor="#00C4CC" />
           <stop offset="0.55" stopColor="#7D2AE8" />
           <stop offset="1" stopColor="#FF5C8A" />
         </linearGradient>
       </defs>
-      <rect width="48" height="48" rx="12" fill="url(#midad-grad)" />
+      <rect width="48" height="48" rx="12" fill={`url(#${gradientId})`} />
       <path d="M24 7.5C19.2 15 11 24.3 11 31.8C11 39.1 16.8 44.5 24 44.5C31.2 44.5 37 39.1 37 31.8C37 24.3 28.8 15 24 7.5Z" fill="#FFFFFF" fillOpacity="0.96" />
       <path d="M16.5 33.8C19 29.8 21.5 28.3 24 28.3C26.5 28.3 29 29.8 31.5 33.8" stroke="#7D2AE8" strokeWidth="2.4" strokeLinecap="round" />
       <circle cx="24" cy="20.5" r="2" fill="#00AEBB" />

@@ -59,7 +59,7 @@ export function TemplatesPanel() {
   )
 
   const recommended = useMemo(() => TEMPLATES.slice(0, 4), [])
-  const premiumList = useMemo(() => list.filter((t) => t.badge === 'مميز'), [list])
+  const premiumList = useMemo(() => list.filter((t) => t.badge === 'premium'), [list])
   const hasPremiumSection = !query && category === 'all'
 
   const designHasContent = pages.some((p) => p.elements.length > 0)
@@ -103,7 +103,7 @@ export function TemplatesPanel() {
     <div className="flex flex-col h-full bg-[#16181D] text-[#EDEEF2]">
       <div className="px-4 pt-4 pb-3 border-b border-white/[0.07] shrink-0">
         <div className="flex items-center justify-between">
-          <h3 className="font-bold text-sm">Templates</h3>
+          <h3 className="font-bold text-sm">القوالب</h3>
           {/* v0.7: the promise — every template, free forever */}
           <span className="flex items-center gap-1 text-[10px] font-bold text-[#00E5A0] bg-[#00E5A0]/10 border border-[#00E5A0]/25 rounded-full px-2 py-0.5">
             <BadgeCheck size={11} /> 100% free forever
@@ -153,15 +153,15 @@ export function TemplatesPanel() {
             {/* v0.17 (Wave 2): user-saved templates first */}
             {userTemplates.length > 0 && (
               <>
-                <SectionLabel icon={<BookMarked size={11} />}>Your templates</SectionLabel>
+                <SectionLabel icon={<BookMarked size={11} />}>قوالبك</SectionLabel>
                 <div className="grid grid-cols-2 gap-3 mb-5">
                   {userTemplates.map((u) => (
                     <div
                       key={u.id}
                       className="group relative text-left rounded-lg overflow-hidden border border-white/10 hover:border-[#7630D7] transition-all"
-                      aria-label={`Your template ${u.name}`}
+                      aria-label={`قالبك ${u.name}`}
                     >
-                      <button className="block w-full" onClick={() => applyUserTemplate(u)} aria-label={`Apply ${u.name}`}>
+                      <button className="block w-full" onClick={() => applyUserTemplate(u)} aria-label={`تطبيق ${u.name}`}>
                         <div className="bg-[#0F1015]" style={{ aspectRatio: `${u.width} / ${u.height}` }}>
                           <LazyPreview page={u.pages[0]} width={u.width} height={u.height} />
                         </div>
@@ -171,7 +171,7 @@ export function TemplatesPanel() {
                         <button
                           onClick={() => void deleteUserTemplate(u.id)}
                           className="opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400 shrink-0"
-                          aria-label={`Delete template ${u.name}`}
+                          aria-label={`حذف القالب ${u.name}`}
                         >
                           <Trash2 size={11} />
                         </button>
@@ -183,7 +183,7 @@ export function TemplatesPanel() {
             )}
             {hasPremiumSection ? (
               <>
-            <SectionLabel icon={<Sparkles size={11} />}>Recommended for you</SectionLabel>
+            <SectionLabel icon={<Sparkles size={11} />}>موصى بها لك</SectionLabel>
             <div className="grid grid-cols-2 gap-3 mb-5">
               {recommended.map((t) => (
                 <TemplateCard key={t.slug} t={t} onApply={() => use(t)} onPreview={() => setPreview(t)} />
@@ -192,7 +192,7 @@ export function TemplatesPanel() {
             {premiumList.length > 0 && (
               <>
                 <SectionLabel icon={<Gem size={11} />}>
-                  Premium collection <span className="text-[#00E5A0] normal-case font-semibold tracking-normal">· free forever</span>
+                  Premium collection <span className="text-[#00E5A0] normal-case font-semibold tracking-normal">· مجانية دائماً</span>
                 </SectionLabel>
                 <div className="grid grid-cols-2 gap-3 mb-5">
                   {premiumList.map((t) => (
@@ -201,7 +201,7 @@ export function TemplatesPanel() {
                 </div>
               </>
             )}
-            <SectionLabel icon={<Clock size={11} />}>All templates</SectionLabel>
+            <SectionLabel icon={<Clock size={11} />}>كل القوالب</SectionLabel>
             <div className="grid grid-cols-2 gap-3">
               {list.filter((t) => !t.badge).slice(4).map((t) => (
                 <TemplateCard key={t.slug} t={t} onApply={() => use(t)} onPreview={() => setPreview(t)} />
@@ -215,7 +215,7 @@ export function TemplatesPanel() {
             ))}
           </div>
         ) : (
-          <EmptyState label={`No templates match “${query}”`} />
+          <EmptyState label={`لا توجد قوالب تطابق “${query}”`} />
         )}
           </>
         )}
@@ -232,7 +232,7 @@ export function TemplatesPanel() {
                 <X size={16} />
               </button>
             </div>
-            <p className="text-[11px] text-white/50 mb-3">Fill in the fields — they flow into the design's marked slots.</p>
+            <p className="text-[11px] text-white/50 mb-3">املأ الحقول لتظهر تلقائياً في المواضع المحددة داخل التصميم.</p>
             <div className="space-y-3">
               {fillTarget.fields.map((f) => (
                 <div key={f.key}>
@@ -249,7 +249,7 @@ export function TemplatesPanel() {
               ))}
             </div>
             <div className="flex items-center justify-between mt-4">
-              <span className="text-[10px] text-white/35">Tip: fill with CSV in bulk from the dashboard</span>
+              <span className="text-[10px] text-white/35">نصيحة: يمكنك تعبئة عدة قوالب دفعة واحدة باستخدام CSV من لوحة التحكم</span>
               <button className="btn-cv h-9 px-4 text-[13px] flex items-center gap-1.5" onClick={applyFilled}>
                 <Check size={14} /> Use this template
               </button>
@@ -266,9 +266,9 @@ export function TemplatesPanel() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold text-white truncate">{preview.name}</span>
-                {preview.badge === 'مميز' && (
+                {preview.badge === 'premium' && (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-[#F5C518] bg-[#F5C518]/10 border border-[#F5C518]/25 rounded-full px-2 py-0.5 shrink-0">
-                    <Gem size={10} /> Premium · Free
+                    <Gem size={10} /> مميز · مجاني
                   </span>
                 )}
                 {preview.fields?.length ? (
@@ -286,7 +286,7 @@ export function TemplatesPanel() {
             </div>
             <div className="flex items-center justify-between mt-3">
               <span className="text-[11px] text-white/50">
-                {preview.width} × {preview.height} px · {preview.pages.length} page{preview.pages.length > 1 ? 's' : ''}
+                {preview.width} × {preview.height} px · {preview.pages.length} صفحة
                 {designHasContent && ' · يستبدل الصفحات الحالية'}
               </span>
               <button className="btn-cv h-9 px-4 text-[13px] flex items-center gap-1.5" onClick={() => use(preview)}>
@@ -344,15 +344,15 @@ const TemplateCard = memo(function TemplateCard({ t, onApply, onPreview }: { t: 
   return (
     <div
       className="group relative text-left rounded-lg overflow-hidden border border-white/10 hover:border-[#7630D7] transition-all"
-      aria-label={`Template ${t.name}`}
+      aria-label={`قالب ${t.name}`}
     >
-      <button className="block w-full" onClick={onPreview} aria-label={`Preview ${t.name}`}>
+      <button className="block w-full" onClick={onPreview} aria-label={`معاينة ${t.name}`}>
         <div className="bg-[#0F1015]" style={{ aspectRatio: `${t.width} / ${t.height}` }}>
           <LazyPreview page={t.pages[0]} width={t.width} height={t.height} />
         </div>
       </button>
       {/* v0.7: premium quality badge — a label, never a paywall */}
-      {t.badge === 'مميز' && (
+      {t.badge === 'premium' && (
         <span className="absolute top-1.5 left-1.5 flex items-center gap-1 text-[9px] font-bold text-[#F5C518] bg-black/70 backdrop-blur-sm border border-[#F5C518]/30 rounded-full px-1.5 py-0.5 pointer-events-none">
           <Gem size={9} /> PREMIUM
         </span>
@@ -364,7 +364,7 @@ const TemplateCard = memo(function TemplateCard({ t, onApply, onPreview }: { t: 
         <button
           onClick={onApply}
           className="w-full h-8 rounded-lg bg-[#7630D7] hover:bg-[#8b5cf6] text-white text-[11px] font-bold transition-colors"
-          aria-label={`Apply ${t.name}`}
+          aria-label={`تطبيق ${t.name}`}
         >
           Apply
         </button>
@@ -386,7 +386,7 @@ function EmptyState({ label }: { label: string }) {
     <div className="flex flex-col items-center py-10 text-white/35">
       <Search size={26} strokeWidth={1.4} />
       <p className="text-xs mt-2.5 text-center">{label}</p>
-      <p className="text-[11px] mt-1 text-white/25">Try “instagram”, “poster” or “logo”</p>
+      <p className="text-[11px] mt-1 text-white/25">جرّب البحث عن منشور أو ملصق أو شعار</p>
     </div>
   )
 }

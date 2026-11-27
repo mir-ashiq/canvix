@@ -82,7 +82,7 @@ export function CommentsPanel() {
                 filter === f ? 'bg-white/[0.12] text-white' : 'text-white/50 hover:text-white/80'
               )}
             >
-              {f} {f === 'open' && threads.filter((t) => !t.root.resolved).length > 0 && `(${threads.filter((t) => !t.root.resolved).length})`}
+              {f === 'open' ? 'مفتوحة' : f === 'resolved' ? 'محلولة' : 'الكل'} {f === 'open' && threads.filter((t) => !t.root.resolved).length > 0 && `(${threads.filter((t) => !t.root.resolved).length})`}
             </button>
           ))}
         </div>

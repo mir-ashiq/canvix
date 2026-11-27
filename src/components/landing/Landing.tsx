@@ -155,11 +155,11 @@ const BIG_FEATURES = [
 ]
 
 const TEMPLATE_SHOWCASE = [
-  { label: 'منشور إنستغرام', from: '#FF5C8A', to: '#FFB84C', icon: Instagram, title: 'MEGA SALE' },
-  { label: 'قصة', from: '#B8E986', to: '#7ED957', icon: Instagram, title: 'NEW DROP' },
+  { label: 'منشور إنستغرام', from: '#FF5C8A', to: '#FFB84C', icon: Instagram, title: 'تخفيضات كبرى' },
+  { label: 'قصة', from: '#B8E986', to: '#7ED957', icon: Instagram, title: 'وصل حديثاً' },
   { label: 'عرض تقديمي', from: '#FFFFFF', to: '#E8F6F7', icon: Presentation, title: 'Nimbus', dark: true },
-  { label: 'ملصق', from: '#FFD166', to: '#FFC93C', icon: Printer, title: 'LIVE MUSIC', dark: true },
-  { label: 'صورة مصغّرة', from: '#0D1117', to: '#161B22', icon: Video, title: 'TOP 10 AI' },
+  { label: 'ملصق', from: '#FFD166', to: '#FFC93C', icon: Printer, title: 'موسيقى مباشرة', dark: true },
+  { label: 'صورة مصغّرة', from: '#0D1117', to: '#161B22', icon: Video, title: 'أفضل 10 أدوات ذكاء اصطناعي' },
   { label: 'شعار', from: '#FFFFFF', to: '#F4F5F7', icon: BadgeCheck, title: 'NOVA', dark: true },
 ]
 
@@ -286,11 +286,11 @@ export function Landing() {
         <section className="border-y border-black/5 bg-[#FAFAFC]">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 grid grid-cols-2 sm:grid-cols-5 gap-6 text-center">
             {[
-              ['MIT', 'license'],
-              ['369', 'fonts'],
-              ['366', 'templates'],
-              ['160+', 'stickers'],
-              ['562+', 'icons'],
+              ['MIT', 'الترخيص'],
+              ['369', 'خط'],
+              ['366', 'قالب'],
+              ['160+', 'ملصق'],
+              ['562+', 'أيقونة'],
             ].map(([num, label]) => (
               <div key={label}>
                 <div className="text-3xl sm:text-4xl font-extrabold text-brand-gradient">{num}</div>
@@ -304,12 +304,11 @@ export function Landing() {
         <section id="collab" className="mx-auto max-w-7xl px-4 sm:px-6 py-20 sm:py-28">
           <div className="text-center">
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-              What the paid tools charge for,{' '}
+              المزايا التي تفرض الأدوات المدفوعة رسوماً مقابلها،{' '}
               <span className="text-brand-gradient">يقدمه TEa.G3 مجاناً</span>
             </h2>
             <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-              The features that cost the most elsewhere — collaboration seats, AI credits, team
-              workspaces — are core parts of TEa.G3 مجاناً وبشفافية.
+              المزايا الأعلى تكلفة في الأدوات الأخرى — مثل التعاون وميزات الذكاء الاصطناعي ومساحات عمل الفرق — متاحة ضمن TEa.G3 مجاناً وبشفافية.
             </p>
           </div>
           <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -332,11 +331,10 @@ export function Landing() {
         <section id="features" className="bg-[#FAFAFC] border-y border-black/5">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 py-20 sm:py-28">
             <h2 className="text-center text-3xl sm:text-4xl font-extrabold tracking-tight">
-              Everything you need to <span className="text-brand-gradient">الإبداع</span>
+              كل ما تحتاجه <span className="text-brand-gradient">لإبداع تصاميمك</span>
             </h2>
             <p className="mt-4 text-center text-muted-foreground max-w-2xl mx-auto">
-              A serious editor, not a toy. TEa.G3 يضم الأدوات التي تحتاجها فعلاً من
-              commercial design tools — minus the price tag.
+              محرر احترافي متكامل، لا مجرد أداة بسيطة. يجمع TEa.G3 الأدوات التي تحتاجها من برامج التصميم التجارية، دون تكلفتها.
             </p>
             <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {FEATURES.map((f) => (
@@ -360,11 +358,10 @@ export function Landing() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="text-center">
               <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-                Start from a <span className="text-brand-gradient">قالب</span>
+                ابدأ من <span className="text-brand-gradient">قالب جاهز</span>
               </h2>
               <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-                Sized and styled for every platform. Open one, tweak everything — every template is
-                free, forever.
+                قوالب مجهزة بمقاسات وتصاميم تناسب مختلف المنصات. اختر قالباً وعدّل تفاصيله كما تريد — جميع القوالب مجانية دائماً.
               </p>
             </div>
             <div className="mt-12 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -392,7 +389,7 @@ export function Landing() {
             </div>
             <div className="mt-10 text-center">
               <Button variant="outline" className="rounded-full px-6 gap-2" onClick={goDashboard}>
-                Browse all 366 templates <ArrowRight size={16} />
+                استعرض القوالب الـ366 <ArrowRight size={16} />
               </Button>
             </div>
           </div>
@@ -402,7 +399,7 @@ export function Landing() {
         <section id="faq" className="bg-[#FAFAFC] border-y border-black/5 py-20 sm:py-28">
           <div className="mx-auto max-w-3xl px-4 sm:px-6">
             <h2 className="text-center text-3xl sm:text-4xl font-extrabold tracking-tight">
-              Questions, <span className="text-brand-gradient">وأجوبة</span>
+              أسئلة <span className="text-brand-gradient">وأجوبة</span>
             </h2>
             <div className="mt-10 space-y-3">
               {FAQ.map((f, i) => (
@@ -420,11 +417,10 @@ export function Landing() {
                 <Star size={14} /> تطوير مفتوح المصدر
               </div>
               <h2 className="mt-5 text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
-                The design tool that <span className="text-brand-gradient">تملكها أنت</span>
+                أداة التصميم التي <span className="text-brand-gradient">تملكها أنت</span>
               </h2>
               <p className="mt-5 text-muted-foreground leading-relaxed">
-                Commercial design tools lock your creativity behind subscriptions. أما TEa.G3 فيختلف — the code is on GitHub, the license is MIT, and every design you make
-                is exportable at full quality. Self-host it, fork it, improve it.
+                تضع أدوات التصميم التجارية إبداعك خلف الاشتراكات. أما TEa.G3 فيمنحك حرية الاستخدام والتطوير؛ شيفرته متاحة على GitHub بترخيص MIT، ويمكنك تصدير تصاميمك بجودتها الكاملة أو استضافته وتطوير نسختك الخاصة.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row gap-3">
                 <a href="https://github.com/TEaG3/eng-salman" target="_blank" rel="noreferrer">

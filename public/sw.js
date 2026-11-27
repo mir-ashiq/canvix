@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tea-g3-shell-v1'
+const CACHE_NAME = 'tea-g3-shell-v2'
 const APP_SHELL = ['/', '/offline.html', '/manifest.webmanifest', '/tea-g3.svg']
 
 self.addEventListener('install', (event) => {
@@ -34,7 +34,10 @@ self.addEventListener('fetch', (event) => {
           }
           return response
         })
-        .catch(async () => (await caches.match(url.pathname === '/' ? '/' : request)) || (await caches.match('/offline.html')))
+        .catch(async () => {
+          const cached = await caches.match(request) || await caches.match(url.pathname)
+          return cached || (await caches.match('/')) || (await caches.match('/offline.html'))
+        })
     )
     return
   }

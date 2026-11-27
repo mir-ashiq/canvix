@@ -168,7 +168,7 @@ export function PluginRuntime({ install, onClose }: { install: PluginInstallView
         {failed && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-[#0F0F13] px-6 text-center">
             <AlertTriangle size={18} className="text-amber-400" />
-            <p className="text-[12px] text-white/70 font-semibold">This app could not start</p>
+            <p className="text-[12px] text-white/70 font-semibold">تعذّر تشغيل هذا التطبيق</p>
             <p className="text-[11px] text-white/45 leading-relaxed">
               The plugin&apos;s panel is unavailable — it may have been uninstalled or disabled. Removing the app
               never affects your design.

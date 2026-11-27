@@ -121,7 +121,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Noto Sans Arabic', 'Inter', sans-serif;
+    font-family: var(--font-noto-sans-arabic), var(--font-inter), sans-serif;
   }
 }
 
@@ -360,7 +360,7 @@
 }
 
 .font-sans {
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-noto-sans-arabic), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 .bg-brand-gradient {

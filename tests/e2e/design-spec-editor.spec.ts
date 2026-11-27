@@ -139,10 +139,20 @@ test.describe('DesignSpec compiled poster in the real editor', () => {
 
 
 test.describe('MIDAD mobile touch targets', () => {
-  test.use({ ...devices['iPhone 13'] })
-
-  test('selection handles and contextual actions are sized for touch', async ({ page }) => {
-    const designId = await createDesign(
+  test('selection handles and contextual actions are sized for touch', async ({ browser }) => {
+    // Playwright only permits test.use() at file scope. Create the mobile
+    // context explicitly so the desktop proof above keeps its own defaults.
+    const iPhone = devices['iPhone 13']
+    const context = await browser.newContext({
+      viewport: iPhone.viewport,
+      deviceScaleFactor: iPhone.deviceScaleFactor,
+      isMobile: iPhone.isMobile,
+      hasTouch: iPhone.hasTouch,
+      userAgent: iPhone.userAgent,
+    })
+    const page = await context.newPage()
+    try {
+      const designId = await createDesign(
       page,
       `midad_touch_${Date.now().toString(36)}`,
       [{
@@ -188,7 +198,10 @@ test.describe('MIDAD mobile touch targets', () => {
       const rect = el.getBoundingClientRect()
       return { width: rect.width, height: rect.height }
     })
-    expect(target.width).toBeGreaterThanOrEqual(44)
-    expect(target.height).toBeGreaterThanOrEqual(44)
+      expect(target.width).toBeGreaterThanOrEqual(44)
+      expect(target.height).toBeGreaterThanOrEqual(44)
+    } finally {
+      await context.close()
+    }
   })
 })

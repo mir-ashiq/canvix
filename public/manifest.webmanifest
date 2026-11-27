@@ -5,7 +5,7 @@
   "description": "منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر.",
   "lang": "ar",
   "dir": "rtl",
-  "start_url": "/",
+  "start_url": "/?app=1",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],

@@ -46,8 +46,8 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Generate lockfile
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Install dependencies and generate lockfile
+        run: npm install --ignore-scripts --no-audit --no-fund
 
       - name: Validate Prisma D1 schema
         run: npx prisma validate

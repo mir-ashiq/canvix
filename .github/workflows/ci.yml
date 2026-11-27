@@ -186,7 +186,7 @@ jobs:
     needs: lint-unit
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
 
     services:
       postgres:

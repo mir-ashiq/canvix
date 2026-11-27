@@ -79,6 +79,9 @@ export async function destroySession(req: NextRequest, res: NextResponse): Promi
  * request-cookie path and the RSC cookies() path (the admin layout).
  */
 export async function getSessionUserFromToken(token: string | null | undefined): Promise<SessionUser | null> {
+  // Accounts are deliberately disabled for the public TEa.G3 web app.
+  // CI and private test deployments opt in explicitly with this flag.
+  if (process.env.TEAG3_ACCOUNTS_ENABLED !== 'true') return null
   if (!token || token.length > 128) return null
   try {
     const row = await db.session.findUnique({

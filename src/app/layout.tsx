@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import { Inter, Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+
+const arabicFont = Noto_Sans_Arabic({ subsets: ["arabic", "latin"], weight: ["400", "500", "600", "700", "800"], variable: "--font-noto-sans-arabic", display: "swap" });
+const latinFont = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], variable: "--font-inter", display: "swap" });
 
 /**
  * v0.23.3 (SEO/social): the site was invisible to link previews and barely
@@ -98,7 +102,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="antialiased bg-background text-foreground">
+      <body className={`${arabicFont.variable} ${latinFont.variable} antialiased bg-background text-foreground`}>
         {/* v0.23.3 (SEO): WebApplication structured data — gives Google a
             machine-readable identity for the app (name, URL, logo, license,
             features) so it can build rich results and entity association.

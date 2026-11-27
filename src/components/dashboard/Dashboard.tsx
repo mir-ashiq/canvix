@@ -42,7 +42,6 @@ import { Logo } from '@/components/logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DesignPreview } from '@/components/design-preview'
-import { McpCard } from '@/components/dashboard/McpCard'
 import { TEMPLATES } from '@/lib/templates'
 import { createPage, TEMPLATE_CATEGORIES, type TemplateRecord } from '@/lib/types'
 import { PRESET_SIZES, PRESET_GROUPS, type SizePreset } from '@/lib/editor-utils'
@@ -696,7 +695,7 @@ export function Dashboard() {
         </section>
 
         {/* ── AI agents (MCP) ── */}
-        <McpCard />
+        {/* Account-based MCP tokens are disabled in the anonymous web-app release. */}
 
         {/* ── v0.8: database setup banner (host switch / missing migration) ── */}
         {dbIssue && (

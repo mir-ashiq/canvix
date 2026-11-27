@@ -304,6 +304,10 @@ function computeBriefValidation(brief: DesignBrief): { satisfied: boolean; unmet
     ...( 'fill' in e && typeof (e as { fill?: unknown }).fill === 'string' ? { fill: (e as { fill: string }).fill } : {}),
     ...('stroke' in e && typeof (e as { stroke?: unknown }).stroke === 'string' ? { stroke: (e as { stroke: string }).stroke } : {}),
     ...(e.type === 'text' ? { text: (e as TextElement).text } : {}),
+    // v0.34: the asset's library name/alt — the brief's semantic
+    // verification reads these (illustration relevance)
+    ...(e.name ? { name: String(e.name).slice(0, 60) } : {}),
+    ...('alt' in e && typeof (e as { alt?: unknown }).alt === 'string' ? { alt: String((e as { alt?: string }).alt).slice(0, 60) } : {}),
     // v0.33: the effects surface — the feature validation reads these
     ...('fillGradient' in e && (e as { fillGradient?: unknown }).fillGradient ? { hasGradient: true } : {}),
     ...(e.shadow?.enabled ? { hasShadow: true } : {}),
@@ -360,7 +364,28 @@ export function AssistantApp({ onClose }: AppPanelProps) {
           lastMsg = 'validated'
           continue
         }
+        // v0.34 · AUTHORITATIVE ADDS: an add action is confirmed
+        // against the store — the element count must actually grow.
+        // Never acknowledge an action that produced no change (the
+        // NEON poster claimed four stickers while two never existed
+        // because no-op strings were acked as success; this closes
+        // the last path where an apply could "succeed" without a
+        // canvas change). addStockPhoto downloads asynchronously and
+        // is disclosed as such; addPage adds a page, not an element.
+        const countsAsAdd =
+          a.type.startsWith('add') && a.type !== 'addPage' && a.type !== 'addStockPhoto'
+        const store = useEditorStore.getState()
+        const beforeCount = countsAsAdd
+          ? (store.pages[store.currentPage]?.elements.length ?? 0)
+          : -1
         lastMsg = await applyDesignAction(a)
+        if (countsAsAdd && beforeCount >= 0) {
+          const after = useEditorStore.getState()
+          const afterCount = after.pages[after.currentPage]?.elements.length ?? 0
+          if (afterCount <= beforeCount) {
+            return { ok: false, message: `${a.type} produced no element on the canvas — ${lastMsg}` }
+          }
+        }
         // v0.33: a NO-OP IS NOT SUCCESS (see NO_ACK_MSG_RE above).
         if (NO_ACK_MSG_RE.test(lastMsg)) {
           return { ok: false, message: lastMsg }

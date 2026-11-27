@@ -47,6 +47,7 @@ import { AGENT_TOOLS, AGENT_TOOL_MAP, fontFamilies, type ToolContext, type Sanit
 import { PLAN_MIN_BAND, PLAN_MIN_GAP } from './plan-repair'
 import { serializeDesignContext, contextValidIds, canvasMap, type AgentDesignCtx } from './context'
 import { spatialCtx } from './spatial'
+import { planRepair } from './repair'
 import { classifyEditIntent, intentRequiresPlan, intentGuidance, type EditIntent } from './intent'
 import { MODE_PROMPTS, MODE_TOOL_RISK } from './router'
 import { skillsPromptSection, selectSkills, type DesignSkill } from './skills'
@@ -265,13 +266,14 @@ export function loopSystemPrompt(deps: {
       '· Reserve a vertical band per section with ≥40px gaps so nothing stacks or crowds; the brief texts each get their section. The SERVER computes the exact y-positions — with ≥40px gaps into the safe area, and on a canvas that already has content, into the FREE space between existing elements (never on top of them).',
       '· Set the page background EARLY with set_background (a required background color belongs there, not in strips).',
       '· Build section by section after the plan. NEVER add bare decorative bars/strips just to include a required color — use colors as the page background, text fills, or real panel/card fills.',
+      '· EFFICIENCY: build each section in ONE add_many batch (up to 10 items: its texts, shapes, stickers, icons together) — a whole poster lands in ~4-6 calls, not 20+ single placements. add_many validates every item and rejects the whole batch if one is wrong.',
       '· A realistic editor mockup = a large native panel (rounded rect, glass fill, border) CONTAINING inner native elements (toolbar bar, sidebar, canvas area, buttons) — not one empty rectangle.',
       '· Feature cards = one semi-transparent rect + its text per card. Glassmorphism = rgba fills with visible borders.',
       // v0.33 · COMPOSITION INTELLIGENCE — the anti-coordinate-placement
       // rules. A run that only drops text at y-positions produces the
       // "unfinished template" the NEON 2027 poster was: no focal point,
       // flat background, bare-text CTA, disconnected icons.
-      '· COMPOSITION — ONE dominant focal element per page (a large illustration via add_illustration, a photo, or a big graphic composite) covering ≥10% of the page, placed in the hero band. Never ship a text-only page.',
+      '· COMPOSITION — ONE dominant focal element per page (a large illustration via add_illustration, a photo, or a big graphic composite) covering ≥10% of the page, placed in the hero band — unless the brief itself demands minimalism, never ship a text-only page.',
       '· Background treatment: set_background first, then LAYER 2-3 large low-opacity shapes (rgba fills) or a gradient band (add_shape with gradientFrom/gradientTo) BEHIND the content — a flat empty background reads as unfinished.',
       '· CTA = a composite button: a filled rounded rect (add_shape with cornerRadius 40-80) with a short bold text centered on top — never bare text alone.',
       '· Accents are placed, not dropped: give every sticker/icon an x/y/size integrated with the composition (beside headings, corners, edges) — icons floating in dead space is the failure mode.',
@@ -709,21 +711,77 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         } catch {
           /* audit is best-effort — never block completion on it */
         }
-        const blocking = issues.filter(isAuditBlocking)
+        let blocking = issues.filter(isAuditBlocking)
         if (blocking.length && auditRounds === 0) {
           auditRounds += 1
-          const list = blocking.map((i) => `· ${i}`).join('\n')
-          emit({
-            v: AGENT_PROTOCOL_VERSION,
-            type: 'observation',
-            stepIndex: steps,
-            message: `QUALITY AUDIT — ${blocking.length} blocking issue(s) found (advisories disclosed):\n${list}${issues.length > blocking.length ? `\nAdvisories (not blocking): ${issues.filter((i) => !isAuditBlocking(i)).slice(0, 2).join('; ')}` : ''}`,
-          })
-          messages.push({
-            role: 'user',
-            content: `QUALITY AUDIT before completion — the canvas has these blocking problems:\n${list}\nFix them now with concrete tool calls (contrast: change the text fill; overflow: reduce fontSize, shorten text or widen the box; overlap/off-canvas: move or resize), then emit done again with an updated summary.`,
-          })
-          continue
+
+          // v0.34 · DETERMINISTIC REPAIR FIRST — code fixes what code
+          // can prove a fix for (covered texts, off-canvas elements,
+          // unreadable contrast, sliver assets); the model's fix round
+          // only ever sees what code cannot repair. The NEON 2027
+          // live repro ended with 12 disclosed-unfixed issues — every
+          // one mechanically repairable. The repairs ride the same
+          // acked bridge as model actions: undoable, confirmed
+          // against the authoritative canvas, and disclosed.
+          try {
+            const live = deps.refreshedContext?.() ?? design
+            const plan = planRepair(live, issues)
+            if (plan.actions.length) {
+              emit({
+                v: AGENT_PROTOCOL_VERSION,
+                type: 'action',
+                stepIndex: steps,
+                callId: `repair-${steps}-${Math.random().toString(36).slice(2, 8)}`,
+                risk: 'write',
+                tool: 'repair',
+                actions: plan.actions,
+              })
+              const ack = (await deps.awaitApply?.()) ?? { ok: true }
+              if (ack.ok) {
+                emit({
+                  v: AGENT_PROTOCOL_VERSION,
+                  type: 'observation',
+                  stepIndex: steps,
+                  message: `DETERMINISTIC REPAIR — ${plan.actions.length} fix(es) applied: ${plan.notes.slice(0, 4).join('; ')}${plan.notes.length > 4 ? ` (+${plan.notes.length - 4} more)` : ''}`,
+                })
+                verificationLog.push(`repair: ${plan.actions.length} deterministic fix(es)`)
+                designChanges += plan.actions.length
+                // re-audit against the repaired canvas — blocking
+                // issues the engine cleared are DONE, not re-sent
+                issues = (await deps.auditDesign(planBands.length ? planBands : undefined)) ?? []
+                blocking = issues.filter(isAuditBlocking)
+                if (!blocking.length) {
+                  verification = verification
+                    ? `${verification} Quality audit passed after the deterministic repair (${plan.actions.length} code fix(es)).`
+                    : `Quality audit passed after the deterministic repair (${plan.actions.length} code fix(es)).`
+                }
+              } else {
+                emit({
+                  v: AGENT_PROTOCOL_VERSION,
+                  type: 'observation',
+                  stepIndex: steps,
+                  message: `Deterministic repair could not be applied (${ack.message ?? 'client rejected'}) — the issues stay for the fix round.`,
+                })
+              }
+            }
+          } catch {
+            /* the repair is best-effort; the fix round still runs */
+          }
+
+          if (blocking.length) {
+            const list = blocking.map((i) => `· ${i}`).join('\n')
+            emit({
+              v: AGENT_PROTOCOL_VERSION,
+              type: 'observation',
+              stepIndex: steps,
+              message: `QUALITY AUDIT — ${blocking.length} blocking issue(s) remain after the deterministic repair (advisories disclosed):\n${list}${issues.length > blocking.length ? `\nAdvisories (not blocking): ${issues.filter((i) => !isAuditBlocking(i)).slice(0, 2).join('; ')}` : ''}`,
+            })
+            messages.push({
+              role: 'user',
+              content: `QUALITY AUDIT before completion — the deterministic repair pass cleared what code could fix; these problems need your judgement:\n${list}\nFix them now with concrete tool calls (contrast: change the text fill; overflow: reduce fontSize, shorten text or widen the box; overlap/off-canvas: move or resize; covered: raise the element with update_elements or move it), then emit done again with an updated summary.`,
+            })
+            continue
+          }
         }
         if (!issues.length) {
           verification = verification

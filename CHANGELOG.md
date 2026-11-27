@@ -4388,3 +4388,54 @@ updated to the INCOMPLETE verdict.
 
 Verified on the branch: typecheck, lint, build green; full suite
 1,830/1,830 (131 files — +spatial +intent +chat-resilience).
+
+### feat(v0.34.0): the deterministic correction engine — convergence in code, authoritative execution, semantic verification, batch placements
+
+The v0.33.1 live repro terminated via the idle guard with 12
+disclosed-unfixed audit issues; every one was mechanically
+repairable. This milestone makes the run CONVERGE instead of
+disclosing residue (plus the reconciliation merge of PR #95 above):
+
+- **repair.ts — the deterministic correction engine.** Covered
+  texts are RAISED above their opaque coverers (reorderLayers,
+  never moved or rewritten); entirely-off-canvas elements are
+  clamped back inside (deliberate full-bleed is never touched);
+  unreadable text gets the first passing fill from a deterministic
+  ladder (white → black → ±25%/±50% shades of the authored fill —
+  the palette survives when possible); sliver assets scale to
+  visibility keeping aspect + centre. Locked elements and
+  intentional layering are never touched; nothing repairs without
+  a matching audit issue class (never speculative). The engine
+  VERIFIES reality rather than trusting issue strings (a "low
+  contrast" claim that computes to 3.17:1 is not "repaired").
+- **Loop wiring — repair before the LLM round.** The audit round
+  now plans + applies the deterministic repair through the same
+  acked bridge as model actions (undoable, authoritative), re-
+  audits, and only sends the REMAINING blocking issues to the
+  model's single fix round. The repair is disclosed as an
+  observation and counted in the verification log.
+- **Authoritative adds (client).** An add action is confirmed
+  against the store — the element count must actually grow; an
+  apply that produced no change acks FAIL (addStockPhoto downloads
+  asynchronously and is disclosed; addPage adds a page).
+- **Semantic illustration verification.** The illustration concept
+  is extracted from the brief ("central TECHNOLOGY illustration" →
+  technology); qualification is IMAGE elements only at ≥10% of the
+  page, and a named asset must relate to the concept (stemmed word
+  match against the name/alt — illustrations now stamp
+  "Circuit board (tech pack)"). An arbitrary birthday-cake photo no
+  longer satisfies a technology-illustration requirement by area.
+  Unnamed elements still qualify by area — the vision round judges
+  their relevance. The composition prompt respects minimalism.
+- **add_many — batch placements.** Up to 10 placement tools
+  (add_text/add_shape/add_sticker/add_icon/add_illustration/
+  add_image/add_qr) in ONE round-trip; every item is sanitized
+  exactly as a direct call and one bad item rejects the whole
+  batch with its index (never a partial apply). A full poster lands
+  in ~4-6 calls instead of 20+ single placements.
+
+Verified on the branch: harness 188/188 (+13; the repair engine 8,
+batch 5, semantic 2, the live integration 1 — covered text + low
+contrast repaired in code, re-audit authoritative-clean, done
+accepted, zero extra model turns); full suite 1,846/1,846 across
+132 files; typecheck, lint and production build green.

@@ -1046,6 +1046,7 @@ export const AGENT_TOOLS: AgentTool[] = [
             type: 'addIllustration',
             svg: hit.svg,
             name: hit.name,
+            pack: hit.pack,
             ...(x !== null ? { x: clamp(x, -ctx.width, ctx.width) } : {}),
             ...(y !== null ? { y: clamp(y, -ctx.height, ctx.height) } : {}),
             ...(size !== null ? { size: clamp(size, 60, 800) } : { size: defaultSize }),
@@ -1114,6 +1115,54 @@ export const AGENT_TOOLS: AgentTool[] = [
           ...(num(args, 'y') !== null ? { y: clamp(num(args, 'y')!, 0, ctx.height) } : {}),
         }],
         observation: 'QR code queued.',
+      }
+    },
+  },
+  {
+    // v0.34 · EXECUTION EFFICIENCY: the NEON 2027 repro needed 49
+    // steps / 36 actions — most of them one-element-at-a-time add
+    // calls. add_many batches up to 10 placement calls into ONE
+    // round-trip: a section (its texts, shapes, stickers, icons)
+    // builds in a single turn. Every item is sanitized EXACTLY as a
+    // direct call would be (fail-closed: one bad item rejects the
+    // whole batch with the item's index and error — never a partial
+    // apply), and the client's authoritative-add check confirms each
+    // element actually landed.
+    name: 'add_many',
+    description: 'Batch-place several elements in ONE call — the efficient way to build a section. items is an array of {tool, args}; each tool is one of add_text, add_shape, add_sticker, add_icon, add_illustration, add_image, add_qr with its normal args.',
+    risk: 'write',
+    argsSpec: '{items: [{tool: string, args: object}, ...]} (max 10)',
+    sanitize: (args, ctx) => {
+      const raw = Array.isArray(args.items) ? args.items : null
+      if (!raw?.length) {
+        return { ok: false, error: 'items must be a non-empty array of {tool, args} (max 10) — e.g. [{"tool":"add_text","args":{"text":"NEON 2027","fontSize":96}}].' }
+      }
+      if (raw.length > 10) {
+        return { ok: false, error: `items holds ${raw.length} entries; the batch max is 10 — split across two calls.` }
+      }
+      const allowed = new Set(['add_text', 'add_shape', 'add_sticker', 'add_icon', 'add_illustration', 'add_image', 'add_qr'])
+      const actions: Record<string, unknown>[] = []
+      const summary: string[] = []
+      for (let i = 0; i < raw.length; i++) {
+        const item = raw[i] as { tool?: unknown; args?: Record<string, unknown> } | null
+        const toolName = String(item?.tool ?? '')
+        if (!allowed.has(toolName)) {
+          return {
+            ok: false,
+            error: `items[${i}].tool "${toolName}" is not batchable — allowed: ${[...allowed].join(', ')}. (edit existing elements with update_elements; batches only place new ones.)`,
+          }
+        }
+        const r = AGENT_TOOL_MAP.get(toolName)!.sanitize(item?.args ?? {}, ctx)
+        if (!r.ok) {
+          return { ok: false, error: `items[${i}] (${toolName}) rejected: ${r.error}` }
+        }
+        actions.push(...r.actions)
+        summary.push(toolName.replace('add_', ''))
+      }
+      return {
+        ok: true,
+        actions,
+        observation: `Batch placed ${actions.length} element(s): ${summary.join(', ')}.`,
       }
     },
   },

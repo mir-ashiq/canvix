@@ -39,6 +39,10 @@ export interface RequiredFeature extends BriefConstraint {
     | 'text-effects'
   /** for feature-cards/stickers: how many the user asked for */
   count?: number
+  /** for illustration: the subject words the user attached ("central
+   *  TECHNOLOGY illustration" → "technology") — semantic verification
+   *  matches them against the asset's library name/alt */
+  concept?: string
   /** human label for prompts and unmet messages */
   label: string
 }
@@ -207,10 +211,22 @@ export function extractBrief(message: string, pageWidth?: number, pageHeight?: n
   // knew three composite kinds. The named visual asks of a brief are
   // now REQUIREMENTS the validator checks against real elements.
   if (/\billustrations?\b/i.test(m) && !/\bno\s+illustrations?\b/i.test(m)) {
+    // v0.34 · semantic concept extraction: the words the user attached
+    // to "illustration" (minus layout adjectives) are the SUBJECT —
+    // the validator matches them against the asset's name/alt so an
+    // arbitrary photo cannot satisfy "technology illustration" by
+    // area alone.
+    const lead = lowerText.match(/([a-z][a-z\s-]{1,40}?)\s+illustrations?\b/)
+    const STOP = new Set(['a', 'an', 'the', 'central', 'main', 'dominant', 'large', 'big', 'hero', 'focal', 'prominent', 'single', 'one', 'editable', 'visual', 'simple', 'clean', 'small', 'suitable', 'available', 'native', 'real', 'professional', 'quality', 'use', 'using', 'add', 'please', 'with', 'and', 'for', 'of', 'poster', 'design', 'page', 'graphic', 'flyer', 'banner', 'card'])
+    const concept =
+      lead
+        ? lead[1].split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w)).slice(-3).join(' ')
+        : ''
     requiredFeatures.push({
       tier: 'mandatory',
       kind: 'illustration',
-      label: 'a dominant illustration (a large illustration/photo/graphic focal element, ≥10% of the page — add_illustration / add_stock_photo)',
+      ...(concept ? { concept } : {}),
+      label: `a dominant illustration (a large illustration/photo/graphic focal element, ≥10% of the page${concept ? `, about: ${concept}` : ''} — add_illustration / add_stock_photo)`,
     })
   }
   const stickerCount =
@@ -337,6 +353,11 @@ export interface BriefElementLike {
   fill?: string
   stroke?: string
   text?: string
+  /** the asset's library name / alt text — semantic verification
+   *  (v0.34: an unrelated asset must not satisfy an illustration
+   *  requirement by area alone) */
+  name?: string
+  alt?: string
   /** v0.33: the effects surface — the visual-feature validation
    *  (gradients / text effects / shadows) reads these. */
   hasGradient?: boolean
@@ -422,14 +443,34 @@ function validateFeatures(
       const bordered = glass.some((e) => typeof e.stroke === 'string' && e.stroke.trim().length > 0)
       out.push({ label: f.label, found: glass.length >= 2 && bordered })
     } else if (f.kind === 'illustration') {
-      // v0.33: a focal element — image (illustrations/photos),
-      // sticker or chart covering ≥10% of the page. Small icons and
-      // plain rects never qualify: a focal point must anchor the
-      // composition, not decorate it.
+      // v0.34 · SEMANTIC verification, not an area threshold: only
+      // IMAGE elements (illustrations, photos — art, not rects or
+      // charts) qualify, at ≥10% of the page; and when the asset
+      // carries a name/alt, it must relate to the brief's concept —
+      // an arbitrary photo does not satisfy "technology
+      // illustration" by size alone. Elements without a name (older
+      // photos) still qualify by area — the vision round judges
+      // their relevance at the aesthetic stage.
       const min = 0.1 * pageW * pageH
-      const found = els.some(
-        (e) => ['image', 'sticker', 'chart'].includes(e.type) && (e.width ?? 0) * (e.height ?? 0) >= min,
-      )
+      const conceptWords = (f.concept ?? '')
+        .split(/\s+/)
+        .filter((w) => w.length >= 3)
+        .map((w) => (w.endsWith('s') ? w.slice(0, -1) : w))
+      const stems = (v?: string) =>
+        String(v ?? '')
+          .toLowerCase()
+          .split(/[^a-z]+/)
+          .map((w) => (w.length > 4 ? w.slice(0, 4) : w))
+      const conceptStems = stems(f.concept ?? '')
+      const found = els.some((e) => {
+        if (e.type !== 'image') return false
+        if ((e.width ?? 0) * (e.height ?? 0) < min) return false
+        const label = [e.name, e.alt].filter(Boolean).join(' ')
+        if (!label) return true // no provenance — area qualifies; vision judges relevance
+        if (!conceptWords.length || !conceptStems.length) return true // no concept to match
+        const labelStems = stems(label)
+        return conceptStems.some((cs) => labelStems.some((ls) => ls === cs || (cs.length >= 4 && ls.startsWith(cs))))
+      })
       out.push({ label: f.label, found })
     } else if (f.kind === 'stickers') {
       const need = f.count ?? 2

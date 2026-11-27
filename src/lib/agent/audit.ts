@@ -28,7 +28,7 @@ import { elementBoxes, intentionalOverlaps, isIntentional, hierarchyLines } from
 
 const HEX = /^#?[0-9a-f]{6}$/i
 
-interface RGB {
+export interface RGB {
   r: number
   g: number
   b: number
@@ -68,12 +68,12 @@ function toHex(c: RGB): string {
   return `#${h(c.r)}${h(c.g)}${h(c.b)}`
 }
 
-function box(e: AgentElementCtx) {
+export function box(e: AgentElementCtx) {
   return { x: e.x ?? 0, y: e.y ?? 0, w: e.width ?? 0, h: e.height ?? 0 }
 }
 
 /** Fraction of `inner`'s area covered by `outer`'s bounds. */
-function coverage(inner: AgentElementCtx, outer: AgentElementCtx): number {
+export function coverage(inner: AgentElementCtx, outer: AgentElementCtx): number {
   const a = box(inner)
   const b = box(outer)
   if (a.w <= 0 || a.h <= 0) return 0
@@ -85,7 +85,7 @@ function coverage(inner: AgentElementCtx, outer: AgentElementCtx): number {
 /** The backdrop a text actually sits on: page background with every
  *  semi-transparent covering element BELOW the text composited on top
  *  (z-order = array order, bottom first). Preserves text-on-card. */
-function effectiveBackdrop(text: AgentElementCtx, els: AgentElementCtx[], pageBg: RGB | null): RGB | null {
+export function effectiveBackdrop(text: AgentElementCtx, els: AgentElementCtx[], pageBg: RGB | null): RGB | null {
   const idx = els.indexOf(text)
   let acc: RGB | null = pageBg
   for (let i = 0; i < idx; i++) {

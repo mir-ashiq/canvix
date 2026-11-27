@@ -121,7 +121,7 @@ describe('harness · tool matrix', () => {
       'goto_page', 'fix_overlaps', 'balance_layout', 'animate_page', 'translate_texts',
       'delete_elements', 'clear_page',
       // v0.28 bridge tools
-      'add_line', 'add_icon', 'add_illustration', 'add_chart', 'add_qr', 'add_frame', 'add_embed',
+      'add_line', 'add_icon', 'add_illustration', 'add_chart', 'add_qr', 'add_many', 'add_frame', 'add_embed',
       'duplicate_elements', 'group_elements', 'ungroup_elements', 'reorder_layers',
       'animate_elements', 'set_page_transition', 'delete_page', 'set_brand_kit', 'resize_design',
       'mask_image', 'adjust_image', 'measure_text', 'set_text_spans', 'export_design',
@@ -3461,5 +3461,162 @@ describe('v0.32.7 · the audit understands layering + design quality', () => {
       { texts: ['Cafe\u0301 Latte Special'], colors: [], elements: [] } as never,
     )
     expect(r.satisfied).toBe(true)
+  })
+})
+
+describe('v0.34 · add_many — batch placements, one round-trip', () => {
+  const call34 = (name: string, args: Record<string, unknown>) =>
+    AGENT_TOOL_MAP.get(name)!.sanitize(args, ctx)
+
+  it('batches placements — every item sanitized, one observation', () => {
+    const r = call34('add_many', {
+      items: [
+        { tool: 'add_text', args: { text: 'NEON 2027', fontSize: 96, color: '#02C0CC', effect: 'neon' } },
+        { tool: 'add_shape', args: { shape: 'rect', x: 0, y: 0, width: 400, height: 200, gradientFrom: '#02C0CC', gradientTo: '#7630D7' } },
+        { tool: 'add_sticker', args: { query: 'sparkle', x: 100, y: 500, size: 120 } },
+      ],
+    })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.actions).toHaveLength(3)
+    expect(r.observation).toContain('Batch placed 3 element(s)')
+    expect(r.observation).toContain('text, shape, sticker')
+  })
+
+  it('one bad item rejects the WHOLE batch with the exact index — never a partial apply', () => {
+    const r = call34('add_many', {
+      items: [
+        { tool: 'add_text', args: { text: 'OK', fontSize: 40 } },
+        { tool: 'add_text', args: { text: '' } },
+      ],
+    })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.error).toContain('items[1]')
+  })
+
+  it('non-batchable tools are refused with the allowed list', () => {
+    const r = call34('add_many', { items: [{ tool: 'update_elements', args: { ids: ['t1'], patch: { fill: '#FFFFFF' } } }] })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.error).toContain('not batchable')
+  })
+
+  it('more than 10 items is refused (bounded batches)', () => {
+    const items = Array.from({ length: 11 }, () => ({ tool: 'add_text', args: { text: 'x', fontSize: 20 } }))
+    const r = call34('add_many', { items })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.error).toContain('batch max is 10')
+  })
+
+  it('adversarial args never throw', () => {
+    for (const args of [{ items: 'nope' }, { items: [] }, {}, { items: [{ tool: null, args: null }] }]) {
+      let r: SanitizeResult | null = null
+      expect(() => {
+        r = call34('add_many', args as Record<string, unknown>)
+      }).not.toThrow()
+      expect(r).toBeTruthy()
+      expect(r!.ok).toBe(false)
+    }
+  })
+})
+
+describe('v0.34 · the illustration check is SEMANTIC — area alone never suffices', () => {
+  it('the concept is extracted from the brief ("technology illustration" → technology)', async () => {
+    const { extractBrief } = await import('./brief')
+    const brief = extractBrief('a poster with a central technology illustration')
+    const f = brief.requiredFeatures?.find((x) => x.kind === 'illustration')
+    expect(f?.concept).toBe('technology')
+  })
+
+  it('an unrelated big image does NOT satisfy a technology illustration; a related one does', async () => {
+    const { extractBrief, validateBrief } = await import('./brief')
+    const brief = extractBrief('a poster with a central technology illustration')
+    const base = { texts: [] as string[], colors: [] as string[], width: 1000, height: 1000 }
+    const unrelated = validateBrief(brief, {
+      ...base,
+      elements: [{ type: 'image', name: 'Birthday cake', alt: 'Birthday cake (celebrate pack)', x: 300, y: 300, width: 400, height: 400 }],
+    })
+    expect(unrelated.satisfied).toBe(false)
+    expect(unrelated.unmet.some((u) => u.includes('dominant illustration'))).toBe(true)
+    const related = validateBrief(brief, {
+      ...base,
+      elements: [{ type: 'image', name: 'Circuit board', alt: 'Circuit board (tech pack)', x: 300, y: 300, width: 400, height: 400 }],
+    })
+    expect(related.satisfied).toBe(true)
+    // an element with NO provenance still qualifies by area — the
+    // vision round judges its relevance at the aesthetic stage
+    const unnamed = validateBrief(brief, {
+      ...base,
+      elements: [{ type: 'image', x: 300, y: 300, width: 400, height: 400 }],
+    })
+    expect(unnamed.satisfied).toBe(true)
+    // and rects/charts never qualify, no matter the size
+    const wrongType = validateBrief(brief, {
+      ...base,
+      elements: [{ type: 'rect', x: 100, y: 100, width: 800, height: 800, fill: '#02C0CC' }],
+    })
+    expect(wrongType.satisfied).toBe(false)
+  })
+})
+
+describe('v0.34 · the deterministic repair pass — code fixes what code can fix', () => {
+  it('covered text + low contrast are repaired in code, the re-audit passes, done is accepted (not INCOMPLETE)', async () => {
+    const events: AgentEvent[] = []
+    const appliedRepair: { type: string }[] = []
+    let auditCalls = 0
+    // the NEON 2027 wrap-up residue, verbatim: a full-canvas rect
+    // covering the texts + an unreadable tagline
+    const auditDesign = async () => {
+      auditCalls += 1
+      return auditCalls === 1
+        ? [
+            'Text "NEON 2027" is covered by rect#r1 (100% of it) — move the shape below the text (reorder_layers) or move one of them.',
+            'Low contrast: text "tagline" #7630d7 on its effective backdrop #0a0a1e is 2.1:1 (needs 3:1) — change the text fill or the card behind it.',
+          ]
+        : []
+    }
+    const { chat } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#0A0A1A' }),
+      turn('plan_layout', { background: '#0A0A1A', sections: [{ name: 'hero', y: 65, height: 300, contains: 'headline' }] }),
+      turn('add_text', { text: 'NEON 2027', fontSize: 96, color: '#02C0CC' }),
+      done('Built the poster'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design: {
+        name: 'Poster', width: 1080, height: 1080, pageCount: 1, currentPageIndex: 0,
+        background: '#0A0A1A',
+        elements: [
+          { id: 't1', type: 'text', text: 'NEON 2027', x: 100, y: 100, width: 400, height: 80, fill: '#02C0CC', fontSize: 96 },
+          { id: 'r1', type: 'rect', x: 0, y: 0, width: 1080, height: 1080, fill: '#000000' },
+          { id: 't2', type: 'text', text: 'tagline', x: 100, y: 300, width: 400, height: 60, fill: '#3A1A5E', fontSize: 40 },
+        ],
+        colorsInUse: [], otherPages: [],
+      } as never,
+      mode: 'create',
+      request: 'Create a poster for NEON 2027',
+      emit: (e) => events.push(e),
+      awaitApply: async () => {
+        const repairEvent = events.find((ev) => ev.type === 'action' && (ev as { tool?: string }).tool === 'repair')
+        if (repairEvent) {
+          appliedRepair.push(...((repairEvent as { actions: { type: string }[] }).actions ?? []))
+        }
+        return { ok: true }
+      },
+      auditDesign: auditDesign as never,
+    })
+    // the repair ran in code: reorders + a fill, applied through the bridge
+    expect(appliedRepair.some((a) => a.type === 'reorderLayers')).toBe(true)
+    expect(appliedRepair.some((a) => a.type === 'updateElements')).toBe(true)
+    // the re-audit is AUTHORITATIVE and clean after the repair
+    expect(auditCalls).toBe(2)
+    expect(String(result.verification)).toContain('deterministic repair')
+    const final = events[events.length - 1]
+    expect(final.type).toBe('done')
+    expect(String((final as { summary?: string }).summary)).not.toContain('INCOMPLETE')
+    // the repair is NOT a model tool call — efficiency, not extra turns
+    expect(result.toolCalls).toBe(2)
   })
 })

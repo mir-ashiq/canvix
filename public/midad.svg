@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">MIDAD — مداد</title>
+  <defs>
+    <linearGradient id="midad" x1="7" y1="6" x2="57" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#08B9C3"/>
+      <stop offset=".55" stop-color="#7540D8"/>
+      <stop offset="1" stop-color="#F05A91"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="url(#midad)"/>
+  <path d="M32 9C26.1 18.1 15.7 29.8 15.7 39.1C15.7 48 22.9 55 32 55C41.1 55 48.3 48 48.3 39.1C48.3 29.8 37.9 18.1 32 9Z" fill="#fff" fill-opacity=".97"/>
+  <path d="M22.3 40.7C25.4 35.7 28.7 33.9 32 33.9C35.3 33.9 38.6 35.7 41.7 40.7" fill="none" stroke="#7540D8" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="32" cy="25.4" r="2.6" fill="#08AEB8"/>
+</svg>

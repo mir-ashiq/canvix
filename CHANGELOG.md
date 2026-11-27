@@ -3,6 +3,7 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+<<<<<<< HEAD
 ### Fixed — v0.33.1: the live-repro convergence — the focal-size default and the unmet-message math
 
 The v0.33.0 live reproduction (49 steps · 36 actions, brief validated
@@ -155,6 +156,55 @@ second audit round, the id alias, the recovery note) — 1,759/1,759.
   identity and the byte-identical domain copy; e2e smoke + the CI docker
   job assert both routes serve the exact bytes. Unit 1,748/1,748 (+3);
   e2e smoke +1 spec.
+=======
+### Changed — v0.32.7: spatial intelligence, intent, persistence, resilience
+
+- **2D spatial map** (spatial.ts): rotation-aware AABBs, z-order,
+  intentional layering (a card behind its text is not a collision),
+  section-scale band blocking with partial-occupancy disclosures,
+  2D free regions, text-hierarchy ladder — wired into the plan
+  solver, tool observations, the audit and the system prompt.
+- **Context-aware editing** (intent.ts): add / replace / reposition
+  / restyle / redesign / remove / refine / review — deterministic,
+  shown live in the panel. The plan-first gate fires only for
+  create/add/redesign; a "check and fix" run is never bounced into
+  planning new sections.
+- **Persistent execution + recovery:** DesignAgentRun.status/state
+  (migration 0016) — the run's brief, plan, applied actions and
+  verification milestones persist live; a provider/network
+  interruption marks the run interrupted and the NEXT run injects
+  the snapshot as recovery context: complete, never re-add.
+- **Provider resilience** (chat-resilience.ts): bounded exponential
+  backoff for transient errors (auth/config errors fail fast), a
+  per-provider circuit breaker, and the CONFIGURED fallback chain
+  (user BYOK → instance slot → env/file; ZAI_NO_FALLBACK=1 opts
+  out). Gateway-reported tokens accumulate in the run's usage.
+- **Verification completed:** blocking audit issues (contrast,
+  overlap, off-canvas, obscured, duplicates, empty sections) get
+  one bounded fix round, then the re-audit is authoritative —
+  remaining blockers end the run INCOMPLETE. Advisories (alignment,
+  typography, hierarchy, deep margins) disclose, never block. The
+  brief validator adopts the design engine's NFC-exact contract.
+- **Tests:** +50 regressions (spatial, intent, resilience, loop);
+  recovery e2e (mocked route, real editor); the live benchmark spec
+  (CANVIX_BENCH_LIVE=1, real provider) writes docs/BENCHMARK-v0.32.7.md.
+  Fixed: the panel crashed on a partial brief event.
+- **Fixed: the discuss misroute during provider outages** (router.ts).
+  The entire fix/improve family — "fix it", "fix the design", "improve
+  this poster", "make it look cool", "it looks like shit", "redesign
+  the poster" — fell through the heuristic lists to the model router,
+  and when the provider was down (429/502, exactly when users retry a
+  broken design) the catch kept the catch-all: DISCUSS. A write request
+  became a product chat that touched nothing. The fix/improve family
+  now classifies deterministically: whole-artifact fixes route to
+  improve, element-level fixes ("fix the title", "change the app
+  icon") stay edits, product talk ("improve the app", "fix the Canvix
+  agent tool loop") stays discuss, interrogatives never create, and a
+  new fallbackMode() classifies remaining design vocabulary by canvas
+  state (empty → create, populated → edit) whenever the model router
+  fails or answers garbage. +5 regressions from the live JNV Baramula
+  poster session (26 Nov 2026).
+>>>>>>> pr-95
 
 ### Changed — v0.32.6: ONE agent, ZERO selectors + the canvas map
 
@@ -4292,3 +4342,100 @@ Canva-style dashboard & mobile polish.
 Initial release: Konva.js editor (text/shapes/lines/graphics/stickers/images),
 smart snapping, layers, templates, dashboard, autosave, PNG/JPG export,
 responsive mobile/tablet/desktop UI.
+
+### Evaluation note — v0.32.7
+
+The live benchmark spec exists (`tests/e2e/live-agent-benchmark.spec.ts`,
+`CANVIX_BENCH_LIVE=1`, writes `docs/BENCHMARK-v0.32.7.md` itself). Both
+session attempts were cut short by the provider gateway's real rate
+limits; no completion rates are claimed and the milestone PR was not
+merged on mocked results alone.
+
+### v0.34.0-a · the PR #95 reconciliation — spatial intelligence, intents, persistent runs, provider resilience, authoritative re-audit
+
+PR #95 (feat/v0327-spatial-resilience, 196c502) developed in parallel
+to main's v0.32.8/v0.33.x and was never merged; this merge folds its
+architecture into the v0.33.1 base on feat/v0340-quality-convergence:
+
+- spatial.ts — rotation-aware AABBs, z-order, INTENTIONAL layering
+  (card-behind-text is not a collision), section-scale band blocking,
+  2D free regions, the hierarchy ladder.
+- intent.ts — add/replace/reposition/restyle/redesign/remove/refine/
+  review classification; the plan-first gate now fires only for
+  create/add/redesign (SSE intent event + panel display).
+- persistent execution — DesignAgentRun.status/state (migration 0016);
+  live persistence via the loop's persistRun; an interrupted run's
+  next message gets the snapshot as recovery context.
+- provider resilience — chat-resilience.ts: bounded exponential
+  backoff, per-provider circuit breaker, the CONFIGURED fallback
+  chain (BYOK → instance → env/file), gateway token accounting —
+  SUPERSEDES v0.33.0's inline chat retry (route.ts).
+- authoritative re-audit — exactly ONE fix round, then the re-audit
+  is authoritative: remaining BLOCKING issues end the run INCOMPLETE
+  (never a success claim); advisories disclose only. The v0.32.8
+  "second fix round + disclosed residue" contract is retired
+  (tests updated; the superseded describe dropped).
+- router: the fix/improve family classifies deterministically — a
+  write request never needs a provider to be classified (the
+  discuss-misroute fix), plus 5 regressions from the live session.
+
+Merge resolution notes: 5 conflicted files; the PR's side taken for
+the audit-round contract (the user's mandate rejects disclosed-
+unfixed residue), ours kept for plan scaling/capture emission/
+type#id alias/recovery note + all v0.33.x work; the harness union
+keeps both suites (180/180) with the superseded contract tests
+updated to the INCOMPLETE verdict.
+
+Verified on the branch: typecheck, lint, build green; full suite
+1,830/1,830 (131 files — +spatial +intent +chat-resilience).
+
+### feat(v0.34.0): the deterministic correction engine — convergence in code, authoritative execution, semantic verification, batch placements
+
+The v0.33.1 live repro terminated via the idle guard with 12
+disclosed-unfixed audit issues; every one was mechanically
+repairable. This milestone makes the run CONVERGE instead of
+disclosing residue (plus the reconciliation merge of PR #95 above):
+
+- **repair.ts — the deterministic correction engine.** Covered
+  texts are RAISED above their opaque coverers (reorderLayers,
+  never moved or rewritten); entirely-off-canvas elements are
+  clamped back inside (deliberate full-bleed is never touched);
+  unreadable text gets the first passing fill from a deterministic
+  ladder (white → black → ±25%/±50% shades of the authored fill —
+  the palette survives when possible); sliver assets scale to
+  visibility keeping aspect + centre. Locked elements and
+  intentional layering are never touched; nothing repairs without
+  a matching audit issue class (never speculative). The engine
+  VERIFIES reality rather than trusting issue strings (a "low
+  contrast" claim that computes to 3.17:1 is not "repaired").
+- **Loop wiring — repair before the LLM round.** The audit round
+  now plans + applies the deterministic repair through the same
+  acked bridge as model actions (undoable, authoritative), re-
+  audits, and only sends the REMAINING blocking issues to the
+  model's single fix round. The repair is disclosed as an
+  observation and counted in the verification log.
+- **Authoritative adds (client).** An add action is confirmed
+  against the store — the element count must actually grow; an
+  apply that produced no change acks FAIL (addStockPhoto downloads
+  asynchronously and is disclosed; addPage adds a page).
+- **Semantic illustration verification.** The illustration concept
+  is extracted from the brief ("central TECHNOLOGY illustration" →
+  technology); qualification is IMAGE elements only at ≥10% of the
+  page, and a named asset must relate to the concept (stemmed word
+  match against the name/alt — illustrations now stamp
+  "Circuit board (tech pack)"). An arbitrary birthday-cake photo no
+  longer satisfies a technology-illustration requirement by area.
+  Unnamed elements still qualify by area — the vision round judges
+  their relevance. The composition prompt respects minimalism.
+- **add_many — batch placements.** Up to 10 placement tools
+  (add_text/add_shape/add_sticker/add_icon/add_illustration/
+  add_image/add_qr) in ONE round-trip; every item is sanitized
+  exactly as a direct call and one bad item rejects the whole
+  batch with its index (never a partial apply). A full poster lands
+  in ~4-6 calls instead of 20+ single placements.
+
+Verified on the branch: harness 188/188 (+13; the repair engine 8,
+batch 5, semantic 2, the live integration 1 — covered text + low
+contrast repaired in code, re-audit authoritative-clean, done
+accepted, zero extra model turns); full suite 1,846/1,846 across
+132 files; typecheck, lint and production build green.

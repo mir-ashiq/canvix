@@ -489,6 +489,15 @@ model DesignAgentRun {
   summary   String   @db.VarChar(600)
   toolCalls Int      @default(0)
   findings  String?  @db.VarChar(1200)
+  /// v0.32.7 · PERSISTENT EXECUTION: running | interrupted |
+  /// completed | stopped — an interrupted run (429/502/network,
+  /// mid-flight) is recoverable; the next message COMPLETES it.
+  status String?
+  /// v0.32.7 · the run's live state, persisted as it happens:
+  /// intent, request, brief, plan bands, applied tool calls,
+  /// pending items, verification milestones (RunStateSnapshot).
+  /// Best-effort — the canvas stays the authority.
+  state Json?
 
   @@index([designId, createdAt])
 }

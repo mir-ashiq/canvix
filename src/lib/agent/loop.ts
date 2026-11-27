@@ -46,6 +46,9 @@ export function telemetry(event: Record<string, unknown>): void {
 import { AGENT_TOOLS, AGENT_TOOL_MAP, fontFamilies, type ToolContext, type SanitizeResult, type AgentTool } from './tools'
 import { PLAN_MIN_BAND, PLAN_MIN_GAP } from './plan-repair'
 import { serializeDesignContext, contextValidIds, canvasMap, type AgentDesignCtx } from './context'
+import { spatialCtx } from './spatial'
+import { planRepair } from './repair'
+import { classifyEditIntent, intentRequiresPlan, intentGuidance, type EditIntent } from './intent'
 import { MODE_PROMPTS, MODE_TOOL_RISK } from './router'
 import { skillsPromptSection, selectSkills, type DesignSkill } from './skills'
 import { briefPromptSection, type DesignBrief } from './brief'
@@ -115,6 +118,43 @@ export interface LoopDeps {
   refreshedContext?: () => AgentDesignCtx
   /** client-side brief validation result (validated against real state) */
   validateBriefOnClient?: () => Promise<{ satisfied: boolean; unmet: string[] } | null>
+  /** v0.32.7: what this message wants DONE to the existing design
+   *  (add / replace / reposition / restyle / redesign / remove /
+   *  refine / review). Default: classified here from the request.
+   *  Drives the plan-first gate (create/add/redesign plan; the rest
+   *  never need a section plan) and the EDIT INTENT guidance. */
+  intent?: EditIntent
+  /** v0.32.7: persisted state of the INTERRUPTED previous run on
+   *  this design (brief / plan / applied / pending / verification)
+   *  — injected into the system prompt so a retry completes the
+   *  work instead of duplicating it. */
+  recovery?: string[]
+  /** v0.32.7: persist the run's live state (best-effort, non-
+   *  blocking) so an interrupted run can be recovered. Called after
+   *  a plan records, after each applied action, and at run exits. */
+  persistRun?: (state: RunStateSnapshot) => void
+}
+
+/** v0.32.7 · the persisted run state — what an interrupted run
+ *  needs to be COMPLETED (not restarted): the original request,
+ *  brief, plan, the actions already applied, what remains, and how
+ *  far verification got. Written by the loop, persisted by the
+ *  route into DesignAgentRun.state. */
+export interface RunStateSnapshot {
+  intent: EditIntent
+  request: string
+  /** the run's brief contract, if any */
+  brief?: { requiredTexts?: string[] } | null
+  /** the validated plan's bands, if a plan ran */
+  plan?: { name: string; y: number; h: number }[]
+  /** applied tool calls in order */
+  applied: { tool: string; detail?: string }[]
+  /** plan sections with no content yet (from the audit) */
+  pending: string[]
+  /** verification milestones reached so far */
+  verification: string[]
+  /** running | interrupted | completed | stopped */
+  status: 'running' | 'interrupted' | 'completed' | 'stopped'
 }
 
 export interface LoopResult {
@@ -151,8 +191,18 @@ export function loopSystemPrompt(deps: {
    *  got there, so follow-ups build on prior work instead of
    *  re-deriving it. */
   ledger?: string[]
+  /** v0.32.7: what the user wants DONE to the existing design
+   *  (add / replace / reposition / restyle / redesign / remove /
+   *  refine / review) — per-intent guidance replaces the old
+   *  "every populated-canvas instruction is additive" assumption. */
+  intent?: EditIntent
+  /** v0.32.7: interrupted-run recovery lines — the persisted brief,
+   *  plan, applied/pending actions and verification state of the
+   *  interrupted run (from DesignAgentRun), injected so a retry
+   *  COMPLETES the work instead of duplicating it. */
+  recovery?: string[]
 }): string {
-  const { design, ctx, mode, brief, skills, ledger } = deps
+  const { design, ctx, mode, brief, skills, ledger, intent, recovery } = deps
   const W = design.width ?? 1080
   const H = design.height ?? 1080
   const margin = 0.06
@@ -161,6 +211,10 @@ export function loopSystemPrompt(deps: {
     'You see the CURRENT design state below. You act ONLY through tools, one per turn.',
     '',
     MODE_PROMPTS[mode],
+    '',
+    // v0.32.7 · CONTEXT-AWARE EDITING: the classified intent of THIS
+    // message — what the user wants done to the existing design.
+    ...(intent ? ['EDIT INTENT (what this message wants done):', `· ${intentGuidance(intent)}`, ''] : []),
     '',
     // v0.32.3: the geometry ground truth, stated up front with the
     // numbers computed for THIS page — where the canvas starts and
@@ -192,7 +246,11 @@ export function loopSystemPrompt(deps: {
     if (section) lines.push(section, '')
   }
 
-  if (mode === 'create' || mode === 'improve') {
+  // v0.32.7: planning guidance is INTENT-aware. Full-composition
+  // planning is for create/redesign; an ADD plans only its additions
+  // into the free space; reposition/restyle/remove/refine never need
+  // a section plan (the composition already exists).
+  if (intent ? intentRequiresPlan(intent) : mode === 'create' || mode === 'improve') {
     // v0.32.8: the computed budget for THIS page — plan inside it from
     // the start. Oversized plans are auto-scaled down to fit and the
     // scaling disclosed (plan-repair.ts), but a realistic plan
@@ -205,22 +263,33 @@ export function loopSystemPrompt(deps: {
       'LAYOUT PLANNING (required first step):',
       `· This page fits at most ${maxSections} planned sections (safe area y ${safeTopY}–${safeBottomY}px, ${usableH}px tall: sections ≥${PLAN_MIN_BAND}px with ≥${PLAN_MIN_GAP}px gaps; oversized plans are auto-scaled to fit and the scaling disclosed).`,
       '· Call plan_layout FIRST with your composition: page background, sections with y-ranges, what each contains (headline band, tagline, feature cards row, mockup, CTA, footer).',
-      '· Reserve a vertical band per section with ≥40px gaps so nothing stacks or crowds; the brief texts each get their section. Invalid plans (gaps under 40px, bands beyond the page) are REJECTED with the exact numbers — fix the bands and resend.',
+      '· Reserve a vertical band per section with ≥40px gaps so nothing stacks or crowds; the brief texts each get their section. The SERVER computes the exact y-positions — with ≥40px gaps into the safe area, and on a canvas that already has content, into the FREE space between existing elements (never on top of them).',
       '· Set the page background EARLY with set_background (a required background color belongs there, not in strips).',
       '· Build section by section after the plan. NEVER add bare decorative bars/strips just to include a required color — use colors as the page background, text fills, or real panel/card fills.',
+      '· EFFICIENCY: build each section in ONE add_many batch (up to 10 items: its texts, shapes, stickers, icons together) — a whole poster lands in ~4-6 calls, not 20+ single placements. add_many validates every item and rejects the whole batch if one is wrong.',
       '· A realistic editor mockup = a large native panel (rounded rect, glass fill, border) CONTAINING inner native elements (toolbar bar, sidebar, canvas area, buttons) — not one empty rectangle.',
       '· Feature cards = one semi-transparent rect + its text per card. Glassmorphism = rgba fills with visible borders.',
       // v0.33 · COMPOSITION INTELLIGENCE — the anti-coordinate-placement
       // rules. A run that only drops text at y-positions produces the
       // "unfinished template" the NEON 2027 poster was: no focal point,
       // flat background, bare-text CTA, disconnected icons.
-      '· COMPOSITION — ONE dominant focal element per page (a large illustration via add_illustration, a photo, or a big graphic composite) covering ≥10% of the page, placed in the hero band. Never ship a text-only page.',
+      '· COMPOSITION — ONE dominant focal element per page (a large illustration via add_illustration, a photo, or a big graphic composite) covering ≥10% of the page, placed in the hero band — unless the brief itself demands minimalism, never ship a text-only page.',
       '· Background treatment: set_background first, then LAYER 2-3 large low-opacity shapes (rgba fills) or a gradient band (add_shape with gradientFrom/gradientTo) BEHIND the content — a flat empty background reads as unfinished.',
       '· CTA = a composite button: a filled rounded rect (add_shape with cornerRadius 40-80) with a short bold text centered on top — never bare text alone.',
       '· Accents are placed, not dropped: give every sticker/icon an x/y/size integrated with the composition (beside headings, corners, edges) — icons floating in dead space is the failure mode.',
       '· Theme effects: futuristic/neon briefs get neon/glow text effects (add_text effect:"neon", or update_elements textEffect) and shadows (update_elements shadowColor/shadowBlur) — the editor renders them natively.',
       '',
     )
+  }
+
+  // v0.32.7 · INTERRUPTED RUN RECOVERY — the previous run on this
+  // design was cut off mid-flight (provider/network). Its persisted
+  // brief, plan, applied and pending work ride the prompt so a
+  // retry COMPLETES the work instead of duplicating it.
+  if (recovery?.length) {
+    lines.push('INTERRUPTED RUN RECOVERY (the previous run on this design was interrupted — its state, persisted):')
+    for (const entry of recovery) lines.push(`· ${entry}`)
+    lines.push('· The canvas ALREADY contains the applied work — verify with get_page_state before adding anything, and NEVER re-add existing content. Complete only the missing pieces.', '')
   }
 
   // v0.32.4: the per-design run ledger — what the agent did in THIS
@@ -261,6 +330,16 @@ function observationFor(tool: string, result: SanitizeResult, ok: boolean): stri
   return `ERROR in ${tool}: ${result.ok ? 'unknown error' : result.error}`
 }
 
+/** v0.32.7 · which audit issues BLOCK completion? Everything the
+ *  audit itself marks ADVISORY (alignment, typography, hierarchy,
+ *  deep-margin text) is disclosed but never blocking; the rest
+ *  (contrast, overlap, off-canvas, obscured text, duplicates,
+ *  empty planned sections) are hard readability failures — a run
+ *  with one of them left after the fix round ends INCOMPLETE. */
+function isAuditBlocking(issue: string): boolean {
+  return !/^(ADVISORY|Text ".*" sits deep inside the page margin)/.test(issue)
+}
+
 /** Hash a tool call for cycle detection. */
 function callHash(tool: string, args: unknown): string {
   try {
@@ -293,6 +372,10 @@ function compactMessages(
 export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
   const { chat, design, mode, emit, signal } = deps
   const brief = deps.brief ?? null
+  // v0.32.7 · CONTEXT-AWARE EDITING: what does this message want
+  // DONE to the existing design? (classifyEditIntent is deterministic
+  // — the route pre-computes it, the harness lets it default here)
+  const intent = deps.intent ?? classifyEditIntent(deps.request, design).intent
   const skills =
     deps.skills ??
     selectSkills(
@@ -357,20 +440,46 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
    *  produce a fitting plan stops honestly with the exact math
    *  instead of retrying forever. */
   let planRejections = 0
+  // ── v0.32.7 · PERSISTENT EXECUTION ─────────────────────────
+  // The run's live state: what was asked, planned, applied, verified.
+  // deps.persistRun (best-effort) writes it to DesignAgentRun so an
+  // interrupted run (429/502/network) can be COMPLETED by the next
+  // message instead of restarted-and-duplicated.
+  const appliedLog: { tool: string; detail?: string }[] = []
+  const verificationLog: string[] = []
+  const persist = (status: RunStateSnapshot['status'], pending: string[] = []) => {
+    if (!deps.persistRun) return
+    try {
+      deps.persistRun({
+        intent,
+        request: deps.request.slice(0, 240),
+        brief: brief ? { requiredTexts: (brief.requiredTexts ?? []).map((t) => t.text) } : null,
+        plan: planBands.length ? planBands.map((b) => ({ name: b.name, y: Math.round(b.y), h: Math.round(b.h) })) : undefined,
+        applied: appliedLog.slice(-40),
+        pending,
+        verification: verificationLog.slice(-8),
+        status,
+      })
+    } catch {
+      /* best-effort — persistence must never break the run */
+    }
+  }
 
   const toolCtx: ToolContext = {
     validIds: contextValidIds(design),
     width: design.width ?? 1080,
     height: design.height ?? 1080,
     fonts: new Set(fontFamilies()),
-    // v0.32.6 · the CANVAS MAP: existing elements' occupied bands.
-    // The plan solver fits new sections into the FREE space between
-    // them — nothing is planned on top of existing content.
-    occupied: canvasMap(design),
+    // v0.32.6 · the CANVAS MAP → v0.32.7: TRUE 2D — occupied bands
+    // (section-scale), small-element partials and the largest free
+    // regions all ride the tool context now (spatial.ts). The plan
+    // solver fits new sections into the FREE space; the plan
+    // observation discloses the whole map.
+    ...spatialCtx(design),
   }
 
   const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
-    { role: 'system', content: loopSystemPrompt({ design, ctx: toolCtx, mode, brief, skills, ledger: deps.ledger }) },
+    { role: 'system', content: loopSystemPrompt({ design, ctx: toolCtx, mode, brief, skills, ledger: deps.ledger, intent, recovery: deps.recovery }) },
     // v0.32.3: the conversation this request arrives in — prior
     // user/assistant turns, verbatim (route-sanitized). The model
     // knows what it already did in this chat.
@@ -388,6 +497,7 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
   const requestIndex = messages.length - 1
 
   emit({ v: AGENT_PROTOCOL_VERSION, type: 'mode', mode, reason: `classified as ${mode}` })
+  emit({ v: AGENT_PROTOCOL_VERSION, type: 'intent', intent, reason: classifyEditIntent(deps.request, design).reason })
   for (const s of skills) emit({ v: AGENT_PROTOCOL_VERSION, type: 'skill', id: s.id, name: s.name })
   if (brief) emit({ v: AGENT_PROTOCOL_VERSION, type: 'brief', brief: brief as unknown as Record<string, unknown> })
 
@@ -439,6 +549,11 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
   const guardExitWithTelemetry = async (base: string, reason: string) => {
     const exit = await guardExit(base)
     telemetry({ outcome: 'guard-exit', reason, steps, toolCalls, designChanges, planRejections })
+    // v0.32.7: a provider/network guard exit is an INTERRUPTION —
+    // the run state persists so the next message COMPLETES the work.
+    // Every other guard exit is an honest stop (state keeps what
+    // landed, for the ledger + recovery context).
+    persist(reason === 'provider' ? 'interrupted' : 'stopped')
     return exit
   }
 
@@ -503,7 +618,10 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         message: `The AI provider failed: ${err instanceof Error ? err.message.slice(0, 200) : 'unknown error'}. Applied work is kept — retry to continue.`,
         code: 'PROVIDER',
       })
-      const exit = await guardExitWithTelemetry(summary, 'provider')
+      const exit = await guardExitWithTelemetry(
+        summary || 'The run was interrupted by an AI provider failure — applied work is kept; send a follow-up to complete it.',
+        'provider',
+      )
       return { summary: exit.summary, steps, toolCalls, verification: exit.verification }
     }
 
@@ -532,6 +650,7 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
       if ((mode === 'create' || mode === 'improve') && designChanges === 0) {
         emptyDoneRejections += 1
         if (emptyDoneRejections >= 2) {
+          persist('stopped')
           const honest = `INCOMPLETE — no design changes were made. ${summary}`
           const noChangeVerification =
             'NOT completed — the run ended without applying any design change; nothing was created.'
@@ -559,6 +678,7 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
             // the model cannot or will not satisfy the brief — end
             // HONESTLY with the unmet list instead of looping
             const unmetList = v.unmet.map((u) => `· ${u}`).join('\n')
+            persist('stopped', v.unmet.slice(0, 8))
             const blockedSummary = `Stopped: the brief still has unmet requirements after ${doneRejections} completion attempts. Applied work is kept.\nUnmet:\n${unmetList}`
             emit({ v: AGENT_PROTOCOL_VERSION, type: 'done', summary: blockedSummary, steps, toolCalls })
             return { summary: blockedSummary, steps, toolCalls }
@@ -572,15 +692,18 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         if (v?.satisfied) {
           briefValidated = true
           verification = 'Brief contract validated against the live canvas — all mandatory items present.'
+          verificationLog.push('brief validated')
         }
       }
       // QUALITY AUDIT (v0.29): self-critique before the run is
       // accepted — local heuristics only, no extra model calls.
-      // BOUNDED fix rounds (v0.32.8: AGENT_GUARDS.auditFixRounds — the
-      // NEON 2027 run cleared 3 of 4 issues in round one and disclosed
-      // the straggler; one more bounded pass clears it): done is then
-      // accepted with the residue DISCLOSED (audit → fix → re-audit →
-      // honest outcome), never looped.
+      // v0.32.7 · AUTONOMOUS CORRECTION, COMPLETED: exactly ONE fix
+      // round, then the re-audit is AUTHORITATIVE — remaining
+      // BLOCKING issues (overlap, off-canvas, covered text,
+      // duplicates, contrast — anything not marked ADVISORY) end the
+      // run INCOMPLETE, exactly like the vision round's P0 gate. A
+      // run may not claim success while a required check still
+      // fails; advisories stay disclosed, never blocking.
       if ((mode === 'create' || mode === 'improve') && deps.auditDesign) {
         let issues: string[] = []
         try {
@@ -588,29 +711,100 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         } catch {
           /* audit is best-effort — never block completion on it */
         }
-        if (issues.length && auditRounds < AGENT_GUARDS.auditFixRounds) {
+        let blocking = issues.filter(isAuditBlocking)
+        if (blocking.length && auditRounds === 0) {
           auditRounds += 1
-          const list = issues.map((i) => `· ${i}`).join('\n')
-          emit({
-            v: AGENT_PROTOCOL_VERSION,
-            type: 'observation',
-            stepIndex: steps,
-            message: `QUALITY AUDIT — ${issues.length} fixable issue(s) found:\n${list}`,
-          })
-          messages.push({
-            role: 'user',
-            content: `QUALITY AUDIT before completion — the canvas has these fixable problems:\n${list}\nFix them now with concrete tool calls (contrast: change the text fill; overflow: reduce fontSize, shorten text or widen the box; overlap/off-canvas: move or resize), then emit done again with an updated summary.`,
-          })
-          continue
+
+          // v0.34 · DETERMINISTIC REPAIR FIRST — code fixes what code
+          // can prove a fix for (covered texts, off-canvas elements,
+          // unreadable contrast, sliver assets); the model's fix round
+          // only ever sees what code cannot repair. The NEON 2027
+          // live repro ended with 12 disclosed-unfixed issues — every
+          // one mechanically repairable. The repairs ride the same
+          // acked bridge as model actions: undoable, confirmed
+          // against the authoritative canvas, and disclosed.
+          try {
+            const live = deps.refreshedContext?.() ?? design
+            const plan = planRepair(live, issues)
+            if (plan.actions.length) {
+              emit({
+                v: AGENT_PROTOCOL_VERSION,
+                type: 'action',
+                stepIndex: steps,
+                callId: `repair-${steps}-${Math.random().toString(36).slice(2, 8)}`,
+                risk: 'write',
+                tool: 'repair',
+                actions: plan.actions,
+              })
+              const ack = (await deps.awaitApply?.()) ?? { ok: true }
+              if (ack.ok) {
+                emit({
+                  v: AGENT_PROTOCOL_VERSION,
+                  type: 'observation',
+                  stepIndex: steps,
+                  message: `DETERMINISTIC REPAIR — ${plan.actions.length} fix(es) applied: ${plan.notes.slice(0, 4).join('; ')}${plan.notes.length > 4 ? ` (+${plan.notes.length - 4} more)` : ''}`,
+                })
+                verificationLog.push(`repair: ${plan.actions.length} deterministic fix(es)`)
+                designChanges += plan.actions.length
+                // re-audit against the repaired canvas — blocking
+                // issues the engine cleared are DONE, not re-sent
+                issues = (await deps.auditDesign(planBands.length ? planBands : undefined)) ?? []
+                blocking = issues.filter(isAuditBlocking)
+                if (!blocking.length) {
+                  verification = verification
+                    ? `${verification} Quality audit passed after the deterministic repair (${plan.actions.length} code fix(es)).`
+                    : `Quality audit passed after the deterministic repair (${plan.actions.length} code fix(es)).`
+                }
+              } else {
+                emit({
+                  v: AGENT_PROTOCOL_VERSION,
+                  type: 'observation',
+                  stepIndex: steps,
+                  message: `Deterministic repair could not be applied (${ack.message ?? 'client rejected'}) — the issues stay for the fix round.`,
+                })
+              }
+            }
+          } catch {
+            /* the repair is best-effort; the fix round still runs */
+          }
+
+          if (blocking.length) {
+            const list = blocking.map((i) => `· ${i}`).join('\n')
+            emit({
+              v: AGENT_PROTOCOL_VERSION,
+              type: 'observation',
+              stepIndex: steps,
+              message: `QUALITY AUDIT — ${blocking.length} blocking issue(s) remain after the deterministic repair (advisories disclosed):\n${list}${issues.length > blocking.length ? `\nAdvisories (not blocking): ${issues.filter((i) => !isAuditBlocking(i)).slice(0, 2).join('; ')}` : ''}`,
+            })
+            messages.push({
+              role: 'user',
+              content: `QUALITY AUDIT before completion — the deterministic repair pass cleared what code could fix; these problems need your judgement:\n${list}\nFix them now with concrete tool calls (contrast: change the text fill; overflow: reduce fontSize, shorten text or widen the box; overlap/off-canvas: move or resize; covered: raise the element with update_elements or move it), then emit done again with an updated summary.`,
+            })
+            continue
+          }
         }
         if (!issues.length) {
           verification = verification
             ? `${verification} Quality audit passed: contrast, spacing and bounds clean.`
             : 'Quality audit passed: contrast, spacing and bounds clean.'
-        } else if (auditRounds > 0) {
-          verification = verification
-            ? `${verification} Quality audit still reports ${issues.length} issue(s) after the fix rounds — disclosed, not blocking.`
-            : `Quality audit still reports ${issues.length} issue(s) after the fix rounds — disclosed, not blocking.`
+        } else if (auditRounds > 0 && blocking.length) {
+          // the fix round ran, the re-audit still finds blockers —
+          // honest INCOMPLETE (the same contract as the vision round)
+          verificationLog.push(`audit: ${blocking.length} blocking issue(s) remained after the fix round`)
+          const blockList = blocking.map((i) => `· ${i}`).join('\n')
+          verification = `NOT verified — ${blocking.length} blocking quality issue(s) remain after the correction pass:\n${blockList}\nThe design is NOT confirmed correct; the issues above need a follow-up.`
+          const blocked = `INCOMPLETE — blocking quality issues remain after the correction pass. ${summary}`
+          persist('stopped', blocking.slice(0, 6))
+          emit({ v: AGENT_PROTOCOL_VERSION, type: 'done', summary: blocked, steps, toolCalls, verification })
+          return { summary: blocked, steps, toolCalls, verification }
+        } else {
+          // no blocking issue (none at all, or advisories only —
+          // advisories never trigger a fix round and never block)
+          const note = issues.length
+            ? `no blocking issues remain (${issues.length} advisory/disclosed)`
+            : 'contrast, spacing and bounds clean'
+          const when = auditRounds > 0 ? 'Quality audit after the fix round' : 'Quality audit passed'
+          verification = verification ? `${verification} ${when}: ${note}.` : `${when}: ${note}.`
         }
       }
 
@@ -690,6 +884,12 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         }
       }
 
+      // v0.32.7 · persistent execution: the completed run's state —
+      // for the ledger + the recovery context of any FUTURE run
+      if (visionBlocked) verificationLog.push('vision: P0 defects remained')
+      else if (visionCritiques > 0) verificationLog.push('vision pass complete')
+      if (briefValidated) verificationLog.push('brief validated')
+      persist('completed')
       emit({ v: AGENT_PROTOCOL_VERSION, type: 'done', summary, steps, toolCalls, verification })
       return {
         summary,
@@ -724,15 +924,20 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
       })
       continue
     }
-    // v0.32.3 PLAN-FIRST: a create/improve run whose first action is
-    // a WRITE (before any plan_layout) is redirected ONCE — geometry
-    // first, then build. Reads are always fine; a run that already
-    // planned is never bounced; after one bounce the model may
-    // proceed (never a hard block, the guards still hold).
+    // v0.32.3 PLAN-FIRST (v0.32.7: intent-aware): a run whose FIRST
+    // action is a WRITE (before any plan_layout) is redirected ONCE —
+    // geometry first, then build. Reads are always fine; a run that
+    // already planned is never bounced; after one bounce the model
+    // may proceed (never a hard block). INTENT-AWARE: create / add /
+    // redesign plan their composition; reposition / restyle / remove
+    // / refine never need a section plan — the composition already
+    // exists, and forcing one is noise (the live defect: "check and
+    // fix issues" was bounced into planning six new sections).
     if (
       !planBounced &&
       !planHasRun &&
       (mode === 'create' || mode === 'improve') &&
+      intentRequiresPlan(intent) &&
       (tool.risk === 'write' || tool.risk === 'destructive') &&
       toolName !== 'set_background'
     ) {
@@ -764,6 +969,9 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
       planBands.length = 0
       planBands.push(...planActions.flatMap((a) => (a && a.type === '__planLayout' && Array.isArray(a.bands) ? a.bands : [])))
       telemetry({ tool: 'plan_layout', outcome: 'recorded', repaired: (result.observation ?? '').includes('AUTO-REPAIRED'), bands: planBands.length })
+      // v0.32.7: persist the run state (the plan is the backbone of
+      // recovery — an interrupted run's next message completes it)
+      persist('running')
       const lines = planLines.length ? planLines : ['(model emitted an empty plan)']
       emit({ v: AGENT_PROTOCOL_VERSION, type: 'plan', steps: lines })
       emit({ v: AGENT_PROTOCOL_VERSION, type: 'observation', stepIndex: steps, message: result.observation })
@@ -937,7 +1145,16 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
     markProgress()
     // v0.32.2: only real writes count as design changes (reads —
     // get_page_state/measure/plan/validate — never do)
-    if (tool.risk === 'write' || tool.risk === 'destructive') designChanges += 1
+    if (tool.risk === 'write' || tool.risk === 'destructive') {
+      designChanges += 1
+      // v0.32.7 · persistent execution: applied writes ride the
+      // run state — recovery knows what already landed
+      appliedLog.push({
+        tool: toolName,
+        detail: (result.actions as { type?: string }[] | undefined)?.slice(0, 2).map((a) => a.type).join(','),
+      })
+      persist('running')
+    }
     emit({ v: AGENT_PROTOCOL_VERSION, type: 'observation', stepIndex: steps - 1, message: result.observation })
 
     // usage telemetry: immediately on the first apply, then at most
@@ -956,9 +1173,9 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         content: `UPDATED PAGE STATE (fresh from the client after your edits):\n${serializeDesignContext(refreshed)}`,
       })
       // refresh the local tool context too — new ids are valid now
-      // and the canvas map reflects what the edits actually occupy
+      // and the 2D canvas map reflects what the edits actually occupy
       toolCtx.validIds = contextValidIds(refreshed)
-      toolCtx.occupied = canvasMap(refreshed)
+      Object.assign(toolCtx, spatialCtx(refreshed))
       continue
     }
 

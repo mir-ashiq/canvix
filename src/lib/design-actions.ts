@@ -695,6 +695,14 @@ export async function applyDesignAction(action: DesignAction, caller?: ActionCal
           ...(Number.isFinite(Number(action.x)) ? { x: Math.round(Number(action.x)) } : {}),
           ...(Number.isFinite(Number(action.y)) ? { y: Math.round(Number(action.y)) } : {}),
         })
+        // v0.34: the library name rides the element — the brief's
+        // semantic verification reads it (an unrelated asset must not
+        // satisfy an illustration requirement by area alone)
+        el.name = String(action.name ?? 'illustration')
+        // the pack rides the alt — the brief's semantic verification
+        // matches "technology illustration" against "circuit board
+        // (tech pack)" through it
+        el.alt = `${String(action.name ?? 'illustration')} (${String(action.pack ?? 'illustration')} pack)`
         useEditorStore.getState().addElement(el)
         return `Illustration "${String(action.name ?? 'illustration')}" added`
       }

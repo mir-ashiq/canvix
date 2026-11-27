@@ -645,3 +645,137 @@ carving inside a free band remains the model's job, guarded by the
 audit's overlap checks. Image GENERATION is not yet an agent tool
 (the former Image tab's route remains an API; the agent places
 existing assets, URLs and uploads).
+
+---
+
+# v0.32.7 — spatial intelligence, intent, persistence, resilience
+
+**The mandate:** "True 2D spatial intelligence… context-aware editing…
+persistent execution and recovery… provider resilience… multilevel
+verification… autonomous correction… test integrity… comprehensive
+evaluation… transparent reporting. Do not claim production readiness
+based solely on passing unit tests."
+
+## 1 · True 2D spatial intelligence (`src/lib/agent/spatial.ts`)
+
+The v0.32.6 canvas map was vertical-only. Now:
+
+- **AABBs with rotation** — a rotated rect expands to its true
+  footprint (`aabb()`, rotation rides the client context).
+- **Intentional layering** — a card behind its contained text, a
+  near-page backdrop, a backing card: `intentionalOverlaps()`
+  classifies them so the audit never flags correct layering (the
+  client's overlap list is filtered through it).
+- **Section-scale band blocking** — only elements ≥40% of the page
+  width block a full-width section band; smaller elements become
+  disclosed *partials* ("180x60 icon at (460,500) — plan around it
+  horizontally").
+- **2D free regions** — the largest free rectangles
+  (`freeRegions2D`), disclosed to the model in the design context
+  and the plan observation.
+- **Visual hierarchy** — the descending text-size ladder + a
+  flat-hierarchy advisory.
+
+## 2 · Context-aware editing (`src/lib/agent/intent.ts`)
+
+"Not every instruction on a populated canvas is an addition."
+`classifyEditIntent()` (deterministic, no model call) classifies
+the message as **add / replace / reposition / restyle / redesign /
+remove / refine / review / create**; the plan-first gate now fires
+only for create/add/redesign — a "check and fix issues" REFINE run
+is never bounced into planning six new sections (the live defect).
+Per-intent guidance rides the system prompt; the intent streams to
+the panel (SSE `intent` event) and shows live + on each turn.
+
+## 3 · Persistent execution + recovery
+
+`DesignAgentRun` gains `status` (running | interrupted | completed |
+stopped) + `state` (RunStateSnapshot: intent, request, brief, plan
+bands, applied actions, pending, verification milestones,
+migration `0016_agent_run_state`). The row is created at run START,
+updated live by the loop (`persistRun`), finalized at exit. A
+provider/network guard exit marks it **interrupted** — and the NEXT
+run on that design loads the snapshot and injects **INTERRUPTED RUN
+RECOVERY** into the system prompt: original request, what already
+landed, the plan, the verification state, and the instruction to
+COMPLETE, never re-add. No new surfaces, no selectors — the same
+agent, now recoverable.
+
+## 4 · Provider resilience (`src/lib/ai/chat-resilience.ts`)
+
+The 26 Nov incident (502 → fetch failed → 429, two hours) killed
+every mid-flight run. Now every agent model call goes through
+`chatResilient()`:
+
+- **bounded exponential backoff** (3 attempts, full jitter, capped)
+  for TRANSIENT failures only — auth/bad-request/unsupported-param
+  errors fail fast (retrying them burns money, not time);
+- **circuit breaker** per provider (5 consecutive transient
+  failures → open 30s → skip straight to fallback);
+- **the configured fallback chain** — the user's other BYOK text
+  providers, the instance slot, the env/file layers. Nothing is
+  invented: only already-configured providers answer, every attempt
+  passes the feature rate limit + AIUsage accounting, and
+  `ZAI_NO_FALLBACK=1` disables the chain for spend control.
+
+Token accounting: gateway-reported usage is accumulated + surfaced
+in the run's final usage event and the panel ("· 12.4k tokens");
+absent gateway usage is disclosed as "not reported", never estimated.
+
+## 5 · Multilevel verification + autonomous correction
+
+The audit (now 14 checks) understands intentional layering and adds
+alignment, typography-sprawl and hierarchy advisories. The
+**blocking contract**: contrast, overlap, off-canvas, obscured
+text, duplicates and empty planned sections trigger ONE bounded fix
+round, then the re-audit is AUTHORITATIVE — remaining blockers end
+the run **INCOMPLETE** (the same contract the vision round's P0
+gate already had). Advisories are disclosed, never blocking. The
+brief validator adopts the design engine's NFC-exact contract
+(composed accents are matches, not alterations).
+
+## 6 · Test integrity (the PR #94 fixtures, reviewed)
+
+All 13 v0.32.6-modified flows re-reviewed: the 11 moved to
+`compactDesign` + CASE C keep their original assertions and
+behavioral coverage (the plan-validation, brief-gate, audit,
+compaction and capability semantics are identical — the fixture
+only provides real free space, which PR #94's tests had made
+necessary and which remains CORRECT: a full-composition plan on a
+nearly-full canvas is honestly infeasible). None of them test the
+spread-out geometry itself; the spatial module now has dedicated
+coverage of both layouts. New regressions: 13 spatial, 15 intent,
+11 resilience, 11 loop-level (gate exemptions, blocking audit,
+interrupted-run persistence, recovery injection, intentional
+layering, advisories, NFC). A panel crash on partial brief events
+(found by the new e2e) is fixed defensively.
+
+## 7 · Evaluation — mocked vs real, labeled
+
+- **Mocked (CI):** unified-ai-reproduction 3/3, wave4 4/4, and the
+  new interrupted-run recovery e2e (mocked route, real editor).
+- **REAL (not in CI):** `tests/e2e/live-agent-benchmark.spec.ts`
+  (`CANVIX_BENCH_LIVE=1`) — real provider, real browser, real
+  route: seven design types + one editing scenario, each measured
+  for completion, brief fidelity, geometry (off-canvas, text-on-text
+  overlaps), intent, latency, turns/tools/model calls/tokens, and
+  provider failures. The report (`docs/BENCHMARK-v0.32.7.md`) is
+  written by the run itself — never hand-typed. See it for the
+  actual completion rates.
+
+## 8 · Evaluation state — HONEST
+
+The live benchmark (`tests/e2e/live-agent-benchmark.spec.ts`,
+`CANVIX_BENCH_LIVE=1`) was launched twice against the live provider.
+Both attempts were interrupted by the gateway's rate limits
+(real 429s under sustained load — the same incident class as
+26 Nov): the first attempt's poster run reached 13 steps · 11
+actions before a 429, the honest provider-failure message appeared,
+and the run persisted as interrupted exactly as designed. The
+benchmark spec (recovery-aware, cooldowns, 429 backoff ladder) did
+not complete a full 7-scenario pass in the session, so **no
+completion rates are claimed** — `docs/BENCHMARK-v0.32.7.md` is
+written only by a real completed run, never by hand. No merge was
+made from unit/mocked results alone (per the milestone's own
+rule); the PR stays open until a completed live benchmark is on
+record.

@@ -361,7 +361,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <DialogTitle className="flex items-center gap-2">
             <FileImage size={18} className="text-[#7D2AE8]" /> Download your design
           </DialogTitle>
-          <DialogDescription>No watermarks. Files are generated locally in your browser.</DialogDescription>
+          <DialogDescription>دون علامات مائية. تُنشأ الملفات محلياً في متصفحك.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 py-2">
@@ -412,7 +412,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                   <strong>looping forever</strong>.
                 </p>
                 {pagesHaveAutoplayVideo(pages) ? (
-                  <p>Autoplay videos export with their moving content frame-accurately — non-autoplay videos keep their poster.</p>
+                  <p>تُصدّر مقاطع الفيديو ذات التشغيل التلقائي بمحتواها المتحرك بدقة إطار بإطار، أما المقاطع التي لا تعمل تلقائياً فتحتفظ بصورة المعاينة.</p>
                 ) : null}
                 <p>ملفات GIF <strong>بلا صوت</strong> لأن هذا التنسيق لا يدعم المسار الصوتي. الحد الأقصى 25 ميغابايت و1800 إطار؛ وسيتوقف التصدير مع إظهار تنبيه إذا تجاوز أحد الحدين.</p>
                 <div>
@@ -453,7 +453,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                 <label className="flex items-center justify-between rounded-xl border border-black/10 px-4 py-3 cursor-pointer">
                   <span>
                     Dithering
-                    <span className="block font-normal">Smoother gradients, slightly larger file</span>
+                    <span className="block font-normal">تدرجات أكثر نعومة مع حجم ملف أكبر قليلاً</span>
                   </span>
                   <input type="checkbox" checked={gifDither} onChange={(e) => setGifDither(e.target.checked)} className="accent-[#00C4CC] h-4 w-4" />
                 </label>
@@ -509,7 +509,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                   {engine === null ? (
                     <>Choosing the export engine…</>
                   ) : engine.engine === 'webcodecs' ? (
-                    <>Engine: <strong>WebCodecs → WebM (VP9)</strong> — frame-exact timeline, explicit bitrate, rendered locally (no upload)</>
+                    <>المحرك: <strong>WebCodecs → WebM (VP9)</strong> — خط زمني دقيق بالإطارات، ومعدل بت محدد، مع التصيير محلياً دون رفع الملفات.</>
                   ) : engine.engine === 'mediarecorder' && videoFormat ? (
                     <>
                       Engine: <strong>MediaRecorder → {videoFormat.label}</strong>
@@ -521,7 +521,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                       {' '}· rendered locally (no upload)
                     </>
                   ) : (
-                    <span className="text-red-500">This browser cannot export video — try Chrome or Edge.</span>
+                    <span className="text-red-500">هذا المتصفح لا يدعم تصدير الفيديو — جرّب Chrome أو Edge.</span>
                   )}
                 </p>
                 {pagesHaveAutoplayVideo(pages) ? (

@@ -1,27 +1,29 @@
-// ─────────────────────────────────────────────────────────────
-// db-script — Prisma factory for Node-side scripts (v0.9.3)
-//
-// Used by prisma/seed.ts, scripts/db-check.ts, scripts/usage-
-// forensics.ts and the embedded tsx probes in scripts/auth-e2e.sh.
-// Deliberately imports everything RELATIVE (no '@/' alias) so plain
-// `tsx` can run it without a bundler resolving tsconfig paths.
-//
-// Mirrors src/lib/db.ts: rust-free client + @prisma/adapter-pg, one
-// pooled connection per process.
-// ─────────────────────────────────────────────────────────────
+import { PrismaD1 } from '@prisma/adapter-d1'
+import { PrismaClient } from '@/generated/prisma/client'
 
-import { PrismaPg } from '@prisma/adapter-pg'
-import { PrismaClient } from '../generated/prisma/client'
-import { driverConnectionString, normalizeDatabaseUrl } from './db-url'
+/**
+ * CLI/script Prisma client for D1.
+ *
+ * Runtime requests use env.DB directly. Operator scripts can target the
+ * remote D1 database through Prisma's HTTP adapter using Cloudflare
+ * credentials supplied in the shell environment.
+ */
+export function createScriptClient(_rawUrl?: string) {
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
+  const databaseId = process.env.CLOUDFLARE_DATABASE_ID
+  const token = process.env.CLOUDFLARE_D1_TOKEN
 
-export function createScriptClient(rawUrl?: string): PrismaClient {
-  // keep the env var normalized too — anything constructed later in the
-  // same process (e.g. prisma CLI helpers) sees the Supabase-safe URL
-  process.env.DATABASE_URL = normalizeDatabaseUrl(process.env.DATABASE_URL)
-  const url = rawUrl ?? process.env.DATABASE_URL
-  const adapter = new PrismaPg({
-    connectionString: driverConnectionString(url),
-    max: 1,
+  if (!accountId || !databaseId || !token) {
+    throw new Error(
+      'CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_DATABASE_ID and CLOUDFLARE_D1_TOKEN are required for D1 scripts.',
+    )
+  }
+
+  const adapter = new PrismaD1({
+    CLOUDFLARE_ACCOUNT_ID: accountId,
+    CLOUDFLARE_DATABASE_ID: databaseId,
+    CLOUDFLARE_D1_TOKEN: token,
   })
-  return new PrismaClient({ adapter, log: ['error'] })
+
+  return new PrismaClient({ adapter })
 }

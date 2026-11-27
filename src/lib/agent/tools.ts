@@ -91,8 +91,20 @@ function idList(args: Record<string, unknown>, ctx: ToolContext, key = 'ids'): {
   const ids: string[] = []
   const invalid: string[] = []
   for (const v of raw.slice(0, 60)) {
-    if (typeof v === 'string' && ctx.validIds.has(v)) ids.push(v)
-    else if (typeof v === 'string') invalid.push(v)
+    if (typeof v !== 'string') continue
+    if (ctx.validIds.has(v)) {
+      ids.push(v)
+      continue
+    }
+    // v0.32.8 · the `type#id` alias. The serialized context, the audit
+    // findings and the overlap reports all print ids as `text#abc123`;
+    // an edit run that copies that notation verbatim was rejected
+    // three times in a row and died at STRIKES (the "fix issues"
+    // incident). Strip the prefix and accept the bare id — the same
+    // alias discipline as the color/fontColor/textColor patch aliases.
+    const bare = v.includes('#') ? v.slice(v.indexOf('#') + 1) : ''
+    if (bare && ctx.validIds.has(bare)) ids.push(bare)
+    else invalid.push(v)
   }
   if (ids.length === 0) {
     return {

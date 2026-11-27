@@ -58,8 +58,16 @@ export const AGENT_GUARDS = {
   /** v0.32.5: consecutive infeasible plan_layout rejections before
    *  an honest stop with the exact math (separate from `strikes` —
    *  geometric constraint failures are recoverable, not model
-   *  failures, but a run may not retry them forever) */
+   *  failures, but a run may not retry them forever). v0.32.8: with
+   *  the solver scaling oversized plans, rejection means a malformed
+   *  section or a composition that cannot fit even at the 56px floor
+   *  — still bounded, still honest */
   planRejections: 3,
+  /** v0.32.8: quality-audit fix rounds before the residue is
+   *  disclosed as unfixable-by-this-run (bounded — never a loop).
+   *  The NEON 2027 run cleared 3 of 4 audit issues in round one and
+   *  disclosed the straggler; one more bounded pass clears it */
+  auditFixRounds: 2,
 } as const
 
 /** v0.28 modes (Phase 8). Read-only modes (review, explain, plan,

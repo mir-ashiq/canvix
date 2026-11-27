@@ -322,14 +322,15 @@ describe('harness · tool matrix', () => {
     expect(String((finalEvent as { verification?: string }).verification ?? '')).toContain('Quality audit passed')
   })
 
-  it('CASE H: audit residue is disclosed, never looped — a second failing audit still accepts done', async () => {
+  it('CASE H: audit residue is disclosed, never looped — after the bounded fix rounds a still-failing audit accepts done', async () => {
     const events: AgentEvent[] = []
     const { chat } = scriptedChat([
       turn('set_background', { kind: 'solid', from: '#090B1A' }),
       turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
       turn('add_text', { text: 'Still dark', fontSize: 40, color: '#111122' }),
       done('Done attempt 1'),
-      done('Done attempt 2 — unfixable, disclosed'),
+      done('Done attempt 2'),
+      done('Done attempt 3 — unfixable, disclosed'),
     ])
     const result = await runAgentLoop({
       chat,
@@ -1541,10 +1542,9 @@ describe('v0.29.3 · loop: planning + fail-closed acks', () => {
       { name: 'b', y: 305, h: 100 },
     ])
 
-    // truly INFEASIBLE (1200px of content > 950px usable): rejected
-    // with the exact math — never a fabricated plan. No strikes: the
-    // loop's separate plan budget handles it (pinned below).
-    const infeasible = tool!.sanitize(
+    // v0.32.8: 1200px of content on a 950px usable page is no longer
+    // infeasible — it SCALES (disclosed): 3×290px bands with 40px gaps.
+    const oversized = tool!.sanitize(
       {
         sections: [
           { name: 'a', y: 65, height: 400, contains: 'x' },
@@ -1554,12 +1554,27 @@ describe('v0.29.3 · loop: planning + fail-closed acks', () => {
       },
       ctx,
     )
+    expect(oversized.ok).toBe(true)
+    const ob = (oversized as { actions?: { bands?: { name: string; y: number; h: number }[] }[] }).actions?.[0]?.bands
+    expect(ob?.every((b) => b.h === 290)).toBe(true)
+    expect(ob![2].y + ob![2].h).toBeLessThanOrEqual(1015)
+    expect(String((oversized as { observation?: string }).observation)).toContain('AUTO-REPAIRED')
+
+    // truly INFEASIBLE remains for compositions that cannot fit even at
+    // the 56px floor: 12 sections floor to 672px + 440px of gaps =
+    // 1112px > the 950px safe area — rejected with the exact math. No
+    // strikes: the loop's separate plan budget handles it (pinned below).
+    const infeasible = tool!.sanitize(
+      {
+        sections: Array.from({ length: 12 }, (_, i) => ({ name: `s${i + 1}`, y: 65 + i * 100, height: 140, contains: 'x' })),
+      },
+      ctx,
+    )
     expect(infeasible.ok).toBe(false)
     const err = String((infeasible as { error?: string }).error)
     expect(err).toContain('Infeasible plan')
-    expect(err).toContain('1200px')
-    expect(err).toContain('950px')
-    expect(err).toContain('Reduce the section heights')
+    expect(err).toContain('56px minimum band')
+    expect(err).toContain('at most 10 sections')
   })
 
   it('a failed (timed-out) apply ack tells the model the action was NOT applied — fail closed', async () => {
@@ -2270,14 +2285,14 @@ describe('v0.32.5 · the P0 regression — recoverable geometry must not kill a 
     expect(calls.some((c) => c.some((m) => m.content.includes('AUTO-REPAIRED')))).toBe(true)
   })
 
-  it('three INFEASIBLE plans stop honestly with the exact math — bounded, never an infinite retry', async () => {
+  it('three FLOOR-INFEASIBLE plans stop honestly with the exact math — bounded, never an infinite retry', async () => {
     const events: AgentEvent[] = []
+    // v0.32.8: oversized plans are SCALED, not rejected — a plan only
+    // stays infeasible when it cannot fit even at the 56px floor (12
+    // sections = 672px of floor + 440px of gaps > the 950px safe area).
+    // Three of those still stop the run honestly.
     const infeasible = () => ({
-      sections: [
-        { name: 'a', y: 65, height: 400, contains: 'x' },
-        { name: 'b', y: 505, height: 400, contains: 'y' },
-        { name: 'c', y: 945, height: 400, contains: 'z' },
-      ],
+      sections: Array.from({ length: 12 }, (_, i) => ({ name: `s${i + 1}`, y: 65 + i * 100, height: 140, contains: 'x' })),
     })
     const { chat } = scriptedChat([
       turn('plan_layout', infeasible()),
@@ -2294,7 +2309,7 @@ describe('v0.32.5 · the P0 regression — recoverable geometry must not kill a 
       emit: (e) => events.push(e),
       awaitApply: async () => ({ ok: true }),
     })
-    expect(result.summary).toContain('infeasible plans')
+    expect(result.summary).toContain('rejected plan_layout calls')
     expect(result.summary).toContain('INCOMPLETE') // guardExit honesty: zero changes
     expect(result.toolCalls).toBe(0) // nothing applied after the honest stop
     const last = events[events.length - 1]
@@ -2385,10 +2400,19 @@ describe('v0.32.5 · deterministic plan solver (plan-repair.ts)', () => {
         expect(b.bands[i].y - (b.bands[i - 1].y + b.bands[i - 1].h)).toBeGreaterThanOrEqual(40)
       }
     }
-    // infeasible on BOTH: 2000px of content cannot fit either page
+    // v0.32.8: a single oversized section is a full-bleed intent, not an
+    // infeasible composition — scaled to the usable height (disclosed)
     const inf: { name: string; y: number; h: number }[] = [{ name: 'x', y: 100, h: 2000 }]
-    expect(repairPlanBands(inf, 1350).ok).toBe(false)
-    expect(repairPlanBands(inf, 1920).ok).toBe(false)
+    const r1350 = repairPlanBands(inf, 1350)
+    expect(r1350.ok).toBe(true)
+    if (r1350.ok) {
+      expect(r1350.bands[0].y).toBe(81)
+      expect(r1350.bands[0].h).toBe(1188)
+      expect(r1350.repairs.join(' ')).toContain('scaled')
+    }
+    const r1920 = repairPlanBands(inf, 1920)
+    expect(r1920.ok).toBe(true)
+    if (r1920.ok) expect(r1920.bands[0].h).toBe(1690)
   })
 
   it('a VALID plan is accepted unchanged — zero repairs', async () => {
@@ -2555,5 +2579,277 @@ describe('v0.32.6 · the canvas map — plans fit the FREE space, never on top',
     // the single band was fitted BELOW the occupied headline: free
     // space starts at y=365 (headline occupies 65–365)
     expect(plan?.steps?.join('\n')).toContain('y=365')
+  })
+})
+
+// ═════════════════════════════════════════════════════════════
+// v0.32.8 · the NEON 2027 incident — one brief, three runs, three
+// defects, all deterministic:
+//   run 1: a reasonable 7-section poster plan was INFEASIBLE three
+//          times → create died with ZERO elements;
+//   run 2: the in-run vision critique never ran — the capture event
+//          was never emitted, every run stalled the capture timeout
+//          and disclosed "UNAVAILABLE"; the audit disclosed a
+//          fixable residue after ONE round;
+//   run 3: the "fix issues" follow-up died at 3 strikes — the model
+//          passed the `text#id` notation it reads everywhere into
+//          id lists.
+// ═════════════════════════════════════════════════════════════
+
+describe('v0.32.8 · oversized plans are SCALED to fit, never a dead end', () => {
+  it('the incident shape: 7×140px sections on a 1080 page scale in with disclosure', async () => {
+    const { repairPlanBands } = await import('./plan-repair')
+    const r = repairPlanBands(
+      Array.from({ length: 7 }, (_, i) => ({ name: `sec ${i + 1}`, y: 65 + i * 140, h: 140 })),
+      1080,
+    )
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.bands).toHaveLength(7)
+    for (const b of r.bands) {
+      expect(b.h).toBeGreaterThanOrEqual(56)
+      expect(b.h).toBeLessThanOrEqual(140)
+    }
+    expect(r.bands[0].y).toBe(65)
+    expect(r.bands[6].y + r.bands[6].h).toBeLessThanOrEqual(1015)
+    for (let i = 1; i < r.bands.length; i++) {
+      expect(r.bands[i].y - (r.bands[i - 1].y + r.bands[i - 1].h)).toBeGreaterThanOrEqual(40)
+    }
+    expect(r.repairs.join(' ')).toContain('scaled')
+  })
+
+  it('a composition that cannot fit even at the floor stays honestly infeasible with the max-sections math', async () => {
+    const { repairPlanBands } = await import('./plan-repair')
+    const r = repairPlanBands(
+      Array.from({ length: 12 }, (_, i) => ({ name: `s${i + 1}`, y: 65 + i * 100, h: 140 })),
+      1080,
+    )
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.infeasible).toContain('56px minimum band')
+    expect(r.infeasible).toContain('at most 10 sections')
+  })
+
+  it('an occupied canvas with too little free space shrinks sections into it before declaring infeasible', async () => {
+    const { repairPlanBands } = await import('./plan-repair')
+    // free space: a 40px sliver + one 210px interval
+    const r = repairPlanBands(
+      [
+        { name: 'offer', y: 400, h: 120 },
+        { name: 'fineprint', y: 700, h: 120 },
+      ],
+      1080,
+      {
+        occupied: [
+          { y: 65, h: 300, label: 'COFFEE LAUNCH' },
+          { y: 405, h: 400, label: 'Artisan Roast' },
+        ],
+      },
+    )
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    for (const b of r.bands) {
+      expect(b.y).toBeGreaterThanOrEqual(805)
+      expect(b.y + b.h).toBeLessThanOrEqual(1015)
+    }
+    expect(r.bands[1].y - (r.bands[0].y + r.bands[0].h)).toBeGreaterThanOrEqual(40)
+    expect(r.repairs.join(' ')).toContain('scaled to fit the free space')
+  })
+
+  it('the loop accepts the scaled plan and BUILDS — the run no longer dies at planRejections', async () => {
+    const events: AgentEvent[] = []
+    const { chat } = scriptedChat([
+      turn('plan_layout', {
+        background: '#0A0A1A',
+        sections: Array.from({ length: 7 }, (_, i) => ({ name: `section ${i + 1}`, y: 65 + i * 140, height: 140, contains: 'content' })),
+      }),
+      turn('set_background', { kind: 'solid', from: '#0A0A1A' }),
+      turn('add_text', { text: 'NEON 2027', fontSize: 96, color: '#02C0CC' }),
+      done('Built the NEON 2027 poster'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design: compactDesign,
+      mode: 'create',
+      request: 'Create a professional promotional poster for a futuristic technology festival called NEON 2027',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    expect(result.toolCalls).toBe(2)
+    expect(result.summary).toContain('Built')
+    const plan = events.find((e) => e.type === 'plan') as { steps?: string[] } | undefined
+    expect(plan?.steps?.length).toBeGreaterThanOrEqual(8) // background + 7 scaled bands
+    expect(events[events.length - 1]?.type).toBe('done')
+  })
+})
+
+describe('v0.32.8 · the capture event is EMITTED — the panel is actually asked', () => {
+  it('a run with applied changes emits capture BEFORE the capture call — the never-ran critique regression', async () => {
+    const events: AgentEvent[] = []
+    const captureCallsAt: number[] = []
+    const { chat } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      done('Poster complete'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+      captureCanvas: async () => {
+        captureCallsAt.push(events.length)
+        return 'data:image/png;base64,AAA'
+      },
+      critique: async () => ({ findings: [], note: 'clean pass' }),
+    })
+    // the panel was ASKED (the capture event) before the bridge waited
+    const captureIdx = events.findIndex((e) => e.type === 'capture')
+    expect(captureIdx).toBeGreaterThanOrEqual(0)
+    expect((events[captureIdx] as { purpose?: string }).purpose).toContain('visual critique')
+    expect(captureCallsAt).toHaveLength(1)
+    expect(captureCallsAt[0]).toBeGreaterThan(captureIdx) // emitted first, waited second
+    expect(String(result.verification)).toContain('PASSED')
+  })
+
+  it('the timeout path still fails closed (disclosed UNAVAILABLE) — but only after the ask', async () => {
+    const events: AgentEvent[] = []
+    const { chat } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      done('Poster complete'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design,
+      mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+      captureCanvas: async () => null,
+      critique: async () => ({ findings: [], note: 'never used' }),
+    })
+    expect(events.some((e) => e.type === 'capture')).toBe(true)
+    expect(String(result.verification)).toContain('UNAVAILABLE')
+  })
+})
+
+describe('v0.32.8 · a SECOND audit fix round — the residue after round one gets one more pass', () => {
+  it('round 1 clears 3 issues, round 2 clears the straggler, done is accepted clean', async () => {
+    const events: AgentEvent[] = []
+    let auditCalls = 0
+    const { chat } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
+      turn('add_text', { text: 'Dark', fontSize: 40, color: '#111122' }),
+      done('Done attempt 1'),
+      turn('add_text', { text: 'Fix 1', fontSize: 40, color: '#FFFFFF' }),
+      done('Done attempt 2'),
+      turn('add_text', { text: 'Fix 2', fontSize: 40, color: '#FFFFFF' }),
+      done('Done attempt 3 — residue gone'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design: compactDesign,
+      mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+      auditDesign: async () => {
+        auditCalls += 1
+        return auditCalls <= 2
+          ? ['Low contrast: text "Dark" #111122 on #090B1A is 1.0:1 (needs 3:1) — change the text fill.']
+          : []
+      },
+    })
+    expect(auditCalls).toBe(3)
+    expect(result.toolCalls).toBe(4)
+    expect(events.filter((e) => e.type === 'observation' && e.message.includes('QUALITY AUDIT')).length).toBe(2)
+    const finalEvent = events[events.length - 1] as { verification?: string }
+    expect(String(finalEvent.verification)).toContain('Quality audit passed')
+  })
+
+  it('after the second round the residue is disclosed — bounded, never a loop', async () => {
+    const { chat } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      turn('plan_layout', { background: '#090B1A', sections: [{ name: 'hero', y: 60, height: 200, contains: 'Hero' }, { name: 'body', y: 300, height: 300, contains: 'Body' }] }),
+      turn('add_text', { text: 'Dark', fontSize: 40, color: '#111122' }),
+      done('Done 1'),
+      done('Done 2'),
+      done('Done 3'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design: compactDesign,
+      mode: 'create',
+      request: 'Design a bold Instagram post for a coffee launch',
+      emit: () => {},
+      awaitApply: async () => ({ ok: true }),
+      auditDesign: async () => ['Low contrast: text "Dark" #111122 on #090B1A is 1.0:1 (needs 3:1)'],
+    })
+    expect(result.toolCalls).toBe(2)
+    expect(String(result.verification)).toContain('after the fix rounds — disclosed')
+  })
+})
+
+describe('v0.32.8 · the `type#id` alias — the "fix issues" strike-out', () => {
+  it('id lists accept the notation the context, findings and overlaps print everywhere', () => {
+    const update = AGENT_TOOL_MAP.get('update_elements')
+    expect(update).toBeTruthy()
+    const r = update!.sanitize({ ids: ['text#txt-1', 'rect#el-1', 'txt-2'], patch: { fill: '#FFFFFF' } }, ctx)
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect((r.actions[0] as { ids?: string[] }).ids).toEqual(['txt-1', 'el-1', 'txt-2'])
+    }
+    const move = AGENT_TOOL_MAP.get('move_elements')
+    expect(move).toBeTruthy()
+    const m = move!.sanitize({ ids: ['text#nope-xyz'], dx: 10 }, ctx)
+    expect(m.ok).toBe(false) // an unknown bare id is still an honest error
+  })
+
+  it('the edit-mode flow: a "fix issues" run patches by text#id without striking', async () => {
+    const events: AgentEvent[] = []
+    const { chat } = scriptedChat([
+      turn('update_elements', { ids: ['text#txt-1'], patch: { fill: '#FFFFFF' } }),
+      done('Fixed the contrast issue'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design: compactDesign,
+      mode: 'edit',
+      request: 'fix issues',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    expect(result.toolCalls).toBe(1)
+    expect(events.some((e) => e.type === 'error')).toBe(false)
+    expect(events[events.length - 1]?.type).toBe('done')
+  })
+})
+
+describe('v0.32.8 · the second-strike recovery note (the "fix issues" strike-out)', () => {
+  it('the second consecutive rejection carries the get_page_state note BEFORE the run can die', async () => {
+    const events: AgentEvent[] = []
+    const bad = turn('update_elements', { ids: ['txt-1'], patch: { font: 'Inter' } })
+    const { chat, calls } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#090B1A' }),
+      bad,
+      bad,
+      turn('update_elements', { ids: ['txt-1'], patch: { fill: '#FFFFFF' } }),
+      done('Fixed'),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design: compactDesign,
+      mode: 'edit',
+      request: 'fix issues',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+    })
+    // the two rejects never struck the run dead; the recovery note rode
+    // the SECOND error observation (one strike from the end)
+    expect(calls.some((cs) => cs.some((m) => m.content.includes('second failed call in a row')))).toBe(true)
+    expect(result.toolCalls).toBe(2)
+    expect(events[events.length - 1]?.type).toBe('done')
   })
 })

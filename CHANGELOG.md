@@ -3,6 +3,48 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+### Fixed — v0.32.8: the NEON 2027 agent runs — scaled plans, the emitted capture, the `type#id` alias
+
+One brief, three runs, three deterministic defects:
+
+- **Run 1 (create, 0 actions):** a reasonable 7-section poster plan
+  exceeded the safe area; the model cannot redo height arithmetic,
+  and three infeasible rejections ended the run with ZERO elements
+  ("ask the user for a smaller composition or fewer sections").
+  **Fix:** the plan solver now SCALES oversized section heights
+  uniformly to fit (each band floored at 56px, the model's relative
+  hierarchy kept, the scaling DISCLOSED); on an occupied canvas it
+  shrinks sections into the free space (bounded ×0.88 passes,
+  floored) before declaring infeasible. Infeasible survives only
+  for compositions that cannot fit even at the floor — reported
+  with the exact math AND the maximum section count that fits. The
+  system prompt states the computed per-page section budget up
+  front, and the plan-rejection guard message points at the fixable
+  cause (malformed sections / floor-infeasible composition), never
+  at the user's brief.
+- **Run 2 (create, 70 actions):** "Visual critique UNAVAILABLE
+  (canvas capture timed out or no client)" — the `capture` event
+  was in the protocol and handled by the panel but NEVER EMITTED,
+  so every create/improve run stalled the full capture timeout and
+  the in-run vision critique never ran once. **Fix:** the loop
+  emits `capture` before awaiting the bridge answer. Also: a
+  quality-audit residue after the first fix round now gets ONE more
+  bounded pass (`auditFixRounds`: 2) before the honest disclosure.
+- **Run 3 (edit, "fix issues"):** "Stopped after 3 consecutive
+  invalid tool calls." Root cause: the serialized context, the audit
+  findings and the overlap reports all print ids as `text#abc123` —
+  the model passed that notation verbatim into `ids:[...]` and was
+  rejected three times. **Fix:** id lists accept the `type#id` alias
+  (prefix stripped, bare id validated — the same alias discipline as
+  the color/fontColor/textColor patch aliases), and the SECOND
+  consecutive rejection carries an explicit recovery note (refresh
+  ids via get_page_state, retry to spec) before a third can end the
+  run.
+
+Unit harness: +11 regression tests (scaled plans, floor
+infeasibility, occupied-canvas shrink, the emitted capture, the
+second audit round, the id alias, the recovery note) — 1,759/1,759.
+
 ### Fixed — v0.32.7: the funding.json .well-known URL-form mismatch
 
 - **The failure:** `canvix.app/.well-known/funding-manifest-urls` listed

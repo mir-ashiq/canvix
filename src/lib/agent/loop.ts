@@ -44,6 +44,7 @@ export function telemetry(event: Record<string, unknown>): void {
   }
 }
 import { AGENT_TOOLS, AGENT_TOOL_MAP, fontFamilies, type ToolContext, type SanitizeResult, type AgentTool } from './tools'
+import { PLAN_MIN_BAND, PLAN_MIN_GAP } from './plan-repair'
 import { serializeDesignContext, contextValidIds, canvasMap, type AgentDesignCtx } from './context'
 import { MODE_PROMPTS, MODE_TOOL_RISK } from './router'
 import { skillsPromptSection, selectSkills, type DesignSkill } from './skills'
@@ -192,8 +193,17 @@ export function loopSystemPrompt(deps: {
   }
 
   if (mode === 'create' || mode === 'improve') {
+    // v0.32.8: the computed budget for THIS page — plan inside it from
+    // the start. Oversized plans are auto-scaled down to fit and the
+    // scaling disclosed (plan-repair.ts), but a realistic plan
+    // composes better than a scaled-down one.
+    const safeTopY = Math.round(H * margin)
+    const safeBottomY = Math.round(H * (1 - margin))
+    const usableH = safeBottomY - safeTopY
+    const maxSections = Math.floor((usableH + PLAN_MIN_GAP) / (PLAN_MIN_BAND + PLAN_MIN_GAP))
     lines.push(
       'LAYOUT PLANNING (required first step):',
+      `· This page fits at most ${maxSections} planned sections (safe area y ${safeTopY}–${safeBottomY}px, ${usableH}px tall: sections ≥${PLAN_MIN_BAND}px with ≥${PLAN_MIN_GAP}px gaps; oversized plans are auto-scaled to fit and the scaling disclosed).`,
       '· Call plan_layout FIRST with your composition: page background, sections with y-ranges, what each contains (headline band, tagline, feature cards row, mockup, CTA, footer).',
       '· Reserve a vertical band per section with ≥40px gaps so nothing stacks or crowds; the brief texts each get their section. Invalid plans (gaps under 40px, bands beyond the page) are REJECTED with the exact numbers — fix the bands and resend.',
       '· Set the page background EARLY with set_background (a required background color belongs there, not in strips).',
@@ -294,7 +304,10 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
   let lastProgressAt = started
   let lastUsageAt = started
   let briefValidated = false
-  /** v0.29: quality-audit fix rounds already used (max 1 per run) */
+  /** v0.29: quality-audit fix rounds already used (v0.32.8: max
+   *  AGENT_GUARDS.auditFixRounds — the NEON 2027 run cleared 3 of 4
+   *  issues in round one and disclosed the straggler; one more
+   *  bounded pass clears it) */
   let auditRounds = 0
   /** v0.29.3: grounded vision passes already run (max 2 — initial
    *  critique + verification after the correction round) */
@@ -554,8 +567,11 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
       }
       // QUALITY AUDIT (v0.29): self-critique before the run is
       // accepted — local heuristics only, no extra model calls.
-      // Exactly ONE fix round: done is then accepted with the residue
-      // DISCLOSED (audit → fix → re-audit → honest outcome), never looped.
+      // BOUNDED fix rounds (v0.32.8: AGENT_GUARDS.auditFixRounds — the
+      // NEON 2027 run cleared 3 of 4 issues in round one and disclosed
+      // the straggler; one more bounded pass clears it): done is then
+      // accepted with the residue DISCLOSED (audit → fix → re-audit →
+      // honest outcome), never looped.
       if ((mode === 'create' || mode === 'improve') && deps.auditDesign) {
         let issues: string[] = []
         try {
@@ -563,7 +579,7 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
         } catch {
           /* audit is best-effort — never block completion on it */
         }
-        if (issues.length && auditRounds === 0) {
+        if (issues.length && auditRounds < AGENT_GUARDS.auditFixRounds) {
           auditRounds += 1
           const list = issues.map((i) => `· ${i}`).join('\n')
           emit({
@@ -584,8 +600,8 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
             : 'Quality audit passed: contrast, spacing and bounds clean.'
         } else if (auditRounds > 0) {
           verification = verification
-            ? `${verification} Quality audit still reports ${issues.length} issue(s) after the fix round — disclosed, not blocking.`
-            : `Quality audit still reports ${issues.length} issue(s) after the fix round — disclosed, not blocking.`
+            ? `${verification} Quality audit still reports ${issues.length} issue(s) after the fix rounds — disclosed, not blocking.`
+            : `Quality audit still reports ${issues.length} issue(s) after the fix rounds — disclosed, not blocking.`
         }
       }
 
@@ -600,6 +616,14 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
       // capturing an empty canvas produced "vision model returned no
       // parseable critique" noise on the P0 run and verifies nothing.
       if ((mode === 'create' || mode === 'improve') && designChanges > 0 && deps.critique && visionCritiques < 2) {
+        // v0.32.8 · ASK before waiting. The capture event has been in
+        // the protocol (and handled by the panel) since v0.29.3, but
+        // nothing ever EMITTED it — every create/improve run stalled
+        // the full capture timeout and disclosed "canvas capture
+        // timed out or no client" (the in-run vision critique never
+        // actually ran once). The panel captures the live canvas and
+        // answers on the bridge.
+        emit({ v: AGENT_PROTOCOL_VERSION, type: 'capture', purpose: 'pre-completion visual critique' })
         const shot = deps.captureCanvas ? await deps.captureCanvas() : null
         if (!shot) {
           // fail-closed: no capture → visual quality is NOT verified,
@@ -811,15 +835,23 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
       //   · repairable geometry no longer rejects at all — the
       //     server-side solver auto-repairs it (plan-repair.ts), so
       //     the loop never sees those cases;
-      //   · what still rejects (infeasible heights, malformed
-      //     sections) counts against a SEPARATE bounded budget —
-      //     never the shared strike counter — and stops honestly
-      //     with the exact math after PLAN_REJECTION_BUDGET tries.
+      //   · what still rejects (malformed sections, or a composition
+      //     that cannot fit even at the 56px floor now that oversized
+      //     plans are scaled in) counts against a SEPARATE bounded
+      //     budget — never the shared strike counter — and stops
+      //     honestly with the exact math after PLAN_REJECTION_BUDGET tries.
       if (toolName === 'plan_layout') {
         planRejections += 1
         telemetry({ tool: 'plan_layout', outcome: 'rejected', attempt: planRejections, detail: String((result as { error?: string }).error ?? '').slice(0, 300) })
         if (planRejections >= AGENT_GUARDS.planRejections) {
-          const exit = await guardExitWithTelemetry(`Stopped after ${planRejections} infeasible plans — the exact math is in the errors above; ask the user for a smaller composition or fewer sections.`, 'plan-infeasible')
+          // v0.32.8: with the solver scaling oversized plans, a
+          // rejection means a MALFORMED section or a floor-infeasible
+          // composition — the message points at the fixable cause,
+          // never at the user's brief.
+          const exit = await guardExitWithTelemetry(
+            `Stopped after ${planRejections} rejected plan_layout calls — each error above names what to fix (a missing section name, non-numeric y/height, or a composition that cannot fit even at the ${PLAN_MIN_BAND}px minimum band). Resend ONE valid plan_layout: numeric y and height per named section, at most ${Math.floor((toolCtx.height * 0.88 + PLAN_MIN_GAP) / (PLAN_MIN_BAND + PLAN_MIN_GAP))} sections on this page.`,
+            'plan-infeasible',
+          )
           emit({ v: AGENT_PROTOCOL_VERSION, type: 'done', summary: exit.summary, steps, toolCalls, verification: exit.verification })
           return { summary: exit.summary, steps, toolCalls, verification: exit.verification }
         }
@@ -828,7 +860,19 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
       }
       // free correction: rejected calls cost only a strike
       strikes += 1
-      messages.push({ role: 'user', content: observationFor(toolName, result, false) })
+      // v0.32.8: the "fix issues" follow-up died at three strikes in
+      // edit mode. One strike from the end, the error observation
+      // carries the recovery move explicitly — refresh state, then
+      // retry to spec — instead of hoping the model infers it three
+      // times in a row.
+      messages.push({
+        role: 'user',
+        content:
+          observationFor(toolName, result, false) +
+          (strikes === AGENT_GUARDS.strikes - 1
+            ? ' NOTE: this is the second failed call in a row — the NEXT failure ends the run. Call get_page_state now to refresh the element ids, then retry with args that match the tool spec exactly.'
+            : ''),
+      })
       continue
     }
 

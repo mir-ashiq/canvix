@@ -12,12 +12,24 @@
  * canvas, the 6% margins, the 40px minimum gap and the requested
  * sections, it deterministically produces a valid band layout —
  * or an honest infeasibility with the exact math. Never a
- * fabrication: heights, order and contents are the model's own;
- * only the y-positions and gaps are computed.
+ * fabrication: order and contents are the model's own; only the
+ * y-positions, the gaps and (since v0.32.8) the scaling of
+ * oversized heights are computed.
  *
  *   repairPlanBands(sections, H) →
- *     { ok: true,  bands, repairs, gap }   valid or repaired
- *     { ok: false, infeasible }            cannot fit — exact math
+ *     { ok: true,  bands, repairs, gap }  valid, repaired or scaled
+ *     { ok: false, infeasible }            cannot fit even at the
+ *                                         56px floor — exact math
+ *
+ * v0.32.8 · the NEON 2027 incident: a reasonable 7-section poster
+ * plan exceeded the safe area, the model could not redo the height
+ * arithmetic in three attempts, and the run died with ZERO elements
+ * ("ask the user for a smaller composition"). Heights are the
+ * SERVER's job now too: an oversized plan is uniformly SCALED to
+ * fit (each band floored at PLAN_MIN_BAND, the model's relative
+ * hierarchy preserved) and the scaling is DISCLOSED in repairs.
+ * Infeasible survives only for compositions that cannot fit even at
+ * the floor — the honest stop nobody can scale their way out of.
  */
 
 export interface PlanSection {
@@ -60,6 +72,11 @@ export type PlanRepairResult = PlanRepairOk | PlanRepairInfeasible
 
 export const PLAN_MIN_GAP = 40
 export const PLAN_MARGIN = 0.06
+/** v0.32.8 · the smallest band the solver will ever produce. Below
+ *  this a section cannot hold readable content (a real headline needs
+ *  ≥40px; the audit flags body text under 14px) — the only plans that
+ *  stay infeasible are the ones that cannot fit even at this floor. */
+export const PLAN_MIN_BAND = 56
 
 /** Merge raw occupied extents into disjoint bands. Two occupied
  *  extents closer than minGap merge: the sliver between them cannot
@@ -111,18 +128,23 @@ function mapEntry(b: { y: number; h: number; label?: string }): string {
  *  0. OCCUPIED CANVAS (v0.32.6): when existing elements are present
  *     they are the map — the sections are fitted into the FREE
  *     intervals between them (order preserved, ≥minGap gaps), never
- *     on top of anything. Sections that cannot fit anywhere produce
- *     an INFEASIBLE result carrying the full occupancy map with the
- *     exact numbers.
+ *     on top of anything. Sections that cannot fit anywhere shrink
+ *     proportionally first (v0.32.8); only a layout that cannot fit
+ *     even at the PLAN_MIN_BAND floor produces an INFEASIBLE result
+ *     carrying the full occupancy map with the exact numbers.
  *  1. A plan whose bands already tile the safe area top-to-bottom
  *     with ≥minGap gaps is accepted UNCHANGED (repairs = []).
  *  2. Otherwise the sections are re-laid out from the top of the
  *     safe area, in the model's intended order, with the requested
  *     heights and a uniform gap: max(minGap, leftover / (n-1)) —
  *     the natural composition the model meant to build.
- *  3. If the content cannot fit even at exactly minGap gaps, the
- *     result is INFEASIBLE with the exact numbers — the model must
- *     shrink heights or drop sections (its choice, its hierarchy).
+ *  3. OVERSIZED PLANS ARE SCALED, NOT REJECTED (v0.32.8): content
+ *     taller than the safe area minus its gaps is uniformly scaled
+ *     down to fit (each band floored at PLAN_MIN_BAND, relative
+ *     heights kept, the scaling DISCLOSED) — the model never re-does
+ *     height arithmetic. Only compositions that cannot fit even at
+ *     the floor are infeasible, with the exact math and the maximum
+ *     section count that DOES fit.
  */
 export function repairPlanBands(
   requested: PlanSection[],
@@ -154,11 +176,11 @@ export function repairPlanBands(
     const freeLine = free.length ? free.map(mapEntry).join(', ') : 'nothing'
     // prefer ONE free interval that fits everything (natural spread)
     const fitsAll = free.filter((f) => f.h >= sumH + minGap * (n - 1))
-    const bands: RepairedBand[] = []
-    const repairs: string[] = []
     if (fitsAll.length) {
       const f = fitsAll[0]
       const gap = n > 1 ? Math.max(minGap, Math.floor((f.h - sumH) / (n - 1))) : minGap
+      const bands: RepairedBand[] = []
+      const repairs: string[] = []
       let y = f.y
       for (const s of sections) {
         bands.push({ name: s.name, y, h: s.h })
@@ -169,67 +191,114 @@ export function repairPlanBands(
       return { ok: true, bands, gap, repairs }
     }
     // no single interval fits all: first-fit across intervals in
-    // order (still ≥minGap inside an interval, order preserved)
-    let fi = 0
-    let y = free.length ? free[0].y : safeTop
-    let intervalEnd = free.length ? free[0].y + free[0].h : safeTop
-    for (const s of sections) {
-      // advance to an interval with room for this section
-      while (fi < free.length && y + s.h > intervalEnd) {
-        fi += 1
-        if (fi < free.length) {
-          y = free[fi].y
-          intervalEnd = free[fi].y + free[fi].h
-        } else break
-      }
-      if (y + s.h > intervalEnd) {
-        return {
-          ok: false,
-          infeasible:
-            `Infeasible plan on an occupied canvas: existing elements occupy ${mapLine}; ` +
-            `free space: ${freeLine}. Your ${n} sections (${sumH}px of content) do not fit the free space ` +
-            `(the largest free interval is ${free.length ? Math.max(...free.map((f) => f.h)) : 0}px). ` +
-            `Move or clear existing elements first, or plan fewer/smaller sections.`,
+    // order (still ≥minGap inside an interval, order preserved).
+    // v0.32.8: a first-fit failure is not immediately infeasible —
+    // the sections shrink proportionally (floored at PLAN_MIN_BAND,
+    // up to 20 passes of ×0.88) until they fit the free space. Only
+    // a layout that cannot fit even at the floor is infeasible.
+    const firstFit = (secs: PlanSection[]): RepairedBand[] | null => {
+      const out: RepairedBand[] = []
+      let fi = 0
+      let y = free.length ? free[0].y : safeTop
+      let intervalEnd = free.length ? free[0].y + free[0].h : safeTop
+      for (const s of secs) {
+        // advance to an interval with room for this section
+        while (fi < free.length && y + s.h > intervalEnd) {
+          fi += 1
+          if (fi < free.length) {
+            y = free[fi].y
+            intervalEnd = free[fi].y + free[fi].h
+          } else break
         }
+        if (y + s.h > intervalEnd) return null
+        out.push({ name: s.name, y, h: s.h })
+        y += s.h + minGap
       }
-      bands.push({ name: s.name, y, h: s.h })
-      if (s.y !== y) repairs.push(`"${s.name}" y ${Math.round(s.y)}→${y}`)
-      y += s.h + minGap
+      return out
     }
-    return { ok: true, bands, gap: minGap, repairs }
+    let attempt = sections
+    let fit = firstFit(attempt)
+    for (let pass = 0; !fit && pass < 20; pass++) {
+      const shrunk = attempt.map((s) => ({ ...s, h: Math.max(PLAN_MIN_BAND, Math.floor(s.h * 0.88)) }))
+      if (shrunk.every((s, i) => s.h === attempt[i].h)) break // already at the floor
+      attempt = shrunk
+      fit = firstFit(attempt)
+    }
+    if (!fit) {
+      return {
+        ok: false,
+        infeasible:
+          `Infeasible plan on an occupied canvas: existing elements occupy ${mapLine}; ` +
+          `free space: ${freeLine}. Your ${n} sections (${sumH}px of content) do not fit the free space ` +
+          `(the largest free interval is ${free.length ? Math.max(...free.map((f) => f.h)) : 0}px) even scaled to the ${PLAN_MIN_BAND}px minimum band. ` +
+          `Move or clear existing elements first, or plan fewer sections.`,
+      }
+    }
+    const repairs: string[] = []
+    fit.forEach((b, i) => {
+      if (sections[i].y !== b.y) repairs.push(`"${b.name}" y ${Math.round(sections[i].y)}→${b.y}`)
+      if (sections[i].h !== b.h) repairs.push(`"${b.name}" h ${sections[i].h}→${b.h} (scaled to fit the free space)`)
+    })
+    return { ok: true, bands: fit, gap: minGap, repairs }
   }
 
-  if (sumH > usable) {
-    return {
-      ok: false,
-      infeasible:
-        `Infeasible plan: the sections total ${sumH}px of content, but the safe area is only ${usable}px ` +
-        `(page ${H}px, 6% margins top/bottom ${safeTop}px, ${H - safeBottom}px). ` +
-        `Reduce the section heights or drop sections — the smallest fitting layout needs ≤${Math.floor(usable / n)}px per section.`,
-    }
-  }
-
-  // Rule 1 — already valid? Keep the model's exact geometry.
-  const valid =
-    sections[0].y >= safeTop &&
-    sections[n - 1].y + sections[n - 1].h <= safeBottom &&
-    sections.every((s, i) => i === 0 || s.y - (sections[i - 1].y + sections[i - 1].h) >= minGap)
-  if (valid) {
-    return {
-      ok: true,
-      bands: sections.map((s) => ({ name: s.name, y: s.y, h: s.h })),
-      gap: n > 1 ? sections[1].y - (sections[0].y + sections[0].h) : minGap,
-      repairs: [],
-    }
-  }
-
-  // Rule 2 — deterministic re-layout: requested heights, uniform
-  // gap (minGap, or the natural spread when there is room).
-  const gap = n > 1 ? Math.max(minGap, Math.floor((usable - sumH) / (n - 1))) : minGap
-  const bands: RepairedBand[] = []
+  // ── Rule 3 · v0.32.8 · oversized plans are SCALED to fit ─────
+  const budget = usable - minGap * (n - 1)
+  let scaled = false
+  let eff = sections
   const repairs: string[] = []
+  if (sumH > budget) {
+    const scale = budget / sumH
+    const scaledSections = sections.map((s) => ({
+      name: s.name,
+      y: s.y,
+      h: Math.max(PLAN_MIN_BAND, Math.round(s.h * scale)),
+    }))
+    const sumScaled = scaledSections.reduce((acc, s) => acc + s.h, 0)
+    if (sumScaled > budget) {
+      const floorSum = sections.reduce((acc, s) => acc + Math.min(s.h, PLAN_MIN_BAND), 0)
+      const maxSections = Math.floor((usable + minGap) / (PLAN_MIN_BAND + minGap))
+      return {
+        ok: false,
+        infeasible:
+          `Infeasible plan: ${n} sections at the ${PLAN_MIN_BAND}px minimum band (${floorSum}px) plus ${minGap}px gaps ` +
+          `(≥ ${floorSum + minGap * (n - 1)}px) cannot fit the ${usable}px safe area (page ${H}px, 6% margins top/bottom ` +
+          `${safeTop}px, ${H - safeBottom}px) — at most ${maxSections} sections fit this page. Drop sections; scaling cannot rescue this composition.`,
+      }
+    }
+    scaled = true
+    eff = scaledSections
+    repairs.push(
+      `section heights scaled ×${scale.toFixed(2)} to fit the ${usable}px safe area (${sumH}px → ${sumScaled}px, floors at ${PLAN_MIN_BAND}px)`,
+    )
+    sections.forEach((s, i) => {
+      if (s.h !== eff[i].h) repairs.push(`"${s.name}" h ${s.h}→${eff[i].h}`)
+    })
+  }
+
+  // Rule 1 — already valid (and never scaled)? Keep the model's exact geometry.
+  if (!scaled) {
+    const valid =
+      sections[0].y >= safeTop &&
+      sections[n - 1].y + sections[n - 1].h <= safeBottom &&
+      sections.every((s, i) => i === 0 || s.y - (sections[i - 1].y + sections[i - 1].h) >= minGap)
+    if (valid) {
+      return {
+        ok: true,
+        bands: sections.map((s) => ({ name: s.name, y: s.y, h: s.h })),
+        gap: n > 1 ? sections[1].y - (sections[0].y + sections[0].h) : minGap,
+        repairs: [],
+      }
+    }
+  }
+
+  // Rule 2 — deterministic re-layout: (possibly scaled) heights,
+  // uniform gap (minGap, or the natural spread when there is room).
+  const sumEff = eff.reduce((acc, s) => acc + s.h, 0)
+  const gap = n > 1 ? Math.max(minGap, Math.floor((usable - sumEff) / (n - 1))) : minGap
+  const bands: RepairedBand[] = []
   let y = safeTop
-  for (const s of sections) {
+  for (const s of eff) {
     bands.push({ name: s.name, y, h: s.h })
     if (s.y !== y) {
       repairs.push(`"${s.name}" y ${Math.round(s.y)}→${y}`)
@@ -241,17 +310,10 @@ export function repairPlanBands(
     return { ok: true, bands, gap, repairs }
   }
 
-  // Single band that still overflows the safe area (clamped h >
-  // usable): shrink honestly with a disclosure.
-  if (n === 1 && sumH > usable) {
-    return {
-      ok: false,
-      infeasible: `Infeasible plan: the single section is ${sumH}px tall, but the safe area is only ${usable}px (page ${H}px).`,
-    }
-  }
-  // unreachable for n ≥ 1 with sumH ≤ usable — kept for honesty
+  // unreachable for n ≥ 1 with the scaled content ≤ budget — kept
+  // for honesty: the solver must never claim a fit it cannot prove.
   return {
     ok: false,
-    infeasible: `Infeasible plan: the sections (${sumH}px + gaps) cannot fit the ${usable}px safe area.`,
+    infeasible: `Infeasible plan: the sections (${sumEff}px + gaps) cannot fit the ${usable}px safe area.`,
   }
 }

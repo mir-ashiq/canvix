@@ -25,7 +25,7 @@ export function ToolsPanel() {
   return (
     <div className="flex flex-col h-full bg-[#16181D] text-[#EDEEF2]">
       <div className="px-4 pt-4 pb-3 border-b border-white/[0.07] shrink-0">
-        <h3 className="font-bold text-sm">Tools</h3>
+        <h3 className="font-bold text-sm">الأدوات</h3>
         <div className="flex gap-1 mt-2.5 bg-white/[0.05] rounded-xl p-1">
           {SUB_TABS.map((t) => (
             <button
@@ -97,7 +97,7 @@ function DrawTab() {
       </div>
 
       <div>
-        <h4 className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-2">Brush color</h4>
+        <h4 className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-2">لون الفرشاة</h4>
         <div className="grid grid-cols-5 gap-2">
           {swatches.map((c) => (
             <button
@@ -160,7 +160,7 @@ function PositionTab() {
   if (!selected.length) {
     return (
       <div className="p-4">
-        <p className="text-[13px] text-white/50 text-center py-10">Select an element to arrange, align or flip it.</p>
+        <p className="text-[13px] text-white/50 text-center py-10">حدد عنصراً لترتيبه أو محاذاته أو قلبه.</p>
       </div>
     )
   }
@@ -214,7 +214,7 @@ function PositionTab() {
   return (
     <div className="p-4 space-y-4">
       <div>
-        <h4 className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-2">Arrange</h4>
+        <h4 className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-2">ترتيب</h4>
         <div className="grid grid-cols-4 gap-2">
           <button className={btn} onClick={() => moveLayer(ids[0], 'front')} aria-label="Bring to front" title="Bring to front"><BringToFront size={16} /></button>
           <button className={btn} onClick={() => moveLayer(ids[0], 'up')} aria-label="Forward" title="Forward"><ArrowUp size={16} /></button>
@@ -224,7 +224,7 @@ function PositionTab() {
       </div>
 
       <div>
-        <h4 className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-2">Align</h4>
+        <h4 className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-2">محاذاة</h4>
         <div className="grid grid-cols-3 gap-2">
           <button className={btn} onClick={() => applyAlign('left')} aria-label="Align left"><AlignLeft size={15} /></button>
           <button className={btn} onClick={() => applyAlign('center-h')} aria-label="Align horizontal center"><AlignVerticalJustifyCenter size={15} className="rotate-90" /></button>
@@ -236,7 +236,7 @@ function PositionTab() {
       </div>
 
       <div>
-        <h4 className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-2">Flip</h4>
+        <h4 className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-2">قلب</h4>
         <div className="grid grid-cols-2 gap-2">
           <button className="h-10 rounded-xl bg-white/[0.05] hover:bg-[#7630D7] text-white text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-colors" onClick={() => flip('x')}>
             <FlipHorizontal2 size={15} /> Horizontal

@@ -21,10 +21,10 @@ function initials(name: string): string {
 
 function timeAgo(iso: string): string {
   const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000)
-  if (s < 60) return 'just now'
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`
-  if (s < 86_400) return `${Math.floor(s / 3600)}h ago`
-  return `${Math.floor(s / 86_400)}d ago`
+  if (s < 60) return 'الآن'
+  if (s < 3600) return `قبل ${Math.floor(s / 60)} دقيقة`
+  if (s < 86_400) return `قبل ${Math.floor(s / 3600)} ساعة`
+  return `قبل ${Math.floor(s / 86_400)} يوم`
 }
 
 /** Comments side panel — canva-style review threads. */
@@ -64,7 +64,7 @@ export function CommentsPanel() {
           size="icon"
           className="rounded-full text-white/70 hover:bg-white/10 hover:text-white h-7 w-7"
           onClick={() => setCommentsOpen(false)}
-          aria-label="Close comments"
+          aria-label="إغلاق التعليقات"
         >
           <X size={14} />
         </Button>
@@ -93,10 +93,10 @@ export function CommentsPanel() {
           <div className="text-center py-10 px-4">
             <MessageCircle size={26} className="mx-auto text-white/20 mb-2" />
             <div className="text-[13px] font-semibold text-white/60">
-              {filter === 'open' ? 'No open comments' : filter === 'resolved' ? 'No resolved comments' : 'No comments yet'}
+              {filter === 'open' ? 'لا توجد تعليقات مفتوحة' : filter === 'resolved' ? 'لا توجد تعليقات محلولة' : 'لا توجد تعليقات بعد'}
             </div>
             <p className="text-[11px] text-white/40 mt-1">
-              In comments mode, click anywhere on the canvas to drop a pin.
+              في وضع التعليقات، انقر في أي مكان على مساحة التصميم لإضافة تعليق.
             </p>
           </div>
         )}
@@ -161,7 +161,7 @@ function ThreadCard({
       setReplyText('')
       setReplyOpen(false)
     } catch {
-      toast({ title: 'Could not post the reply.' })
+      toast({ title: 'تعذر إرسال الرد.' })
     } finally {
       setBusy(false)
     }
@@ -182,7 +182,7 @@ function ThreadCard({
         window.dispatchEvent(new CustomEvent('canvix:comments-changed'))
       }
     } catch {
-      toast({ title: 'Could not update the comment.' })
+      toast({ title: 'تعذر تحديث التعليق.' })
     }
   }
 
@@ -198,7 +198,7 @@ function ThreadCard({
         window.dispatchEvent(new CustomEvent('canvix:comments-changed'))
       }
     } catch {
-      toast({ title: 'Could not delete the comment.' })
+      toast({ title: 'تعذر حذف التعليق.' })
     }
   }
 
@@ -268,7 +268,7 @@ function ThreadCard({
                 void toggleResolve()
               }}
             >
-              <CheckCircle2 size={10} /> {root.resolved ? 'Reopen' : 'Resolve'}
+              <CheckCircle2 size={10} /> {root.resolved ? 'إعادة الفتح' : 'حلّ التعليق'}
             </button>
             {root.authorId === meId && (
               <button
@@ -281,7 +281,7 @@ function ThreadCard({
                 <Trash2 size={10} /> Delete
               </button>
             )}
-            <span className="ml-auto text-[9px] text-white/25 shrink-0">Page {pageIndex + 1}</span>
+            <span className="ml-auto text-[9px] text-white/25 shrink-0">الصفحة {pageIndex + 1}</span>
           </div>
 
           {replyOpen && (
@@ -290,7 +290,7 @@ function ThreadCard({
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && void addReply()}
-                placeholder={`Reply to ${root.authorName}…`}
+                placeholder={`الرد على ${root.authorName}…`}
                 maxLength={2000}
                 autoFocus
                 className="flex-1 h-8 rounded-lg bg-white/[0.06] border border-white/10 px-2.5 text-[12px] text-white placeholder:text-white/30 outline-none focus:border-[#02C0CC]/50"

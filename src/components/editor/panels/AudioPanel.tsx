@@ -175,7 +175,7 @@ export function AudioPanel() {
     } catch {
       toast({
         title: 'الميكروفون غير متاح',
-        description: 'The browser denied mic access, or no mic is connected — check the site permissions and try again.',
+        description: 'رفض المتصفح الوصول إلى الميكروفون أو لا يوجد ميكروفون متصل — تحقق من أذونات الموقع ثم حاول مجدداً.',
       })
     }
   }
@@ -264,7 +264,7 @@ export function AudioPanel() {
         <section aria-label="البحث في Freesound">
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-white/50">Freesound</h4>
-            <span className="text-[10px] text-white/40">CC0 by default</span>
+            <span className="text-[10px] text-white/40">ترخيص CC0 افتراضياً</span>
           </div>
           <div className="mt-2 flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
             <Search size={14} className="shrink-0 text-white/40" />
@@ -298,7 +298,7 @@ export function AudioPanel() {
           )}
 
           {results !== null && results.length === 0 && !error && (
-            <p className="mt-2 text-[11px] text-white/40">No sounds matched — try a broader term.</p>
+            <p className="mt-2 text-[11px] text-white/40">لم نعثر على أصوات مطابقة — جرّب كلمات بحث أوسع.</p>
           )}
 
           {results && results.length > 0 && (
@@ -342,7 +342,7 @@ export function AudioPanel() {
 
         {/* ── 3. voiceover ── */}
         <section aria-label="Voiceover">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-white/50">Voiceover</h4>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-white/50">التعليق الصوتي</h4>
           <p className="mt-1 text-[11px] leading-relaxed text-white/40">
             Record page narration with your mic — it lands as a waveform card, autoplayed in Preview and Present.
           </p>
@@ -366,7 +366,7 @@ export function AudioPanel() {
 
         {/* ── 4. uploads hint ── */}
         <section aria-label="Upload audio">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-white/50">Your audio files</h4>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-white/50">ملفاتك الصوتية</h4>
           <p className="mt-1 flex items-start gap-1.5 text-[11px] leading-relaxed text-white/40">
             <AudioLines size={13} className="mt-0.5 shrink-0" />
             <span>

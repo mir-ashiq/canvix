@@ -35,18 +35,30 @@ describe('GET /api/templates (v0.9.2 CDN caching)', () => {
     expect(res.status).toBe(200)
     const cc = res.headers.get('cache-control') ?? ''
     expect(cc).toContain('public')
-    expect(cc).toContain('s-maxage=86400')
+    expect(cc).toContain('s-maxage=3600')
+    expect(cc).toContain('stale-while-revalidate=86400')
     expect(cc).toContain('stale-while-revalidate')
     const body = await res.json()
     expect(body).toHaveLength(1)
     expect(body[0].pages).toEqual([{ id: 'p1', elements: [] }])
   })
 
-  it('still surfaces classified DB errors (never a bare 500)', async () => {
+  it('serves the bundled 366-template catalogue when the database is unavailable', async () => {
     dbMock.template.findMany.mockRejectedValue(new Error('connect ECONNREFUSED'))
-    const res = await GET(new NextRequest('http://canvix.test/api/templates'))
-    expect(res.status).toBeGreaterThanOrEqual(500)
+    const res = await GET(new NextRequest('http://tea-g3.test/api/templates'))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-teag3-template-source')).toBe('built-in')
     const body = await res.json()
-    expect(typeof body.error).toBe('string')
+    expect(body).toHaveLength(366)
+    expect(body[0]).toHaveProperty('slug')
+    expect(body[0]).toHaveProperty('pages')
+  })
+
+  it('uses the bundled catalogue when the database table is empty', async () => {
+    dbMock.template.findMany.mockResolvedValue([])
+    const res = await GET(new NextRequest('http://tea-g3.test/api/templates'))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-teag3-template-source')).toBe('built-in')
+    expect(await res.json()).toHaveLength(366)
   })
 })

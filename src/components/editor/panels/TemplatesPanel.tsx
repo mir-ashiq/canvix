@@ -106,7 +106,7 @@ export function TemplatesPanel() {
           <h3 className="font-bold text-sm">القوالب</h3>
           {/* v0.7: the promise — every template, free forever */}
           <span className="flex items-center gap-1 text-[10px] font-bold text-[#00E5A0] bg-[#00E5A0]/10 border border-[#00E5A0]/25 rounded-full px-2 py-0.5">
-            <BadgeCheck size={11} /> 100% free forever
+            <BadgeCheck size={11} /> مجانية بالكامل دائماً
           </span>
         </div>
         <div className="flex items-center gap-2 h-9 rounded-lg bg-white/[0.06] border border-white/10 px-2.5 mt-2.5">
@@ -192,7 +192,7 @@ export function TemplatesPanel() {
             {premiumList.length > 0 && (
               <>
                 <SectionLabel icon={<Gem size={11} />}>
-                  Premium collection <span className="text-[#00E5A0] normal-case font-semibold tracking-normal">· مجانية دائماً</span>
+                  مجموعة مميزة <span className="text-[#00E5A0] normal-case font-semibold tracking-normal">· مجانية دائماً</span>
                 </SectionLabel>
                 <div className="grid grid-cols-2 gap-3 mb-5">
                   {premiumList.map((t) => (
@@ -249,9 +249,9 @@ export function TemplatesPanel() {
               ))}
             </div>
             <div className="flex items-center justify-between mt-4">
-              <span className="text-[10px] text-white/35">نصيحة: يمكنك تعبئة عدة قوالب دفعة واحدة باستخدام CSV من لوحة التحكم</span>
+              <span className="text-[10px] text-white/35">نصيحة: يمكنك تعبئة عدة قوالب دفعة واحدة باستخدام ملف CSV من لوحة التحكم</span>
               <button className="btn-cv h-9 px-4 text-[13px] flex items-center gap-1.5" onClick={applyFilled}>
-                <Check size={14} /> Use this template
+                <Check size={14} /> استخدم هذا القالب
               </button>
             </div>
           </div>
@@ -273,7 +273,7 @@ export function TemplatesPanel() {
                 )}
                 {preview.fields?.length ? (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-[#02C0CC] bg-[#02C0CC]/10 border border-[#02C0CC]/25 rounded-full px-2 py-0.5 shrink-0">
-                    <Braces size={10} /> {preview.fields.length} fields
+                    <Braces size={10} /> {preview.fields.length} حقول
                   </span>
                 ) : null}
               </div>
@@ -354,7 +354,7 @@ const TemplateCard = memo(function TemplateCard({ t, onApply, onPreview }: { t: 
       {/* v0.7: premium quality badge — a label, never a paywall */}
       {t.badge === 'premium' && (
         <span className="absolute top-1.5 left-1.5 flex items-center gap-1 text-[9px] font-bold text-[#F5C518] bg-black/70 backdrop-blur-sm border border-[#F5C518]/30 rounded-full px-1.5 py-0.5 pointer-events-none">
-          <Gem size={9} /> PREMIUM
+          <Gem size={9} /> مميز
         </span>
       )}
       <div className="px-2 py-1.5 text-[11px] font-medium truncate bg-[#16181D] text-white/80 flex items-center justify-between">
@@ -366,7 +366,7 @@ const TemplateCard = memo(function TemplateCard({ t, onApply, onPreview }: { t: 
           className="w-full h-8 rounded-lg bg-[#7630D7] hover:bg-[#8b5cf6] text-white text-[11px] font-bold transition-colors"
           aria-label={`تطبيق ${t.name}`}
         >
-          Apply
+          تطبيق
         </button>
       </div>
     </div>

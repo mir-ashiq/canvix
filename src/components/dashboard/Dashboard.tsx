@@ -567,7 +567,7 @@ export function Dashboard() {
                   onClick={() => startBlank(preset.width, preset.height, preset.name)}
                   disabled={creating}
                   className="group flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-[#16171D] p-4 hover:border-[#7630D7]/60 hover:bg-[#1C1E28] transition-all disabled:opacity-50"
-                  aria-label={`Create ${preset.name}`}
+                  aria-label={`إنشاء ${preset.name}`}
                 >
                   <span className="h-10 w-10 rounded-xl bg-brand-gradient-soft text-[#A78BFA] flex items-center justify-center group-hover:scale-110 transition-transform">
                     <Icon size={19} />
@@ -634,7 +634,7 @@ export function Dashboard() {
                   onClick={() => startFromTemplate(t)}
                   disabled={creating}
                   className="group text-left w-full"
-                  aria-label={`Open template ${t.name}`}
+                  aria-label={`فتح القالب ${t.name}`}
                 >
                   <div
                     className="relative rounded-xl overflow-hidden border border-white/10 shadow-lg shadow-black/30 group-hover:shadow-xl group-hover:-translate-y-0.5 transition-all bg-[#0F1015]"
@@ -753,7 +753,7 @@ export function Dashboard() {
               )}
               aria-pressed={activeFolder === null}
             >
-              <LayoutGrid size={14} /> الكل designs
+              <LayoutGrid size={14} /> كل التصاميم
             </button>
             {(folders ?? []).map((f) => (
               <span
@@ -769,7 +769,7 @@ export function Dashboard() {
                   onClick={() => setActiveFolder(f.id)}
                   className="inline-flex items-center gap-1.5 rounded-l-full pl-3.5 py-1.5 pr-1.5 text-sm font-medium hover:text-white transition-colors"
                   aria-pressed={activeFolder === f.id}
-                  aria-label={`Open folder ${f.name}`}
+                  aria-label={`فتح المجلد ${f.name}`}
                 >
                   <Folder size={14} /> {f.name}
                   <span className="text-xs text-white/40">{f.designCount}</span>
@@ -780,7 +780,7 @@ export function Dashboard() {
                       variant="ghost"
                       size="icon"
                       className="h-6 w-6 rounded-r-full text-white/50 hover:bg-white/10 hover:text-white"
-                      aria-label={`Options for folder ${f.name}`}
+                      aria-label={`خيارات المجلد ${f.name}`}
                     >
                       <MoreHorizontal size={13} />
                     </Button>
@@ -834,7 +834,7 @@ export function Dashboard() {
                     onClick={() => openDesign(d.id)}
                     className="relative block w-full rounded-xl overflow-hidden border border-white/10 shadow-lg shadow-black/30 group-hover:shadow-xl group-hover:-translate-y-0.5 transition-all bg-[#0F1015]"
                     style={{ aspectRatio: `${d.width} / ${d.height}` }}
-                    aria-label={`Open ${d.name}`}
+                    aria-label={`فتح ${d.name}`}
                   >
                     {d.thumbnail ? (
                       <img src={d.thumbnail} alt={d.name} className="w-full h-full object-cover" />
@@ -851,7 +851,7 @@ export function Dashboard() {
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg shrink-0 text-white/60 hover:bg-white/10 hover:text-white" aria-label={`Options for ${d.name}`}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg shrink-0 text-white/60 hover:bg-white/10 hover:text-white" aria-label={`خيارات ${d.name}`}>
                           <MoreHorizontal size={15} />
                         </Button>
                       </DropdownMenuTrigger>
@@ -981,7 +981,7 @@ export function Dashboard() {
                             size="icon"
                             className="h-7 w-7 rounded-lg text-white/60 hover:bg-white/10 hover:text-white"
                             onClick={() => void doRestore(d.id, d.name)}
-                            aria-label={`Restore ${d.name}`}
+                            aria-label={`استعادة ${d.name}`}
                             title="استعادة"
                           >
                             <RotateCcw size={14} />
@@ -991,7 +991,7 @@ export function Dashboard() {
                             size="icon"
                             className="h-7 w-7 rounded-lg text-white/60 hover:bg-red-500/15 hover:text-red-400"
                             onClick={() => void doDeleteForever(d.id, d.name)}
-                            aria-label={`Delete ${d.name} forever`}
+                            aria-label={`حذف ${d.name} نهائياً`}
                             title="حذف نهائي"
                           >
                             <Trash2 size={14} />
@@ -1138,9 +1138,9 @@ export function Dashboard() {
       <Dialog open={sizesOpen} onOpenChange={setSizesOpen}>
         <DialogContent className="rounded-[28px] sm:max-w-2xl bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle>All design sizes</DialogTitle>
+            <DialogTitle>جميع مقاسات التصميم</DialogTitle>
             <DialogDescription className="text-white/55">
-              {PRESET_GROUPS.reduce((n, g) => n + g.presets.length, 0)} presets across five categories — or{' '}
+              {PRESET_GROUPS.reduce((n, g) => n + g.presets.length, 0)} مقاساً جاهزاً ضمن خمس فئات — أو{' '}
               <button className="text-[#A78BFA] underline" onClick={() => { setSizesOpen(false); setCustomOpen(true) }}>
                 create a custom size
               </button>
@@ -1153,8 +1153,8 @@ export function Dashboard() {
               value={sizeQuery}
               onChange={(e) => setSizeQuery(e.target.value)}
               className="bg-transparent outline-none text-sm text-white w-full placeholder:text-white/35"
-              placeholder="Search sizes — try “story”, “A4”, “logo”…"
-              aria-label="Search design sizes"
+              placeholder="ابحث عن مقاس — جرّب قصة أو A4 أو شعاراً…"
+              aria-label="البحث عن مقاسات التصميم"
             />
           </div>
           <div className="max-h-[52vh] overflow-y-auto cv-scroll pr-1 -mr-1">
@@ -1284,7 +1284,7 @@ export function Dashboard() {
       <Dialog open={!!renameTarget} onOpenChange={(open) => !open && setRenameTarget(null)}>
         <DialogContent className="rounded-[28px] sm:max-w-sm bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle>Rename design</DialogTitle>
+            <DialogTitle>إعادة تسمية التصميم</DialogTitle>
           </DialogHeader>
           <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus onKeyDown={(e) => e.key === 'Enter' && doRename()} className="bg-white/[0.06] border-white/10 text-white" />
           <DialogFooter>
@@ -1298,14 +1298,14 @@ export function Dashboard() {
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent className="rounded-[28px] sm:max-w-sm bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle>Delete this design?</DialogTitle>
+            <DialogTitle>هل تريد حذف هذا التصميم؟</DialogTitle>
             <DialogDescription className="text-white/55">
               It will move to your Trash. You can restore it anytime — or delete it forever from there.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setDeleteTarget(null)}>إلغاء</Button>
-            <Button variant="destructive" onClick={() => deleteTarget && doDelete(deleteTarget)}>Move to Trash</Button>
+            <Button variant="destructive" onClick={() => deleteTarget && doDelete(deleteTarget)}>نقل إلى سلة المحذوفات</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1314,7 +1314,7 @@ export function Dashboard() {
       <Dialog open={!!folderDialog} onOpenChange={(open) => !open && setFolderDialog(null)}>
         <DialogContent className="rounded-[28px] sm:max-w-sm bg-[#16181D] border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle>{folderDialog?.mode === 'rename' ? 'Rename folder' : 'New folder'}</DialogTitle>
+            <DialogTitle>{folderDialog?.mode === 'rename' ? 'إعادة تسمية المجلد' : 'مجلد جديد'}</DialogTitle>
             {folderDialog?.mode === 'create' && (
               <DialogDescription className="text-white/55">
                 Folders organize your designs — deleting one never deletes the designs inside.
@@ -1326,10 +1326,10 @@ export function Dashboard() {
             onChange={(e) => setFolderValue(e.target.value)}
             autoFocus
             maxLength={60}
-            placeholder="Folder name"
+            placeholder="اسم المجلد"
             onKeyDown={(e) => e.key === 'Enter' && void doFolderSubmit()}
             className="bg-white/[0.06] border-white/10 text-white"
-            aria-label="Folder name"
+            aria-label="اسم المجلد"
           />
           <DialogFooter>
             <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setFolderDialog(null)}>إلغاء</Button>

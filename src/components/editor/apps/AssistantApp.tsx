@@ -655,7 +655,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
             <div className="mx-auto mb-3 w-11 h-11 rounded-2xl bg-[#7630D7]/15 flex items-center justify-center">
               <Bot size={20} className="text-[#a78bfa]" />
             </div>
-            <p className="text-[13px] font-bold text-white/90">Your design agent</p>
+            <p className="text-[13px] font-bold text-white/90">مساعد التصميم</p>
             <p className="text-[11px] text-white/40 mt-1 max-w-[240px] mx-auto">
               Describe what to build or change. The agent plans, edits real elements, validates against your brief, and can critique the result visually.
             </p>
@@ -709,7 +709,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
                 )}
                 {turn.plan && turn.plan.length > 0 && (
                   <div className="rounded-xl border border-[#02C0CC]/25 bg-[#02C0CC]/8 px-3 py-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-[#02C0CC] mb-1">Proposed plan</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-[#02C0CC] mb-1">الخطة المقترحة</p>
                     <ol className="space-y-0.5">
                       {turn.plan.map((p, j) => (
                         <li key={j} className="text-[11.5px] text-white/75">{j + 1}. {p}</li>
@@ -719,7 +719,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
                 )}
                 {turn.findings && turn.findings.length > 0 && (
                   <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 space-y-1.5">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-white/50">Findings</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-white/50">النتائج</p>
                     {turn.findings.slice(0, 8).map((f, j) => (
                       <div key={j} className="text-[11.5px] leading-relaxed">
                         <span
@@ -803,7 +803,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
               )}
               {liveBrief && (liveBrief.requiredTexts.length > 0 || liveBrief.requiredColors.length > 0) && (
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-white/50 mb-1">Brief contract (exact)</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-white/50 mb-1">موجز المهمة (النص الحرفي)</p>
                   <div className="flex flex-wrap gap-1.5">
                     {liveBrief.requiredTexts.map((t, i) => (
                       <span key={i} className="px-1.5 py-0.5 rounded bg-white/8 text-[10.5px] text-white/80 font-medium">&ldquo;{t.text}&rdquo;</span>
@@ -891,8 +891,8 @@ export function AssistantApp({ onClose }: AppPanelProps) {
           </button>
         </div>
         <div className="flex items-center justify-between mt-1.5 text-[10px] text-white/30">
-          <span>One agent — it maps the canvas, plans the geometry, builds, checks and verifies by itself</span>
-          {canUndo && <span>Undo available in the toolbar</span>}
+          <span>وكيل واحد يحلل مساحة التصميم ويخطط لتوزيع العناصر وينفذ العمل ويفحصه ويتحقق منه تلقائياً</span>
+          {canUndo && <span>التراجع متاح من شريط الأدوات</span>}
         </div>
       </div>
     </div>

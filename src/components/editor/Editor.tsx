@@ -50,7 +50,7 @@ const PluginServiceLayer = dynamic(() => import('./apps/PluginServiceLayer').the
 const PANEL_TITLES: Record<Exclude<PanelId, null>, string> = {
   templates: 'Templates',
   elements: 'Elements',
-  text: 'Text',
+  text: 'نص',
   brand: 'Brand',
   uploads: 'Uploads',
   photos: 'Photos',
@@ -207,7 +207,7 @@ export default function Editor() {
         if (saved.aiProvenance !== undefined || saved.aiProvenanceRejected !== undefined) {
           if (saved.aiProvenanceRejected) {
             toast({
-              title: 'AI contract not saved',
+              title: 'لم يتم حفظ تعليمات الذكاء الاصطناعي',
               description: saved.aiProvenanceRejected.slice(0, 160),
               variant: 'destructive',
             })

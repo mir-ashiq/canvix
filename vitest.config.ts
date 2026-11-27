@@ -9,6 +9,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    env: { TEAG3_ACCOUNTS_ENABLED: 'true' },
     include: ['src/**/*.test.ts'],
     reporters: ['default'],
   },

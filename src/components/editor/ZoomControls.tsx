@@ -47,20 +47,20 @@ export function ZoomControls() {
 
   return (
     <div className="absolute bottom-3 right-3 z-30 flex items-center gap-0.5 rounded-xl bg-[#1D1F26]/95 backdrop-blur border border-white/10 shadow-xl shadow-black/40 px-1 py-1">
-      <button className="h-10 w-10 rounded-xl flex items-center justify-center text-white/75 hover:bg-white/10 hover:text-white" onClick={zoomOut} aria-label="Zoom out" title="Zoom out">
+      <button className="h-10 w-10 rounded-xl flex items-center justify-center text-white/75 hover:bg-white/10 hover:text-white" onClick={zoomOut} aria-label="تصغير" title="تصغير">
         <ZoomOut size={16} />
       </button>
       <button
         className="h-10 min-w-[64px] px-2 rounded-xl text-[13px] font-semibold text-white/90 hover:bg-white/10 flex items-center justify-center gap-1"
         onClick={() => setOpen(!open)}
-        aria-label="Zoom options"
+        aria-label="خيارات التكبير"
         aria-expanded={open}
         aria-haspopup="listbox"
-        title="Zoom options"
+        title="خيارات التكبير"
       >
         {percent}% <ChevronsUpDown size={11} className="opacity-50" />
       </button>
-      <button className="h-10 w-10 rounded-xl flex items-center justify-center text-white/75 hover:bg-white/10 hover:text-white" onClick={zoomIn} aria-label="Zoom in" title="Zoom in">
+      <button className="h-10 w-10 rounded-xl flex items-center justify-center text-white/75 hover:bg-white/10 hover:text-white" onClick={zoomIn} aria-label="تكبير" title="تكبير">
         <ZoomIn size={16} />
       </button>
       <span className="h-5 w-px bg-white/15 mx-0.5" aria-hidden="true" />
@@ -70,8 +70,8 @@ export function ZoomControls() {
           if (canvasBridge.fitToScreen) canvasBridge.fitToScreen()
           else fitToScreen()
         }}
-        aria-label="Fit to screen"
-        title="Fit to screen"
+        aria-label="ملاءمة للشاشة"
+        title="ملاءمة للشاشة"
       >
         <Maximize size={16} />
       </button>
@@ -82,9 +82,9 @@ export function ZoomControls() {
           showGrid ? 'text-[#02C0CC] bg-white/10' : 'text-white/75'
         )}
         onClick={() => setShowGrid(!showGrid)}
-        aria-label="Toggle grid"
+        aria-label="إظهار أو إخفاء الشبكة"
         aria-pressed={showGrid}
-        title="Grid overlay"
+        title="طبقة الشبكة"
         data-testid="grid-toggle"
       >
         <Grid3x3 size={16} />
@@ -97,9 +97,9 @@ export function ZoomControls() {
             snapToGrid ? 'text-[#02C0CC] bg-white/10' : 'text-white/75'
           )}
           onClick={() => setSnapToGrid(!snapToGrid)}
-          aria-label="Snap to grid"
+          aria-label="محاذاة إلى الشبكة"
           aria-pressed={snapToGrid}
-          title="Snap to grid"
+          title="محاذاة إلى الشبكة"
           data-testid="snap-toggle"
         >
           <Magnet size={15} />
@@ -110,8 +110,8 @@ export function ZoomControls() {
           value={gridSize}
           onChange={(e) => setGridSize(Number(e.target.value))}
           className="h-8 rounded-lg bg-black/30 border border-white/10 text-[12px] text-white/80 px-1.5 focus:outline-none focus:border-[#02C0CC]"
-          aria-label="Grid size"
-          title="Grid size"
+          aria-label="حجم الشبكة"
+          title="حجم الشبكة"
           data-testid="grid-size"
         >
           {[10, 20, 40, 80, 120].map((g) => (
@@ -128,7 +128,7 @@ export function ZoomControls() {
           <div
             className="cv-menu !min-w-[128px] !max-w-[128px] !p-1.5"
             role="listbox"
-            aria-label="Zoom level"
+            aria-label="مستوى التكبير"
             style={{ right: 12, bottom: 56, left: 'auto', top: 'auto' }}
           >
             {PRESETS.map((p) => (
@@ -154,7 +154,7 @@ export function ZoomControls() {
           setOpen(false)
         }}
             >
-              <span className="flex items-center gap-2"><Scan size={13} /> Fit</span>
+              <span className="flex items-center gap-2"><Scan size={13} /> ملاءمة</span>
               {isFit && <Check size={13} className="text-white/80" />}
             </button>
             <button role="option" aria-selected={false} className="cv-menu-item !h-10" onClick={doFill}>

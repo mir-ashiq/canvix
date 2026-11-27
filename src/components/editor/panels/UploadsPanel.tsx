@@ -88,22 +88,22 @@ export function UploadsPanel() {
           })
           if (hasImageSelected) {
             replaceSelectedImage(src, w, h)
-            toast({ title: 'Image replaced' })
+            toast({ title: 'تم استبدال الصورة' })
           } else {
             addImageFromSrc(src, w, h)
-            toast({ title: 'Image uploaded to your library' })
+            toast({ title: 'تم رفع الصورة إلى مكتبتك' })
           }
         } else {
           const add = kind === 'audio' ? addAudioFromFile : addVideoFromFile
           await add(file, (ratio) => {
             setMediaUploads((prev) => prev.map((u) => (u.key === key ? { ...u, ratio } : u)))
           })
-          toast({ title: kind === 'audio' ? 'Audio added — open Preview to play it' : 'Video added — open Preview to play it' })
+          toast({ title: kind === 'audio' ? 'تمت إضافة الصوت — افتح المعاينة لتشغيله' : 'تمت إضافة الفيديو — افتح المعاينة لتشغيله' })
         }
       } catch (err) {
         setMediaUploads((prev) => prev.map((u) => (u.key === key ? { ...u, failed: true } : u)))
         toast({
-          title: `Could not upload ${kind}`,
+          title: `تعذّر رفع ${kind}`, 
           description: err instanceof Error ? err.message.slice(0, 140) : undefined,
           variant: 'destructive',
         })
@@ -120,17 +120,17 @@ export function UploadsPanel() {
         const { w, h } = await probeImageSize(`/api/media/${item.id}`)
         if (hasImageSelected) {
           replaceSelectedImage(`/api/media/${item.id}`, w, h)
-          toast({ title: 'Image replaced' })
+          toast({ title: 'تم استبدال الصورة' })
         } else {
           addImageFromSrc(`/api/media/${item.id}`, w, h)
         }
       } else if (item.mime.startsWith('audio/')) {
-        await addAudioFromLibrary(item.id, item.name ?? 'Audio')
+        await addAudioFromLibrary(item.id, item.name ?? 'الصوت')
       } else if (item.mime.startsWith('video/')) {
-        await addVideoFromLibrary(item.id, item.name ?? 'Video')
+        await addVideoFromLibrary(item.id, item.name ?? 'الفيديو')
       }
     } catch {
-      toast({ title: 'Could not insert this file', variant: 'destructive' })
+      toast({ title: 'تعذّرت إضافة هذا الملف', variant: 'destructive' })
     }
   }
 
@@ -153,7 +153,7 @@ export function UploadsPanel() {
       state.moveLayer(el.id, 'back')
       state.setLock([el.id], true)
     }
-    toast({ title: 'Set as background' })
+    toast({ title: 'تعيين كخلفية' })
   }
 
   const commitRename = async () => {
@@ -168,7 +168,7 @@ export function UploadsPanel() {
       await renameLibraryItem(id, trimmed)
     } catch {
       setItems(prev)
-      toast({ title: 'Could not rename', variant: 'destructive' })
+      toast({ title: 'تعذّرت إعادة التسمية', variant: 'destructive' })
     }
   }
 
@@ -180,22 +180,22 @@ export function UploadsPanel() {
       await removeLibraryItem(item.id)
       if (prevQuota) setQuota({ ...prevQuota, used: Math.max(0, prevQuota.used - item.size) })
       toast({
-        title: 'Removed from your library',
-        description: 'Designs already using this file keep working.',
+        title: 'تمت الإزالة من مكتبتك',
+        description: 'ستبقى التصاميم التي تستخدم هذا الملف تعمل.',
       })
     } catch {
       setItems(prev)
       setQuota(prevQuota)
-      toast({ title: 'Could not remove', variant: 'destructive' })
+      toast({ title: 'تعذّرت الإزالة', variant: 'destructive' })
     }
   }
 
   return (
     <div className="flex flex-col h-full bg-[#16181D] text-[#EDEEF2]">
       <div className="px-4 pt-4 pb-3 border-b border-white/[0.07] shrink-0">
-        <h3 className="font-bold text-sm">Uploads</h3>
+        <h3 className="font-bold text-sm">الملفات المرفوعة</h3>
         <p className="text-xs text-white/50 mt-0.5">
-          {hasImageSelected ? 'Click a file to replace the selected image.' : 'Your files follow your account.'}
+          {hasImageSelected ? 'اضغط على ملف لاستبدال الصورة المحددة.' : 'ملفاتك مرتبطة بحسابك.'}
         </p>
         {hasImageSelected && (
           <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#02C0CC] bg-[#02C0CC]/10 border border-[#02C0CC]/25 rounded-full px-2.5 py-1">
@@ -214,10 +214,10 @@ export function UploadsPanel() {
         <button
           onClick={() => fileRef.current?.click()}
           className="w-full rounded-xl border-2 border-dashed border-white/15 hover:border-[#7630D7] hover:bg-[#7630D7]/10 transition-all py-8 flex flex-col items-center gap-2 text-white/50"
-          aria-label="Upload images and media"
+          aria-label="ارفع الصور والوسائط"
         >
           <Upload size={22} />
-          <span className="text-sm font-medium text-white/80">Click or drag files here</span>
+          <span className="text-sm font-medium text-white/80">انقر أو اسحب الملفات إلى هنا</span>
           <span className="text-xs">PNG, JPG, SVG, GIF — plus MP3/WAV audio &amp; MP4/WebM video</span>
         </button>
         <input
@@ -230,12 +230,12 @@ export function UploadsPanel() {
             void handleFiles(e.target.files)
             e.target.value = ''
           }}
-          aria-label="File upload"
+          aria-label="رفع ملف"
         />
 
         {mediaUploads.length > 0 && (
           <div className="mt-4 flex flex-col gap-2">
-            <h4 className="text-xs font-semibold text-white/50">Uploading</h4>
+            <h4 className="text-xs font-semibold text-white/50">جارٍ الرفع</h4>
             {mediaUploads.map((u) => (
               <div
                 key={u.key}
@@ -278,7 +278,7 @@ export function UploadsPanel() {
         ) : items.length > 0 ? (
           <>
             <div className="flex items-center justify-between mt-6 mb-2">
-              <h4 className="text-xs font-semibold text-white/50">Your library</h4>
+              <h4 className="text-xs font-semibold text-white/50">مكتبتك</h4>
               {quota && (
                 <span className="text-[10px] text-white/40 tabular-nums">
                   {formatBytes(quota.used)} of {formatBytes(quota.total)}
@@ -367,7 +367,7 @@ export function UploadsPanel() {
         ) : (
           <div className="mt-6 flex flex-col items-center py-6 text-white/35">
             <ImageIcon size={28} strokeWidth={1.4} />
-            <p className="text-xs mt-2.5 text-center leading-relaxed">No uploads yet.<br />Your files will appear here.</p>
+            <p className="text-xs mt-2.5 text-center leading-relaxed">لا توجد ملفات مرفوعة بعد.<br />ستظهر ملفاتك هنا.</p>
           </div>
         )}
       </div>

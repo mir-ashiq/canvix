@@ -12,11 +12,11 @@ import { useEditorStore } from '@/store/editor-store'
 // catch render/lifecycle errors per surface and offer the three
 // recoveries that actually help:
 //
-//   Reload editor     — fresh mount, browser state (URL, design id)
+//   إعادة تحميل المحرر     — fresh mount, browser state (URL, design id)
 //                        preserved
-//   Back to dashboard — switches the app-store view and remounts
+//   العودة إلى لوحة التحكم — switches the app-store view and remounts
 //                        the crashed surface from scratch
-//   Copy diagnostics  — design id, last-saved seq, save state,
+//   نسخ معلومات التشخيص  — design id, last-saved seq, save state,
 //                        page/element counts, the error itself;
 //                        paste-ready for a bug report
 //
@@ -154,7 +154,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       return (
         <div
           role="alert"
-          aria-label={`${this.props.label} crashed`}
+          aria-label={`تعطل ${this.props.label}`}
           className="flex h-screen w-full items-center justify-center bg-[#0D0F14] p-6"
         >
           <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#181B23] p-6 text-white shadow-2xl">
@@ -162,39 +162,37 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               <span aria-hidden className="text-xl">
                 ⚠️
               </span>
-              <h2 className="text-lg font-semibold">Something went wrong</h2>
+              <h2 className="text-lg font-semibold">حدث خطأ غير متوقع</h2>
             </div>
             <p className="mb-4 text-sm text-white/60">
-              The {this.props.label} hit an unexpected error and was stopped
-              safely. Your design is saved on the server up to the last
-              autosave.
+              واجه {this.props.label} خطأ غير متوقع، وتم إيقافه بأمان. تصميمك محفوظ على الخادم حتى آخر عملية حفظ تلقائي.
             </p>
             <div className="mb-4 rounded-lg bg-black/40 p-3 font-mono text-xs text-red-300">
-              {this.state.error.message || 'Unknown error'}
+              {this.state.error.message || 'خطأ غير معروف'}
             </div>
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={this.reload}
                 className="rounded-lg bg-[#00C4CC] px-4 py-2 text-sm font-semibold text-black hover:bg-[#00b3ba]"
               >
-                Reload editor
+                إعادة تحميل المحرر
               </button>
               <button
                 onClick={this.backToDashboard}
                 className="rounded-lg bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
               >
-                Back to dashboard
+                العودة إلى لوحة التحكم
               </button>
               <button
                 onClick={this.copyDiagnostics}
                 className="rounded-lg bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
               >
-                {this.state.copied ? 'Diagnostics copied ✓' : 'Copy diagnostics'}
+                {this.state.copied ? 'تم نسخ معلومات التشخيص ✓' : 'نسخ معلومات التشخيص'}
               </button>
             </div>
             {this.state.diagnostics?.designId ? (
               <p className="mt-4 text-xs text-white/40">
-                design {this.state.diagnostics.designId} · last saved seq{' '}
+                التصميم {this.state.diagnostics.designId} · آخر تسلسل حفظ{' '}
                 {this.state.diagnostics.lastSavedSeq ?? 'unknown'}
               </p>
             ) : null}

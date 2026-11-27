@@ -68,7 +68,7 @@ export function PageBar() {
                   i === currentPage ? 'border-[#02C0CC]' : 'border-white/20 hover:border-white/45'
                 )}
                 style={{ height: THUMB_H, width: thumbW }}
-                aria-label={`Go to page ${i + 1}`}
+                aria-label={`الانتقال إلى الصفحة ${i + 1}`}
               >
                 <div className="w-full h-full">
                   <DesignPreview page={p} width={ps.width} height={ps.height} />
@@ -80,7 +80,7 @@ export function PageBar() {
               {i === currentPage && p.notes ? (
                 <span
                   className="absolute -bottom-1.5 -right-1.5 h-4 w-4 rounded-full bg-[#02C0CC] text-white flex items-center justify-center shadow"
-                  title="This page has speaker notes"
+                  title="تحتوي هذه الصفحة على ملاحظات للمتحدث"
                 >
                   <NotebookPen size={9} />
                 </span>
@@ -90,16 +90,16 @@ export function PageBar() {
                   <button
                     className="h-5 w-5 rounded bg-black/55 text-white flex items-center justify-center hover:bg-black/80"
                     onClick={() => duplicatePage(i)}
-                    title="Duplicate page"
-                    aria-label="Duplicate page"
+                    title="تكرار الصفحة"
+                    aria-label="تكرار الصفحة"
                   >
                     <Copy size={10} />
                   </button>
                   <button
                     className="h-5 w-5 rounded bg-black/55 text-white flex items-center justify-center hover:bg-red-600"
                     onClick={() => deletePage(i)}
-                    title="Delete page"
-                    aria-label="Delete page"
+                    title="حذف الصفحة"
+                    aria-label="حذف الصفحة"
                   >
                     <Trash2 size={10} />
                   </button>
@@ -112,8 +112,8 @@ export function PageBar() {
       <button
         onClick={addPage}
         className="h-9 w-9 rounded-lg border-2 border-dashed border-white/25 text-white/60 hover:border-[#02C0CC] hover:text-[#02C0CC] flex items-center justify-center shrink-0 bg-white/[0.06]"
-        title="Add page"
-        aria-label="Add page"
+        title="إضافة صفحة"
+        aria-label="إضافة صفحة"
       >
         <Plus size={16} />
       </button>
@@ -127,8 +127,8 @@ export function PageBar() {
             notesOpen ? 'border-[#02C0CC] text-[#02C0CC]' : 'border-white/15',
             page?.notes ? 'text-[#02C0CC]' : ''
           )}
-          title="Speaker notes"
-          aria-label="Speaker notes"
+          title="ملاحظات المتحدث"
+          aria-label="ملاحظات المتحدث"
           aria-expanded={notesOpen}
         >
           <NotebookPen size={15} />
@@ -141,7 +141,7 @@ export function PageBar() {
             <textarea
               value={page.notes ?? ''}
               onChange={(e) => setPageNotes(page.id, e.target.value)}
-              placeholder="Type speaker notes…"
+              placeholder="اكتب ملاحظات المتحدث…"
               data-testid="notes-textarea"
               className="w-full h-28 resize-none rounded-lg bg-black/30 border border-white/10 px-2.5 py-2 text-[13px] text-white/85 placeholder:text-white/30 focus:outline-none focus:border-[#02C0CC]"
             />
@@ -164,8 +164,8 @@ export function PageBar() {
             'h-9 px-2.5 rounded-lg border text-white/60 hover:border-[#02C0CC] hover:text-[#02C0CC] flex items-center gap-1.5 bg-white/[0.06] transition-colors',
             resizeOpen ? 'border-[#02C0CC] text-[#02C0CC]' : 'border-white/15'
           )}
-          title="Resize this page"
-          aria-label="Resize this page"
+          title="تغيير مقاس هذه الصفحة"
+          aria-label="تغيير مقاس هذه الصفحة"
           aria-expanded={resizeOpen}
           data-testid="page-size-button"
         >
@@ -173,7 +173,7 @@ export function PageBar() {
           <span className="text-[11px] tabular-nums">
             {current.width}×{current.height}
           </span>
-          {page?.width && page?.height ? <span className="w-1.5 h-1.5 rounded-full bg-[#FFB84C]" title="Custom page size" /> : null}
+          {page?.width && page?.height ? <span className="w-1.5 h-1.5 rounded-full bg-[#FFB84C]" title="مقاس صفحة مخصص" /> : null}
         </button>
         {resizeOpen && sizeDraft && page && (
           <div className="absolute bottom-11 left-0 w-72 rounded-xl bg-[#16181D] border border-white/10 shadow-2xl p-3" data-testid="page-size-popover">
@@ -225,15 +225,15 @@ export function PageBar() {
                 className="flex-1 h-8 rounded-lg bg-[#02C0CC] text-[#0B0C10] text-xs font-semibold flex items-center justify-center gap-1 hover:bg-[#02C0CC]/85"
                 data-testid="page-size-apply"
               >
-                <Check size={13} /> Apply
+                <Check size={13} /> تطبيق
               </button>
               {page.width || page.height ? (
                 <button
                   onClick={resetPageSize}
                   className="h-8 px-2.5 rounded-lg border border-white/15 text-white/60 text-xs flex items-center gap-1 hover:border-white/35"
-                  title="Back to the design size"
+                  title="العودة إلى مقاس التصميم"
                 >
-                  <RotateCcw size={12} /> Reset
+                  <RotateCcw size={12} /> إعادة ضبط
                 </button>
               ) : null}
             </div>

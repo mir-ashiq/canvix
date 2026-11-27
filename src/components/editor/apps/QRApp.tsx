@@ -52,7 +52,7 @@ export function QRApp({ onClose }: AppPanelProps) {
   return (
     <div>
       <AppHeader icon={QrCode} title="QR generator" onClose={onClose} />
-      <label className="block text-[11px] font-semibold text-white/55 mb-1.5">Link or text</label>
+      <label className="block text-[11px] font-semibold text-white/55 mb-1.5">الرابط أو النص</label>
       <input
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -62,7 +62,7 @@ export function QRApp({ onClose }: AppPanelProps) {
       />
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div>
-          <label className="block text-[11px] font-semibold text-white/55 mb-1.5">Size</label>
+          <label className="block text-[11px] font-semibold text-white/55 mb-1.5">الحجم</label>
           <select
             value={size}
             onChange={(e) => setSize(Number(e.target.value))}
@@ -75,7 +75,7 @@ export function QRApp({ onClose }: AppPanelProps) {
           </select>
         </div>
         <div>
-          <label className="block text-[11px] font-semibold text-white/55 mb-1.5">Colour</label>
+          <label className="block text-[11px] font-semibold text-white/55 mb-1.5">اللون</label>
           <input
             type="color"
             value={dark}

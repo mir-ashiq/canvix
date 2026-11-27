@@ -42,7 +42,7 @@ export function NotesAIGenerator() {
       setOpen(true)
     } catch (e) {
       toast({
-        title: 'Notes generation',
+        title: 'إنشاء الملاحظات',
         description: e instanceof Error ? e.message : 'Failed. Try again.',
         variant: 'destructive',
       })

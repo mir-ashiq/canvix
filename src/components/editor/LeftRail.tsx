@@ -13,17 +13,17 @@ import { Tip } from './tooltip'
  *  /api/stock-video/available says the instance has a stock-video key —
  *  no provider = feature hidden, everything else works (the F2b pattern). */
 const PANELS: { id: Exclude<PanelId, null>; label: string; icon: typeof LayoutTemplate }[] = [
-  { id: 'templates', label: 'Templates', icon: LayoutTemplate },
-  { id: 'elements', label: 'Elements', icon: Shapes },
-  { id: 'text', label: 'Text', icon: Type },
-  { id: 'brand', label: 'Brand', icon: BookMarked },
-  { id: 'uploads', label: 'Uploads', icon: Upload },
-  { id: 'photos', label: 'Photos', icon: Image },
-  { id: 'videos', label: 'Videos', icon: Video },
-  { id: 'audio', label: 'Audio', icon: AudioLines },
-  { id: 'tools', label: 'Tools', icon: Wrench },
-  { id: 'projects', label: 'Projects', icon: FolderOpen },
-  { id: 'apps', label: 'Apps', icon: LayoutGrid },
+  { id: 'templates', label: 'القوالب', icon: LayoutTemplate },
+  { id: 'elements', label: 'العناصر', icon: Shapes },
+  { id: 'text', label: 'النص', icon: Type },
+  { id: 'brand', label: 'الهوية', icon: BookMarked },
+  { id: 'uploads', label: 'الملفات المرفوعة', icon: Upload },
+  { id: 'photos', label: 'الصور', icon: Image },
+  { id: 'videos', label: 'الفيديو', icon: Video },
+  { id: 'audio', label: 'الصوت', icon: AudioLines },
+  { id: 'tools', label: 'الأدوات', icon: Wrench },
+  { id: 'projects', label: 'المشاريع', icon: FolderOpen },
+  { id: 'apps', label: 'التطبيقات', icon: LayoutGrid },
 ]
 
 export function LeftRail({ vertical = true }: { vertical?: boolean }) {
@@ -46,7 +46,7 @@ export function LeftRail({ vertical = true }: { vertical?: boolean }) {
         'bg-[#1D1F26] shrink-0 z-30 border-r border-white/[0.06]',
         vertical ? 'w-[72px] flex flex-col items-center pt-1 gap-0.5' : 'flex items-center justify-around px-2 h-14 overflow-x-auto cv-scroll-dark'
       )}
-      aria-label="Editor tools"
+      aria-label="أدوات المحرر"
     >
       {panels.map((p) => {
         const active = panel === p.id

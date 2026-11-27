@@ -50,19 +50,19 @@ export function ProjectsPanel() {
         openEditor(d)
         toast({ title: `Opened “${d.name}”` })
       })
-      .catch(() => toast({ title: 'Could not open that design', variant: 'destructive' }))
+      .catch(() => toast({ title: 'تعذّر فتح هذا التصميم', variant: 'destructive' }))
   }
 
   const filtered = (designs ?? []).filter((d) => d.name.toLowerCase().includes(query.toLowerCase()))
 
   return (
-    <PanelShell title="Projects" subtitle="Your saved designs" searchPlaceholder="Search your designs" onSearch={setQuery}>
+    <PanelShell title="المشاريع" subtitle="تصاميمك المحفوظة" searchPlaceholder="ابحث في تصاميمك" onSearch={setQuery}>
       {designs === null ? (
         <div className="py-10 text-center text-white/40 text-sm">Loading your projects…</div>
       ) : filtered.length === 0 ? (
         <div className="py-10 text-center">
           <FolderOpen size={28} className="mx-auto text-white/25" />
-          <p className="mt-2 text-sm text-white/50">{designs.length === 0 ? 'No saved designs yet' : 'No matches'}</p>
+          <p className="mt-2 text-sm text-white/50">{designs.length === 0 ? 'لا توجد تصاميم محفوظة بعد' : 'لا توجد نتائج مطابقة'}</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2.5 pt-2">
@@ -86,7 +86,7 @@ export function ProjectsPanel() {
                   </div>
                 )}
                 {d.id === designId && (
-                  <span className="absolute top-1.5 left-1.5 text-[9px] font-bold bg-[#02C0CC] text-black px-1.5 py-0.5 rounded-md uppercase">Open</span>
+                  <span className="absolute top-1.5 left-1.5 text-[9px] font-bold bg-[#02C0CC] text-black px-1.5 py-0.5 rounded-md uppercase">فتح</span>
                 )}
               </div>
               <div className="px-2 py-1.5 bg-[#16181D]">

@@ -113,13 +113,13 @@ export function VideosPanel() {
     try {
       await addStockVideo(tile)
       toast({
-        title: 'Video added',
+        title: 'تمت إضافة الفيديو',
         description: `${tile.credit.provider} · ${tile.credit.author} — ${tile.credit.license}`,
       })
     } catch (err) {
       toast({
-        title: 'Could not add the video',
-        description: err instanceof Error ? err.message : 'Try again — or pick another result.',
+        title: 'تعذّرت إضافة الفيديو',
+        description: err instanceof Error ? err.message : 'حاول مجدداً أو اختر نتيجة أخرى.',
       })
     } finally {
       setBusyTile(null)
@@ -130,9 +130,9 @@ export function VideosPanel() {
 
   return (
     <PanelShell
-      title="Videos"
-      subtitle={providers.length > 0 ? `Search free stock videos from ${providers.map((p) => p[0].toUpperCase() + p.slice(1)).join(' & ')}` : 'Search free stock videos'}
-      searchPlaceholder="Search stock videos (e.g. ocean, city, coffee)"
+      title="الفيديوهات"
+      subtitle={providers.length > 0 ? `Search free stock videos from ${providers.map((p) => p[0].toUpperCase() + p.slice(1)).join(' & ')}` : 'ابحث عن مقاطع فيديو مجانية'}
+      searchPlaceholder="ابحث عن فيديوهات (مثل البحر أو المدينة أو القهوة)"
       searchValue={query}
       onSearchValueChange={setQuery}
       onSearch={setQuery}
@@ -184,8 +184,8 @@ export function VideosPanel() {
           ) : results && results.length === 0 && !busy ? (
             <div className="py-10 text-center">
               <VideoOff size={24} className="mx-auto text-white/25 mb-2" />
-              <p className="text-[12.5px] text-white/50 font-medium">No stock videos matched</p>
-              <p className="text-[11.5px] text-white/35 mt-1">Try other keywords.</p>
+              <p className="text-[12.5px] text-white/50 font-medium">لم نعثر على مقاطع فيديو مطابقة</p>
+              <p className="text-[11.5px] text-white/35 mt-1">جرّب كلمات بحث أخرى.</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2.5">
@@ -242,7 +242,7 @@ export function VideosPanel() {
                     <span className="absolute inset-0 hidden group-hover:flex items-center justify-center">
                       <span className="h-8 px-3 rounded-full bg-[#7630D7] text-white text-[11.5px] font-bold flex items-center gap-1.5 shadow-lg">
                         {isBusy ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-                        {isBusy ? 'Adding…' : 'Add'}
+                        {isBusy ? 'جارٍ الإضافة…' : 'إضافة'}
                       </span>
                     </span>
                   </button>
@@ -261,7 +261,7 @@ export function VideosPanel() {
           <AIVideoCard />
           <div className="py-10 text-center">
             <Clapperboard size={26} className="mx-auto text-white/25 mb-3" />
-            <p className="text-[13px] text-white/50 font-medium">Search free stock videos</p>
+            <p className="text-[13px] text-white/50 font-medium">ابحث عن مقاطع فيديو مجانية</p>
             <p className="text-[11.5px] text-white/35 mt-1 leading-relaxed max-w-[240px] mx-auto">
               Type at least two letters. Every video carries its creator and license —
               shown when you add it and saved with the design.

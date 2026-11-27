@@ -45,41 +45,41 @@ function StarMini({ points, ratio }: { points: number; ratio: number }) {
 }
 
 const BASIC_SHAPES = [
-  { id: 'rect', label: 'Square', icon: Square },
-  { id: 'rounded', label: 'Rounded', icon: null },
-  { id: 'ellipse', label: 'Circle', icon: Circle },
-  { id: 'triangle', label: 'Triangle', icon: Triangle },
-  { id: 'star', label: 'Star', icon: Star },
+  { id: 'rect', label: 'مربع', icon: Square },
+  { id: 'rounded', label: 'مستدير', icon: null },
+  { id: 'ellipse', label: 'دائرة', icon: Circle },
+  { id: 'triangle', label: 'مثلث', icon: Triangle },
+  { id: 'star', label: 'نجمة', icon: Star },
 ] as const
 
 const POLY_TILES: { label: string; sides: number }[] = [
-  { label: 'Pentagon', sides: 5 },
-  { label: 'Hexagon', sides: 6 },
-  { label: 'Heptagon', sides: 7 },
-  { label: 'Octagon', sides: 8 },
-  { label: 'Nonagon', sides: 9 },
-  { label: 'Decagon', sides: 10 },
+  { label: 'خماسي', sides: 5 },
+  { label: 'سداسي', sides: 6 },
+  { label: 'سباعي', sides: 7 },
+  { label: 'ثماني', sides: 8 },
+  { label: 'تساعي', sides: 9 },
+  { label: 'عشاري', sides: 10 },
 ]
 
 /** v0.18 (Wave 3): star variants — parametric, editable post-insert */
 const STAR_TILES: { label: string; points: number; ratio?: number }[] = [
-  { label: '6-point', points: 6 },
-  { label: '8-point', points: 8 },
-  { label: '12-point', points: 12, ratio: 0.72 },
-  { label: '16-point burst', points: 16, ratio: 0.8 },
-  { label: 'Thin spike', points: 5, ratio: 0.3 },
-  { label: 'Soft star', points: 5, ratio: 0.75 },
+  { label: 'سداسي الرؤوس', points: 6 },
+  { label: 'ثماني الرؤوس', points: 8 },
+  { label: '12 رأساً', points: 12, ratio: 0.72 },
+  { label: 'انفجار بـ16 رأساً', points: 16, ratio: 0.8 },
+  { label: 'شوكة رفيعة', points: 5, ratio: 0.3 },
+  { label: 'نجمة ناعمة', points: 5, ratio: 0.75 },
 ]
 
 const GRAPHIC_GROUPS: { name: string; ids: string[] }[] = [
-  { name: 'Decorative', ids: ['heart', 'blob', 'cloud', 'moon', 'sparkle', 'wave'] },
-  { name: 'Badges & labels', ids: ['badge', 'banner', 'ribbon', 'frame', 'speech'] },
-  { name: 'Icons', ids: ['bolt', 'check-circle', 'arrow'] },
+  { name: 'زخرفي', ids: ['heart', 'blob', 'cloud', 'moon', 'sparkle', 'wave'] },
+  { name: 'شارات وملصقات', ids: ['badge', 'banner', 'ribbon', 'frame', 'speech'] },
+  { name: 'أيقونات', ids: ['bolt', 'check-circle', 'arrow'] },
 ]
 
 const TABLE_STYLES: { id: TableStyle; label: string; swatch: React.CSSProperties }[] = [
-  { id: 'classic', label: 'Classic', swatch: { background: '#FFFFFF', border: '1px solid #E0E1E6' } },
-  { id: 'minimal', label: 'Minimal', swatch: { background: '#FFFFFF', borderTop: '2px solid #7630D7' } },
+  { id: 'classic', label: 'كلاسيكي', swatch: { background: '#FFFFFF', border: '1px solid #E0E1E6' } },
+  { id: 'minimal', label: 'بسيط', swatch: { background: '#FFFFFF', borderTop: '2px solid #7630D7' } },
   { id: 'bold', label: 'Bold', swatch: { background: '#F6F2FC', border: '2px solid #7630D7' } },
   { id: 'soft', label: 'Soft', swatch: { background: '#F2FBFC', border: '1px solid #02C0CC' } },
 ]
@@ -100,7 +100,7 @@ const CATEGORY_TABS = [
 const CHART_TILES: { kind: ChartKind; label: string; mini: React.ReactNode }[] = [
   {
     kind: 'bar',
-    label: 'Bar',
+    label: 'أعمدة',
     mini: (
       <svg viewBox="0 0 56 40" className="h-10 w-14" aria-hidden="true">
         <rect x="4" y="14" width="8" height="22" rx="2" fill="#7630D7" />
@@ -112,7 +112,7 @@ const CHART_TILES: { kind: ChartKind; label: string; mini: React.ReactNode }[] =
   },
   {
     kind: 'line',
-    label: 'Line',
+    label: 'خطي',
     mini: (
       <svg viewBox="0 0 56 40" className="h-10 w-14" aria-hidden="true">
         <polyline points="4,30 18,22 30,26 44,10 52,14" fill="none" stroke="#7630D7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
@@ -126,7 +126,7 @@ const CHART_TILES: { kind: ChartKind; label: string; mini: React.ReactNode }[] =
   },
   {
     kind: 'donut',
-    label: 'Donut',
+    label: 'حلقي',
     mini: (
       <svg viewBox="0 0 56 40" className="h-10 w-14" aria-hidden="true">
         <circle cx="28" cy="20" r="14" fill="none" stroke="#7630D7" strokeWidth="8" strokeDasharray="44 88" transform="rotate(-90 28 20)" />
@@ -137,7 +137,7 @@ const CHART_TILES: { kind: ChartKind; label: string; mini: React.ReactNode }[] =
   },
   {
     kind: 'scatter',
-    label: 'Scatter',
+    label: 'مبعثر',
     mini: (
       <svg viewBox="0 0 56 40" className="h-10 w-14" aria-hidden="true">
         <circle cx="8" cy="32" r="3" fill="#02C0CC" />
@@ -172,7 +172,7 @@ export function ElementsPanel() {
   return (
     <Tabs value={tab} onValueChange={setTab} className="flex flex-col h-full bg-[#16181D] text-[#EDEEF2]">
       <div className="px-4 pt-4 pb-3 border-b border-white/[0.07] shrink-0">
-        <h3 className="font-bold text-sm">Elements</h3>
+        <h3 className="font-bold text-sm">العناصر</h3>
         <div className="flex items-center gap-2 h-9 rounded-lg bg-white/[0.06] border border-white/10 px-2.5 mt-2.5">
           <Search size={13} className="text-white/40 shrink-0" />
           <input
@@ -202,7 +202,7 @@ export function ElementsPanel() {
       </div>
 
       <TabsContent value="shapes" className="flex-1 overflow-y-auto cv-scroll-dark p-4 mt-0">
-        <SectionTitle>Basic shapes</SectionTitle>
+        <SectionTitle>الأشكال الأساسية</SectionTitle>
         <div className="grid grid-cols-3 gap-2 mb-4">
           {BASIC_SHAPES.map((s) => (
             <ShapeTile key={s.id} label={s.label} onClick={() => addShape(s.id as 'rect')}>
@@ -210,7 +210,7 @@ export function ElementsPanel() {
             </ShapeTile>
           ))}
         </div>
-        <SectionTitle>Polygons</SectionTitle>
+        <SectionTitle>المضلعات</SectionTitle>
         <div className="grid grid-cols-3 gap-2 mb-4">
           {POLY_TILES.map((s) => (
             <ShapeTile key={s.label} label={s.label} onClick={() => addPolygon(s.sides)}>
@@ -218,7 +218,7 @@ export function ElementsPanel() {
             </ShapeTile>
           ))}
         </div>
-        <SectionTitle>Stars</SectionTitle>
+        <SectionTitle>النجوم</SectionTitle>
         <div className="grid grid-cols-3 gap-2">
           {STAR_TILES.map((s) => (
             <ShapeTile key={s.label} label={s.label} onClick={() => addStarVariant(s.points, s.ratio)}>
@@ -278,7 +278,7 @@ export function ElementsPanel() {
 
       <TabsContent value="stickers" className="flex-1 overflow-y-auto cv-scroll-dark p-4 mt-0">
         {/* v0.22: the vector pack library — featured row + full-library launcher */}
-        <h4 className="text-xs font-semibold text-white/50 mb-2">Sticker packs</h4>
+        <h4 className="text-xs font-semibold text-white/50 mb-2">حزم الملصقات</h4>
         <div className="grid grid-cols-4 gap-1.5 mb-3">
           {FEATURED_STICKERS.map((s) => (
             <button
@@ -325,9 +325,9 @@ export function ElementsPanel() {
       {/* v0.14 (D7): data-bound charts */}
       <TabsContent value="charts" className="flex-1 overflow-y-auto cv-scroll-dark p-4 mt-0">
         <p className="text-[11px] text-white/45 leading-relaxed mb-3">
-          Charts are data-bound elements — select one on the canvas and use <span className="text-white/70">Edit data</span> in the toolbar to change labels, values, colours and kind.
+          المخططات عناصر مرتبطة بالبيانات — حدد مخططاً على مساحة التصميم ثم اختر <span className="text-white/70">تحرير البيانات</span> من شريط الأدوات لتعديل التسميات والقيم والألوان ونوع المخطط.
         </p>
-        <SectionTitle>Types</SectionTitle>
+        <SectionTitle>الأنواع</SectionTitle>
         <div className="grid grid-cols-2 gap-2">
           {CHART_TILES.map((t) => (
             <button
@@ -348,7 +348,7 @@ export function ElementsPanel() {
         <p className="text-[11px] text-white/45 leading-relaxed mb-3">
           Tables are native elements — click a cell on the canvas to edit it. Add or remove rows &amp; columns from the toolbar.
         </p>
-        <SectionTitle>Styles</SectionTitle>
+        <SectionTitle>الأنماط</SectionTitle>
         <div className="grid grid-cols-2 gap-2">
           {TABLE_STYLES.map((t) => (
             <button
@@ -373,10 +373,10 @@ export function ElementsPanel() {
         <p className="text-[11px] text-white/45 leading-relaxed mb-3">
           Drop an upload or photo onto a frame to fill it — the image is clipped to the shape.
         </p>
-        <SectionTitle>Shapes</SectionTitle>
+        <SectionTitle>الأشكال</SectionTitle>
         <div className="grid grid-cols-3 gap-2">
           {FRAME_SHAPES.map((fs) => (
-            <ShapeTile key={fs} label={fs === 'rect' ? 'Rectangle' : fs === 'ellipse' ? 'Ellipse' : fs === 'triangle' ? 'Triangle' : fs === 'hexagon' ? 'Hexagon' : 'Circle'} onClick={() => addFrame(fs)}>
+            <ShapeTile key={fs} label={fs === 'rect' ? 'Rectangle' : fs === 'ellipse' ? 'Ellipse' : fs === 'triangle' ? 'مثلث' : fs === 'hexagon' ? 'سداسي' : 'دائرة'} onClick={() => addFrame(fs)}>
               <FrameIconFor shape={fs} />
             </ShapeTile>
           ))}
@@ -410,7 +410,7 @@ function EmbedComposer() {
   const [url, setUrl] = useState('')
   return (
     <div>
-      <SectionTitle>Add a link card</SectionTitle>
+      <SectionTitle>إضافة بطاقة رابط</SectionTitle>
       <div className="flex items-center gap-2 h-10 rounded-lg bg-white/[0.06] border border-white/10 px-3">
         <Link2 size={14} className="text-white/40 shrink-0" />
         <input

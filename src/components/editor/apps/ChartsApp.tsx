@@ -28,7 +28,7 @@ export function ChartsApp({ onClose }: AppPanelProps) {
     <div>
       <AppHeader icon={BarChart3} title="Charts" onClose={onClose} />
       <p className="text-[11px] text-white/45 leading-relaxed mb-3">
-        Charts are native data-bound elements — select one on the canvas and hit <span className="text-white/70">Edit data</span> in the toolbar to change labels, values and colours.
+        المخططات عناصر مرتبطة بالبيانات مباشرة — حدد مخططاً على مساحة التصميم ثم اختر <span className="text-white/70">تحرير البيانات</span> من شريط الأدوات لتعديل التسميات والقيم والألوان.
       </p>
       <div className="space-y-2">
         {ROWS.map((r) => (

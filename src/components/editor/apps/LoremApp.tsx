@@ -71,7 +71,7 @@ export function LoremApp({ onClose }: AppPanelProps) {
         ))}
       </div>
 
-      <label className="block text-[11px] font-semibold text-white/55 mb-1.5">Lines</label>
+      <label className="block text-[11px] font-semibold text-white/55 mb-1.5">عدد الأسطر</label>
       <input
         type="range" min={1} max={6} value={lines}
         onChange={(e) => setLines(Number(e.target.value))}

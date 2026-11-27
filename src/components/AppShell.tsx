@@ -14,7 +14,7 @@ const Editor = dynamic(() => import('@/components/editor/Editor'), {
     <div className="h-screen w-full flex items-center justify bg-[#E9EAF0]">
       <div className="flex flex-col items-center gap-4">
         <div className="h-10 w-10 rounded-full border-4 border-[#00C4CC] border-t-transparent animate-spin" />
-        <p className="text-sm text-muted-foreground font-medium">Loading editor…</p>
+        <p className="text-sm text-muted-foreground font-medium">جارٍ تحميل المحرر…</p>
       </div>
     </div>
   ),
@@ -28,7 +28,12 @@ function DeepLinkHandler() {
   useEffect(() => {
     try {
       const designId = readDesignIdFromLocation()
-      if (!designId) return
+      if (!designId) {
+        if (new URLSearchParams(window.location.search).get('app') === '1') {
+          useAppStore.getState().goDashboard()
+        }
+        return
+      }
       const openEditor = useAppStore.getState().openEditor
       void fetch(`/api/designs/${encodeURIComponent(designId)}`)
         .then((r) => (r.ok ? r.json() : null))
@@ -53,7 +58,7 @@ function DeepLinkHandler() {
 }
 
 /**
- * The single-page Canvix shell — shared by / (landing + dashboard) and
+ * غلاف TEa.G3 أحادي الصفحة — shared by / (landing + dashboard) and
  * /design/<id> (deep link). The view switch is client-side; the URL is
  * kept in sync by the app store (see src/store/app-store.ts).
  */

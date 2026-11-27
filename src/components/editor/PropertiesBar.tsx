@@ -90,26 +90,26 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
         'flex items-center gap-0.5 min-w-0 overflow-x-auto cv-scroll-dark',
         isTopbar ? 'h-14 items-center px-1' : 'h-14 items-center px-2 bg-[#16181D] border-t border-white/[0.09]'
       )}
-      aria-label="Selected element common controls"
+      aria-label="عناصر التحكم الشائعة للعنصر المحدد"
       style={{ scrollbarWidth: 'none' }}
     >
       {/* ── multi-select ─────────────────────────────────────── */}
       {isMulti ? (
         <>
-          <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0">{sel.length} selected</span>
-          <TBtn onClick={() => state.groupSelection()} disabled={!canGroup} title="Group (Ctrl+G)" ariaLabel="Group">
+          <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0">{sel.length} عناصر محددة</span>
+          <TBtn onClick={() => state.groupSelection()} disabled={!canGroup} title="تجميع (Ctrl+G)" ariaLabel="تجميع">
             <Group size={15} />
           </TBtn>
-          <TBtn onClick={() => state.ungroupSelection()} disabled={!canUngroup} title="Ungroup (Ctrl+Shift+G)" ariaLabel="Ungroup">
+          <TBtn onClick={() => state.ungroupSelection()} disabled={!canUngroup} title="إلغاء التجميع (Ctrl+Shift+G)" ariaLabel="إلغاء التجميع">
             <Ungroup size={15} />
           </TBtn>
           <Divider />
           <PositionPopover ids={ids} count={sel.length} />
           <Divider />
-          <TBtn onClick={() => state.duplicateSelection()} title="Duplicate (Ctrl+D)" ariaLabel="Duplicate">
+          <TBtn onClick={() => state.duplicateSelection()} title="إنشاء نسخة (Ctrl+D)" ariaLabel="نسخ">
             <CopyPlus size={15} />
           </TBtn>
-          <TBtn onClick={() => state.deleteSelection()} title="Delete (Del)" ariaLabel="Delete" danger>
+          <TBtn onClick={() => state.deleteSelection()} title="حذف (Del)" ariaLabel="حذف" danger>
             <Trash2 size={15} />
           </TBtn>
         </>
@@ -118,7 +118,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           <FontDropdown value={text.fontFamily} onChange={(f) => update(ids, { fontFamily: f })} />
           {/* size stepper */}
           <div className="flex items-center shrink-0">
-            <TBtn onClick={() => update(ids, { fontSize: Math.max(6, text.fontSize - 2) })} title="Decrease font size" ariaLabel="Decrease font size" className="!rounded-r-none">
+            <TBtn onClick={() => update(ids, { fontSize: Math.max(6, text.fontSize - 2) })} title="تصغير حجم الخط" ariaLabel="تصغير حجم الخط" className="!rounded-r-none">
               <Minus size={14} />
             </TBtn>
             <input
@@ -129,9 +129,9 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
               onChange={(e) => { const v = Number(e.target.value); if (v >= 6 && v <= 400) updateLive(ids, { fontSize: v }) }}
               onBlur={() => update(ids, { fontSize: text.fontSize })}
               className="h-8 w-10 bg-white/[0.06] border-y border-white/10 text-white text-[12px] text-center outline-none focus:border-[#7630D7] [color-scheme:dark]"
-              aria-label="Font size"
+              aria-label="حجم الخط"
             />
-            <TBtn onClick={() => update(ids, { fontSize: Math.min(400, text.fontSize + 2) })} title="Increase font size" ariaLabel="Increase font size" className="!rounded-l-none">
+            <TBtn onClick={() => update(ids, { fontSize: Math.min(400, text.fontSize + 2) })} title="تكبير حجم الخط" ariaLabel="تكبير حجم الخط" className="!rounded-l-none">
               <Plus size={14} />
             </TBtn>
           </div>
@@ -141,7 +141,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
             gradient={text.fillGradient ?? null}
             onChange={(c, committed) => committed ? update(ids, { fill: c, fillGradient: null }) : updateLive(ids, { fill: c, fillGradient: null })}
             onGradient={(g, committed) => { const patch = g ? { fillGradient: g, fill: g.from } : { fillGradient: null }; if (committed) update(ids, patch); else updateLive(ids, patch) }}
-            title="Text colour"
+            title="لون النص"
           />
 
           {/* v0.15 (R1): while the element carries rich spans, per-range
@@ -152,36 +152,36 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
               className="cv-tbtn"
               style={{ width: 'auto', padding: '0 10px', fontSize: 11, gap: 6 }}
               onClick={() => update(ids, { spans: null })}
-              title="Rich text active — clear per-range styling back to the base style"
-              aria-label="Clear rich text styling"
+              title="تنسيق النص المتقدم مفعّل — امسح تنسيق المقاطع للعودة إلى التنسيق الأساسي"
+              aria-label="مسح تنسيق النص"
               data-testid="clear-rich-text"
             >
               Rich text · Clear
             </button>
           ) : (
             <>
-              <TBtn onClick={() => update(ids, { bold: !text.bold })} dataActive={text.bold} title="Bold" ariaLabel="Bold">
+              <TBtn onClick={() => update(ids, { bold: !text.bold })} dataActive={text.bold} title="عريض" ariaLabel="عريض">
                 <Bold size={14} />
               </TBtn>
-              <TBtn onClick={() => update(ids, { italic: !text.italic })} dataActive={text.italic} title="Italic" ariaLabel="Italic">
+              <TBtn onClick={() => update(ids, { italic: !text.italic })} dataActive={text.italic} title="مائل" ariaLabel="مائل">
                 <Italic size={14} />
               </TBtn>
-              <TBtn onClick={() => update(ids, { underline: !text.underline })} dataActive={text.underline} title="Underline" ariaLabel="Underline">
+              <TBtn onClick={() => update(ids, { underline: !text.underline })} dataActive={text.underline} title="تسطير" ariaLabel="تسطير">
                 <Underline size={14} />
               </TBtn>
-              <TBtn onClick={() => update(ids, { strike: !text.strike })} dataActive={text.strike} title="Strikethrough" ariaLabel="Strikethrough">
+              <TBtn onClick={() => update(ids, { strike: !text.strike })} dataActive={text.strike} title="يتوسطه خط" ariaLabel="يتوسطه خط">
                 <Strikethrough size={14} />
               </TBtn>
             </>
           )}
-          <TBtn onClick={() => update(ids, { uppercase: !text.uppercase })} dataActive={text.uppercase} title="Uppercase" ariaLabel="Uppercase">
+          <TBtn onClick={() => update(ids, { uppercase: !text.uppercase })} dataActive={text.uppercase} title="أحرف كبيرة" ariaLabel="أحرف كبيرة">
             <CaseUpper size={14} />
           </TBtn>
 
           {/* alignment */}
           <ToolbarPopover
             trigger={(open) => (
-              <button className="cv-tbtn" data-active={open} aria-label="Toggle text alignment" title="Text alignment">
+              <button className="cv-tbtn" data-active={open} aria-label="تبديل محاذاة النص" title="محاذاة النص">
                 {(() => { const I = ALIGN_ICONS[text.align] ?? AlignLeft; return <I size={14} /> })()}
               </button>
             )}
@@ -205,42 +205,42 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           {/* spacing */}
           <ToolbarPopover
             trigger={(open) => (
-              <button className="cv-tbtn" data-active={open} aria-label="Advanced settings" title="Letter & line spacing">
+              <button className="cv-tbtn" data-active={open} aria-label="إعدادات متقدمة" title="تباعد الأحرف والأسطر">
                 <LetterText size={14} />
               </button>
             )}
           >
-            <SliderRow label="Letter spacing" value={text.letterSpacing} min={-10} max={80} step={1} onChange={(v) => updateLive(ids, { letterSpacing: v })} onCommit={() => update(ids, { letterSpacing: text.letterSpacing })} />
-            <SliderRow label="Line spacing" value={text.lineHeight} min={0.6} max={3} step={0.05} onChange={(v) => updateLive(ids, { lineHeight: v })} onCommit={() => update(ids, { lineHeight: text.lineHeight })} format={(v) => `${v.toFixed(2)}×`} />
+            <SliderRow label="تباعد الأحرف" value={text.letterSpacing} min={-10} max={80} step={1} onChange={(v) => updateLive(ids, { letterSpacing: v })} onCommit={() => update(ids, { letterSpacing: text.letterSpacing })} />
+            <SliderRow label="تباعد الأسطر" value={text.lineHeight} min={0.6} max={3} step={0.05} onChange={(v) => updateLive(ids, { lineHeight: v })} onCommit={() => update(ids, { lineHeight: text.lineHeight })} format={(v) => `${v.toFixed(2)}×`} />
           </ToolbarPopover>
 
           {/* v0.18 (Wave 3): list + direction + auto-fit */}
           <ToolbarPopover
             width={228}
             trigger={(open) => (
-              <button className="cv-tbtn" data-active={open || !!text.listStyle || !!text.autoFit} aria-label="List and fit options" title="List & auto-fit">
+              <button className="cv-tbtn" data-active={open || !!text.listStyle || !!text.autoFit} aria-label="خيارات القوائم والملاءمة" title="القائمة والملاءمة التلقائية">
                 <List size={14} />
               </button>
             )}
           >
-            <div className="text-[12px] font-bold text-white/90 mb-1.5">List style</div>
+            <div className="text-[12px] font-bold text-white/90 mb-1.5">نمط القائمة</div>
             <div className="flex gap-1 mb-2.5">
-              <TBtn onClick={() => update(ids, { listStyle: 'none' })} dataActive={!text.listStyle || text.listStyle === 'none'} title="No list" ariaLabel="No list">
+              <TBtn onClick={() => update(ids, { listStyle: 'none' })} dataActive={!text.listStyle || text.listStyle === 'none'} title="بلا قائمة" ariaLabel="بلا قائمة">
                 <List size={13} className="opacity-40 line-through" />
               </TBtn>
-              <TBtn onClick={() => update(ids, { listStyle: 'bullet' })} dataActive={text.listStyle === 'bullet'} title="Bulleted list" ariaLabel="Bulleted list" data-testid="list-bullet">
+              <TBtn onClick={() => update(ids, { listStyle: 'bullet' })} dataActive={text.listStyle === 'bullet'} title="قائمة نقطية" ariaLabel="قائمة نقطية" data-testid="list-bullet">
                 <List size={13} />
               </TBtn>
-              <TBtn onClick={() => update(ids, { listStyle: 'number' })} dataActive={text.listStyle === 'number'} title="Numbered list" ariaLabel="Numbered list" data-testid="list-number">
+              <TBtn onClick={() => update(ids, { listStyle: 'number' })} dataActive={text.listStyle === 'number'} title="قائمة مرقمة" ariaLabel="قائمة مرقمة" data-testid="list-number">
                 <ListOrdered size={13} />
               </TBtn>
             </div>
-            <div className="text-[12px] font-bold text-white/90 mb-1.5">Direction</div>
+            <div className="text-[12px] font-bold text-white/90 mb-1.5">الاتجاه</div>
             <div className="flex gap-1 mb-2.5">
-              <TBtn onClick={() => update(ids, { direction: 'ltr' })} dataActive={text.direction !== 'rtl'} title="Left to right" ariaLabel="Left to right">
+              <TBtn onClick={() => update(ids, { direction: 'ltr' })} dataActive={text.direction !== 'rtl'} title="من اليسار إلى اليمين" ariaLabel="من اليسار إلى اليمين">
                 <span className="text-[11px] font-semibold px-1">LTR</span>
               </TBtn>
-              <TBtn onClick={() => update(ids, { direction: 'rtl' })} dataActive={text.direction === 'rtl'} title="Right to left (Arabic, Hebrew…)" ariaLabel="Right to left" data-testid="dir-rtl">
+              <TBtn onClick={() => update(ids, { direction: 'rtl' })} dataActive={text.direction === 'rtl'} title="من اليمين إلى اليسار (العربية والعبرية…)" ariaLabel="من اليمين إلى اليسار" data-testid="dir-rtl">
                 <Languages size={13} />
               </TBtn>
             </div>
@@ -265,8 +265,8 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
             )}
           >
             <div className="flex items-center justify-between mb-1.5">
-              <div className="text-[12px] font-bold text-white/90">Curved text</div>
-              <button className="text-[11px] text-white/60 hover:text-white" onClick={() => update(ids, { curve: 0 })}>Reset</button>
+              <div className="text-[12px] font-bold text-white/90">نص منحني</div>
+              <button className="text-[11px] text-white/60 hover:text-white" onClick={() => update(ids, { curve: 0 })}>إعادة تعيين</button>
             </div>
             <SliderRow label="Curve" value={text.curve ?? 0} min={-180} max={180} step={5} onChange={(v) => updateLive(ids, { curve: v })} onCommit={() => update(ids, { curve: text.curve ?? 0 })} format={(v) => `${v}°`} />
             <div className="flex justify-center pt-1.5">
@@ -293,10 +293,10 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           {/* effects */}
           <ToolbarPopover width={264} trigger={(open) => (
             <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Effects" title="Effects">
-              <Sparkles size={14} /> <span className="text-[12px] hidden lg:inline">Effects</span>
+              <Sparkles size={14} /> <span className="text-[12px] hidden lg:inline">التأثيرات</span>
             </button>
           )}>
-            <div className="text-[12px] font-bold text-white/90 mb-2">Text effects</div>
+            <div className="text-[12px] font-bold text-white/90 mb-2">تأثيرات النص</div>
             <div className="grid grid-cols-3 gap-1.5">
               {TEXT_EFFECTS.map((fx) => (
                 <button
@@ -315,7 +315,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
             </div>
             {text.effect === 'background' && (
               <div className="mt-2.5 border-t border-white/[0.08] pt-2.5">
-                <div className="text-[11px] text-white/60 mb-1.5 font-medium">Background block</div>
+                <div className="text-[11px] text-white/60 mb-1.5 font-medium">كتلة الخلفية</div>
                 <div className="flex flex-wrap gap-1.5">
                   {['#EFEFEF', '#7630D7', '#00C4CC', '#FF5C8A', '#1F2226', '#FFE066'].map((c) => (
                     <button key={c} className="cv-swatch h-6 w-6" style={{ background: c }} onClick={() => update(ids, { effectBackground: c })} data-selected={text.effectBackground === c} aria-label={`Background ${c}`} />
@@ -342,12 +342,12 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
               {/* border colour + width */}
               <ToolbarPopover trigger={(open) => (
                 <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Border" title="Border">
-                  <SquareDashed size={14} /> <span className="text-[12px] hidden lg:inline">Border</span>
+                  <SquareDashed size={14} /> <span className="text-[12px] hidden lg:inline">الحدود</span>
                 </button>
               )}>
-                <div className="text-[12px] font-bold text-white/90 mb-2">Border</div>
+                <div className="text-[12px] font-bold text-white/90 mb-2">الحدود</div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[11px] text-white/60">Colour</span>
+                  <span className="text-[11px] text-white/60">اللون</span>
                   <ColorMenu value={shape.stroke === 'transparent' ? '#FFFFFF' : shape.stroke} onChange={(c, committed) => committed ? update(ids, { stroke: c, strokeWidth: shape.strokeWidth || 4 }) : updateLive(ids, { stroke: c, strokeWidth: shape.strokeWidth || 4 })} title="Border colour" />
                 </div>
                 <SliderRow label="Width" value={shape.strokeWidth} min={0} max={40} step={1} onChange={(v) => updateLive(ids, { strokeWidth: v })} onCommit={() => update(ids, { strokeWidth: shape.strokeWidth })} />
@@ -360,7 +360,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
                   trigger={(open) => (
                     <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Shape properties" title="Shape properties">
                       {shape.type === 'polygon' ? <Hexagon size={14} /> : <Shapes size={14} />}
-                      <span className="text-[12px] hidden lg:inline">Shape</span>
+                      <span className="text-[12px] hidden lg:inline">الشكل</span>
                     </button>
                   )}
                 >
@@ -398,7 +398,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
               <ColorMenu value={line.stroke} onChange={(c, committed) => committed ? update(ids, { stroke: c }) : updateLive(ids, { stroke: c })} title="Line colour" />
               <ToolbarPopover trigger={(open) => (
                 <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Line style" title="Line style">
-                  <Minus size={14} /> <span className="text-[12px] hidden lg:inline">Style</span>
+                  <Minus size={14} /> <span className="text-[12px] hidden lg:inline">النمط</span>
                 </button>
               )}>
                 <SliderRow label="Thickness" value={line.strokeWidth} min={1} max={40} step={1} onChange={(v) => updateLive(ids, { strokeWidth: v })} onCommit={() => update(ids, { strokeWidth: line.strokeWidth })} />
@@ -647,7 +647,7 @@ function MediaToolbar({
       width={264}
       trigger={(open) => (
         <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Media settings" title="Media settings">
-          <SlidersHorizontal size={14} /> <span className="text-[12px] hidden lg:inline">Media</span>
+          <SlidersHorizontal size={14} /> <span className="text-[12px] hidden lg:inline">الوسائط</span>
         </button>
       )}
     >
@@ -758,16 +758,16 @@ function TableToolbar({ table, ids }: { table: TableElement; ids: string[] }) {
       <TBtn onClick={removeCol} title="Remove column" ariaLabel="Remove column"><Columns3 size={15} /><Minus size={9} className="-ml-1.5 -mb-1.5" /></TBtn>
       <ToolbarPopover trigger={(open) => (
         <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Table style" title="Table style">
-          <Palette size={14} /> <span className="text-[12px] hidden lg:inline">Style</span>
+          <Palette size={14} /> <span className="text-[12px] hidden lg:inline">النمط</span>
         </button>
       )}>
-        <div className="text-[12px] font-bold text-white/90 mb-2">Table style</div>
+        <div className="text-[12px] font-bold text-white/90 mb-2">نمط الجدول</div>
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-[11px] text-white/60">Border</span>
+          <span className="text-[11px] text-white/60">الحدود</span>
           <ColorMenu value={table.borderColor} onChange={(c, committed) => committed ? update(ids, { borderColor: c }) : updateLive(ids, { borderColor: c })} title="Border colour" />
         </div>
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-[11px] text-white/60">Header</span>
+          <span className="text-[11px] text-white/60">الترويسة</span>
           <ColorMenu value={table.headerFill} onChange={(c, committed) => committed ? update(ids, { headerFill: c }) : updateLive(ids, { headerFill: c })} title="Header fill" />
         </div>
         <SliderRow label="Border width" value={table.borderWidth} min={0} max={6} step={0.5} onChange={(v) => updateLive(ids, { borderWidth: v })} onCommit={() => update(ids, { borderWidth: table.borderWidth })} />
@@ -797,12 +797,12 @@ function FrameToolbar({ frame, ids }: { frame: FrameElement; ids: string[] }) {
   return (
     <>
       <label className="cv-tbtn gap-1 !px-2.5 cursor-pointer" title="Fill frame with an image" aria-label="Fill frame with an image">
-        <Upload size={14} /> <span className="text-[12px] hidden lg:inline">Fill</span>
+        <Upload size={14} /> <span className="text-[12px] hidden lg:inline">التعبئة</span>
         <input type="file" accept="image/*" className="hidden" onChange={onFill} />
       </label>
       <ToolbarPopover trigger={(open) => (
-        <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Frame shape" title="Frame shape">
-          <SquareDashed size={14} /> <span className="text-[12px] hidden lg:inline">Shape</span>
+        <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="شكل الإطار" title="Frame shape">
+          <SquareDashed size={14} /> <span className="text-[12px] hidden lg:inline">الشكل</span>
         </button>
       )}>
         <div className="text-[12px] font-bold text-white/90 mb-2">Frame shape</div>
@@ -839,10 +839,10 @@ function EmbedToolbar({ embed, ids }: { embed: EmbedElement; ids: string[] }) {
     <>
       <ToolbarPopover width={280} trigger={(open) => (
         <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Edit link" title="Edit link">
-          <ExternalLink size={14} /> <span className="text-[12px] hidden lg:inline">Link</span>
+          <ExternalLink size={14} /> <span className="text-[12px] hidden lg:inline">الرابط</span>
         </button>
       )}>
-        <div className="text-[12px] font-bold text-white/90 mb-2">Embed link</div>
+        <div className="text-[12px] font-bold text-white/90 mb-2">تضمين رابط</div>
         <input
           value={editingUrl}
           onChange={(e) => setEditingUrl(e.target.value)}
@@ -853,8 +853,8 @@ function EmbedToolbar({ embed, ids }: { embed: EmbedElement; ids: string[] }) {
           aria-label="Embed URL"
         />
         <div className="flex gap-1.5 mt-2">
-          <button className="btn-cv h-8 px-3 text-[11px]" onClick={() => editingUrl.trim() && update(ids, { url: editingUrl.trim(), title: undefined })}>Apply</button>
-          <button className="h-8 px-3 text-[11px] rounded-lg border border-white/10 text-white/70 hover:bg-white/[0.07]" onClick={() => setEditingUrl(embed.url)}>Reset</button>
+          <button className="btn-cv h-8 px-3 text-[11px]" onClick={() => editingUrl.trim() && update(ids, { url: editingUrl.trim(), title: undefined })}>تطبيق</button>
+          <button className="h-8 px-3 text-[11px] rounded-lg border border-white/10 text-white/70 hover:bg-white/[0.07]" onClick={() => setEditingUrl(embed.url)}>إعادة تعيين</button>
         </div>
         <p className="text-[10px] text-white/40 mt-2 leading-relaxed">Cards open their link in Preview &amp; shared views.</p>
       </ToolbarPopover>
@@ -880,7 +880,7 @@ function PositionPopover({ ids, count, element }: { ids: string[]; count: number
       width={252}
       trigger={(open) => (
         <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Position" title="Position, layer ordering & size">
-          <Move size={14} /> <span className="text-[12px] hidden lg:inline">Position</span>
+          <Move size={14} /> <span className="text-[12px] hidden lg:inline">الموضع</span>
         </button>
       )}
     >
@@ -893,7 +893,7 @@ function PositionPopover({ ids, count, element }: { ids: string[]; count: number
       </div>
 
       <div className="border-t border-white/[0.08] pt-2 mb-2.5">
-        <div className="text-[10px] font-semibold text-white/45 uppercase tracking-wide mb-1.5">Align to page</div>
+        <div className="text-[10px] font-semibold text-white/45 uppercase tracking-wide mb-1.5">محاذاة إلى الصفحة</div>
         <div className="grid grid-cols-3 gap-1">
           <IconTile icon={<AlignVerticalJustifyStart size={15} />} label="Top" onClick={() => store.alignElements(ids, 'top')} />
           <IconTile icon={<AlignVerticalJustifyCenter size={15} />} label="Middle" onClick={() => store.alignElements(ids, 'cy')} />
@@ -906,7 +906,7 @@ function PositionPopover({ ids, count, element }: { ids: string[]; count: number
 
       {count >= 3 && (
         <div className="border-t border-white/[0.08] pt-2 mb-2.5">
-          <div className="text-[10px] font-semibold text-white/45 uppercase tracking-wide mb-1.5">Distribute</div>
+          <div className="text-[10px] font-semibold text-white/45 uppercase tracking-wide mb-1.5">توزيع</div>
           <div className="grid grid-cols-3 gap-1">
             <IconTile icon={<AlignHorizontalDistributeCenter size={15} />} label="Spacing H" onClick={() => store.distributeElements(ids, 'x')} />
             <IconTile icon={<AlignVerticalDistributeCenter size={15} />} label="Spacing V" onClick={() => store.distributeElements(ids, 'y')} />
@@ -916,7 +916,7 @@ function PositionPopover({ ids, count, element }: { ids: string[]; count: number
 
       {count === 1 && el && (
         <div className="border-t border-white/[0.08] pt-2">
-          <div className="text-[10px] font-semibold text-white/45 uppercase tracking-wide mb-1.5">Advanced</div>
+          <div className="text-[10px] font-semibold text-white/45 uppercase tracking-wide mb-1.5">متقدم</div>
           <div className="grid grid-cols-3 gap-1.5 mb-1.5">
             <NumField label="W" value={W} onCommit={(v) => setSize(ratio ? v * (H / W) : v, ratio ? v * (H / W) : H)} />
             <NumField label="H" value={H} onCommit={(v) => setSize(ratio ? v * (W / H) : W, ratio ? v * (W / H) : v)} />
@@ -973,11 +973,11 @@ function MaskPopover({ el, ids }: { el: ImageElement; ids: string[] }) {
       width={244}
       trigger={(open) => (
         <button className="cv-tbtn gap-1 !px-2.5" data-active={open || (current !== 'none' && !!current)} aria-label="Image mask" title="Mask shape">
-          <Shapes size={14} /> <span className="text-[12px] hidden lg:inline">Mask</span>
+          <Shapes size={14} /> <span className="text-[12px] hidden lg:inline">القناع</span>
         </button>
       )}
     >
-      <div className="text-[12px] font-bold text-white/90 mb-1.5">Mask shape</div>
+      <div className="text-[12px] font-bold text-white/90 mb-1.5">شكل القناع</div>
       <div className="grid grid-cols-4 gap-1.5" data-testid="mask-grid">
         {MASK_SHAPES.map((m) => (
           <button
@@ -1036,7 +1036,7 @@ function ImageAdjustPopover({ el, ids }: { el: ImageElement; ids: string[] }) {
       width={252}
       trigger={(open) => (
         <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Adjust image" title="Adjust image">
-          <Sun size={14} /> <span className="text-[12px] hidden lg:inline">Adjust</span>
+          <Sun size={14} /> <span className="text-[12px] hidden lg:inline">ضبط</span>
         </button>
       )}
     >
@@ -1067,7 +1067,7 @@ function ImageFilterPopover({ el, ids }: { el: ImageElement; ids: string[] }) {
       width={268}
       trigger={(open) => (
         <button className="cv-tbtn gap-1 !px-2.5" data-active={open || active !== 'none'} aria-label="Filters" title="Filters">
-          <Wand2 size={14} /> <span className="text-[12px] hidden lg:inline">Filters</span>
+          <Wand2 size={14} /> <span className="text-[12px] hidden lg:inline">المرشحات</span>
         </button>
       )}
     >
@@ -1339,7 +1339,7 @@ function ChartToolbar({ chart, ids }: { chart: ChartElement; ids: string[] }) {
         width={540}
         trigger={(open) => (
           <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Edit chart data" title="Edit chart data">
-            <Table2 size={14} /> <span className="text-[12px] hidden lg:inline">Edit data</span>
+            <Table2 size={14} /> <span className="text-[12px] hidden lg:inline">تحرير البيانات</span>
           </button>
         )}
       >
@@ -1348,15 +1348,15 @@ function ChartToolbar({ chart, ids }: { chart: ChartElement; ids: string[] }) {
       <ToolbarPopover
         trigger={(open) => (
           <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Chart options" title="Chart options">
-            <SlidersHorizontal size={14} /> <span className="text-[12px] hidden lg:inline">Options</span>
+            <SlidersHorizontal size={14} /> <span className="text-[12px] hidden lg:inline">الخيارات</span>
           </button>
         )}
       >
-        <div className="text-[12px] font-bold text-white/90 mb-2">Chart options</div>
+        <div className="text-[12px] font-bold text-white/90 mb-2">خيارات المخطط</div>
         {chart.kind === 'bar' && (
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-[11px] text-white/60 w-16">Bars</span>
-            <ChartToggle label="Group" active={chart.barMode !== 'stack'} onClick={() => update(ids, { barMode: 'group' })} />
+            <span className="text-[11px] text-white/60 w-16">الأعمدة</span>
+            <ChartToggle label="تجميع" active={chart.barMode !== 'stack'} onClick={() => update(ids, { barMode: 'group' })} />
             <ChartToggle label="Stack" active={chart.barMode === 'stack'} onClick={() => update(ids, { barMode: 'stack' })} />
           </div>
         )}
@@ -1374,7 +1374,7 @@ function ChartToolbar({ chart, ids }: { chart: ChartElement; ids: string[] }) {
         )}
         {chart.kind === 'line' && (
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-[11px] text-white/60 w-16">Line</span>
+            <span className="text-[11px] text-white/60 w-16">الخط</span>
             <ChartToggle label="Smooth" active={chart.smooth} onClick={() => update(ids, { smooth: !chart.smooth })} />
           </div>
         )}
@@ -1384,10 +1384,10 @@ function ChartToolbar({ chart, ids }: { chart: ChartElement; ids: string[] }) {
           <ChartToggle label="Legend" active={chart.showLegend} onClick={() => update(ids, { showLegend: !chart.showLegend })} />
         </div>
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-[11px] text-white/60">Panel</span>
+          <span className="text-[11px] text-white/60">اللوحة</span>
           <ColorMenu value={chart.fill} onChange={(c, committed) => committed ? update(ids, { fill: c }) : updateLive(ids, { fill: c })} title="Chart background" />
-          <span className="text-[11px] text-white/60 ml-2">Text</span>
-          <ColorMenu value={chart.textColor} onChange={(c, committed) => committed ? update(ids, { textColor: c }) : updateLive(ids, { textColor: c })} title="Text colour" />
+          <span className="text-[11px] text-white/60 ml-2">النص</span>
+          <ColorMenu value={chart.textColor} onChange={(c, committed) => committed ? update(ids, { textColor: c }) : updateLive(ids, { textColor: c })} title="لون النص" />
         </div>
         <SliderRow
           label="Text size"
@@ -1519,7 +1519,7 @@ function ChartDataEditor({ chart, ids }: { chart: ChartElement; ids: string[] })
 
   return (
     <div>
-      <div className="text-[12px] font-bold text-white/90 mb-2">Chart data</div>
+      <div className="text-[12px] font-bold text-white/90 mb-2">بيانات المخطط</div>
       {scatter ? (
         <div className="max-h-[320px] overflow-y-auto cv-scroll-dark pr-1">
           {chart.series.map((sr, si) => (
@@ -1549,7 +1549,7 @@ function ChartDataEditor({ chart, ids }: { chart: ChartElement; ids: string[] })
               </button>
             </div>
           ))}
-          <p className="text-[10px] text-white/35">Each point is an x, y pair on numeric axes.</p>
+          <p className="text-[10px] text-white/35">تمثل كل نقطة زوجاً من الإحداثيين x وy على محاور رقمية.</p>
         </div>
       ) : (
         <div>

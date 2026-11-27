@@ -1,15 +1,15 @@
 <div align="center">
 
-<img src="public/canvix.svg" width="72" alt="Canvix logo" />
+<img src="public/tea-g3.svg" width="72" alt="TEa.G3 logo" />
 
-# Canvix
+# TEa.G3
 
-**Design anything. Free for everyone.**
+**تطوير المطور العراقي**
 
-Free & open-source graphic design tool — a community-built [Canva](https://canva.com) alternative.
+منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر — تطوير المطور العراقي TEa.G3.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-00C4CC.svg)](LICENSE)
-[![CI](https://github.com/mir-ashiq/canvix/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mir-ashiq/canvix/actions/workflows/ci.yml)
+[![CI](https://github.com/TEaG3/eng-salman/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TEaG3/eng-salman/actions/workflows/ci.yml)
 [![Next.js](https://img.shields.io/badge/Next.js%2016-black?logo=next.js)](https://nextjs.org)
 [![React 19](https://img.shields.io/badge/React%2019-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://typescriptlang.org)
@@ -21,18 +21,27 @@ Free & open-source graphic design tool — a community-built [Canva](https://can
 
 ---
 
-## ✨ What is Canvix?
+## ✨ What is TEa.G3?
 
-Canvix is a browser-based design tool that lets anyone create social media posts,
+TEa.G3 is an Arabic-first, installable Web App for creating social media posts,
 presentations, posters, logos and thumbnails — with a drag-and-drop editor, a
-366-template library and one-click export. It runs entirely on your own infrastructure, stores designs
-in your own database, and exports files locally in your browser. Free accounts
-keep your designs yours; anonymous link-editing keeps working too. No
-watermarks, no paywalls.
+366-template library and one-click export. It runs in the browser, stores designs
+in the configured database, and exports files locally in your browser. The current
+public release is account-free: no sign-up, no login and no account requirement.
+Anonymous designs are associated with the creating browser and can be shared by link.
+No watermarks, no paywalls.
+
+## الوضع الحالي للنسخة العامة
+
+- **دون حسابات أو تسجيل دخول:** واجهتا الدخول والتسجيل معطلتان، كما أن واجهات API الخاصة بهما ترفض الطلبات افتراضياً.
+- **ابدأ مباشرة:** يمكن إنشاء التصاميم وتعديلها وتصديرها دون حساب.
+- **حفظ ومشاركة:** تُحفظ التصاميم في قاعدة بيانات النشر وتُنسب إلى متصفح منشئها؛ ويمكن فتح التصميم ومشاركته عبر رابطه.
+- **تطبيق ويب قابل للتثبيت:** يتضمن TEa.G3 manifest وService Worker وواجهة مستقلة مع صفحة احتياطية عند انقطاع الاتصال.
+- يمكن تفعيل الحسابات مؤقتاً لبيئات الاختبار الخاصة فقط عبر `TEAG3_ACCOUNTS_ENABLED=true`؛ لا تضبط هذا المتغير في النشر العام الحالي.
 
 ## 🆓 Free forever — the promise
 
-**Every feature in Canvix is free, and it stays free. Forever.** There is no
+**Every feature in TEa.G3 is free, and it stays free. Forever.** There is no
 Pro tier, no subscription, no trial countdown, no watermark ransom, no
 "premium" element you can drag but not drop. The whole point of this project
 is a design tool that never asks you for a credit card:
@@ -41,12 +50,11 @@ is a design tool that never asks you for a credit card:
 - All **exports** (PNG, JPG, WebP, SVG, PDF, PPTX, video, GIF) are free and unwatermarked
 - All **AI features** (magic edit, magic write, background removal, translate)
   run against your own API keys, so there is nothing for us to meter
-- **Accounts are free** — username + password, no email, no verification,
-  no external provider; a self-hoster runs the whole thing for $0
+- **No account required** — the public release opens directly in anonymous mode; no username, password, email or sign-in.
 - **Self-hosting** is first-class: your server, your database, your rules
 - The license is **MIT** — you can even fork it and build a business on it
 
-If anyone ever asks you to pay for Canvix, you are being scammed: the source
+If anyone ever asks you to pay for TEa.G3, you are being scammed: the source
 is right here.
 
 ## 🎨 Features
@@ -67,7 +75,7 @@ is right here.
   pre-v0.9 link-editable behaviour. One click (**“Save my designs to this
   account”**) migrates the designs *this browser created* into your new
   account — anonymous creations are attributed to the creating browser
-  (`canvix_anon` cookie, sha256-hashed in the DB), so **adopt-all can
+  (`tea-g3_anon` cookie, sha256-hashed in the DB), so **adopt-all can
   never sweep up another person's work**. Legacy designs from before
   attribution exist? Claim those one-by-one with the per-design
   **“Save to my account”** action (a deliberate, visible action for
@@ -82,7 +90,7 @@ is right here.
   now connects via a custom lookup pinned to the validated IP, closing the
   TOCTOU window documented in v0.6.1. TLS keeps the real hostname for SNI,
   so certificate validation is unaffected.
-- **End-to-end CI verification** — the “Canvix Database Setup” workflow now
+- **End-to-end CI verification** — the “TEa.G3 Database Setup” workflow now
   boots the built server against your real database and exercises the whole
   account + ownership + claim-safety + CSRF flow (register → me → owned
   create → owner save → anonymous 403 → logout → revoked-token replay →
@@ -171,7 +179,7 @@ is right here.
 
 ### v0.6.0 — the Agent Edition: MCP, tables, frames, curved text & embeds
 
-- **MCP server (Model Context Protocol)** — Canvix becomes an **agent-native design platform**:
+- **MCP server (Model Context Protocol)** — TEa.G3 becomes an **agent-native design platform**:
   `POST /api/mcp` speaks standard MCP (JSON-RPC 2.0 over Streamable HTTP, stateless —
   same transport profile Canva's AI Connector uses), so AI assistants like Claude
   Desktop, Cursor, ChatGPT and any MCP client can **create and edit real designs on
@@ -209,7 +217,7 @@ is right here.
 ### v0.5.0 — Magic Layers, real-time collaboration & production AI infrastructure
 
 - **Magic Layers** — upload any flat design (or pick an image on your canvas) and a
-  vision model decomposes it into **real, editable Canvix layers**: text becomes
+  vision model decomposes it into **real, editable TEa.G3 layers**: text becomes
   live text boxes (color, weight and size recovered), photos become cropped image
   elements, shapes become native shapes, the background becomes a page background.
   Every region carries a confidence score — uncertain regions are flagged amber in
@@ -340,7 +348,7 @@ is right here.
   colour balance while keeping the framing identical
 - **Translate design** — File → Translate: pick from 24 languages, and every
   text across all pages is AI-translated in place (layout intact, one undo)
-- **Canvix AI assistant** — a chat copilot app (Canva AI-style) that sees your
+- **TEa.G3 AI assistant** — a chat copilot app (Canva AI-style) that sees your
   design: ask for headlines, palettes or taglines and tap the suggested
   actions to add text, generate images, save palettes or translate the design
 - **Live photo search** — the Photos panel now searches real web photos (not
@@ -481,8 +489,8 @@ is right here.
 > **Prerequisites:** [Node.js 20+](https://nodejs.org) (or [Bun](https://bun.sh)), and a PostgreSQL database — a free [Supabase](https://supabase.com) project is the easiest start (any other Postgres works too: Neon, RDS, Docker, local).
 
 ```bash
-git clone https://github.com/mir-ashiq/canvix.git
-cd canvix
+git clone https://github.com/TEaG3/eng-salman.git
+cd eng-salman
 npm install            # or: bun install
 
 # set up the database (get a connection string first — see below)
@@ -494,11 +502,11 @@ npm run dev            # → http://localhost:3000
 
 **Getting your Supabase connection string:** Supabase dashboard →
 **Connect** (or Project Settings → Database) → copy the URI. Both styles work
-out of the box — Canvix auto-applies the right flags:
+out of the box — TEa.G3 auto-applies the right flags:
 
 | Style | Looks like | Notes |
 |---|---|---|
-| Transaction pooler *(recommended)* | `…pooler.supabase.com:6543/postgres` | IPv4-friendly; Canvix auto-adds `pgbouncer=true&connection_limit=1` |
+| Transaction pooler *(recommended)* | `…pooler.supabase.com:6543/postgres` | IPv4-friendly; TEa.G3 auto-adds `pgbouncer=true&connection_limit=1` |
 | Direct connection | `db.<ref>.supabase.co:5432/postgres` | IPv6-only on most plans — use it only if your host has an IPv6 route |
 
 Replace `[YOUR-PASSWORD]` with your database password, and you're done. If
@@ -514,7 +522,7 @@ npm run start
 
 ## ☁️ Deploy — Vercel, Netlify, Cloudflare Workers, or your own box
 
-Canvix runs on **any Node host** and — since v0.9.3 — on **Cloudflare
+TEa.G3 runs on **any Node host** and — since v0.9.3 — on **Cloudflare
 Workers** too, and — since v0.9.4 — on **Netlify**. Same codebase, same
 database, zero config divergence.
 
@@ -549,7 +557,7 @@ npm run preview                 # builds & boots the real worker locally
 
 # ship it:
 npx wrangler secret put DATABASE_URL      # paste the pooler URL when asked
-npm run deploy                              # → https://canvix.<you>.workers.dev
+npm run deploy                              # → https://tea-g3.<you>.workers.dev
 # then open /api/health on the deployed URL — {"ok":true} = full stack green
 ```
 
@@ -604,7 +612,7 @@ What makes it work (all already wired):
 | PNG export | needs `sharp` (native) — on Workers it degrades gracefully: the tool answers "use SVG instead" |
 
 Honest free-tier notes: Workers free allows 100k requests/day, ~10 ms CPU
-per request and a 3 MB (gzipped) worker bundle — fine for trying Canvix
+per request and a 3 MB (gzipped) worker bundle — fine for trying TEa.G3
 and light self-hosting; heavier editing sessions (scrypt logins, big SSE
 pumps) fit the $5 paid plan better. Prisma's rust-free client keeps the
 bundle ~85 % smaller than the classic engine, which is what makes it fit
@@ -758,7 +766,7 @@ research/                   # architecture decision records & audits
 
 ## 🤖 AI provider setup
 
-Canvix works fully **without** any AI provider — the editor, templates, exports,
+TEa.G3 works fully **without** any AI provider — the editor, templates, exports,
 collaboration and comments need nothing but the database. AI features
 (Magic Layers, Assistant, Magic Write, image generation/editing, translate,
 the v0.19 plan/notes/theme/alt-text/video features) activate when a provider
@@ -865,8 +873,8 @@ See `docs/AI-POWER-UP.md` for the full Wave 4 guide.
 
 ## 🤖 AI agents (MCP)
 
-Canvix ships a **Model Context Protocol server** — the same interoperability
-standard Canva's “AI Connector” uses. It turns your Canvix instance into a set of
+TEa.G3 ships a **Model Context Protocol server** — the same interoperability
+standard Canva's “AI Connector” uses. It turns your TEa.G3 instance into a set of
 tools an AI assistant can call: create designs, add elements, restyle, animate,
 comment, export.
 
@@ -875,7 +883,7 @@ comment, export.
 Two rails, pick either (or both):
 
 **Personal token — any signed-in user, no server setup (v0.25 “BYO-MCP”).**
-Works on canvix.app and any instance where you have an account: open
+Works on tea-g3.app and any instance where you have an account: open
 **Settings → Profile & AI keys**, create an API key with the **`mcp`** scope
 (or click “Create my MCP token” on the dashboard's *AI agents (MCP)* card), and
 use that token as the Bearer. Tools are **scoped to your own designs** — the
@@ -892,7 +900,7 @@ so your agents pay with your keys, never the operator's.
 ```bash
 # 1. set a secret on the server (openssl rand -hex 24)
 CANVIX_MCP_TOKEN=your-long-random-secret
-# 2. restart Canvix — the dashboard "AI agents (MCP)" card flips to Enabled
+# 2. restart TEa.G3 — the dashboard "AI agents (MCP)" card flips to Enabled
 ```
 
 The server token sees every design on the instance; personal tokens only see
@@ -901,15 +909,15 @@ access immediately.
 
 ### Connect a client
 
-Endpoint: `https://your-canvix.example.com/api/mcp` (Streamable HTTP, stateless).
+Endpoint: `https://your-tea-g3.example.com/api/mcp` (Streamable HTTP, stateless).
 Client config (Claude Desktop / Cursor / any MCP client that supports remote
 HTTP servers) — with a personal token:
 
 ```json
 {
   "mcpServers": {
-    "canvix": {
-      "url": "https://your-canvix.example.com/api/mcp",
+    "tea-g3": {
+      "url": "https://your-tea-g3.example.com/api/mcp",
       "headers": { "Authorization": "Bearer cvx_…your-personal-token" }
     }
   }
@@ -990,13 +998,13 @@ tool descriptions so agents pick the right format.
 
 ## 🤖 AI & Development Disclosure
 
-NLnet's [generative-AI policy](https://nlnet.nl/foundation/policies/generativeAI) expects projects with prior AI-generated code to say so publicly, in the repository itself. This is Canvix's complete disclosure — both of how the codebase was built and of the standard every future contribution is held to.
+NLnet's [generative-AI policy](https://nlnet.nl/foundation/policies/generativeAI) expects projects with prior AI-generated code to say so publicly, in the repository itself. This is TEa.G3's complete disclosure — both of how the codebase was built and of the standard every future contribution is held to.
 
-**Historical development (v0.1 – v0.23.2, plus the unreleased-to-v0.31.0 arc).** Canvix was rapid-prototyped by a solo maintainer using AI coding assistants: drafting editor modules, unit tests and documentation at a pace (23 minor releases in 14 days) that would not otherwise have been possible for one person around classes. **No AI output was ever merged unreviewed.** Every line landed through the human review loop: the maintainer reads, edits and takes authorship responsibility for all of it; CI gates every PR on typecheck, lint, and the full test wall — **1,693 unit tests (127 files) and 39 end-to-end Playwright specs** — plus the production-build guard added in v0.16.1. Where AI-generated code failed that gate, it was fixed or rewritten before merge (the [changelog](CHANGELOG.md) records the honest incidents, e.g. the plugin-ceiling misses). The AI features in the product are runtime capabilities behind provider keys — they are not the development process.
+**Historical development (v0.1 – v0.23.2, plus the unreleased-to-v0.31.0 arc).** TEa.G3 was rapid-prototyped by a solo maintainer using AI coding assistants: drafting editor modules, unit tests and documentation at a pace (23 minor releases in 14 days) that would not otherwise have been possible for one person around classes. **No AI output was ever merged unreviewed.** Every line landed through the human review loop: the maintainer reads, edits and takes authorship responsibility for all of it; CI gates every PR on typecheck, lint, and the full test wall — **1,693 unit tests (127 files) and 39 end-to-end Playwright specs** — plus the production-build guard added in v0.16.1. Where AI-generated code failed that gate, it was fixed or rewritten before merge (the [changelog](CHANGELOG.md) records the honest incidents, e.g. the plugin-ceiling misses). The AI features in the product are runtime capabilities behind provider keys — they are not the development process.
 
 **Grant-funded milestones (WP1–WP5).** Any code funded through the proposed NLnet grant will be **human-authored engineering**. AI tools are restricted to read-only review of human-authored code and tests, including identifying defects, security issues, and potential test-coverage gaps. AI may recommend additional test scenarios, but all test cases, code, fixes, and documentation must be independently authored by human contributors. The grant funds **zero AI development**: the entire AI-provider path — removing the `z-ai-web-dev-sdk` dependency and the provider-neutral adapter that replaces it — proceeds as unfunded project work outside the grant, and the budget requests **€0 for AI subscriptions or API credits** (AI costs are not reimbursable under the policy). To keep this auditable we adopt a commit convention: grant-funded commits carry a `Grant: NLnet WP#` trailer identifying the work package, and the maintainer is the sole recorded author of every commit. When an AI tool contributed to a commit's review, that fact is noted in plain prose in the commit message body (`AI-assisted: …`) — a commit note, never a `Co-authored-by` trailer — so the authorship record stays unambiguous: one human, responsible for every line. Anyone can audit the funding boundary with `git log --grep='Grant: NLnet'`.
 
-**Also disclosed — funding.** Canvix has applied for FOSS United project support: a **₹5,00,000 (INR) six-month, milestone-based application** covering design-output correctness, a reproducible public design-quality evaluation harness, and creator education. The full proposal is [CANVIX-FOSS-UNITED-PROPOSAL.md](CANVIX-FOSS-UNITED-PROPOSAL.md); the machine-readable [funding.json](funding.json) manifest (fundingjson.org v1.1.0) carries the four milestone plans, and [FUNDING-SCOPE-MATRIX.md](FUNDING-SCOPE-MATRIX.md) documents the boundary against the pending NLnet application so no hour is billed to two funders. **These are applications, not awards — nothing has been approved or disbursed**, and the manifest is not a revenue stream for the project. Interested supporters can learn more from the proposal document or the [grants-directory profile](https://fossunited.org/grants/directory/ashiq_hussain_mir).
+**Also disclosed — funding.** TEa.G3 has applied for FOSS United project support: a **₹5,00,000 (INR) six-month, milestone-based application** covering design-output correctness, a reproducible public design-quality evaluation harness, and creator education. The full proposal is [CANVIX-FOSS-UNITED-PROPOSAL.md](CANVIX-FOSS-UNITED-PROPOSAL.md); the machine-readable [funding.json](funding.json) manifest (fundingjson.org v1.1.0) carries the four milestone plans, and [FUNDING-SCOPE-MATRIX.md](FUNDING-SCOPE-MATRIX.md) documents the boundary against the pending NLnet application so no hour is billed to two funders. **These are applications, not awards — nothing has been approved or disbursed**, and the manifest is not a revenue stream for the project. Interested supporters can learn more from the proposal document or the [grants-directory profile](https://fossunited.org/grants/directory/ashiq_hussain_mir).
 
 ## 🧭 Roadmap
 
@@ -1117,7 +1125,7 @@ NLnet's [generative-AI policy](https://nlnet.nl/foundation/policies/generativeAI
       caller identity comes from the install row — verified
       end-to-end that uninstall/crash/flag-off never loses document
       data *(v0.13.3)*; and the **reference plugin** (P5) closed the
-      MVP — `com.canvix.wordcloud`, bundled in
+      MVP — `com.tea-g3.wordcloud`, bundled in
       `public/plugins/wordcloud/` and installable one-click from the
       Apps grid: a seeded, fully deterministic word-cloud generator
       (panel + service renderer, zero network permissions) whose
@@ -1141,7 +1149,7 @@ NLnet's [generative-AI policy](https://nlnet.nl/foundation/policies/generativeAI
       media images to data URLs so files stay portable
       *(v0.14.0)*
 - [x] System clipboard & cross-tab copy (v0.14 D2) — copy/cut mirror a
-      Canvix JSON envelope to the OS clipboard (custom MIME + text/plain
+      TEa.G3 JSON envelope to the OS clipboard (custom MIME + text/plain
       fallback for Firefox), and one native paste pipeline handles it
       all: OS image files (screenshots!) become image elements through
       the uploads library, envelopes paste as sanitized elements, and
@@ -1194,7 +1202,7 @@ NLnet's [generative-AI policy](https://nlnet.nl/foundation/policies/generativeAI
       AI/plugin `distributeElements` action — whose old inline math
       measured the span off by the last box's size and refused
       overlapping selections (Canva/Figma distribute those; now so
-      does Canvix) *(v0.14.5)*
+      does TEa.G3) *(v0.14.5)*
 - [x] Rich text (v0.15 R1) — per-range styling inside ONE text box:
   bold / italic / underline / strikethrough / colour / links as style
   runs (`spans`) over the existing flat fields, which stay the
@@ -1339,5 +1347,5 @@ Contributions are very welcome! Areas that especially need help:
 
 [MIT](LICENSE) © 2026 Ashiq Hussain Mir
 
-Canvix is an independent open-source project and is not affiliated with, endorsed by,
+TEa.G3 is an independent open-source project and is not affiliated with, endorsed by,
 or connected to Canva.

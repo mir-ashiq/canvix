@@ -53,14 +53,14 @@ interface StockPhotoTile {
 type SearchError = { kind: 'no-provider' } | { kind: 'service'; message: string }
 
 const CATEGORIES = [
-  { id: 'all', label: 'All photos' },
-  { id: 'nature', label: 'Nature' },
-  { id: 'business', label: 'Business' },
-  { id: 'people', label: 'People' },
-  { id: 'food', label: 'Food' },
-  { id: 'travel', label: 'Travel' },
-  { id: 'texture', label: 'Textures' },
-  { id: 'abstract', label: 'Abstract' },
+  { id: 'all', label: 'كل الصور' },
+  { id: 'nature', label: 'الطبيعة' },
+  { id: 'business', label: 'الأعمال' },
+  { id: 'people', label: 'الأشخاص' },
+  { id: 'food', label: 'الطعام' },
+  { id: 'travel', label: 'السفر' },
+  { id: 'texture', label: 'الأنسجة' },
+  { id: 'abstract', label: 'تجريدي' },
 ]
 
 const TAGS: Record<string, string[]> = {
@@ -180,12 +180,12 @@ export function PhotosPanel() {
     try {
       await addStockPhoto(tile)
       toast({
-        title: 'Photo added',
+        title: 'تمت إضافة الصورة',
         description: `${tile.credit.provider} · ${tile.credit.author} — ${tile.credit.license}`,
       })
     } catch (err) {
       toast({
-        title: 'Could not add the photo',
+        title: 'تعذرت إضافة الصورة',
         description: err instanceof Error ? err.message : 'Try again — or pick another result.',
       })
     } finally {
@@ -199,7 +199,7 @@ export function PhotosPanel() {
   // v0.11.6 (F2): clicking a category tab EXITS results mode — clears the
   // query (and with it the visible search box, now controlled), the stock
   // results and any error. Before, the query kept filtering the bundled
-  // grid, so "All photos" showed the stale 6-photo result set instead of
+  // grid, so "كل الصور" showed the stale 6-photo result set instead of
   // the 42-photo library until the panel was closed and reopened.
   function pickCategory(id: string) {
     setCat(id)
@@ -287,7 +287,7 @@ export function PhotosPanel() {
           ) : error?.kind === 'service' ? (
             <p className="text-[11.5px] text-white/40 py-2">{error.message}</p>
           ) : results && results.length === 0 && !busy ? (
-            <p className="text-[11.5px] text-white/40 py-2">No stock photos matched — try other keywords.</p>
+            <p className="text-[11.5px] text-white/40 py-2">لم نعثر على صور مطابقة — جرّب كلمات بحث أخرى.</p>
           ) : (
             <div className="grid grid-cols-2 gap-2.5">
               {(results ?? []).map((t) => {
@@ -366,7 +366,7 @@ export function PhotosPanel() {
         <div className="py-16 text-center">
           <ImageDown size={28} className="mx-auto text-white/25 mb-3" />
           <p className="text-[13px] text-white/50 font-medium">No photos match “{query}”</p>
-          <p className="text-[11.5px] text-white/35 mt-1">Try a different keyword or category.</p>
+          <p className="text-[11.5px] text-white/35 mt-1">جرّب كلمة بحث أو فئة مختلفة.</p>
         </div>
       )}
 
@@ -374,7 +374,7 @@ export function PhotosPanel() {
         Stock photos come from {providers.length > 0 ? providers.map(providerLabel).join(' and ') : 'the configured provider'} under
         their free licenses (Pexels License / Pixabay Content License) — inserted photos are downloaded
         into your media library and attribution stays on the element. Bundled photos are AI-generated
-        for Canvix.
+        for TEa.G3.
       </p>
     </PanelShell>
   )

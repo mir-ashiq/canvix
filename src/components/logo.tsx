@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 
-/** Canvix gradient logo mark — stacked design layers */
+/** TEa.G3 gradient logo mark — stacked design layers */
 export function LogoMark({ className, size = 36 }: { className?: string; size?: number }) {
   return (
     <svg
@@ -13,13 +13,13 @@ export function LogoMark({ className, size = 36 }: { className?: string; size?: 
       aria-hidden="true"
     >
       <defs>
-        <linearGradient id="canvix-grad" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+        <linearGradient id="tea-g3-grad" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
           <stop offset="0" stopColor="#00C4CC" />
           <stop offset="0.55" stopColor="#7D2AE8" />
           <stop offset="1" stopColor="#FF5C8A" />
         </linearGradient>
       </defs>
-      <rect width="48" height="48" rx="12" fill="url(#canvix-grad)" />
+      <rect width="48" height="48" rx="12" fill="url(#tea-g3-grad)" />
       {/* stacked design layers */}
       <rect x="12" y="10" width="24" height="8" rx="3" fill="#FFFFFF" fillOpacity="0.45" />
       <rect x="12" y="21" width="24" height="8" rx="3" fill="#FFFFFF" fillOpacity="0.7" />
@@ -44,7 +44,7 @@ export function Logo({ className, size = 32 }: { className?: string; size?: numb
           color: 'transparent',
         }}
       >
-        canvix
+        TEa.G3
       </span>
     </span>
   )

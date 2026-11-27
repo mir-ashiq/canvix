@@ -174,7 +174,7 @@ export function InstalledApps() {
     <section className="mt-4" aria-label="Installed plugin apps">
       <div className="flex items-center gap-1.5 mb-2">
         <Puzzle size={12} className="text-[#02C0CC]" />
-        <span className="text-[11px] font-bold uppercase tracking-wider text-white/50">Installed</span>
+        <span className="text-[11px] font-bold uppercase tracking-wider text-white/50">مثبتة</span>
         <span className="text-[10px] text-white/30">({installs.length})</span>
       </div>
 
@@ -332,7 +332,7 @@ function ConsentModal({ row, onClose }: { row: InstallSummaryRow; onClose: () =>
               </li>
             ))}
             {row.permissions.length === 0 && (
-              <li className="text-[11px] text-white/45 italic">No permissions requested — this plugin is read-only.</li>
+              <li className="text-[11px] text-white/45 italic">لم تُطلب أي أذونات — هذه الإضافة للقراءة فقط.</li>
             )}
           </ul>
         </div>

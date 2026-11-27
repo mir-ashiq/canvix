@@ -13,18 +13,18 @@ import { cn } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
 
 const EASINGS: { id: AnimationEasing; label: string }[] = [
-  { id: 'linear', label: 'Linear' },
-  { id: 'easeIn', label: 'Ease in' },
-  { id: 'easeOut', label: 'Ease out' },
-  { id: 'easeInOut', label: 'Ease in-out' },
-  { id: 'spring', label: 'Spring' },
+  { id: 'linear', label: 'خطي' },
+  { id: 'easeIn', label: 'تسارع تدريجي' },
+  { id: 'easeOut', label: 'تباطؤ تدريجي' },
+  { id: 'easeInOut', label: 'تسارع وتباطؤ' },
+  { id: 'spring', label: 'ارتداد' },
 ]
 
 const DIRECTIONS: { id: AnimationDirection; label: string; icon: typeof ArrowLeft }[] = [
-  { id: 'left', label: 'From left', icon: ArrowLeft },
-  { id: 'right', label: 'From right', icon: ArrowRight },
-  { id: 'up', label: 'From bottom', icon: ArrowUp },
-  { id: 'down', label: 'From top', icon: ArrowDown },
+  { id: 'left', label: 'من اليسار', icon: ArrowLeft },
+  { id: 'right', label: 'من اليمين', icon: ArrowRight },
+  { id: 'up', label: 'من الأسفل', icon: ArrowUp },
+  { id: 'down', label: 'من الأعلى', icon: ArrowDown },
 ]
 
 /**
@@ -90,14 +90,14 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 pt-4 pb-3 shrink-0">
         <h2 className="font-bold text-sm text-white flex items-center gap-2">
-          <Zap size={15} className="text-[#02C0CC]" /> Animate
+          <Zap size={15} className="text-[#02C0CC]" /> التحريك
         </h2>
         <Button
           variant="ghost"
           size="icon"
           className="rounded-full text-white/70 hover:bg-white/10 hover:text-white h-7 w-7"
           onClick={onClose}
-          aria-label="Close animate panel"
+          aria-label="إغلاق لوحة التحريك"
         >
           <X size={14} />
         </Button>
@@ -115,7 +115,7 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                 tab === t ? 'bg-white/[0.12] text-white' : 'text-white/50 hover:text-white/80'
               )}
             >
-              {t === 'page' ? 'Page' : 'Element'}
+              {t === 'page' ? 'الصفحة' : 'العنصر'}
             </button>
           ))}
         </div>
@@ -130,7 +130,7 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
               className="w-full rounded-xl bg-gradient-to-r from-[#00C4CC] to-[#7630D7] p-[1px] cursor-pointer group"
               onClick={() => {
                 magicAnimateCurrentPage(speed)
-                toast({ title: 'Magic Animate applied', description: 'Every element got a fitting animation. Preview to see it play.' })
+                toast({ title: 'تم تطبيق التحريك السحري', description: 'تمت إضافة حركة مناسبة لكل عنصر. افتح المعاينة لمشاهدتها.' })
               }}
             >
               <div className="rounded-[11px] bg-[#16181D] px-3 py-3 flex items-center gap-2.5 group-hover:bg-transparent transition-colors">
@@ -138,8 +138,8 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                   <Sparkles size={16} className="text-white" />
                 </div>
                 <div className="text-left">
-                  <div className="text-[13px] font-bold text-white">Magic Animate</div>
-                  <div className="text-[11px] text-white/55">One click — animate everything on this page</div>
+                  <div className="text-[13px] font-bold text-white">التحريك السحري</div>
+                  <div className="text-[11px] text-white/55">بنقرة واحدة، أضف الحركة إلى جميع عناصر الصفحة</div>
                 </div>
               </div>
             </button>
@@ -147,12 +147,12 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
             {/* speed */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11px] font-semibold text-white/60">Animation speed</span>
+                <span className="text-[11px] font-semibold text-white/60">سرعة الحركة</span>
                 <button
                   className="text-[10px] text-[#02C0CC] font-semibold cursor-pointer"
                   onClick={() => setShowSpeed((v) => !v)}
                 >
-                  {showSpeed ? 'hide presets' : 'show presets'}
+                  {showSpeed ? 'إخفاء الخيارات' : 'عرض الخيارات'}
                 </button>
               </div>
               {showSpeed && (
@@ -175,8 +175,8 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
 
             {/* page transition */}
             <div>
-              <span className="text-[11px] font-semibold text-white/60 block mb-1.5">Page transition</span>
-              <p className="text-[10px] text-white/35 mb-2">Plays when this page appears after another.</p>
+              <span className="text-[11px] font-semibold text-white/60 block mb-1.5">انتقال الصفحة</span>
+              <p className="text-[10px] text-white/35 mb-2">يُشغّل عند الانتقال إلى هذه الصفحة من صفحة أخرى.</p>
               <div className="grid grid-cols-2 gap-1.5">
                 {TRANSITION_KINDS.map((t) => (
                   <button
@@ -198,7 +198,7 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
               {pageTransition && pageTransition.kind !== 'none' && (
                 <div className="mt-2.5">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-semibold text-white/50">Duration</span>
+                    <span className="text-[10px] font-semibold text-white/50">المدة</span>
                     <span className="text-[10px] text-white/60">{pageTransition.duration.toFixed(1)}s</span>
                   </div>
                   <input
@@ -235,7 +235,7 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                   {/* Sound wave: transition SFX — the 16 offline pack sounds,
                       auditioned inline, stored on the transition config */}
                   <SfxPicker
-                    label="Transition sound"
+                    label="صوت الانتقال"
                     value={pageTransition.sfxId}
                     onChange={(sfxId) => setPageTransition({ ...pageTransition, ...(sfxId ? { sfxId } : { sfxId: undefined }) })}
                   />
@@ -250,16 +250,16 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                 className="flex-1 btn-brand-gradient gap-1.5"
                 onClick={() => setPreviewOpen(true)}
               >
-                <Play size={12} /> Preview animations
+                <Play size={12} /> معاينة الحركات
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
                 className="text-white/70 hover:bg-white/10 hover:text-white gap-1.5"
                 onClick={() => clearPageAnimations()}
-                title="Remove all animations from this page"
+                title="إزالة جميع الحركات من هذه الصفحة"
               >
-                <RotateCcw size={12} /> Clear
+                <RotateCcw size={12} /> مسح
               </Button>
             </div>
           </div>
@@ -271,15 +271,15 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
             {!selection ? (
               <div className="text-center py-10 px-2">
                 <Zap size={26} className="mx-auto text-white/20 mb-2" />
-                <div className="text-[13px] font-semibold text-white/60">Select an element</div>
+                <div className="text-[13px] font-semibold text-white/60">حدد عنصراً</div>
                 <p className="text-[11px] text-white/40 mt-1">
-                  Pick one or more elements on the canvas, then choose an animation.
+                  حدد عنصراً أو أكثر على مساحة التصميم، ثم اختر الحركة.
                 </p>
               </div>
             ) : (
               <>
                 <p className="text-[11px] text-white/50">
-                  Animating {selectedIds.length} element{selectedIds.length > 1 ? 's' : ''}
+                  جارٍ تحريك {selectedIds.length} عنصر
                 </p>
 
                 <div className="grid grid-cols-3 gap-1.5">
@@ -306,7 +306,7 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                   <div className="space-y-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] font-semibold text-white/50">Duration</span>
+                        <span className="text-[10px] font-semibold text-white/50">المدة</span>
                         <span className="text-[10px] text-white/60">{selectedAnim.duration.toFixed(1)}s</span>
                       </div>
                       <input
@@ -322,7 +322,7 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] font-semibold text-white/50">Delay</span>
+                        <span className="text-[10px] font-semibold text-white/50">التأخير</span>
                         <span className="text-[10px] text-white/60">{selectedAnim.delay.toFixed(1)}s</span>
                       </div>
                       <input
@@ -337,7 +337,7 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                       />
                     </div>
                     <div>
-                      <span className="text-[10px] font-semibold text-white/50 block mb-1.5">Easing</span>
+                      <span className="text-[10px] font-semibold text-white/50 block mb-1.5">منحنى الحركة</span>
                       <div className="grid grid-cols-3 gap-1">
                         {EASINGS.map((e) => (
                           <button
@@ -357,7 +357,7 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                     </div>
                     {['pan', 'rise', 'wipe', 'rotate'].includes(selectedAnim.kind) && (
                       <div>
-                        <span className="text-[10px] font-semibold text-white/50 block mb-1.5">Direction</span>
+                        <span className="text-[10px] font-semibold text-white/50 block mb-1.5">الاتجاه</span>
                         <div className="flex gap-1">
                           {DIRECTIONS.map((d) => (
                             <button
@@ -380,7 +380,7 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                     {/* Sound wave: element animation SFX — fires when the
                         animation triggers (at its delay) in preview/present */}
                     <SfxPicker
-                      label="Entrance sound"
+                      label="صوت الظهور"
                       value={selectedAnim.sfxId}
                       onChange={(sfxId) => patchAnim({ ...(sfxId ? { sfxId } : { sfxId: undefined }) })}
                     />
@@ -424,7 +424,7 @@ function AnimationGlyph({ kind }: { kind: AnimationKind }) {
 /**
  * Sound wave: the SFX picker — a compact select over the 16 offline
  * pack sounds with an inline audition button. `value` undefined =
- * "None". Changing the pick previews nothing (Preview plays it in
+ * "بدون". Changing the pick previews nothing (Preview plays it in
  * context); the speaker button auditions immediately.
  */
 function SfxPicker({ label, value, onChange }: { label: string; value: string | undefined; onChange: (sfxId: string | undefined) => void }) {
@@ -438,7 +438,7 @@ function SfxPicker({ label, value, onChange }: { label: string; value: string | 
           className="min-w-0 flex-1 rounded-md border border-white/10 bg-[#16181D] px-2 py-1.5 text-[11px] text-white/85 outline-none focus:border-[#02C0CC]"
           aria-label={label}
         >
-          <option value="">None</option>
+          <option value="">بدون</option>
           {SFX_PACK.map((s) => (
             <option key={s.id} value={s.id}>
               {s.label} · {s.seconds}s
@@ -448,15 +448,15 @@ function SfxPicker({ label, value, onChange }: { label: string; value: string | 
         <button
           onClick={() => value && playSfx(value, 0.8)}
           disabled={!value}
-          title={value ? 'Audition this sound' : 'Pick a sound first'}
-          aria-label={`Audition ${label}`}
+          title={value ? 'استمع إلى هذا الصوت' : 'اختر صوتاً أولاً'}
+          aria-label={`استمع إلى ${label}`}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/10 text-white/60 transition-colors hover:text-white hover:border-white/25 disabled:opacity-40"
         >
           <Volume2 size={13} />
         </button>
       </div>
       <p className="mt-1 text-[9px] leading-snug text-white/30">
-        Plays in Preview and Present. For video export, insert the sound from the Audio panel as an autoplay element instead.
+        يُشغّل الصوت في المعاينة والعرض. لتصدير الفيديو، أضف الصوت من لوحة الصوت كعنصر تشغيل تلقائي.
       </p>
     </div>
   )

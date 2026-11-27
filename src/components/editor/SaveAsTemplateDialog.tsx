@@ -11,7 +11,7 @@ import { TEMPLATE_CATEGORIES } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 /**
- * v0.17 (Wave 2): "Save as template" — persist the open document as a
+ * v0.17 (Wave 2): "حفظ كقالب" — persist the open document as a
  * reusable template (server-side, attributed like designs: account or
  * anon cookie). Appears in the editor File menu.
  *
@@ -85,7 +85,7 @@ function SaveAsTemplateForm({ onOpenChange }: { onOpenChange: (open: boolean) =>
 
         <div className="space-y-3">
           <div>
-            <label className="text-sm font-medium" htmlFor="tpl-name">Template name</label>
+            <label className="text-sm font-medium" htmlFor="tpl-name">اسم القالب</label>
             <Input
               id="tpl-name"
               value={name}
@@ -96,7 +96,7 @@ function SaveAsTemplateForm({ onOpenChange }: { onOpenChange: (open: boolean) =>
             />
           </div>
           <div>
-            <span className="text-sm font-medium">Category</span>
+            <span className="text-sm font-medium">الفئة</span>
             <div className="flex gap-1.5 flex-wrap mt-1.5">
               {TEMPLATE_CATEGORIES.map((c) => (
                 <button
@@ -113,7 +113,7 @@ function SaveAsTemplateForm({ onOpenChange }: { onOpenChange: (open: boolean) =>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Card colour</span>
+            <span className="text-sm font-medium">لون البطاقة</span>
             <input
               type="color"
               value={accent}

@@ -14,6 +14,9 @@ import { claimAnonFolders } from '@/lib/auth/claim-folders'
 // username exists (account enumeration).
 // v0.9.1: same-origin enforced (blocks login CSRF / session fixation).
 async function __canvix_post(req: NextRequest) {
+  if (process.env.TEAG3_ACCOUNTS_ENABLED !== 'true') {
+    return NextResponse.json({ error: 'تسجيل الدخول غير متاح حالياً في TEa.G3.' }, { status: 410 })
+  }
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   const rl = rateLimit('auth:login', req, 10, 600)
   if (!rl.ok) {

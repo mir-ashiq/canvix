@@ -247,10 +247,15 @@ test.describe('v0.34.2 · the STOP button releases the post-run vision critique'
         body: events.map(ev).join(''),
       })
     })
-    // the post-run vision critique HANGS (the old unabortable fetch)
+    // the post-run vision critique HANGS (the old unabortable fetch).
+    // The hang must never outlive the test uncaught: a page-scoped
+    // wait inside a route callback gets CANCELLED with "Test ended"
+    // when the test finishes, and that cancellation escaping the
+    // route callback fails the run (run 237's only failure) — catch
+    // it and let the request die with the test.
     await page.route('**/api/ai/agent/vision**', async (route: Route) => {
-      await page.waitForTimeout(60_000) // never fulfills within the test
-      await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' })
+      await page.waitForTimeout(60_000).catch(() => undefined) // never fulfills within the test
+      await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }).catch(() => undefined)
     })
 
     await page.getByPlaceholder('Describe what to design or change — the agent figures out the rest…').fill('Create a STOP TEST design')

@@ -137,7 +137,7 @@ export function AIVideoCard() {
       setFailed(null)
     } catch (e) {
       toast({
-        title: 'Could not add the video',
+        title: 'تعذرت إضافة الفيديو',
         description: e instanceof Error ? e.message : 'Try again.',
         variant: 'destructive',
       })
@@ -155,7 +155,7 @@ export function AIVideoCard() {
     <div className="rounded-xl border border-[#7630D7]/40 bg-[#7630D7]/[0.08] p-3 mb-3" data-testid="ai-video-card">
       <div className="flex items-center gap-1.5 mb-2">
         <Clapperboard size={12} className="text-[#B79AFF]" />
-        <span className="text-[10.5px] font-bold text-white/60 uppercase tracking-wide">Generate with AI</span>
+        <span className="text-[10.5px] font-bold text-white/60 uppercase tracking-wide">إنشاء بالذكاء الاصطناعي</span>
       </div>
 
       <div className="flex gap-1.5">

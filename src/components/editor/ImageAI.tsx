@@ -338,7 +338,7 @@ export function BgRemoverPopover({ el }: { el: ImageElement }) {
       }
     } catch (e) {
       toast({
-        title: 'Background remover',
+        title: 'إزالة الخلفية',
         description: e instanceof Error ? e.message : 'Could not remove the background. Please try again.',
         variant: 'destructive',
       })
@@ -419,7 +419,7 @@ export function MagicEraserPopover({ el }: { el: ImageElement }) {
     )
     setBusy(false)
     if (ok) {
-      toast({ title: 'Erased', description: `"${target.trim()}" was removed. Ctrl+Z to undo.` })
+      toast({ title: 'تمت الإزالة', description: `"${target.trim()}" was removed. Ctrl+Z to undo.` })
       setTarget('')
       setOpen(false)
     }
@@ -430,7 +430,7 @@ export function MagicEraserPopover({ el }: { el: ImageElement }) {
       <PopoverTrigger asChild>
         <button className={btnBase} data-active={open} title="Magic eraser — remove unwanted objects" aria-label="Magic eraser">
           <Sparkles size={14} />
-          <span className="text-[12px] hidden lg:inline">Magic eraser</span>
+          <span className="text-[12px] hidden lg:inline">الممحاة السحرية</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="center" side="bottom" className="w-[300px] rounded-2xl bg-[#1A1C22] border-white/10 text-white p-3.5">
@@ -555,12 +555,12 @@ export function AutoAdjustButton({ el, ids }: { el: ImageElement; ids: string[] 
       const update = useEditorStore.getState().updateElements
       update(ids, { brightness, contrast, saturation })
       toast({
-        title: 'Auto-adjusted',
-        description: `Brightness ${brightness >= 0 ? '+' : ''}${brightness}, contrast ${contrast >= 0 ? '+' : ''}${contrast}, saturation ${saturation >= 0 ? '+' : ''}${saturation}. Ctrl+Z to undo.`,
+        title: 'تم الضبط تلقائياً',
+        description: `السطوع ${brightness >= 0 ? '+' : ''}${brightness}، والتباين ${contrast >= 0 ? '+' : ''}${contrast}، والتشبع ${saturation >= 0 ? '+' : ''}${saturation}. اضغط Ctrl+Z للتراجع.`, 
       })
     } catch (e) {
       toast({
-        title: 'Auto adjust',
+        title: 'ضبط تلقائي',
         description: e instanceof Error ? e.message : 'Could not analyze this image.',
         variant: 'destructive',
       })
@@ -666,8 +666,8 @@ export function UpscaleButton({ el }: { el: ImageElement }) {
       const f = factorFor(src.width, src.height, factor)
       if (f === 1) {
         toast({
-          title: 'Upscale',
-          description: `This image is already at the size cap (${src.width}×${src.height}px).`,
+          title: 'تحسين الدقة',
+          description: `وصلت الصورة بالفعل إلى الحد الأقصى للحجم (${src.width}×${src.height}px).`, 
         })
         return
       }
@@ -731,7 +731,7 @@ export function UpscaleButton({ el }: { el: ImageElement }) {
         ...(providerEntId ? { aiEntId: providerEntId } : {}),
       })
       toast({
-        title: `Upscaled ${f}×`,
+        title: `تم تحسين الدقة ${f}×`, 
         description:
           `${base.width}×${base.height} → ${out.width}×${out.height}px` +
           `${usedProvider ? ' (provider re-render + Lanczos finish)' : ''}.${fellBackNote} Ctrl+Z to undo.`,
@@ -754,7 +754,7 @@ export function UpscaleButton({ el }: { el: ImageElement }) {
       <PopoverTrigger asChild>
         <button className={btnBase} data-active={open} title="Upscale — enlarge this image (provider or on-device)" aria-label="Upscale image">
           <Maximize2 size={14} />
-          <span className="text-[12px] hidden lg:inline">Upscale</span>
+          <span className="text-[12px] hidden lg:inline">تحسين الدقة</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="center" side="bottom" className="w-[300px] rounded-2xl bg-[#1A1C22] border-white/10 text-white p-3.5">
@@ -941,12 +941,12 @@ export function BrushEraserDialog({ el }: { el: ImageElement }) {
       update([el.id], { src: dataUrl })
       toast({
         title: 'Erased',
-        description: 'The painted region was reconstructed. Ctrl+Z to undo.',
+        description: 'تمت إعادة بناء المنطقة المحددة بالفرشاة. اضغط Ctrl+Z للتراجع.',
       })
       setOpen(false)
     } catch (e) {
       toast({
-        title: 'Brush eraser',
+        title: 'ممحاة الفرشاة',
         description: e instanceof Error ? e.message : 'Could not erase. Please try again.',
         variant: 'destructive',
       })
@@ -959,7 +959,7 @@ export function BrushEraserDialog({ el }: { el: ImageElement }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <button className={btnBase} onClick={() => setOpen(true)} title="Brush eraser — paint over anything to remove it" aria-label="Brush eraser">
         <Brush size={14} />
-        <span className="text-[12px] hidden lg:inline">Brush eraser</span>
+        <span className="text-[12px] hidden lg:inline">ممحاة الفرشاة</span>
       </button>
       <DialogContent className="max-w-[720px] rounded-2xl bg-[#14161B] border-white/10 text-white">
         <DialogHeader>
@@ -1025,7 +1025,7 @@ export function BrushEraserDialog({ el }: { el: ImageElement }) {
           )}
         </div>
         <div className="flex items-center gap-3 mt-1">
-          <span className="text-[11px] text-white/55 shrink-0">Brush</span>
+          <span className="text-[11px] text-white/55 shrink-0">الفرشاة</span>
           <input
             type="range"
             min={8}
@@ -1092,7 +1092,7 @@ export function AltTextPopover({ el }: { el: ImageElement }) {
       setValue(data.alt)
     } catch (e) {
       toast({
-        title: 'Alt text',
+        title: 'النص البديل',
         description: e instanceof Error ? e.message : 'Could not generate. Try again.',
         variant: 'destructive',
       })

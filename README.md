@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="public/tea-g3.svg" width="72" alt="TEa.G3 logo" />
+<img src="public/midad.svg" width="72" alt="MIDAD logo" />
 
-# TEa.G3
+# مِداد | MIDAD
 
-**تطوير المطور العراقي**
+**منصة التصميم العربية — MIDAD**
 
-منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر — تطوير المطور العراقي TEa.G3.
+منصة تصميم جرافيكي عربية مجانية ومفتوحة المصدر — تطوير TEa.G3.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-00C4CC.svg)](LICENSE)
 [![CI](https://github.com/TEaG3/eng-salman/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TEaG3/eng-salman/actions/workflows/ci.yml)
@@ -21,27 +21,28 @@
 
 ---
 
-## ✨ What is TEa.G3?
+## ✨ What is MIDAD?
 
-TEa.G3 is an Arabic-first, installable Web App for creating social media posts,
+MIDAD (مِداد) is an Arabic-first, installable Web App for creating social media posts,
 presentations, posters, logos and thumbnails — with a drag-and-drop editor, a
 366-template library and one-click export. It runs in the browser, stores designs
 in the configured database, and exports files locally in your browser. The current
 public release is account-free: no sign-up, no login and no account requirement.
 Anonymous designs are associated with the creating browser and can be shared by link.
-No watermarks, no paywalls.
+No watermarks, no paywalls. MIDAD is the public-facing product name, maintained by
+TEa.G3; the original MIT license and upstream notices remain unchanged.
 
 ## الوضع الحالي للنسخة العامة
 
 - **دون حسابات أو تسجيل دخول:** واجهتا الدخول والتسجيل معطلتان، كما أن واجهات API الخاصة بهما ترفض الطلبات افتراضياً.
 - **ابدأ مباشرة:** يمكن إنشاء التصاميم وتعديلها وتصديرها دون حساب.
 - **حفظ ومشاركة:** تُحفظ التصاميم في قاعدة بيانات النشر وتُنسب إلى متصفح منشئها؛ ويمكن فتح التصميم ومشاركته عبر رابطه.
-- **تطبيق ويب قابل للتثبيت:** يتضمن TEa.G3 manifest وService Worker وواجهة مستقلة مع صفحة احتياطية عند انقطاع الاتصال.
+- **تطبيق ويب قابل للتثبيت:** يتضمن مِداد manifest وService Worker وواجهة مستقلة مع صفحة احتياطية عند انقطاع الاتصال.
 - يمكن تفعيل الحسابات مؤقتاً لبيئات الاختبار الخاصة فقط عبر `TEAG3_ACCOUNTS_ENABLED=true`؛ لا تضبط هذا المتغير في النشر العام الحالي.
 
 ## 🆓 Free forever — the promise
 
-**Every feature in TEa.G3 is free, and it stays free. Forever.** There is no
+**Every feature in MIDAD is free, and it stays free. Forever.** There is no
 Pro tier, no subscription, no trial countdown, no watermark ransom, no
 "premium" element you can drag but not drop. The whole point of this project
 is a design tool that never asks you for a credit card:
@@ -54,7 +55,7 @@ is a design tool that never asks you for a credit card:
 - **Self-hosting** is first-class: your server, your database, your rules
 - The license is **MIT** — you can even fork it and build a business on it
 
-If anyone ever asks you to pay for TEa.G3, you are being scammed: the source
+If anyone ever asks you to pay for MIDAD, you are being scammed: the source
 is right here.
 
 ## 🎨 Features

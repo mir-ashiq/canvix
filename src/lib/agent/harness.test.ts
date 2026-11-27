@@ -3620,3 +3620,44 @@ describe('v0.34 · the deterministic repair pass — code fixes what code can fi
     expect(result.toolCalls).toBe(2)
   })
 })
+
+describe('v0.34.1 · the guard-exit wrap-up repairs before disclosing', () => {
+  it('a cycle-guard wrap-up with low-contrast residue applies the deterministic repair through the bridge, then discloses only what remains', async () => {
+    const events: AgentEvent[] = []
+    let auditCalls = 0
+    // the model stalls: the same no-effect call until the cycle guard wraps
+    const { chat } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#0A0A1A' }),
+      turn('plan_layout', { background: '#0A0A1A', sections: [{ name: 'hero', y: 65, height: 300, contains: 'headline' }] }),
+      turn('add_text', { text: 'Dark', fontSize: 40, color: '#3A1A5E' }),
+      turn('add_text', { text: 'x', fontSize: 12, color: '#000000' }),
+      turn('add_text', { text: 'x', fontSize: 12, color: '#000000' }),
+      turn('add_text', { text: 'x', fontSize: 12, color: '#000000' }),
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design: {
+        name: 'Poster', width: 1080, height: 1080, pageCount: 1, currentPageIndex: 0,
+        background: '#0A0A1A',
+        elements: [
+          { id: 't9', type: 'text', text: 'Dark', x: 100, y: 100, width: 400, height: 60, fill: '#3A1A5E', fontSize: 40 },
+        ],
+        colorsInUse: [], otherPages: [],
+      } as never,
+      mode: 'create',
+      request: 'Create a poster with a dark headline',
+      emit: (e) => events.push(e),
+      awaitApply: async () => ({ ok: true }),
+      auditDesign: (async () => {
+        auditCalls += 1
+        return ['Low contrast: text "Dark" #3a1a5e on its effective backdrop #0a0a1e is 1.5:1 (needs 3:1) — change the text fill or the card behind it.']
+      }) as never,
+    })
+    // the wrap-up REPAIRED in code through the acked bridge first
+    expect(events.some((e) => e.type === 'action' && (e as { tool?: string }).tool === 'repair')).toBe(true)
+    expect(events.some((e) => e.type === 'observation' && String((e as { message?: string }).message ?? '').includes('DETERMINISTIC REPAIR AT WRAP-UP'))).toBe(true)
+    // the re-audit ran; the residue disclosure names the deterministic repair
+    expect(auditCalls).toBeGreaterThanOrEqual(2)
+    expect(String(result.summary)).toContain('residue after the deterministic repair')
+  })
+})

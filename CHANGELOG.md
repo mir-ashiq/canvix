@@ -4439,3 +4439,19 @@ batch 5, semantic 2, the live integration 1 — covered text + low
 contrast repaired in code, re-audit authoritative-clean, done
 accepted, zero extra model turns); full suite 1,846/1,846 across
 132 files; typecheck, lint and production build green.
+
+### Fixed — v0.34.1: the wrap-up repair — a guard exit fixes what code can fix before disclosing
+
+The 27 Nov live evaluation (the NEON after-run, 38 steps · 40
+actions) ended at the CYCLE guard with 12 disclosed-unfixed
+low-contrast issues — every one a fill-ladder fix. The deterministic
+repair only ran on the DONE path; a run that wraps at a guard exit
+(idle/cycle/strikes) never reached it. guardExit now plans + applies
+the deterministic repair FIRST (no model round-trip — the run is
+ending anyway; the repairs ride the same acked bridge, undoable +
+authoritative), re-audits, and discloses only the genuine residue.
+The wrap-up message says "residue after the deterministic repair".
+
+Harness: +1 regression (the cycle-guard wrap-up with contrast residue
+applies the repair through the bridge, re-audits, then discloses) —
+1,847/1,847 across the full suite.

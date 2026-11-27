@@ -525,15 +525,51 @@ export async function runAgentLoop(deps: LoopDeps): Promise<LoopResult> {
     }
     if ((mode === 'create' || mode === 'improve') && deps.auditDesign) {
       try {
-        const issues = (await deps.auditDesign(planBands.length ? planBands : undefined)) ?? []
+        let issues = (await deps.auditDesign(planBands.length ? planBands : undefined)) ?? []
+        // v0.34.1 · REPAIR AT WRAP-UP TOO. The 27 Nov live repro ended
+        // at the cycle guard with 12 disclosed-unfixed low-contrast
+        // issues — every one a fill-ladder fix — because the
+        // deterministic repair only ran on the done path and the run
+        // never reached done. A guard exit now repairs what code can
+        // fix FIRST (no model round-trip — the run is ending anyway,
+        // and the repairs ride the same acked bridge), re-audits, and
+        // discloses only the genuine residue.
+        try {
+          const live = deps.refreshedContext?.() ?? design
+          const repair = planRepair(live, issues)
+          if (repair.actions.length) {
+            emit({
+              v: AGENT_PROTOCOL_VERSION,
+              type: 'action',
+              stepIndex: steps,
+              callId: `repair-${steps}-${Math.random().toString(36).slice(2, 8)}`,
+              risk: 'write',
+              tool: 'repair',
+              actions: repair.actions,
+            })
+            const ack = (await deps.awaitApply?.()) ?? { ok: true }
+            if (ack.ok) {
+              emit({
+                v: AGENT_PROTOCOL_VERSION,
+                type: 'observation',
+                stepIndex: steps,
+                message: `DETERMINISTIC REPAIR AT WRAP-UP — ${repair.actions.length} fix(es) applied: ${repair.notes.slice(0, 4).join('; ')}${repair.notes.length > 4 ? ` (+${repair.notes.length - 4} more)` : ''}`,
+              })
+              verificationLog.push(`wrap-up repair: ${repair.actions.length} deterministic fix(es)`)
+              issues = (await deps.auditDesign(planBands.length ? planBands : undefined)) ?? []
+            }
+          }
+        } catch {
+          /* the wrap-up repair is best-effort; the disclosure still runs */
+        }
         if (issues.length) {
           const residue = issues.slice(0, 4).map((i) => `· ${i}`).join('\n')
-          const withResidue = `${base}\nQuality audit at wrap-up (fixable residue):\n${residue}`
+          const withResidue = `${base}\nQuality audit at wrap-up (residue after the deterministic repair):\n${residue}`
           return {
             summary: withResidue,
             verification: verification
-              ? `${verification} Quality audit at wrap-up reports ${issues.length} issue(s) — disclosed, unfixed.`
-              : `Quality audit at wrap-up reports ${issues.length} issue(s) — disclosed, unfixed.`,
+              ? `${verification} Quality audit at wrap-up reports ${issues.length} issue(s) after the deterministic repair — disclosed, unfixed.`
+              : `Quality audit at wrap-up reports ${issues.length} issue(s) after the deterministic repair — disclosed, unfixed.`,
           }
         }
       } catch {

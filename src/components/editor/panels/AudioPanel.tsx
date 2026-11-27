@@ -284,10 +284,10 @@ export function AudioPanel() {
               <span className="flex items-start gap-1.5">
                 <Info size={13} className="mt-0.5 shrink-0" />
                 <span>
-                  Sound search is off on this server — the operator sets a free{' '}
-                  <strong>Freesound</strong> مفتاحاً من صفحة إدارة الذكاء الاصطناعي والنماذج (أو{' '
-                  <code className="rounded bg-black/20 px-1">FREESOUND_API_KEY</code>). Results are
-                  Creative Commons 0 by default. The Sound library above works without any key.
+                  البحث عن الأصوات معطّل على هذا الخادم — على المشرف إضافة مفتاح مجاني لخدمة{' '}
+                  <strong>Freesound</strong> من صفحة إدارة الذكاء الاصطناعي والنماذج (أو{' '}
+                  <code className="rounded bg-black/20 px-1">FREESOUND_API_KEY</code>). تكون النتائج بترخيص
+                  Creative Commons 0 افتراضياً. تعمل مكتبة الأصوات أعلاه دون أي مفتاح.
                 </span>
               </span>
             </div>

@@ -22,7 +22,8 @@ import { getDesignProvenance } from '@/lib/design-provenance'
 import { db } from '@/lib/db'
 
 export const runtime = 'nodejs'
-export const maxDuration = 800
+// Vercel Hobby caps serverless function duration at 300 seconds.
+export const maxDuration = 300
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/ai/agent — the design agent (v0.28).

@@ -103,7 +103,7 @@ export function UploadsPanel() {
       } catch (err) {
         setMediaUploads((prev) => prev.map((u) => (u.key === key ? { ...u, failed: true } : u)))
         toast({
-          title: `Could not upload ${kind}`,
+          title: `تعذّر رفع ${kind}`, 
           description: err instanceof Error ? err.message.slice(0, 140) : undefined,
           variant: 'destructive',
         })
@@ -193,7 +193,7 @@ export function UploadsPanel() {
   return (
     <div className="flex flex-col h-full bg-[#16181D] text-[#EDEEF2]">
       <div className="px-4 pt-4 pb-3 border-b border-white/[0.07] shrink-0">
-        <h3 className="font-bold text-sm">Uploads</h3>
+        <h3 className="font-bold text-sm">الملفات المرفوعة</h3>
         <p className="text-xs text-white/50 mt-0.5">
           {hasImageSelected ? 'اضغط على ملف لاستبدال الصورة المحددة.' : 'ملفاتك مرتبطة بحسابك.'}
         </p>
@@ -217,7 +217,7 @@ export function UploadsPanel() {
           aria-label="ارفع الصور والوسائط"
         >
           <Upload size={22} />
-          <span className="text-sm font-medium text-white/80">Click or drag files here</span>
+          <span className="text-sm font-medium text-white/80">انقر أو اسحب الملفات إلى هنا</span>
           <span className="text-xs">PNG, JPG, SVG, GIF — plus MP3/WAV audio &amp; MP4/WebM video</span>
         </button>
         <input
@@ -235,7 +235,7 @@ export function UploadsPanel() {
 
         {mediaUploads.length > 0 && (
           <div className="mt-4 flex flex-col gap-2">
-            <h4 className="text-xs font-semibold text-white/50">Uploading</h4>
+            <h4 className="text-xs font-semibold text-white/50">جارٍ الرفع</h4>
             {mediaUploads.map((u) => (
               <div
                 key={u.key}
@@ -278,7 +278,7 @@ export function UploadsPanel() {
         ) : items.length > 0 ? (
           <>
             <div className="flex items-center justify-between mt-6 mb-2">
-              <h4 className="text-xs font-semibold text-white/50">Your library</h4>
+              <h4 className="text-xs font-semibold text-white/50">مكتبتك</h4>
               {quota && (
                 <span className="text-[10px] text-white/40 tabular-nums">
                   {formatBytes(quota.used)} of {formatBytes(quota.total)}
@@ -367,7 +367,7 @@ export function UploadsPanel() {
         ) : (
           <div className="mt-6 flex flex-col items-center py-6 text-white/35">
             <ImageIcon size={28} strokeWidth={1.4} />
-            <p className="text-xs mt-2.5 text-center leading-relaxed">No uploads yet.<br />Your files will appear here.</p>
+            <p className="text-xs mt-2.5 text-center leading-relaxed">لا توجد ملفات مرفوعة بعد.<br />ستظهر ملفاتك هنا.</p>
           </div>
         )}
       </div>

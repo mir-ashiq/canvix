@@ -496,7 +496,7 @@ npm install            # or: bun install
 
 # set up the database (get a connection string first — see below)
 cp .env.example .env   # then edit DATABASE_URL
-npm run db:setup       # migrations + 110 free templates, in one command
+npm run db:setup       # migrations + 366 free templates, in one command
 
 npm run dev            # → http://localhost:3000
 ```

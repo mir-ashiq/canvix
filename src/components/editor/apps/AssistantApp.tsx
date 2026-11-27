@@ -76,6 +76,16 @@ const SUGGESTIONS = [
 
 const READ_ONLY_MODES: AgentMode[] = ['review', 'explain', 'plan', 'discuss']
 
+/** v0.33: the NO-OP prefixes applyDesignAction returns (as strings,
+ *  never throws) for unresolved assets and malformed actions. A no-op
+ *  must FAIL the ack: the NEON 2027 poster claimed four stickers while
+ *  two never existed because these strings were acked {ok:true} and
+ *  the loop counted them as applied. Deliberately exhaustive, not a
+ *  blanket /^No / — "No overlaps or off-canvas elements found — the
+ *  layout is clean" is a SUCCESS message and must keep acking ok. */
+const NO_ACK_MSG_RE =
+  /^(Bad |Grouping needs|Sticker missing|Table needs|Chart needs|Unknown |QR generation failed|Nothing|No QR |No elements from this app|No font specified|No group elements|No icon|No illustration|No image|No language|No matching|No page to fix|No photo|No size change|No text|No video)/
+
 /** Flatten elements (groups included). */
 function flatElements(els: AnyElement[], out: AnyElement[] = []): AnyElement[] {
   for (const el of els) {
@@ -125,11 +135,22 @@ function buildDesignContext() {
       base.fontSize = Math.round(t.fontSize)
       base.bold = t.bold
       base.fontFamily = t.fontFamily
+      if (t.effect && t.effect !== 'none') base.textEffect = t.effect
       const w = measureText(t)
       if (w !== undefined) base.measuredWidth = w
     } else if ('fill' in el) {
       base.fill = (el as { fill: string }).fill
     }
+    // v0.33: the native effects surface on the context — the brief's
+    // feature validation (gradients/effects/shadows) and the audit's
+    // visibility checks consume these; before, nothing could see them
+    // and "brief validated" said nothing about the visual features.
+    if ('fillGradient' in el && (el as { fillGradient?: unknown }).fillGradient) base.hasGradient = true
+    if ('effect' in el) {
+      const eff = (el as { effect?: unknown }).effect
+      if (typeof eff === 'string' && eff !== 'none') base.textEffect = eff
+    }
+    if (el.shadow?.enabled) base.hasShadow = true
     if ('stroke' in el && typeof (el as { stroke?: unknown }).stroke === 'string') {
       const stroke = (el as { stroke: string }).stroke
       if (stroke.trim()) base.stroke = stroke
@@ -273,6 +294,12 @@ function computeBriefValidation(brief: DesignBrief): { satisfied: boolean; unmet
     ...( 'fill' in e && typeof (e as { fill?: unknown }).fill === 'string' ? { fill: (e as { fill: string }).fill } : {}),
     ...('stroke' in e && typeof (e as { stroke?: unknown }).stroke === 'string' ? { stroke: (e as { stroke: string }).stroke } : {}),
     ...(e.type === 'text' ? { text: (e as TextElement).text } : {}),
+    // v0.33: the effects surface — the feature validation reads these
+    ...('fillGradient' in e && (e as { fillGradient?: unknown }).fillGradient ? { hasGradient: true } : {}),
+    ...(e.shadow?.enabled ? { hasShadow: true } : {}),
+    ...('effect' in e && typeof (e as { effect?: unknown }).effect === 'string' && (e as { effect?: string }).effect !== 'none'
+      ? { textEffect: (e as { effect?: string }).effect }
+      : {}),
   }))
   const result = validateBrief(brief, {
     texts,
@@ -322,6 +349,10 @@ export function AssistantApp({ onClose }: AppPanelProps) {
           continue
         }
         lastMsg = await applyDesignAction(a)
+        // v0.33: a NO-OP IS NOT SUCCESS (see NO_ACK_MSG_RE above).
+        if (NO_ACK_MSG_RE.test(lastMsg)) {
+          return { ok: false, message: lastMsg }
+        }
       } catch (e) {
         return { ok: false, message: e instanceof Error ? e.message : 'Action failed' }
       }

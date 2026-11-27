@@ -28,6 +28,12 @@ export interface AgentElementCtx {
   fill?: string
   /** v0.29.3: border color (glassmorphism/feature-card validation) */
   stroke?: string
+  /** v0.33: the native-effects surface — the feature contract
+   *  (gradients / text effects / shadows) validates against these;
+   *  the audit's visibility checks read them too. */
+  hasGradient?: boolean
+  hasShadow?: boolean
+  textEffect?: string
   fontSize?: number
   bold?: boolean
   fontFamily?: string
@@ -85,6 +91,11 @@ function elementLine(e: AgentElementCtx, selected: boolean): string {
   if (e.text) parts.push(`text="${e.text.slice(0, 60).replace(/\n/g, ' ')}"`)
   if (e.fill) parts.push(e.fill)
   if (e.stroke) parts.push(`border:${e.stroke}`)
+  // v0.33: the effects on each element — the model sees (and can
+  // verify) gradients, text effects and shadows in the page state.
+  if (e.hasGradient) parts.push('gradient')
+  if (e.textEffect) parts.push(`effect:${e.textEffect}`)
+  if (e.hasShadow) parts.push('shadow')
   if (e.fontSize) parts.push(`${Math.round(e.fontSize)}px`)
   if (e.measuredWidth && e.text) parts.push(`measured:${Math.round(e.measuredWidth)}px`)
   if (e.bold) parts.push('bold')

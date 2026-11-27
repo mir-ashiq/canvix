@@ -210,6 +210,15 @@ export function loopSystemPrompt(deps: {
       '· Build section by section after the plan. NEVER add bare decorative bars/strips just to include a required color — use colors as the page background, text fills, or real panel/card fills.',
       '· A realistic editor mockup = a large native panel (rounded rect, glass fill, border) CONTAINING inner native elements (toolbar bar, sidebar, canvas area, buttons) — not one empty rectangle.',
       '· Feature cards = one semi-transparent rect + its text per card. Glassmorphism = rgba fills with visible borders.',
+      // v0.33 · COMPOSITION INTELLIGENCE — the anti-coordinate-placement
+      // rules. A run that only drops text at y-positions produces the
+      // "unfinished template" the NEON 2027 poster was: no focal point,
+      // flat background, bare-text CTA, disconnected icons.
+      '· COMPOSITION — ONE dominant focal element per page (a large illustration via add_illustration, a photo, or a big graphic composite) covering ≥10% of the page, placed in the hero band. Never ship a text-only page.',
+      '· Background treatment: set_background first, then LAYER 2-3 large low-opacity shapes (rgba fills) or a gradient band (add_shape with gradientFrom/gradientTo) BEHIND the content — a flat empty background reads as unfinished.',
+      '· CTA = a composite button: a filled rounded rect (add_shape with cornerRadius 40-80) with a short bold text centered on top — never bare text alone.',
+      '· Accents are placed, not dropped: give every sticker/icon an x/y/size integrated with the composition (beside headings, corners, edges) — icons floating in dead space is the failure mode.',
+      '· Theme effects: futuristic/neon briefs get neon/glow text effects (add_text effect:"neon", or update_elements textEffect) and shadows (update_elements shadowColor/shadowBlur) — the editor renders them natively.',
       '',
     )
   }

@@ -27,8 +27,17 @@ export interface BriefConstraint {
  *  These are REQUIREMENTS, not decoration — the validator checks that
  *  the corresponding native, editable elements actually exist. */
 export interface RequiredFeature extends BriefConstraint {
-  kind: 'editor-mockup' | 'feature-cards' | 'glassmorphism'
-  /** for feature-cards: how many cards the user asked for */
+  kind:
+    | 'editor-mockup'
+    | 'feature-cards'
+    | 'glassmorphism'
+    | 'illustration'
+    | 'stickers'
+    | 'cta-button'
+    | 'gradients'
+    | 'shadows'
+    | 'text-effects'
+  /** for feature-cards/stickers: how many the user asked for */
   count?: number
   /** human label for prompts and unmet messages */
   label: string
@@ -191,6 +200,62 @@ export function extractBrief(message: string, pageWidth?: number, pageHeight?: n
     })
   }
 
+  // v0.33 · the visual-feature contract — the NEON 2027 lesson:
+  // "brief contract validated" was true-and-empty while the poster
+  // had no focal illustration, no CTA button, no gradients and two
+  // of four promised stickers missing, because the contract only
+  // knew three composite kinds. The named visual asks of a brief are
+  // now REQUIREMENTS the validator checks against real elements.
+  if (/\billustrations?\b/i.test(m) && !/\bno\s+illustrations?\b/i.test(m)) {
+    requiredFeatures.push({
+      tier: 'mandatory',
+      kind: 'illustration',
+      label: 'a dominant illustration (a large illustration/photo/graphic focal element, ≥10% of the page — add_illustration / add_stock_photo)',
+    })
+  }
+  const stickerCount =
+    lowerText.match(/(\d+|two|three|four|five|six|seven|eight)\s+(?:floating\s+|vector\s+)?(?:emoji\s+)?stickers?\b/) ??
+    (/\bstickers?\b/i.test(m) && !/\bno\s+stickers?\b/i.test(m) ? [undefined, undefined] : null)
+  if (stickerCount) {
+    const words: Record<string, number> = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8 }
+    const named = stickerCount[1]
+    const n = named ? (/^\d+$/.test(named) ? Number(named) : (words[named] ?? 2)) : 2
+    requiredFeatures.push({
+      tier: 'mandatory',
+      kind: 'stickers',
+      count: Math.min(Math.max(n, 1), 8),
+      label: `${Math.min(Math.max(n, 1), 8)} floating stickers (add_sticker — the 160+ vector library or emoji glyphs)`,
+    })
+  }
+  if (/\b(?:call\s+to\s+action|cta)\b/i.test(m)) {
+    requiredFeatures.push({
+      tier: 'mandatory',
+      kind: 'cta-button',
+      label: 'a prominent call-to-action (a filled rounded shape behind a short actionable text — a button, never bare text)',
+    })
+  }
+  if (/\bgradients?\b/i.test(m)) {
+    requiredFeatures.push({
+      tier: 'mandatory',
+      kind: 'gradients',
+      label: 'gradient fills (add_shape gradientFrom/gradientTo or update_elements gradientFrom/To)',
+    })
+  }
+  if (/\bshadows?\b/i.test(m)) {
+    requiredFeatures.push({
+      tier: 'mandatory',
+      kind: 'shadows',
+      label: 'shadow effects (update_elements shadowColor/shadowBlur)',
+    })
+  }
+  if (/\b(?:neon|glow(?:ing)?)\b/i.test(m) && /\b(?:text|title|headline|typography|theme|poster|futuristic|festival)\b/i.test(m)) {
+    requiredFeatures.push({
+      tier: 'mandatory',
+      kind: 'text-effects',
+      label: 'creative text effects (neon/glow on the headline — add_text effect:"neon" or update_elements textEffect)',
+    })
+  }
+
   // explicit dimensions
   const dims = m.match(DIMENSIONS_RE)
   let dimensions: DesignBrief['dimensions'] | undefined
@@ -272,6 +337,11 @@ export interface BriefElementLike {
   fill?: string
   stroke?: string
   text?: string
+  /** v0.33: the effects surface — the visual-feature validation
+   *  (gradients / text effects / shadows) reads these. */
+  hasGradient?: boolean
+  hasShadow?: boolean
+  textEffect?: string
 }
 
 /** Parse "#RRGGBB" or "rgba(r,g,b,a)" → {r,g,b,a} (a defaults 1); null unparseable.
@@ -303,12 +373,15 @@ function centerInside(el: BriefElementLike, host: BriefElementLike): boolean {
   )
 }
 
-/** Structural validation of the composite deliverables (v0.29.3).
- *  Heuristics on purpose — a FALSE PASS here hides a missing
- *  deliverable; a false failure only costs one extra build step. */
+/** Structural validation of the composite deliverables (v0.29.3,
+ *  extended v0.33 with the visual-feature kinds). Heuristics on
+ *  purpose — a FALSE PASS here hides a missing deliverable; a false
+ *  failure only costs one extra build step. */
 function validateFeatures(
   features: RequiredFeature[],
   els: BriefElementLike[],
+  pageW: number,
+  pageH: number,
 ): { label: string; found: boolean }[] {
   const rects = els.filter((e) => e.type === 'rect' && (e.width ?? 0) > 0 && (e.height ?? 0) > 0)
   const texts = els.filter((e) => e.type === 'text' && e.text)
@@ -348,6 +421,43 @@ function validateFeatures(
       })
       const bordered = glass.some((e) => typeof e.stroke === 'string' && e.stroke.trim().length > 0)
       out.push({ label: f.label, found: glass.length >= 2 && bordered })
+    } else if (f.kind === 'illustration') {
+      // v0.33: a focal element — image (illustrations/photos),
+      // sticker or chart covering ≥10% of the page. Small icons and
+      // plain rects never qualify: a focal point must anchor the
+      // composition, not decorate it.
+      const min = 0.1 * pageW * pageH
+      const found = els.some(
+        (e) => ['image', 'sticker', 'chart'].includes(e.type) && (e.width ?? 0) * (e.height ?? 0) >= min,
+      )
+      out.push({ label: f.label, found })
+    } else if (f.kind === 'stickers') {
+      const need = f.count ?? 2
+      out.push({ label: f.label, found: els.filter((e) => e.type === 'sticker').length >= need })
+    } else if (f.kind === 'cta-button') {
+      // v0.33: the button pattern — a short actionable text sitting
+      // on a filled shape. Bare text never passes: the NEON 2027
+      // poster's "GET TICKETS" was plain text on a flat background.
+      const ctaVerbs = /^(?:get|buy|register|book|join|subscribe|start|shop|sign\s?up|reserve|order|download|rsvp|grab|claim|tickets)\b/i
+      const buttons = rects.filter((r) => {
+        const fill = parseColor(r.fill)
+        return (r.width ?? 0) >= 80 && (r.height ?? 0) >= 32 && fill !== null && fill.a >= 0.35
+      })
+      const found = texts.some((t) => {
+        const words = (t.text ?? '').trim().split(/\s+/)
+        if (words.length > 6 || words.length === 0) return false
+        return ctaVerbs.test((t.text ?? '').trim()) && buttons.some((r) => centerInside(t, r))
+      })
+      out.push({ label: f.label, found })
+    } else if (f.kind === 'gradients') {
+      out.push({ label: f.label, found: els.some((e) => e.hasGradient) })
+    } else if (f.kind === 'shadows') {
+      out.push({ label: f.label, found: els.some((e) => e.hasShadow) })
+    } else if (f.kind === 'text-effects') {
+      out.push({
+        label: f.label,
+        found: els.some((e) => e.type === 'text' && !!e.textEffect && e.textEffect !== 'none'),
+      })
     }
   }
   return out
@@ -394,7 +504,7 @@ export function validateBrief(
     })
   let features: BriefValidationResult['checked']['features']
   if (brief.requiredFeatures?.length && state.elements?.length) {
-    features = validateFeatures(brief.requiredFeatures, state.elements)
+    features = validateFeatures(brief.requiredFeatures, state.elements, state.width, state.height)
     for (const f of features) {
       if (!f.found) unmet.push(`Required element missing: ${f.label} — build it from NATIVE elements (rect panels, semi-transparent fills, borders, text).`)
     }

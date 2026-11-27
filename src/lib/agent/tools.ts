@@ -17,6 +17,15 @@
 import { FONTS } from '@/lib/fonts/catalog'
 import type { ToolRisk } from './protocol'
 import { repairPlanBands } from './plan-repair'
+// v0.33 · the native asset libraries are PURE data — the SERVER
+// resolves queries against them (fail-closed at the boundary). The
+// NEON 2027 incident: unknown concepts were acked as success on the
+// client while nothing was created — the poster claimed four
+// stickers and two never existed, and "quality audit passed" said
+// nothing because no stage ever checked assets.
+import { searchStickers } from '@/lib/stickers'
+import { searchIcons } from '@/lib/assets/icon-pack'
+import { ILLUSTRATIONS } from '@/lib/assets/illustrations'
 
 export interface AgentTool {
   name: string
@@ -277,9 +286,9 @@ export const AGENT_TOOLS: AgentTool[] = [
   // ── add elements ───────────────────────────────────────────
   {
     name: 'add_text',
-    description: 'Add a text box. Positions are px on the page; estimate width ≈ 0.6 × fontSize × chars.',
+    description: 'Add a text box. Positions are px on the page; estimate width ≈ 0.6 × fontSize × chars. effect sets a native text effect (neon, glow, shadow…) — use it for themed headlines.',
     risk: 'write',
-    argsSpec: '{text: string, x?: number, y?: number, width?: number, fontSize?: 6-400, fontFamily?: string, bold?: bool, color?: "#RRGGBB", align?: "left"|"center"|"right", yBand?: "top"|"center"|"bottom"}',
+    argsSpec: '{text: string, x?: number, y?: number, width?: number, fontSize?: 6-400, fontFamily?: string, bold?: bool, color?: "#RRGGBB", align?: "left"|"center"|"right", yBand?: "top"|"center"|"bottom", effect?: "none"|"shadow"|"lift"|"hollow"|"neon"|"echo"|"glow"|"outline"|"background"|"splice"}',
     sanitize: (args, ctx) => {
       const text = str(args, 'text', 400).trim()
       if (!text) return { ok: false, error: 'text must be a non-empty string (max 400 chars).' }
@@ -294,6 +303,14 @@ export const AGENT_TOOLS: AgentTool[] = [
       const color = hex(args, 'color')
       if (args.color !== undefined && !color) {
         return { ok: false, error: 'color must be a #RRGGBB hex string, e.g. "#7D2AE8".' }
+      }
+      // v0.33: the editor's native text effects (neon, glow, drop…)
+      // existed since v0.3 but the tool surface never exposed them —
+      // briefs asking for neon/futuristic treatments were physically
+      // impossible to satisfy.
+      const effect = enumVal(args, 'effect', ['none', 'shadow', 'lift', 'hollow', 'neon', 'echo', 'glow', 'outline', 'background', 'splice'] as const, '' as never)
+      if (args.effect !== undefined && !effect) {
+        return { ok: false, error: 'effect must be one of: none, shadow, lift, hollow, neon, echo, glow, outline, background, splice.' }
       }
       const x = num(args, 'x')
       const y = num(args, 'y')
@@ -316,6 +333,7 @@ export const AGENT_TOOLS: AgentTool[] = [
             ...(y !== null ? { y: clamp(y, -ctx.height, ctx.height) } : {}),
             ...(width !== null ? { width: clamp(width, 24, ctx.width * 1.5) } : {}),
             align: enumVal(args, 'align', ['left', 'center', 'right'] as const, 'center'),
+            ...(effect ? { effect } : {}),
             // the y band only rides along when no exact y was given
             ...(y === null ? { y: yBand } : {}),
           },
@@ -326,9 +344,9 @@ export const AGENT_TOOLS: AgentTool[] = [
   },
   {
     name: 'add_shape',
-    description: 'Add a shape: rect, ellipse, triangle, star, line, or rounded rect with a fill.',
+    description: 'Add a shape: rect, ellipse, triangle, star, line, or rounded rect with a solid or gradient fill (gradients: gradientFrom + gradientTo + optional gradientAngle).',
     risk: 'write',
-    argsSpec: '{shape: "rect"|"ellipse"|"triangle"|"star"|"line", x: number, y: number, width: number, height: number, fill?: "#RRGGBB", cornerRadius?: number, rotation?: deg}',
+    argsSpec: '{shape: "rect"|"ellipse"|"triangle"|"star"|"line", x: number, y: number, width: number, height: number, fill?: "#RRGGBB", gradientFrom?: "#RRGGBB", gradientTo?: "#RRGGBB", gradientAngle?: deg, cornerRadius?: number, rotation?: deg}',
     sanitize: (args, ctx) => {
       const shape = enumVal(args, 'shape', ['rect', 'ellipse', 'triangle', 'star', 'line'] as const, '' as never)
       if (!shape) return { ok: false, error: 'shape must be one of: rect, ellipse, triangle, star, line.' }
@@ -342,6 +360,20 @@ export const AGENT_TOOLS: AgentTool[] = [
       if (w < 4 || h < 4) return { ok: false, error: `width/height must be ≥ 4px; you sent ${Math.round(w)}×${Math.round(h)}.` }
       const fill = hex(args, 'fill')
       if (args.fill !== undefined && !fill) return { ok: false, error: 'fill must be #RRGGBB, e.g. "#FF5C8A".' }
+      // v0.33: native gradient fills — the editor has supported them
+      // since v0.3; the tool surface never exposed them, so "use
+      // gradients" briefs were impossible to satisfy.
+      const gFrom = hex(args, 'gradientFrom')
+      const gTo = hex(args, 'gradientTo')
+      if (args.gradientFrom !== undefined || args.gradientTo !== undefined) {
+        if (!gFrom || !gTo) {
+          return { ok: false, error: 'a gradient needs BOTH gradientFrom and gradientTo as #RRGGBB, e.g. {"gradientFrom":"#02C0CC","gradientTo":"#7630D7","gradientAngle":45}.' }
+        }
+      }
+      const gAngle = num(args, 'gradientAngle')
+      if (gAngle !== null && (gAngle < -360 || gAngle > 360)) {
+        return { ok: false, error: `gradientAngle must be −360–360 degrees; you sent ${gAngle}.` }
+      }
       const rotation = num(args, 'rotation')
       const cornerRadius = num(args, 'cornerRadius')
       return {
@@ -355,11 +387,14 @@ export const AGENT_TOOLS: AgentTool[] = [
             width: clamp(w, 4, ctx.width * 2),
             height: clamp(h, 4, ctx.height * 2),
             ...(fill ? { fill } : {}),
+            ...(gFrom && gTo
+              ? { gradient: { type: 'linear', from: gFrom, to: gTo, angle: gAngle !== null ? gAngle : 90 } }
+              : {}),
             ...(cornerRadius !== null ? { cornerRadius: clamp(cornerRadius, 0, 200) } : {}),
             ...(rotation !== null ? { rotation: clamp(rotation, -360, 360) } : {}),
           },
         ],
-        observation: `${shape} added at (${Math.round(x)},${Math.round(y)}) ${Math.round(w)}×${Math.round(h)}.`,
+        observation: `${shape} added at (${Math.round(x)},${Math.round(y)}) ${Math.round(w)}×${Math.round(h)}${gFrom && gTo ? ' with a gradient fill' : ''}.`,
       }
     },
   },
@@ -424,29 +459,54 @@ export const AGENT_TOOLS: AgentTool[] = [
     },
   },
   {
+    // v0.33 · stickers resolve SERVER-SIDE. The old tool took any
+    // short string as an "emoji" and left resolution to the client;
+    // unknown concepts were acked as success while nothing was
+    // created (the NEON 2027 poster claimed four stickers, two
+    // existed). The 160+ vector sticker library is pure data — the
+    // server resolves the query against it, rejects unknown concepts
+    // with real examples, and passes the resolved sticker + the
+    // model's own geometry through. Emoji glyphs still work.
     name: 'add_sticker',
-    description: 'Add an emoji sticker (e.g. "🚀", "✨"). Fast, no AI generation.',
+    description: 'Place a library sticker — 160+ vector stickers (rocket, star, sparkle, heart, balloon, fireworks, gift, cake, party, arrow, face…) or an emoji glyph (e.g. "🚀"). Resolved and placed exactly at x/y with the given size.',
     risk: 'write',
-    argsSpec: '{emoji: string, x?: number, y?: number, size?: 24-400}',
+    argsSpec: '{query: string, x?: number, y?: number, size?: 24-400}',
     sanitize: (args, ctx) => {
-      const emoji = str(args, 'emoji', 8).trim()
-      if (!emoji) return { ok: false, error: 'emoji is required, e.g. "🚀".' }
+      const raw = (str(args, 'query', 60).trim() || str(args, 'emoji', 60).trim()).slice(0, 60)
+      if (!raw) {
+        return { ok: false, error: 'query is required — a sticker concept (rocket, star, sparkle, heart, balloon, fireworks, gift, cake, party) or an emoji glyph like "🚀".' }
+      }
       const x = num(args, 'x')
       const y = num(args, 'y')
       const size = num(args, 'size')
       if (size !== null && (size < 24 || size > 400)) return { ok: false, error: `size must be 24–400; you sent ${size}.` }
+      const pos = {
+        ...(x !== null ? { x: clamp(x, -ctx.width, ctx.width) } : {}),
+        ...(y !== null ? { y: clamp(y, -ctx.height, ctx.height) } : {}),
+        ...(size !== null ? { size: clamp(size, 24, 400) } : {}),
+      }
+      // vector library first — richer art, still native editable
+      // sticker elements (svg + stickerId, pack-recolourable)
+      const packs = searchStickers(raw)
+      if (packs.length) {
+        const sticker = packs[0].stickers[0]
+        return {
+          ok: true,
+          actions: [{ type: 'addPackSticker', sticker: { id: sticker.id, name: sticker.name, svg: sticker.svg }, ...pos }],
+          observation: `Sticker "${sticker.name}" (${packs[0].pack.name} pack) added${size !== null ? ` at ${Math.round(clamp(size, 24, 400))}px` : ''}.`,
+        }
+      }
+      // emoji glyph fallback — any short string with no ASCII letters
+      if (!/[a-z0-9]/i.test(raw) && raw.length <= 4) {
+        return {
+          ok: true,
+          actions: [{ type: 'addSticker', emoji: raw, ...pos }],
+          observation: `Sticker ${raw} added.`,
+        }
+      }
       return {
-        ok: true,
-        actions: [
-          {
-            type: 'addSticker',
-            emoji,
-            ...(x !== null ? { x: clamp(x, -ctx.width, ctx.width) } : {}),
-            ...(y !== null ? { y: clamp(y, -ctx.height, ctx.height) } : {}),
-            ...(size !== null ? { size: clamp(size, 24, 400) } : {}),
-          },
-        ],
-        observation: `Sticker ${emoji} added.`,
+        ok: false,
+        error: `No sticker matches "${raw}". Vector library concepts include: rocket, star, sparkle, heart, balloon, fireworks, gift, cake, party, arrow, face, food, travel. Or send an emoji glyph directly (e.g. "🚀", "✨", "⭐").`,
       }
     },
   },
@@ -485,9 +545,9 @@ export const AGENT_TOOLS: AgentTool[] = [
   // ── edit elements ──────────────────────────────────────────
   {
     name: 'update_elements',
-    description: 'Patch properties of elements by id: geometry (x,y,width,height,rotation), style (fill,fontSize,bold,italic,underline,strike,uppercase,align,lineHeight,letterSpacing,curve,text), image (flipH,flipV,brightness,contrast,saturation), layer (locked,visible,opacity).',
+    description: 'Patch properties of elements by id: geometry (x,y,width,height,rotation), style (fill,fontSize,bold,italic,underline,strike,uppercase,align,lineHeight,letterSpacing,curve,text), image (flipH,flipV,brightness,contrast,saturation), layer (locked,visible,opacity), effects (gradientFrom+gradientTo+gradientAngle, textEffect, shadowColor/shadowBlur/shadowOffsetX/shadowOffsetY).',
     risk: 'write',
-    argsSpec: '{ids: string[], patch: {x?, y?, width?, height?, rotation?, text?, fill?, fontSize?, bold?, italic?, underline?, strike?, uppercase?, align?, lineHeight?, letterSpacing?, curve?, flipH?, flipV?, brightness?, contrast?, saturation?, locked?, visible?, opacity?}}',
+    argsSpec: '{ids: string[], patch: {x?, y?, width?, height?, rotation?, text?, fill?, fontSize?, bold?, italic?, underline?, strike?, uppercase?, align?, lineHeight?, letterSpacing?, curve?, flipH?, flipV?, brightness?, contrast?, saturation?, locked?, visible?, opacity?, gradientFrom?, gradientTo?, gradientAngle?, textEffect?, shadowColor?, shadowBlur?, shadowOffsetX?, shadowOffsetY?}}',
     sanitize: (args, ctx) => {
       const { ids, error } = idList(args, ctx)
       if (error) return { ok: false, error }
@@ -541,9 +601,55 @@ export const AGENT_TOOLS: AgentTool[] = [
         if (p[flag] !== undefined) patch[flag] = p[flag] === true
       }
       if (p.align !== undefined) patch.align = enumVal(p as Record<string, unknown>, 'align', ['left', 'center', 'right'] as const, 'center')
+      // v0.33 · the native effects surface — the editor has supported
+      // gradient fills (shapes + text), text effects (neon, glow, drop…)
+      // and per-element shadows since v0.3, but the tool never exposed
+      // them: briefs asking for "gradients, shadows, neon" were
+      // physically impossible for the agent to satisfy.
+      const gFrom = hex(p as Record<string, unknown>, 'gradientFrom')
+      const gTo = hex(p as Record<string, unknown>, 'gradientTo')
+      if (p.gradientFrom !== undefined || p.gradientTo !== undefined) {
+        if (!gFrom || !gTo) {
+          return {
+            ok: false,
+            error: `a gradient needs BOTH gradientFrom and gradientTo as #RRGGBB, e.g. {"gradientFrom":"#02C0CC","gradientTo":"#7630D7","gradientAngle":45}; you sent from=${JSON.stringify(p.gradientFrom)} to=${JSON.stringify(p.gradientTo)}.`,
+          }
+        }
+        const gAngle = num(p as Record<string, unknown>, 'gradientAngle')
+        if (gAngle !== null && (gAngle < -360 || gAngle > 360)) {
+          return { ok: false, error: `gradientAngle must be −360–360 degrees; you sent ${gAngle}.` }
+        }
+        patch.gradient = { type: 'linear', from: gFrom, to: gTo, angle: gAngle !== null ? gAngle : 90 }
+      }
+      if (p.textEffect !== undefined) {
+        const eff = enumVal(p as Record<string, unknown>, 'textEffect', ['none', 'shadow', 'lift', 'hollow', 'neon', 'echo', 'glow', 'outline', 'background', 'splice'] as const, '' as never)
+        if (!eff) {
+          return { ok: false, error: `textEffect must be one of: none, shadow, lift, hollow, neon, echo, glow, outline, background, splice; you sent ${JSON.stringify(p.textEffect)}.` }
+        }
+        patch.textEffect = eff
+      }
+      if (p.shadowColor !== undefined || p.shadowBlur !== undefined || p.shadowOffsetX !== undefined || p.shadowOffsetY !== undefined) {
+        const sc = hex(p as Record<string, unknown>, 'shadowColor')
+        if (p.shadowColor !== undefined && !sc) {
+          return { ok: false, error: `shadowColor must be #RRGGBB, e.g. "#000000"; you sent ${JSON.stringify(p.shadowColor)}.` }
+        }
+        const blur = num(p as Record<string, unknown>, 'shadowBlur')
+        if (blur !== null && (blur < 0 || blur > 120)) {
+          return { ok: false, error: `shadowBlur must be 0–120px; you sent ${blur}.` }
+        }
+        const ox = num(p as Record<string, unknown>, 'shadowOffsetX')
+        const oy = num(p as Record<string, unknown>, 'shadowOffsetY')
+        patch.shadow = {
+          enabled: true,
+          ...(sc ? { color: sc } : {}),
+          ...(blur !== null ? { blur: Math.round(blur) } : {}),
+          ...(ox !== null ? { offsetX: Math.round(clamp(ox, -200, 200)) } : {}),
+          ...(oy !== null ? { offsetY: Math.round(clamp(oy, -200, 200)) } : {}),
+        }
+      }
       if (Object.keys(patch).length === 0) {
         const sent = Object.keys(p).filter((k) => k !== 'ids')
-        const valid = ['x', 'y', 'width', 'height', 'rotation', 'text', 'fill', 'fontSize', 'bold', 'italic', 'underline', 'strike', 'uppercase', 'align', 'lineHeight', 'letterSpacing', 'curve', 'flipH', 'flipV', 'brightness', 'contrast', 'saturation', 'locked', 'visible', 'opacity']
+        const valid = ['x', 'y', 'width', 'height', 'rotation', 'text', 'fill', 'fontSize', 'bold', 'italic', 'underline', 'strike', 'uppercase', 'align', 'lineHeight', 'letterSpacing', 'curve', 'flipH', 'flipV', 'brightness', 'contrast', 'saturation', 'locked', 'visible', 'opacity', 'gradientFrom', 'gradientTo', 'gradientAngle', 'textEffect', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY']
         return {
           ok: false,
           error: `patch had no supported property. You sent: [${sent.join(', ')}]. Valid properties: [${valid.join(', ')}]. The text colour property is named fill.`,
@@ -846,29 +952,89 @@ export const AGENT_TOOLS: AgentTool[] = [
     },
   },
   {
+    // v0.33 · icons resolve SERVER-SIDE (fail-closed). The 562-icon
+    // offline pack is pure data; the client used to re-search it after
+    // the loop had already recorded success — an unknown concept
+    // ("robot" in the NEON 2027 run) was acked as applied while
+    // nothing was created. The server now resolves the query, rejects
+    // unknowns with real examples, and sends the path data + the
+    // model's own geometry so the icon lands EXACTLY where intended
+    // (the old path ignored x/y/size and default-centred every icon).
     name: 'add_icon',
-    description: 'Search the icon pack by keyword (arrow, check, star, heart, cart…) and place the best match as a stroke icon.',
+    description: 'Search the 562-icon stroke pack by keyword (rocket, sparkles, star, heart, laptop, wifi, circuit board, check…) and place it exactly at x/y with the given size.',
     risk: 'write',
-    argsSpec: '{query: string, stroke?: "#RRGGBB", size?: 24-600}',
-    sanitize: (args) => {
+    argsSpec: '{query: string, x?: number, y?: number, size?: 24-600, stroke?: "#RRGGBB"}',
+    sanitize: (args, ctx) => {
       const query = str(args, 'query', 60).trim()
-      if (query.length < 2) return { ok: false, error: 'query must name the icon concept, e.g. "arrow-right", "check".' }
+      if (query.length < 2) return { ok: false, error: 'query must name the icon concept, e.g. "rocket", "sparkles", "circuit board".' }
+      const icon = searchIcons(query, 1)[0]
+      if (!icon) {
+        const near = searchIcons(query.split(/\s+/)[0] ?? '', 4).map((i) => i.name.toLowerCase())
+        return {
+          ok: false,
+          error: `No icon matches "${query}". Available concepts include: ${(near.length ? near : ['rocket', 'star', 'sparkles', 'heart', 'wifi', 'zap']).join(', ')}. For scenes (robot helper, circuit board, AI chip, rocket launch, waves) use add_illustration.`,
+        }
+      }
+      const x = num(args, 'x')
+      const y = num(args, 'y')
+      const size = num(args, 'size')
       return {
         ok: true,
-        actions: [{ type: 'addIcon', query, ...(hex(args, 'stroke') ? { stroke: hex(args, 'stroke')! } : {}), ...(num(args, 'size') !== null ? { size: clamp(num(args, 'size')!, 24, 600) } : {}) }],
-        observation: `Icon search queued for "${query}".`,
+        actions: [
+          {
+            type: 'addIcon',
+            d: icon.d,
+            name: icon.name,
+            ...(hex(args, 'stroke') ? { stroke: hex(args, 'stroke')! } : {}),
+            ...(x !== null ? { x: clamp(x, -ctx.width, ctx.width) } : {}),
+            ...(y !== null ? { y: clamp(y, -ctx.height, ctx.height) } : {}),
+            ...(size !== null ? { size: clamp(size, 24, 600) } : {}),
+          },
+        ],
+        observation: `Icon "${icon.name}" added${x !== null ? ` at (${Math.round(clamp(x, -ctx.width, ctx.width))},${Math.round(clamp(y ?? 0, -ctx.height, ctx.height))})` : ''}${size !== null ? ` at ${Math.round(clamp(size, 24, 600))}px` : ''}.`,
       }
     },
   },
   {
+    // v0.33 · illustrations resolve SERVER-SIDE too (same fail-closed
+    // discipline; the packs are pure data) and honour the model's
+    // geometry — the old path ignored x/y/size entirely.
     name: 'add_illustration',
-    description: 'Place a decorative SVG illustration by keyword (abstract/nature/business/decoration scenes).',
+    description: 'Place a decorative SVG illustration exactly at x/y with the given size. Tech pack: robot helper, circuit board, AI chip, cloud sync, rocket launch… plus nature, people, business, abstract (waves, blobs), festive.',
     risk: 'write',
-    argsSpec: '{query: string}',
-    sanitize: (args) => {
+    argsSpec: '{query: string, x?: number, y?: number, size?: 60-800}',
+    sanitize: (args, ctx) => {
       const query = str(args, 'query', 60).trim()
-      if (query.length < 3) return { ok: false, error: 'query must describe the scene, e.g. "waves", "mountain scene".' }
-      return { ok: true, actions: [{ type: 'addIllustration', query }], observation: `Illustration search queued for "${query}".` }
+      if (query.length < 3) return { ok: false, error: 'query must describe the scene, e.g. "rocket launch", "circuit board", "waves".' }
+      const q = query.toLowerCase()
+      const hit =
+        ILLUSTRATIONS.find((i) => i.name.toLowerCase() === q) ??
+        ILLUSTRATIONS.find(
+          (i) => i.name.toLowerCase().includes(q) || i.tags.some((t) => t.includes(q) || q.includes(t)),
+        )
+      if (!hit) {
+        return {
+          ok: false,
+          error: `No illustration matches "${query}". Packs: tech (robot helper, circuit board, AI chip, cloud sync, rocket launch, smartphone app), nature, people, business, abstract (waves, blobs), festive. Name a concept or scene.`,
+        }
+      }
+      const x = num(args, 'x')
+      const y = num(args, 'y')
+      const size = num(args, 'size')
+      return {
+        ok: true,
+        actions: [
+          {
+            type: 'addIllustration',
+            svg: hit.svg,
+            name: hit.name,
+            ...(x !== null ? { x: clamp(x, -ctx.width, ctx.width) } : {}),
+            ...(y !== null ? { y: clamp(y, -ctx.height, ctx.height) } : {}),
+            ...(size !== null ? { size: clamp(size, 60, 800) } : {}),
+          },
+        ],
+        observation: `Illustration "${hit.name}" (${hit.pack} pack) added${size !== null ? ` at ${Math.round(clamp(size, 60, 800))}px` : ''}.`,
+      }
     },
   },
   {

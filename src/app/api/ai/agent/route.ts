@@ -228,22 +228,39 @@ async function __canvix_post(req: NextRequest) {
       }
       const callJson = (withJson: boolean) =>
         rawCreate(withJson ? { ...base, response_format: { type: 'json_object' } } : base)
-      try {
-        const completion = await callJson(jsonModeLive)
-        return String(completion.choices[0]?.message?.content ?? '')
-      } catch (e) {
-        const msg = String((e as Error | undefined)?.message ?? e)
-        if (
-          jsonModeLive &&
-          jsonModePref === 'auto' &&
-          /(?:\b(?:400|404|422)\b|response_format|json_object|unknown field|not supported|unsupported)/i.test(msg)
-        ) {
-          jsonModeLive = false // remember for the whole run
-          const completion = await callJson(false)
-          return String(completion.choices[0]?.message?.content ?? '')
+      // v0.33 · transient-provider retry. Upstream 429s and network
+      // blips killed live runs mid-build ("Applied work is kept —
+      // retry to continue") and the user received degraded, half-
+      // built posters. A bounded retry with backoff (×2: 1.5s, 3s)
+      // rides out bursts before a transient error surfaces.
+      const callWithRetry = async (): Promise<string> => {
+        for (let tries = 0; ; tries++) {
+          try {
+            const completion = await callJson(jsonModeLive)
+            return String(completion.choices[0]?.message?.content ?? '')
+          } catch (e) {
+            const msg = String((e as Error | undefined)?.message ?? e)
+            // json-mode fallback (unchanged v0.32 behaviour): a gateway
+            // that rejects response_format degrades once and the
+            // choice is remembered for the whole run
+            if (
+              jsonModeLive &&
+              jsonModePref === 'auto' &&
+              /(?:\b(?:400|404|422)\b|response_format|json_object|unknown field|not supported|unsupported)/i.test(msg)
+            ) {
+              jsonModeLive = false // remember for the whole run
+              continue
+            }
+            const transient =
+              /\b(?:429|500|502|503|504)\b|rate.?limit|too many requests|fetch failed|network|econnreset|etimedout|socket hang up|aborted/i.test(
+                msg,
+              )
+            if (!transient || tries >= 2) throw e
+            await new Promise((r) => setTimeout(r, 1500 * (tries + 1)))
+          }
         }
-        throw e
       }
+      return callWithRetry()
     }
 
     // ── 1. classify the mode (heuristic first, model when unsure) ──

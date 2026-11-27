@@ -2853,3 +2853,339 @@ describe('v0.32.8 · the second-strike recovery note (the "fix issues" strike-ou
     expect(events[events.length - 1]?.type).toBe('done')
   })
 })
+
+// ═════════════════════════════════════════════════════════════
+// v0.33 · the design-quality architecture — the NEON 2027 review
+// ("a coordinate-placement script that passes geometry tests")
+// traced to deterministic root causes:
+//   · asset tools acked ok while creating NOTHING (concepts
+//     resolved client-side, no-op strings acked as success);
+//   · icons that DID resolve landed at default centres — the
+//     model's geometry was ignored;
+//   · the native gradients / shadows / neon-glow text effects were
+//     never exposed to the agent, so "use gradients, shadows"
+//     briefs were physically impossible to satisfy;
+//   · the feature contract knew only 3 composite kinds —
+//     illustration/stickers/CTA/gradients extracted NOTHING, so
+//     "brief validated" was true-and-empty;
+//   · the audit never looked at non-text elements (present ≠
+//     visible).
+// ═════════════════════════════════════════════════════════════
+
+describe('v0.33 · assets resolve server-side — fail-closed, placed exactly', () => {
+  const call33 = (name: string, args: Record<string, unknown>) =>
+    AGENT_TOOL_MAP.get(name)!.sanitize(args, ctx)
+
+  it('add_sticker resolves the 160+ vector library and passes the model geometry', () => {
+    const r = call33('add_sticker', { query: 'sparkle', x: 100, y: 200, size: 160 })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    const action = r.actions[0] as {
+      type: string
+      sticker?: { id: string; name: string; svg: string }
+      x?: number
+      y?: number
+      size?: number
+    }
+    expect(action.type).toBe('addPackSticker')
+    expect(action.sticker?.svg?.startsWith('<svg')).toBe(true)
+    expect(action.x).toBe(100)
+    expect(action.y).toBe(200)
+    expect(action.size).toBe(160)
+  })
+
+  it('add_sticker still accepts emoji glyphs (back-compat: the emoji arg key)', () => {
+    const r = call33('add_sticker', { emoji: '🚀', x: 10, y: 20 })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect((r.actions[0] as { type: string }).type).toBe('addSticker')
+    expect((r.actions[0] as { emoji?: string }).emoji).toBe('🚀')
+  })
+
+  it('the NEON incident shape: an unknown sticker CONCEPT is rejected with resolvable examples', () => {
+    const r = call33('add_sticker', { query: 'laser dragon hologram' })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.error).toContain('No sticker matches')
+    expect(r.error).toContain('star')
+  })
+
+  it('add_icon resolves server-side and carries x/y/size — no more default-centred icons', () => {
+    const r = call33('add_icon', { query: 'rocket', x: 40, y: 60, size: 220, stroke: '#02C0CC' })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    const action = r.actions[0] as {
+      type: string
+      d?: string
+      name?: string
+      x?: number
+      y?: number
+      size?: number
+      stroke?: string
+    }
+    expect(action.type).toBe('addIcon')
+    expect(action.d?.length ?? 0).toBeGreaterThan(20)
+    expect(action.name).toBeTruthy()
+    expect(action.x).toBe(40)
+    expect(action.y).toBe(60)
+    expect(action.size).toBe(220)
+    expect(action.stroke).toBe('#02c0cc')
+  })
+
+  it('the NEON incident: an icon concept the pack lacks is rejected with real alternatives', () => {
+    const r = call33('add_icon', { query: 'robot' })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.error).toContain('No icon matches')
+    expect(r.error).toContain('add_illustration')
+  })
+
+  it('add_illustration resolves and carries geometry', () => {
+    const r = call33('add_illustration', { query: 'rocket launch', x: 300, y: 400, size: 500 })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    const action = r.actions[0] as {
+      type: string
+      svg?: string
+      name?: string
+      x?: number
+      y?: number
+      size?: number
+    }
+    expect(action.type).toBe('addIllustration')
+    expect(action.svg?.startsWith('<svg')).toBe(true)
+    expect(action.x).toBe(300)
+    expect(action.size).toBe(500)
+  })
+
+  it('an unknown illustration is rejected with the pack themes', () => {
+    const r = call33('add_illustration', { query: 'cyberpunk skyline neon city' })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.error).toContain('No illustration matches')
+    expect(r.error).toContain('tech')
+  })
+
+  it('the resolvers never throw on adversarial args (registry discipline holds)', () => {
+    const cases: [string, Record<string, unknown>][] = [
+      ['add_sticker', { query: { nested: true } }],
+      ['add_sticker', { query: '' }],
+      ['add_sticker', { query: 42 }],
+      ['add_icon', { query: null }],
+      ['add_illustration', { query: '   ' }],
+    ]
+    for (const [name, args] of cases) {
+      let r: SanitizeResult | null = null
+      expect(() => {
+        r = call33(name, args)
+      }).not.toThrow()
+      expect(r).toBeTruthy()
+    }
+  })
+})
+
+describe('v0.33 · the native effects surface — gradients, text effects, shadows', () => {
+  const call33 = (name: string, args: Record<string, unknown>) =>
+    AGENT_TOOL_MAP.get(name)!.sanitize(args, ctx)
+
+  it('add_shape takes a gradient; a half-given gradient is an error', () => {
+    const ok = call33('add_shape', {
+      shape: 'rect', x: 0, y: 0, width: 400, height: 200,
+      gradientFrom: '#02C0CC', gradientTo: '#7630D7', gradientAngle: 45,
+    })
+    expect(ok.ok).toBe(true)
+    if (ok.ok) {
+      const action = ok.actions[0] as { gradient?: { type: string; from: string; to: string; angle: number } }
+      expect(action.gradient).toEqual({ type: 'linear', from: '#02c0cc', to: '#7630d7', angle: 45 })
+    }
+    const bad = call33('add_shape', { shape: 'rect', x: 0, y: 0, width: 10, height: 10, gradientFrom: '#02C0CC' })
+    expect(bad.ok).toBe(false)
+  })
+
+  it('add_text takes a native text effect (neon/glow/…)', () => {
+    const r = call33('add_text', { text: 'NEON 2027', fontSize: 96, color: '#02C0CC', effect: 'neon' })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect((r.actions[0] as { effect?: string }).effect).toBe('neon')
+    const bad = call33('add_text', { text: 'X', effect: 'sparkly' })
+    expect(bad.ok).toBe(false)
+  })
+
+  it('update_elements patches gradient / textEffect / shadow — validated, never silent', () => {
+    const g = call33('update_elements', { ids: ['txt-1'], patch: { gradientFrom: '#02C0CC', gradientTo: '#7630D7', gradientAngle: 90 } })
+    expect(g.ok).toBe(true)
+    if (g.ok) {
+      const patch = (g.actions[0] as { patch?: Record<string, unknown> }).patch
+      expect(patch?.gradient).toEqual({ type: 'linear', from: '#02c0cc', to: '#7630d7', angle: 90 })
+    }
+    const eff = call33('update_elements', { ids: ['txt-1'], patch: { textEffect: 'glow' } })
+    expect(eff.ok).toBe(true)
+    if (eff.ok) {
+      expect((eff.actions[0] as { patch?: Record<string, unknown> }).patch?.textEffect).toBe('glow')
+    }
+    const sh = call33('update_elements', { ids: ['txt-1'], patch: { shadowColor: '#000000', shadowBlur: 24, shadowOffsetY: 8 } })
+    expect(sh.ok).toBe(true)
+    if (sh.ok) {
+      const shadow = (sh.actions[0] as { patch?: { shadow?: Record<string, unknown> } }).patch?.shadow
+      expect(shadow?.enabled).toBe(true)
+      expect(shadow?.blur).toBe(24)
+      expect(shadow?.offsetY).toBe(8)
+    }
+    expect(call33('update_elements', { ids: ['txt-1'], patch: { gradientFrom: '#02C0CC' } }).ok).toBe(false)
+    expect(call33('update_elements', { ids: ['txt-1'], patch: { textEffect: 'sparkly' } }).ok).toBe(false)
+  })
+})
+
+describe('v0.33 · the visual-feature contract — brief asks become checkable requirements', () => {
+  it('the NEON 2027 brief extracts illustration, stickers, CTA, gradients, shadows and text effects', async () => {
+    const { extractBrief } = await import('./brief')
+    const brief = extractBrief(
+      'Create a professional promotional poster for a futuristic technology festival called NEON 2027. Use editable text, gradients, shapes, shadows and creative typography. Include a central technology illustration, floating stickers, event information and a prominent call to action.',
+      1240,
+      1754,
+    )
+    const kinds = (brief.requiredFeatures ?? []).map((f) => f.kind)
+    expect(kinds).toContain('illustration')
+    expect(kinds).toContain('stickers')
+    expect(kinds).toContain('cta-button')
+    expect(kinds).toContain('gradients')
+    expect(kinds).toContain('shadows')
+    expect(kinds).toContain('text-effects')
+  })
+
+  it('the CTA check: bare text FAILS, a filled button shape + actionable text PASSES', async () => {
+    const { extractBrief, validateBrief } = await import('./brief')
+    const brief = extractBrief('A poster with a prominent call to action')
+    const bare = validateBrief(brief, {
+      texts: ['GET TICKETS NOW'],
+      colors: [],
+      width: 1240,
+      height: 1754,
+      elements: [{ type: 'text', text: 'GET TICKETS NOW', x: 400, y: 900, width: 400, height: 60 }],
+    })
+    expect(bare.satisfied).toBe(false)
+    expect(bare.unmet.some((u) => u.includes('call-to-action'))).toBe(true)
+    const button = validateBrief(brief, {
+      texts: ['GET TICKETS NOW'],
+      colors: [],
+      width: 1240,
+      height: 1754,
+      elements: [
+        { type: 'rect', x: 320, y: 880, width: 600, height: 120, fill: '#02C0CC' },
+        { type: 'text', text: 'GET TICKETS NOW', x: 400, y: 900, width: 400, height: 60 },
+      ],
+    })
+    expect(button.checked.features?.some((f) => f.found)).toBe(true)
+    expect(button.satisfied).toBe(true)
+  })
+
+  it('the illustration check: small icons do NOT qualify, a ≥10% focal element does', async () => {
+    const { extractBrief, validateBrief } = await import('./brief')
+    const brief = extractBrief('a poster with a central technology illustration')
+    const small = validateBrief(brief, {
+      texts: [], colors: [], width: 1000, height: 1000,
+      elements: [{ type: 'image', x: 480, y: 480, width: 120, height: 120 }], // 1.4%
+    })
+    expect(small.satisfied).toBe(false)
+    const focal = validateBrief(brief, {
+      texts: [], colors: [], width: 1000, height: 1000,
+      elements: [{ type: 'image', x: 300, y: 300, width: 400, height: 400 }], // 16%
+    })
+    expect(focal.satisfied).toBe(true)
+  })
+
+  it('gradients/shadows/features validate against the real effects fields', async () => {
+    const { extractBrief, validateBrief } = await import('./brief')
+    const brief = extractBrief('use gradients and shadows and floating stickers')
+    const withEffects = validateBrief(brief, {
+      texts: [], colors: [], width: 1000, height: 1000,
+      elements: [
+        { type: 'rect', x: 0, y: 0, width: 200, height: 200, hasGradient: true, hasShadow: true },
+        { type: 'sticker', x: 0, y: 300, width: 100, height: 100 },
+        { type: 'sticker', x: 200, y: 300, width: 100, height: 100 },
+      ],
+    })
+    expect(withEffects.satisfied).toBe(true)
+  })
+})
+
+describe('v0.33 · the audit sees non-text elements — present is not visible', () => {
+  it('a sticker fully covered by a higher opaque shape is reported', async () => {
+    const { auditDesign } = await import('./audit')
+    const issues = auditDesign({
+      name: 't', width: 1080, height: 1080, pageCount: 1, currentPageIndex: 0,
+      background: '#090B1A',
+      elements: [
+        { id: 'st-1', type: 'sticker', x: 100, y: 100, width: 160, height: 160, fill: '#FFFFFF' },
+        { id: 'cover-1', type: 'rect', x: 0, y: 0, width: 1080, height: 1080, fill: '#000000' },
+      ],
+      colorsInUse: [], otherPages: [],
+    } as never)
+    expect(issues.some((i) => i.includes('sticker#st-1') && i.includes('COVERED'))).toBe(true)
+  })
+
+  it('an off-canvas sticker is reported', async () => {
+    const { auditDesign } = await import('./audit')
+    const issues = auditDesign({
+      name: 't', width: 1080, height: 1080, pageCount: 1, currentPageIndex: 0,
+      background: '#090B1A',
+      elements: [{ id: 'st-2', type: 'sticker', x: 1200, y: 100, width: 160, height: 160, fill: '#FFFFFF' }],
+      colorsInUse: [], otherPages: [],
+    } as never)
+    expect(issues.some((i) => i.includes('OFF the canvas'))).toBe(true)
+  })
+})
+
+describe('v0.33 · the full-circle honesty: a run cannot claim stickers it never built', () => {
+  it('done is bounced with the unmet feature, then the resolved add_sticker satisfies it', async () => {
+    const events: AgentEvent[] = []
+    let appliedSticker = 0
+    const { chat } = scriptedChat([
+      turn('set_background', { kind: 'solid', from: '#0A0A1A' }),
+      turn('plan_layout', { background: '#0A0A1A', sections: [{ name: 'hero', y: 65, height: 300, contains: 'headline + focal' }, { name: 'cta', y: 805, height: 150, contains: 'button' }] }),
+      turn('add_text', { text: 'NEON 2027', fontSize: 96, color: '#02C0CC' }),
+      done('Built with four floating stickers'), // bounced: no stickers on the canvas
+      turn('add_sticker', { query: 'sparkle', x: 120, y: 500, size: 140 }), // resolves → applied
+      done('Built, stickers added'), // accepted
+    ])
+    const result = await runAgentLoop({
+      chat,
+      design: {
+        name: 'Empty poster', width: 1080, height: 1080, pageCount: 1,
+        currentPageIndex: 0, elements: [], colorsInUse: [], otherPages: [],
+      },
+      mode: 'create',
+      request: 'Create a poster for NEON 2027 with floating stickers',
+      // the route extracts the brief from the request; the loop consumes
+      // it via deps — the stickers feature is the contract here
+      brief: {
+        requiredTexts: [],
+        requiredColors: [],
+        requiredFeatures: [
+          { tier: 'mandatory', kind: 'stickers', count: 2, label: '2 floating stickers (add_sticker — the 160+ vector library or emoji glyphs)' },
+        ],
+        restrictions: [],
+        notes: [],
+        source: 'user',
+      },
+      emit: (e) => events.push(e),
+      // 1 = set_background, 2 = add_text, 3 = add_sticker (the resolved
+      // vector sticker that satisfies the feature contract)
+      awaitApply: async () => {
+        appliedSticker += 1
+        return { ok: true }
+      },
+      validateBriefOnClient: async () =>
+        appliedSticker >= 3
+          ? { satisfied: true, unmet: [] }
+          : {
+              satisfied: false,
+              unmet: [
+                'Required element missing: 2 floating stickers (add_sticker — the 160+ vector library or emoji glyphs) — build it from NATIVE elements (rect panels, semi-transparent fills, borders, text).',
+              ],
+            },
+    })
+    expect(appliedSticker).toBe(3)
+    expect(result.toolCalls).toBe(3)
+    expect(String(result.verification)).toContain('Brief contract validated')
+  })
+})

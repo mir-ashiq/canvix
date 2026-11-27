@@ -59,8 +59,9 @@ export const DESIGN_SKILLS: DesignSkill[] = [
       planning: [
         'Read the Design Brief Contract; list every mandatory text and color before placing anything.',
         'Pick the composition archetype: centered hero (classic, confident), asymmetric split (modern, editorial), or full-bleed image with plate (photographic).',
-        'Place in order: background → headline block → subhead → CTA → supporting details (date/place/price) → one decorative element max.',
-        'For the CTA use the accent color; make it a filled shape or pill, not naked text.',
+        'Place in order: background (set_background + 2-3 large layered rgba shapes or a gradient band via add_shape gradientFrom/gradientTo) → FOCAL ELEMENT (a large add_illustration / add_stock_photo in the hero band, ≥10% of the page) → headline block → subhead → CTA → supporting details → placed accents (add_sticker / add_icon with x/y/size, integrated with the composition).',
+        'For the CTA use the accent color; build it as a composite: a filled rounded rect (add_shape cornerRadius 40-80, solid or gradient) with the short actionable text centered on top — never naked text.',
+        'Stickers: add_sticker resolves the 160+ vector library (rocket, star, sparkle, heart, balloon, fireworks, gift, trophy, party…) — query a CONCEPT, give x/y/size so each accent is placed, not dropped.',
         'End with fix_overlaps or get_page_state + manual geometry check; then validate_brief.',
       ],
       validation: [
@@ -116,7 +117,7 @@ export const DESIGN_SKILLS: DesignSkill[] = [
         'Build on ONE hue relationship: monochrome (shades of one hue — safest), analogous (neighbors), or complementary (opposites, maximum pop). Triads only for playful brands.',
         'Text contrast ≥ 4.5:1 (body) / ≥ 3:1 (≥ 24px bold or 18.66px+ bold = "large text") against ITS ACTUAL BACKGROUND — a gradient background is checked at its lightest point under the text.',
         'Never place mid-gray text on white or dark-gray on navy; when the palette forces it, darken/lighten the TEXT (keep brand colors on shapes, adjust the text shade).',
-        'One gradient per design: linear, ≤ 25° from a cardinal direction, hues within 60° of each other. Gradients are backgrounds or hero fills, not body text fills.',
+        'One gradient per design: linear, ≤ 25° from a cardinal direction, hues within 60° of each other. Gradients are backgrounds or hero fills, not body text fills. Build them natively: add_shape {gradientFrom, gradientTo, gradientAngle} or update_elements {gradientFrom, gradientTo} on an existing shape/text.',
         'Dark-mode palettes: saturate less, lighten text in steps (gray-100/300/500), never pure #000 or #FFF for large fields — use #090B1A-navy / #F4F5F7-off-white.',
         'The brand kit OUTRANKS your taste but never the brief: brief hexes are verbatim; brand colors fill the unassigned roles.',
       ],
@@ -279,7 +280,8 @@ export const DESIGN_SKILLS: DesignSkill[] = [
     version: '1.0.0',
     playbook: {
       principles: [
-        'Concrete subject → add_stock_photo (real, licensed, credited). Abstract/stylized or exact-brand art → add_image (generation). Icon-language → add_icon. Decorative scenes → add_illustration.',
+        'Concrete subject → add_stock_photo (real, licensed, credited). Abstract/stylized or exact-brand art → add_image (generation). Icon-language → add_icon (562 stroke icons, resolved + placed at x/y/size). Decorative scenes → add_illustration (tech: robot helper, circuit board, AI chip, cloud sync, rocket launch; nature; abstract; festive). Fun accents → add_sticker (160+ vector stickers).',
+        'Every asset call carries its OWN geometry (x/y/size): the composition decides where art lands — an asset placed at a default centre is a disconnected graphic, not a design.',
         'The photo is a layout region: allocate its bounding box FIRST, then choose orientation (landscape/portrait/square) to match the region.',
         'Focal awareness: keep the subject on the rule-of-thirds intersection; text goes on the calm third (sky, wall, negative space) — else add a scrim.',
         'One hero image per page; more images only as a deliberate grid (3-up gallery) with consistent gaps.',

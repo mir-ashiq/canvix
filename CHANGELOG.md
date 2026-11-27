@@ -3,6 +3,74 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+### feat(v0.33.0): the design-quality architecture — server-resolved assets, the visual-feature contract, asset-visibility audit, the native effects surface
+
+One brief, one review ("a program that places elements at
+coordinates that passes geometry tests"), five deterministic root
+causes, all fixed at the architecture level — no poster-specific
+hardcoding:
+
+- **Assets resolve SERVER-SIDE (fail-closed).** add_icon,
+  add_illustration and add_sticker passed raw queries to the client
+  and hoped; unknown concepts were acked {ok:true} while NOTHING
+  was created (the NEON 2027 poster claimed four stickers — two
+  never existed: there is no "robot" in the 562-icon pack). The
+  offline packs are pure data: the server resolves queries
+  (add_sticker now reaches the 160+ VECTOR sticker library,
+  add_icon the 562 icons, add_illustration the 48 illustrations),
+  REJECTS unknowns with real resolvable examples, and passes the
+  resolved asset + the model's OWN geometry — icons/illustrations/
+  stickers land exactly where the model placed them (the old path
+  default-centred every icon and ignored x/y/size). The client
+  additionally acks no-op result strings as failures (a no-op is
+  not success), exhaustively pattern-matched so "no overlaps —
+  layout is clean" still acks ok.
+- **The visual-feature contract.** The brief contract knew three
+  composite kinds; the NEON brief's asks (central illustration,
+  floating stickers, call to action, gradients, shadows) extracted
+  NOTHING — "brief validated" was true-and-empty. Six new
+  checkable feature kinds — illustration (a ≥10% focal element;
+  small icons never qualify), stickers (with counts), cta-button
+  (a filled shape + short actionable text; bare text never
+  passes), gradients, shadows, text-effects — are extracted as
+  MANDATORY requirements and validated against real canvas state,
+  including the new gradient/textEffect/shadow context fields.
+- **The audit sees non-text elements.** Present ≠ visible now holds
+  for art too: stickers/icons/illustrations/photos entirely
+  off-canvas, sliver-sized, or fully covered by a higher opaque
+  element are reported as defects.
+- **The native effects surface — exposed (and actually applied).**
+  The editor has supported gradient fills (shapes + text),
+  per-element shadows and neon/glow/drop text effects since v0.3;
+  the agent's tool surface never exposed them, so "use gradients,
+  shadows, creative typography" briefs were physically impossible
+  to satisfy. add_shape takes gradientFrom/gradientTo/
+  gradientAngle, add_text takes effect ("neon", "glow"…),
+  update_elements patches gradient/textEffect/shadow — and now
+  actually APPLIES rotation, opacity, italic, underline, strike,
+  uppercase, align, curve, flipH/V, brightness, contrast,
+  saturation, locked, visible (previously validated server-side,
+  then silently dropped by the client whitelist).
+- **Composition intelligence in the plan.** The create/improve
+  prompt REQUIRES: one dominant focal element (≥10% of the page —
+  never a text-only page), layered background treatment
+  (set_background + low-opacity shapes or a gradient band), a
+  composite CTA button (filled rounded rect + text, never bare
+  text), placed accents (x/y/size on every sticker/icon), and
+  theme effects on futuristic/neon briefs. The skills playbooks
+  teach the same with the concrete tool calls.
+- **Transient-provider retry.** Upstream 429s and network blips
+  killed live runs mid-build and shipped degraded, half-built
+  posters; the route's chat call retries transient errors ×2 with
+  backoff before surfacing them.
+
+Harness: +18 regression tests (server-side resolution, geometry
+passthrough, unknown-concept rejections, the effects surface, the
+feature contract including the bare-CTA failure and the ≥10% focal
+threshold, the asset-visibility audit, and the full-circle
+honesty: done with unmet stickers → the resolved add_sticker →
+accepted only then) — 1,777/1,777 expected.
+
 ### Fixed — v0.32.8: the NEON 2027 agent runs — scaled plans, the emitted capture, the `type#id` alias
 
 One brief, three runs, three deterministic defects:

@@ -13,9 +13,13 @@ import {
   createStickerElement,
   createTableElement,
   createTextElement,
+  DEFAULT_SHADOW,
+  TEXT_EFFECTS,
   type AnyElement,
   type Background,
+  type GradientFill,
   type PluginElement,
+  type TextEffect,
   type TextElement,
 } from '@/lib/types'
 import { checkCloneSafe } from '@/lib/plugins/data-caps'
@@ -67,6 +71,20 @@ export interface DesignAction {
 
 const HEX = /^#[0-9a-fA-F]{6}$/
 
+/** v0.33 (agent): defensively normalize a wire gradient into a
+ *  GradientFill. The server already validated it; the client still
+ *  never trusts it raw (AI output is NEVER trusted). */
+function normalizeGradient(g: unknown): GradientFill | null {
+  if (!g || typeof g !== 'object') return null
+  const o = g as Record<string, unknown>
+  const from = typeof o.from === 'string' && HEX.test(o.from) ? o.from : null
+  const to = typeof o.to === 'string' && HEX.test(o.to) ? o.to : null
+  if (!from || !to) return null
+  const type = o.type === 'radial' ? 'radial' : 'linear'
+  const angle = Number.isFinite(Number(o.angle)) ? Math.min(360, Math.max(-360, Number(o.angle))) : 90
+  return { type, from, to, angle }
+}
+
 /** Flatten elements (groups included) for id-based lookups. */
 function flatElements(els: AnyElement[], out: AnyElement[] = []): AnyElement[] {
   for (const el of els) {
@@ -114,6 +132,10 @@ export async function applyDesignAction(action: DesignAction, caller?: ActionCal
       el.align = (action.align as 'left' | 'center' | 'right') ?? 'center'
       if (typeof action.font === 'string' && action.font) el.fontFamily = action.font
       if (typeof action.color === 'string' && HEX.test(action.color)) el.fill = action.color
+      // v0.33 (agent): native text effects — the editor has had them
+      // since v0.3; the agent's add_text now exposes them.
+      const effect = String(action.effect ?? '')
+      if (effect && TEXT_EFFECTS.some((t) => t.id === effect)) el.effect = effect as TextEffect
       useEditorStore.getState().addElement(el)
       return 'Text added — fully editable'
     }
@@ -136,6 +158,9 @@ export async function applyDesignAction(action: DesignAction, caller?: ActionCal
         ...(Number.isFinite(Number(action.cornerRadius)) ? { cornerRadius: Math.round(Number(action.cornerRadius)) } : {}),
         ...(Number.isFinite(Number(action.rotation)) ? { rotation: Number(action.rotation) } : {}),
       })
+      // v0.33 (agent): native gradient fill (add_shape gradientFrom/To).
+      const gradient = normalizeGradient(action.gradient)
+      if (gradient) el.fillGradient = gradient
       useEditorStore.getState().addElement(el)
       return `${shape} added`
     }
@@ -155,6 +180,34 @@ export async function applyDesignAction(action: DesignAction, caller?: ActionCal
       })
       useEditorStore.getState().addElement(el)
       return `Sticker ${emoji} added`
+    }
+
+    // v0.33 (agent): addPackSticker — a server-resolved vector library
+    // sticker placed at the model's geometry. Native sticker element
+    // (svg + stickerId + alt), pack-recolourable like any library
+    // sticker the Stickers app inserts.
+    case 'addPackSticker': {
+      const sticker = action.sticker as { id?: string; name?: string; svg?: string } | undefined
+      if (!sticker || typeof sticker.svg !== 'string' || !sticker.svg.trim().startsWith('<svg')) {
+        return 'Sticker missing its art'
+      }
+      const size = Math.min(400, Math.max(24, Number(action.size) || 200))
+      const x = Number.isFinite(Number(action.x)) ? Number(action.x) : width / 2 - size / 2
+      const y = Number.isFinite(Number(action.y)) ? Number(action.y) : height / 2 - size / 2
+      const name = String(sticker.name ?? 'sticker')
+      const el = createStickerElement(name, {
+        x: Math.round(x),
+        y: Math.round(y),
+        width: size,
+        height: size,
+        fontSize: Math.round(size * 0.75),
+        svg: sticker.svg,
+        stickerId: String(sticker.id ?? ''),
+      })
+      el.name = name
+      el.alt = name
+      useEditorStore.getState().addElement(el)
+      return `Sticker "${name}" added`
     }
 
     // v0.27 (agent): addTable — header + rows on a clamped grid.
@@ -268,6 +321,38 @@ export async function applyDesignAction(action: DesignAction, caller?: ActionCal
       if (Number.isFinite(Number(raw.height))) patch.height = Math.max(8, Number(raw.height))
       if (Number.isFinite(Number(raw.lineHeight))) patch.lineHeight = Math.min(3, Math.max(0.8, Number(raw.lineHeight)))
       if (Number.isFinite(Number(raw.letterSpacing))) patch.letterSpacing = Number(raw.letterSpacing)
+      // v0.33: the server-validated surface the client used to DROP —
+      // rotation/opacity/align/curve/brightness… were advertised by the
+      // tool, validated server-side, then silently ignored here (the
+      // same "acked but not applied" class as the missing stickers).
+      // Everything the agent is promised now actually applies.
+      if (Number.isFinite(Number(raw.rotation))) patch.rotation = Number(raw.rotation)
+      if (Number.isFinite(Number(raw.opacity))) patch.opacity = Math.min(1, Math.max(0, Number(raw.opacity)))
+      if (raw.align === 'left' || raw.align === 'center' || raw.align === 'right') patch.align = raw.align
+      if (Number.isFinite(Number(raw.curve))) patch.curve = Math.min(180, Math.max(-180, Number(raw.curve)))
+      for (const flag of ['italic', 'underline', 'strike', 'uppercase', 'flipH', 'flipV', 'locked', 'visible'] as const) {
+        if (typeof raw[flag] === 'boolean') patch[flag] = raw[flag] === true
+      }
+      for (const adj of ['brightness', 'contrast', 'saturation'] as const) {
+        if (Number.isFinite(Number(raw[adj]))) patch[adj] = Math.min(100, Math.max(-100, Number(raw[adj])))
+      }
+      // v0.33: the native effects surface — gradient fills, text
+      // effects (neon/glow/drop…), per-element shadows.
+      const gradient = normalizeGradient(raw.gradient)
+      if (gradient) patch.fillGradient = gradient
+      const eff = String(raw.textEffect ?? '')
+      if (eff && TEXT_EFFECTS.some((t) => t.id === eff)) patch.effect = eff
+      if (raw.shadow && typeof raw.shadow === 'object') {
+        const s = raw.shadow as Record<string, unknown>
+        patch.shadow = {
+          ...DEFAULT_SHADOW,
+          ...(typeof s.color === 'string' && HEX.test(s.color) ? { color: s.color } : {}),
+          ...(Number.isFinite(Number(s.blur)) ? { blur: Math.min(120, Math.max(0, Number(s.blur))) } : {}),
+          ...(Number.isFinite(Number(s.offsetX)) ? { offsetX: Number(s.offsetX) } : {}),
+          ...(Number.isFinite(Number(s.offsetY)) ? { offsetY: Number(s.offsetY) } : {}),
+          enabled: true,
+        }
+      }
       if (!Object.keys(patch).length) return 'Nothing to update'
       useEditorStore.getState().updateElements(ids, patch)
       return `Updated ${ids.length} element${ids.length > 1 ? 's' : ''}`
@@ -565,6 +650,27 @@ export async function applyDesignAction(action: DesignAction, caller?: ActionCal
     }
 
     case 'addIcon': {
+      // v0.33: the server resolves the icon pack (fail-closed) and
+      // sends the path data + the model's own geometry — the icon is
+      // placed EXACTLY where intended. The old path default-centred
+      // every icon and ignored x/y/size entirely (the "disconnected,
+      // randomly positioned graphics" complaint). The legacy query
+      // path stays for older in-flight actions.
+      if (typeof action.d === 'string' && action.d.trim().length > 4) {
+        const size = Math.min(600, Math.max(24, Number(action.size) || 240))
+        const el = createShapeElement('path', {
+          width: size,
+          height: size,
+          pathData: action.d,
+          fill: 'transparent',
+          stroke: typeof action.stroke === 'string' && HEX.test(action.stroke) ? action.stroke : '#1F2226',
+          strokeWidth: 8.3,
+          ...(Number.isFinite(Number(action.x)) ? { x: Math.round(Number(action.x)) } : {}),
+          ...(Number.isFinite(Number(action.y)) ? { y: Math.round(Number(action.y)) } : {}),
+        })
+        useEditorStore.getState().addElement(el)
+        return `Icon "${String(action.name ?? 'icon')}" added`
+      }
       // server-side search of the same offline pack the Icons app uses
       const { searchIcons } = await import('@/lib/assets/icon-pack')
       const query = String(action.query ?? '').trim().slice(0, 60)
@@ -579,13 +685,26 @@ export async function applyDesignAction(action: DesignAction, caller?: ActionCal
     }
 
     case 'addIllustration': {
+      // v0.33: the server resolves the illustration pack and sends
+      // the SVG + geometry — placed exactly. Legacy path for older
+      // in-flight actions.
+      if (typeof action.svg === 'string' && action.svg.trim().startsWith('<svg')) {
+        const size = Math.min(800, Math.max(60, Number(action.size) || 420))
+        const url = `data:image/svg+xml;base64,${typeof btoa === 'function' ? btoa(unescape(encodeURIComponent(action.svg))) : Buffer.from(action.svg, 'utf8').toString('base64')}`
+        const el = createImageElement(url, size, size, {
+          ...(Number.isFinite(Number(action.x)) ? { x: Math.round(Number(action.x)) } : {}),
+          ...(Number.isFinite(Number(action.y)) ? { y: Math.round(Number(action.y)) } : {}),
+        })
+        useEditorStore.getState().addElement(el)
+        return `Illustration "${String(action.name ?? 'illustration')}" added`
+      }
       const { ILLUSTRATIONS } = await import('@/lib/assets/illustrations')
       const query = String(action.query ?? '').trim().toLowerCase().slice(0, 60)
       if (!query) return 'No illustration query given'
       const hit =
         ILLUSTRATIONS.find((i) => i.name.toLowerCase() === query) ??
         ILLUSTRATIONS.find((i) => i.name.toLowerCase().includes(query) || i.tags.some((t) => t.includes(query)))
-      if (!hit) return `No illustration matches "${query}" — the packs cover abstract/nature/business/decoration scenes`
+      if (!hit) return `No illustration matches "${query}" — the packs cover abstract/nature/business/tech scenes`
       const { addIllustration } = await import('@/components/editor/add-element')
       addIllustration(hit.svg)
       return `Illustration "${hit.name}" added`
@@ -1087,6 +1206,7 @@ export function describeAction(action: DesignAction): string {
     case 'addText': return `Add text: “${String(action.text ?? '').slice(0, 40)}${String(action.text ?? '').length > 40 ? '…' : ''}”`
     case 'addShape': return `Add ${String(action.shape ?? 'shape')}`
     case 'addSticker': return `Add sticker ${String(action.emoji ?? '')}`
+    case 'addPackSticker': return `Add sticker ${String((action.sticker as { name?: string } | undefined)?.name ?? '')}`
     case 'addTable': return `Add table (${(action.header as string[] | undefined)?.length ?? 0} cols)`
     case 'addImage': return `Add image (${String(action.src ?? '').startsWith('data:') ? 'embedded' : 'media library'})`
     case 'addPluginElement': return `Add ${String(action.kind ?? 'plugin')} element`

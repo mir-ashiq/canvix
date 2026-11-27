@@ -341,6 +341,47 @@ export function auditDesign(
     }
   }
 
+  // 12. ASSET VISIBILITY (v0.33): present is not visible — for art
+  //     too. The text-obscured check predates this; the NEON 2027
+  //     poster shipped claimed stickers nobody could see, and
+  //     "quality audit passed" said nothing because no stage ever
+  //     looked at non-text elements. Stickers/icons/illustrations/
+  //     photos that are off-canvas, sliver-sized or fully covered by
+  //     a higher opaque element are reported like any other defect.
+  if (d.width && d.height) {
+    let assetHits = 0
+    const art = els.filter(
+      (e) => e && e.type !== 'text' && (e.width ?? 0) > 0 && (e.height ?? 0) > 0,
+    )
+    for (const a of art) {
+      const b = box(a)
+      const label = `${a.type}#${a.id}${a.text ? ` ("${String(a.text).slice(0, 16)}")` : a.name ? ` ("${a.name.slice(0, 16)}")` : ''}`
+      let problem: string | null = null
+      if (b.x + b.w <= 0 || b.y + b.h <= 0 || b.x >= d.width! || b.y >= d.height!) {
+        problem = `is entirely OFF the canvas (@${Math.round(b.x)},${Math.round(b.y)} ${Math.round(b.w)}x${Math.round(b.h)}) — move it inside the page`
+      } else if (b.w < 8 || b.h < 8) {
+        problem = `is a sliver (${Math.round(b.w)}x${Math.round(b.h)}px) — resize it to be visible`
+      } else {
+        // fully covered by a HIGHER opaque element (later = in front)
+        const idx = els.indexOf(a)
+        for (let i = idx + 1; i < els.length; i++) {
+          const cover = els[i]
+          if (!cover || cover.type === 'text') continue
+          const fill = parseColor((cover as { fill?: unknown }).fill)
+          if (!fill || fill.a < 0.9) continue
+          if (coverage(a, cover) >= 0.95) {
+            problem = `is fully COVERED by ${cover.type}#${cover.id} (z-order) — reorder it to the front (update_elements visible:true + move) or move it`
+            break
+          }
+        }
+      }
+      if (problem) {
+        assetHits += 1
+        if (assetHits <= 3) issues.push(`${label} ${problem}.`)
+      }
+    }
+  }
+
   return issues.slice(0, 12)
 }
 

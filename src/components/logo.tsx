@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 
-/** TEa.G3 gradient logo mark — stacked design layers */
+/** MIDAD gradient emblem — a drop of ink and a flowing stroke */
 export function LogoMark({ className, size = 36 }: { className?: string; size?: number }) {
   return (
     <svg
@@ -13,18 +13,16 @@ export function LogoMark({ className, size = 36 }: { className?: string; size?: 
       aria-hidden="true"
     >
       <defs>
-        <linearGradient id="tea-g3-grad" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+        <linearGradient id="midad-grad" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
           <stop offset="0" stopColor="#00C4CC" />
           <stop offset="0.55" stopColor="#7D2AE8" />
           <stop offset="1" stopColor="#FF5C8A" />
         </linearGradient>
       </defs>
-      <rect width="48" height="48" rx="12" fill="url(#tea-g3-grad)" />
-      {/* stacked design layers */}
-      <rect x="12" y="10" width="24" height="8" rx="3" fill="#FFFFFF" fillOpacity="0.45" />
-      <rect x="12" y="21" width="24" height="8" rx="3" fill="#FFFFFF" fillOpacity="0.7" />
-      <rect x="12" y="32" width="16" height="6" rx="3" fill="#FFFFFF" />
-      <circle cx="36.5" cy="35" r="2.5" fill="#FFFFFF" fillOpacity="0.9" />
+      <rect width="48" height="48" rx="12" fill="url(#midad-grad)" />
+      <path d="M24 7.5C19.2 15 11 24.3 11 31.8C11 39.1 16.8 44.5 24 44.5C31.2 44.5 37 39.1 37 31.8C37 24.3 28.8 15 24 7.5Z" fill="#FFFFFF" fillOpacity="0.96" />
+      <path d="M16.5 33.8C19 29.8 21.5 28.3 24 28.3C26.5 28.3 29 29.8 31.5 33.8" stroke="#7D2AE8" strokeWidth="2.4" strokeLinecap="round" />
+      <circle cx="24" cy="20.5" r="2" fill="#00AEBB" />
     </svg>
   )
 }
@@ -37,14 +35,16 @@ export function Logo({ className, size = 32 }: { className?: string; size?: numb
       <span
         className="font-extrabold tracking-tight leading-none"
         style={{
-          fontSize: size * 0.62,
+          fontSize: size * 0.78,
+          fontFamily: 'var(--font-noto-sans-arabic), sans-serif',
+          letterSpacing: 'normal',
           background: 'linear-gradient(120deg, #00C4CC 0%, #7D2AE8 55%, #FF5C8A 100%)',
           WebkitBackgroundClip: 'text',
           backgroundClip: 'text',
           color: 'transparent',
         }}
       >
-        TEa.G3
+        مداد
       </span>
     </span>
   )

@@ -91,6 +91,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
         isTopbar ? 'h-14 items-center px-1' : 'h-14 items-center px-2 bg-[#16181D] border-t border-white/[0.09]'
       )}
       aria-label="عناصر التحكم الشائعة للعنصر المحدد"
+      data-toolbar-variant={variant}
       style={{ scrollbarWidth: 'none' }}
     >
       {/* ── multi-select ─────────────────────────────────────── */}

@@ -212,7 +212,7 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
           : { ok: false, msg: data.error ?? 'Test failed.' },
       }))
     } catch {
-      setTestResult((r) => ({ ...r, [p.id]: { ok: false, msg: 'Test failed — network error.' } }))
+      setTestResult((r) => ({ ...r, [p.id]: { ok: false, msg: 'فشل الاختبار — تعذر الاتصال بالشبكة.' } }))
     } finally {
       setTestingId(null)
     }
@@ -303,8 +303,8 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-[#16181D] border-white/10 text-white">
         <DialogHeader>
-          <DialogTitle>Your profile</DialogTitle>
-          <DialogDescription>Your account and your own AI provider keys (used before this instance&apos;s providers).</DialogDescription>
+          <DialogTitle>ملفك الشخصي</DialogTitle>
+          <DialogDescription>حسابك ومفاتيح مزوّدي الذكاء الاصطناعي الخاصة بك، وتُستخدم قبل مزوّدي هذه النسخة.</DialogDescription>
         </DialogHeader>
 
         {/* ── account card ── */}
@@ -321,7 +321,7 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
                 </span>
               )}
             </div>
-            <div className="text-[12px] text-white/45">Member since {memberSince} · designs stay private to your account</div>
+            <div className="text-[12px] text-white/45">عضو منذ {memberSince} · تبقى تصاميمك خاصة بحسابك</div>
           </div>
         </div>
 
@@ -329,20 +329,20 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 font-semibold text-[14px]">
-              <KeyRound size={15} className="text-[#00C4CC]" /> Your AI providers
+              <KeyRound size={15} className="text-[#00C4CC]" /> مزودو الذكاء الاصطناعي لديك
             </div>
             <Button size="sm" className="btn-cv rounded-full px-3 h-8 gap-1.5" onClick={openAdd}>
-              <Plus size={14} /> Add provider
+              <Plus size={14} /> إضافة مزوّد
             </Button>
           </div>
           <p className="text-[12px] text-white/50 leading-relaxed mb-3">
-            Bring your own key: providers you save here answer the AI features <span className="text-white/75 font-medium">before</span> the
+            استخدم مفتاحك الخاص: المزوّدون الذين تحفظهم هنا تُستخدم خدماتهم أولاً في ميزات الذكاء الاصطناعي <span className="text-white/75 font-medium">before</span> the
             instance-wide ones — your work never spends the operator&apos;s quota. Keys stay on the server and are never shown back.
           </p>
 
           {providers === null ? (
             <div className="flex items-center justify-center gap-2 py-8 text-white/50 text-sm">
-              <Loader2 size={15} className="animate-spin" /> Loading…
+              <Loader2 size={15} className="animate-spin" /> جارٍ التحميل…
             </div>
           ) : loadError ? (
             <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-[13px] text-red-200">
@@ -364,13 +364,13 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-white/70 hover:text-white" title="Test connection" disabled={testingId === p.id} onClick={() => void test(p)}>
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-white/70 hover:text-white" title="اختبار الاتصال" disabled={testingId === p.id} onClick={() => void test(p)}>
                         {testingId === p.id ? <Loader2 size={14} className="animate-spin" /> : <PlugZap size={14} />}
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-white/70 hover:text-white" title="Edit" onClick={() => openEdit(p)}>
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-white/70 hover:text-white" title="تعديل" onClick={() => openEdit(p)}>
                         <Pencil size={14} />
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-white/70 hover:text-red-300" title="Remove" onClick={() => void remove(p)}>
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-white/70 hover:text-red-300" title="إزالة" onClick={() => void remove(p)}>
                         <Trash2 size={14} />
                       </Button>
                     </div>
@@ -403,28 +403,28 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
             <div className="mt-3 rounded-lg border border-white/10 bg-[#0F1115] p-4 space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-medium text-white/60 uppercase tracking-wide">Label</label>
+                  <label className="text-[11px] font-medium text-white/60 uppercase tracking-wide">الاسم</label>
                   <Input
                     className="mt-1 bg-white/[0.05] border-white/10 text-white placeholder:text-white/30 h-9 text-[13px]"
-                    placeholder="My OpenAI key"
+                    placeholder="مفتاح OpenAI الخاص بي"
                     value={form.label}
                     maxLength={60}
                     onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-medium text-white/60 uppercase tracking-wide">API key</label>
+                  <label className="text-[11px] font-medium text-white/60 uppercase tracking-wide">مفتاح API</label>
                   <Input
                     className="mt-1 bg-white/[0.05] border-white/10 text-white placeholder:text-white/30 h-9 text-[13px] font-mono"
                     type="password"
-                    placeholder={editing ? 'unchanged — leave blank to keep' : 'sk-…'}
+                    placeholder={editing ? 'لم يتغير — اتركه فارغاً للاحتفاظ به' : 'sk-…'}
                     value={form.apiKey}
                     onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))}
                   />
                 </div>
               </div>
               <div>
-                <label className="text-[11px] font-medium text-white/60 uppercase tracking-wide">Base URL (OpenAI-compatible)</label>
+                <label className="text-[11px] font-medium text-white/60 uppercase tracking-wide">عنوان URL الأساسي (متوافق مع OpenAI)</label>
                 <Input
                   className="mt-1 bg-white/[0.05] border-white/10 text-white placeholder:text-white/30 h-9 text-[13px]"
                   placeholder="https://api.openai.com/v1"
@@ -433,7 +433,7 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-white/60 uppercase tracking-wide">Capability slots</label>
+                <label className="text-[11px] font-medium text-white/60 uppercase tracking-wide">مجالات الاستخدام</label>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {SLOT_OPTIONS.map((o) => {
                     const active = form.slots.includes(o.id)
@@ -462,11 +462,11 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
                   {form.slots.map((slot) => (
                     <div key={slot}>
                       <label className="text-[11px] font-medium text-white/60 uppercase tracking-wide">
-                        {SLOT_OPTIONS.find((o) => o.id === slot)?.label ?? slot} model <span className="text-white/30 normal-case">(optional)</span>
+                        {SLOT_OPTIONS.find((o) => o.id === slot)?.label ?? slot} model <span className="text-white/30 normal-case">(اختياري)</span>
                       </label>
                       <Input
                         className="mt-1 bg-white/[0.05] border-white/10 text-white placeholder:text-white/30 h-9 text-[13px] font-mono"
-                        placeholder="provider default"
+                        placeholder="النموذج الافتراضي للمزوّد"
                         maxLength={120}
                         value={form.models[slot] ?? ''}
                         onChange={(e) => setForm((f) => ({ ...f, models: { ...f.models, [slot]: e.target.value } }))}
@@ -480,7 +480,7 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
                   Cancel
                 </Button>
                 <Button size="sm" className="btn-cv h-8 gap-1.5" disabled={saving || !form.label.trim() || !form.baseUrl.trim() || (!editing && !form.apiKey)} onClick={() => void save()}>
-                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} {editing ? 'Save changes' : 'Save provider'}
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} {editing ? 'حفظ التغييرات' : 'حفظ المزوّد'}
                 </Button>
               </div>
             </div>
@@ -500,23 +500,22 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
                 setKeyFormOpen((v) => !v)
               }}
             >
-              <Plus size={14} /> Create key
+              <Plus size={14} /> إنشاء مفتاح
             </Button>
           </div>
           <p className="text-[12px] text-white/50 leading-relaxed mb-3">
-            Script against Canvix over REST: send <span className="font-mono text-white/75">Authorization: Bearer &lt;key&gt;</span> to{' '}
-            <span className="font-mono text-white/75">/api/v1/designs</span>. Keys are shown once at creation and can be revoked any
-            time — see docs/API.md for the full surface.
+            استخدم واجهة REST الخاصة بـ TEa.G3 في تطبيقاتك البرمجية: أرسل <span className="font-mono text-white/75">Authorization: Bearer &lt;key&gt;</span> to{' '}
+            <span className="font-mono text-white/75">/api/v1/designs</span>. يظهر المفتاح مرة واحدة عند إنشائه ويمكن إلغاؤه في أي وقت. راجع docs/API.md للاطلاع على التفاصيل.
           </p>
 
           {/* the raw key, shown exactly once */}
           {freshKey && (
             <div className="mb-3 rounded-lg border border-[#00C4CC]/30 bg-[#00C4CC]/10 p-3">
-              <div className="text-[12px] text-[#8fe8ef] font-semibold mb-1.5">Copy this key now — it will not be shown again.</div>
+              <div className="text-[12px] text-[#8fe8ef] font-semibold mb-1.5">انسخ هذا المفتاح الآن — لن يظهر مرة أخرى.</div>
               <div className="flex items-center gap-2">
                 <code className="flex-1 min-w-0 break-all font-mono text-[12px] text-white/90 bg-black/30 rounded px-2 py-1.5">{freshKey}</code>
                 <Button size="sm" className="btn-cv h-8 px-3 gap-1.5 shrink-0" onClick={() => void copyFreshKey()}>
-                  {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy'}
+                  {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'تم النسخ' : 'نسخ'}
                 </Button>
               </div>
             </div>
@@ -525,18 +524,18 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
           {keyFormOpen && (
             <div className="mb-3 rounded-lg border border-white/10 bg-[#0F1115] p-4 space-y-3" data-testid="api-key-form">
               <div>
-                <label htmlFor="api-key-label" className="text-[11px] font-medium text-white/60 uppercase tracking-wide">Label</label>
+                <label htmlFor="api-key-label" className="text-[11px] font-medium text-white/60 uppercase tracking-wide">الاسم</label>
                 <Input
                   id="api-key-label"
                   className="mt-1 bg-white/[0.05] border-white/10 text-white placeholder:text-white/30 h-9 text-[13px]"
-                  placeholder="CI export script"
+                  placeholder="برنامج تصدير CI"
                   value={keyLabel}
                   maxLength={40}
                   onChange={(e) => setKeyLabel(e.target.value)}
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-white/60 uppercase tracking-wide">Scopes</label>
+                <label className="text-[11px] font-medium text-white/60 uppercase tracking-wide">الصلاحيات</label>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {API_SCOPE_OPTIONS.map((o) => {
                     const active = keyScopes.includes(o.id)
@@ -564,7 +563,7 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
                   Cancel
                 </Button>
                 <Button size="sm" className="btn-cv h-8 gap-1.5" disabled={keySaving || !keyLabel.trim() || keyScopes.length === 0} onClick={() => void createKey()}>
-                  {keySaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Create key
+                  {keySaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} إنشاء مفتاح
                 </Button>
               </div>
             </div>
@@ -572,10 +571,10 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
 
           {apiKeys === null ? (
             <div className="flex items-center justify-center gap-2 py-6 text-white/50 text-sm">
-              <Loader2 size={15} className="animate-spin" /> Loading…
+              <Loader2 size={15} className="animate-spin" /> جارٍ التحميل…
             </div>
           ) : apiKeys.length === 0 ? (
-            <div className="text-center py-6 text-white/45 text-[13px]">No API keys yet.</div>
+            <div className="text-center py-6 text-white/45 text-[13px]">لا توجد مفاتيح API بعد.</div>
           ) : (
             <div className="space-y-2">
               {apiKeys.map((k) => {
@@ -601,8 +600,8 @@ export function ProfilePanel({ open, onOpenChange, user }: { open: boolean; onOp
                           size="sm"
                           variant="ghost"
                           className="h-8 w-8 p-0 text-white/70 hover:text-red-300 shrink-0"
-                          title="Revoke key"
-                          aria-label={`Revoke API key ${k.label}`}
+                          title="إلغاء المفتاح"
+                          aria-label={`إلغاء مفتاح API ${k.label}`}
                           onClick={() => void revokeKey(k)}
                         >
                           <Ban size={14} />

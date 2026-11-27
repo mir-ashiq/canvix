@@ -15,6 +15,9 @@ import { getSettings } from '@/lib/admin/config'
 // self-hosted account system with zero moving parts beyond the DB.
 // v0.9.1: same-origin enforced (blocks cross-site forced sign-ups).
 async function __canvix_post(req: NextRequest) {
+  if (process.env.TEAG3_ACCOUNTS_ENABLED !== 'true') {
+    return NextResponse.json({ error: 'إنشاء الحسابات غير متاح حالياً في TEa.G3.' }, { status: 410 })
+  }
   if (!isSameOrigin(req)) return NextResponse.json(CSRF_REJECTED, { status: 403 })
   // v0.16 (A1): the admin console's "allow new sign-ups" switch. Checked
   // BEFORE the rate limiter so a closed instance burns none of an honest

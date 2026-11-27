@@ -325,7 +325,7 @@ export function ElementsPanel() {
       {/* v0.14 (D7): data-bound charts */}
       <TabsContent value="charts" className="flex-1 overflow-y-auto cv-scroll-dark p-4 mt-0">
         <p className="text-[11px] text-white/45 leading-relaxed mb-3">
-          Charts are data-bound elements — select one on the canvas and use <span className="text-white/70">تحرير البيانات</span> in the toolbar to change labels, values, colours and kind.
+          المخططات عناصر مرتبطة بالبيانات — حدد مخططاً على مساحة التصميم ثم اختر <span className="text-white/70">تحرير البيانات</span> من شريط الأدوات لتعديل التسميات والقيم والألوان ونوع المخطط.
         </p>
         <SectionTitle>الأنواع</SectionTitle>
         <div className="grid grid-cols-2 gap-2">

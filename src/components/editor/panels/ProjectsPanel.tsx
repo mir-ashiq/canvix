@@ -86,7 +86,7 @@ export function ProjectsPanel() {
                   </div>
                 )}
                 {d.id === designId && (
-                  <span className="absolute top-1.5 left-1.5 text-[9px] font-bold bg-[#02C0CC] text-black px-1.5 py-0.5 rounded-md uppercase">Open</span>
+                  <span className="absolute top-1.5 left-1.5 text-[9px] font-bold bg-[#02C0CC] text-black px-1.5 py-0.5 rounded-md uppercase">فتح</span>
                 )}
               </div>
               <div className="px-2 py-1.5 bg-[#16181D]">

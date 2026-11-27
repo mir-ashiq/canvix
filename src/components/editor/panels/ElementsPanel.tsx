@@ -72,7 +72,7 @@ const STAR_TILES: { label: string; points: number; ratio?: number }[] = [
 ]
 
 const GRAPHIC_GROUPS: { name: string; ids: string[] }[] = [
-  { name: 'Decorative', ids: ['heart', 'blob', 'cloud', 'moon', 'sparkle', 'wave'] },
+  { name: 'Decorative', ids: ['star', 'heart', 'blob', 'cloud', 'moon', 'sparkle', 'wave'] },
   { name: 'Badges & labels', ids: ['badge', 'banner', 'ribbon', 'frame', 'speech'] },
   { name: 'Icons', ids: ['bolt', 'check-circle', 'arrow'] },
 ]

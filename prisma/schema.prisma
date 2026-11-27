@@ -20,11 +20,12 @@ generator client {
   provider   = "prisma-client"
   output     = "../src/generated/prisma"
   engineType = "client"
+  runtime    = "cloudflare"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 // ── v0.9.0: accounts ─────────────────────────────────────────
@@ -485,10 +486,10 @@ model DesignAgentRun {
   design    Design   @relation("DesignAgentRuns", fields: [designId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   mode      String // create | edit | improve | review | plan
-  request   String   @db.VarChar(240)
-  summary   String   @db.VarChar(600)
+  request   String
+  summary   String
   toolCalls Int      @default(0)
-  findings  String?  @db.VarChar(1200)
+  findings  String?
 
   @@index([designId, createdAt])
 }

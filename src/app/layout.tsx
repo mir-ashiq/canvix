@@ -48,7 +48,7 @@ export const metadata: Metadata = {
     "free design tool",
     "self hosted design tool",
   ],
-  authors: [{ name: "المطور العراقي TEa.G3" }],
+  authors: [{ name: "TEa.G3" }],
   alternates: { canonical: "/" },
   manifest: "/manifest.webmanifest",
   icons: { icon: "/midad.svg", apple: "/midad.svg" },

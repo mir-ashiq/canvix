@@ -180,12 +180,12 @@ export function PhotosPanel() {
     try {
       await addStockPhoto(tile)
       toast({
-        title: 'Photo added',
+        title: 'تمت إضافة الصورة',
         description: `${tile.credit.provider} · ${tile.credit.author} — ${tile.credit.license}`,
       })
     } catch (err) {
       toast({
-        title: 'Could not add the photo',
+        title: 'تعذرت إضافة الصورة',
         description: err instanceof Error ? err.message : 'Try again — or pick another result.',
       })
     } finally {
@@ -287,7 +287,7 @@ export function PhotosPanel() {
           ) : error?.kind === 'service' ? (
             <p className="text-[11.5px] text-white/40 py-2">{error.message}</p>
           ) : results && results.length === 0 && !busy ? (
-            <p className="text-[11.5px] text-white/40 py-2">No stock photos matched — try other keywords.</p>
+            <p className="text-[11.5px] text-white/40 py-2">لم نعثر على صور مطابقة — جرّب كلمات بحث أخرى.</p>
           ) : (
             <div className="grid grid-cols-2 gap-2.5">
               {(results ?? []).map((t) => {
@@ -366,7 +366,7 @@ export function PhotosPanel() {
         <div className="py-16 text-center">
           <ImageDown size={28} className="mx-auto text-white/25 mb-3" />
           <p className="text-[13px] text-white/50 font-medium">No photos match “{query}”</p>
-          <p className="text-[11.5px] text-white/35 mt-1">Try a different keyword or category.</p>
+          <p className="text-[11.5px] text-white/35 mt-1">جرّب كلمة بحث أو فئة مختلفة.</p>
         </div>
       )}
 

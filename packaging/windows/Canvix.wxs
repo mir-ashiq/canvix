@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="Canvix"
+    Manufacturer="Canvix contributors"
+    Version="$(var.ProductVersion)"
+    UpgradeCode="D4B9E7B4-4AE5-4C8E-9E51-0E5E2D24C0A6"
+    Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Canvix is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Feature Id="MainFeature" Title="Canvix" Level="1">
+      <ComponentGroupRef Id="MainComponents" />
+      <ComponentGroupRef Id="StandaloneComponents" />
+      <ComponentGroupRef Id="StartMenuComponents" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Canvix" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Canvix" />
+    </StandardDirectory>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="MainComponents" Directory="INSTALLFOLDER">
+      <Component Id="LauncherComponent" Bitness="always64">
+        <File Id="CanvixLauncherExe" Source="$(var.PublishDir)\CanvixLauncher.exe" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="StandaloneComponents" Directory="INSTALLFOLDER">
+      <Files Include="$(var.StandaloneDir)\**\*" />
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="StartMenuComponents" Directory="ApplicationProgramsFolder">
+      <Component Id="StartMenuComponent">
+        <Shortcut
+          Id="CanvixStartMenuShortcut"
+          Name="Canvix"
+          Target="[INSTALLFOLDER]CanvixLauncher.exe"
+          WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\Canvix" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

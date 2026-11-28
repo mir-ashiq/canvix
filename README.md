@@ -512,6 +512,10 @@ npm run build
 npm run start
 ```
 
+### Windows installer
+
+The standalone Windows package runs Canvix without Docker Desktop, GHCR, or a separate PostgreSQL installation. It bundles Node.js, PostgreSQL, the Canvix server, migrations, and templates. Download `CanvixSetup.exe` from a GitHub release for the guided installer, or `CanvixSetup.msi` for direct Windows Installer use. See [`packaging/windows/README.md`](packaging/windows/README.md) for local builds.
+
 ## ☁️ Deploy — Vercel, Netlify, Cloudflare Workers, or your own box
 
 Canvix runs on **any Node host** and — since v0.9.3 — on **Cloudflare

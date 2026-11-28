@@ -3,6 +3,32 @@
 All notable changes to Canvix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+### Fixed — v0.34.3: the arm64 self-host build (issue #99) — openssl detection + the arch-agnostic toolchain guard
+
+`docker compose up -d --build` failed on **linux/arm64** hosts at the
+runner's migrate-toolchain step (`✗ migrate toolchain install failed`)
+while everything before it built fine — two independent platform
+quirks, both reported and root-caused by @wayangm on a real ARM64 VPS:
+
+- **The runner stage lacked the `openssl` CLI package.** Prisma shells
+  out to `openssl version` to pick its engine binaryTarget; without the
+  package, detection fails on a bare `node:22-slim` image and Prisma
+  defaults to the `openssl-1.1.x` target — a binary name bookworm
+  (libssl3 only) cannot run. The runner now installs `openssl` alongside
+  dumb-init/curl/ca-certificates, so detection resolves to
+  `linux-arm64-openssl-3.0.x` on arm64 (and stays correct on x64).
+- **The toolchain guard hardchecked the x86_64 binary name.**
+  `test -x …schema-engine-debian-openssl-3.0.x` never passes on aarch64,
+  where the binary is `schema-engine-linux-arm64-openssl-3.0.x`. The
+  guard is now arch-agnostic (`ls …schema-engine-*`): it accepts
+  whichever per-arch binary was downloaded and still fails loudly when
+  none exists.
+
+Dockerfile comments + docs/DOCKER.md updated to describe the per-arch
+binary names. The CI docker job (amd64 build + compose smoke) keeps
+validating the x64 path; the arm64 path is validated by the reporter's
+host per this fix.
+
 ### feat(v0.34.2): AUTO-DELETE (optional), the plan that never dies, the Stop button that finally stops
 
 Two production reports from the same day, three fixes at the cause:

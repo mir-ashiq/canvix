@@ -36,14 +36,17 @@
 #   The app is rust-free (engineType="client": the generated client
 #   compiles queries to WASM at runtime — prisma/schema.prisma).
 #   Only `prisma migrate deploy` runs a native binary (the
-#   schema-engine, ~40 MB, prebuilt for debian-openssl-3.0.x on
-#   x64 and aarch64), and only at boot. So the runner carries
-#   exactly one native piece: the migration engine.
+#   schema-engine, ~40 MB, prebuilt per arch for x64
+#   (debian-openssl-3.0.x) and aarch64
+#   (linux-arm64-openssl-3.0.x)), and only at boot. So the runner
+#   carries exactly one native piece: the migration engine.
 #
 # BASE IMAGE
-#   node:22-slim bookworm: Prisma ships the schema-engine for
-#   debian-openssl-3.0.x; slim keeps the glibc + openssl 3 the
-#   binary needs. The CI wall (lint-unit, e2e) runs Node 22 — the
+#   node:22-slim bookworm: Prisma ships the schema-engine for both
+#   arches' bookworm targets; slim keeps the glibc + openssl 3 the
+#   binary needs (the openssl CLI package is installed in the
+#   runner so Prisma's own detection picks the right one per arch —
+#   issue #99). The CI wall (lint-unit, e2e) runs Node 22 — the
 #   runner matches the tested version.
 # ─────────────────────────────────────────────────────────────────
 
@@ -85,10 +88,17 @@ WORKDIR /app
 
 # dumb-init: PID 1 signal handling (SIGTERM reaches node, so
 # `docker stop` drains in-flight requests instead of the 10 s kill).
-# curl: the container healthcheck. From the slim image's own
-# bookworm apt — no extra repos.
+# curl: the container healthcheck. openssl: NOT for the runtime —
+# the app's prisma client is WASM — but for Prisma's own libssl
+# DETECTION at image build and boot (the CLI shells out to
+# `openssl version` to pick the engine binaryTarget). Without the
+# CLI package, detection fails on a bare slim image and Prisma
+# defaults to the openssl-1.1.x target, which bookworm (libssl3
+# only) cannot run — observed on aarch64 (issue #99), where the
+# correct target is linux-arm64-openssl-3.0.x. From the slim
+# image's own bookworm apt — no extra repos.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends dumb-init curl ca-certificates \
+ && apt-get install -y --no-install-recommends dumb-init curl ca-certificates openssl \
  && rm -rf /var/lib/apt/lists/*
 
 # Non-root. The app persists everything to Postgres (media included:
@@ -123,7 +133,14 @@ RUN mkdir -p /opt/migrate \
  # the CLI's downloaded query-engine .so is dead weight in the image
  && rm -f node_modules/@prisma/engines/libquery_engine-*.so.node \
  && node -e "const v=require('effect/package.json').version;const p=v.split('.').map(Number);if(p[0]!==3||p[1]<22){console.error('effect '+v+' — override did not apply (Dependabot #9 regression)');process.exit(1)}console.log('effect override ok: '+v)" \
- && test -x node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x \
+ # v0.34.3 (issue #99): the guard is ARCH-AGNOSTIC. The binary name
+ # is the per-arch binaryTarget — schema-engine-debian-openssl-3.0.x
+ # on x64, schema-engine-linux-arm64-openssl-3.0.x on aarch64 — so
+ # the old exact-name test could never pass on arm. The glob accepts
+ # whichever one this arch resolved to (with the openssl CLI
+ # installed above, detection is correct on both) and still fails
+ # loudly when none exists.
+ && ls node_modules/@prisma/engines/schema-engine-* >/dev/null 2>&1 \
  || (echo "✗ migrate toolchain install failed" && exit 1)
 
 # schema + migrations for migrate deploy; the entrypoint runs the

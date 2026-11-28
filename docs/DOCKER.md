@@ -172,9 +172,13 @@ The Prisma split is the interesting part. The app is rust-free
 (`engineType="client"`: the generated client compiles queries to WASM
 at runtime — see `prisma/schema.prisma`), so the request path carries
 no native binaries at all. Only `prisma migrate deploy` runs one (the
-schema-engine, ~40 MB, prebuilt for debian-openssl-3.0.x), and only
-at boot — which is why it lives in `/opt/migrate`, isolated from the
-app's traced `node_modules`.
+schema-engine, ~40 MB, prebuilt per arch — `debian-openssl-3.0.x` on
+x64, `linux-arm64-openssl-3.0.x` on aarch64), and only at boot —
+which is why it lives in `/opt/migrate`, isolated from the app's
+traced `node_modules`. The runner image installs the `openssl` CLI
+so Prisma's own libssl detection picks the right engine per arch,
+and the toolchain guard accepts whichever per-arch binary was
+downloaded (issue #99 — both were needed for aarch64 hosts).
 
 The migrate toolchain carries the same `effect` override as the app
 (`^3.22.1`, Dependabot #9 / GHSA-7589-6fvf-x4pw): `@prisma/config`

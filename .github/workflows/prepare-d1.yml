@@ -1,0 +1,57 @@
+name: Prepare MIDAD D1 migration
+
+on:
+  push:
+    branches:
+      - midad-d1-migration
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    if: "!contains(github.event.head_commit.message, '[skip d1 prep]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: midad-d1-migration
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Refresh package lock
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Install exact locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Validate Prisma D1 schema
+        run: ./node_modules/.bin/prisma validate
+
+      - name: Generate Prisma client
+        run: ./node_modules/.bin/prisma generate
+
+      - name: Generate initial D1 migration
+        run: |
+          mkdir -p prisma/d1-migrations
+          ./node_modules/.bin/prisma migrate diff \
+            --from-empty \
+            --to-schema-datamodel prisma/schema.prisma \
+            --script \
+            --output prisma/d1-migrations/0001_initial.sql
+
+      - name: Commit generated migration and lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json prisma/d1-migrations/0001_initial.sql
+          if git diff --cached --quiet; then
+            echo "No generated changes."
+            exit 0
+          fi
+          git commit -m "chore: generate D1 migration [skip d1 prep]"
+          git push origin midad-d1-migration

@@ -30,9 +30,10 @@ permissions:
   contents: read
 
 jobs:
-  # ── Fast gate: every pull request ─────────────────────────────────
-  lint-unit:
-    name: lint-unit
+  # Temporary D1 migration preparation for the MIDAD migration PR.
+  # Generates the real npm lockfile and D1 SQL without touching production.
+  d1-prep:
+    name: d1-prep
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -44,6 +45,52 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - name: Install dependencies and generate lockfile
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Validate Prisma D1 schema
+        run: npx prisma validate
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Generate D1 SQL
+        run: |
+          mkdir -p prisma/d1-migrations
+          npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script --output prisma/d1-migrations/0001_initial.sql
+
+      - name: Upload D1 preparation artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: d1-prep
+          path: |
+            package-lock.json
+            prisma/d1-migrations/0001_initial.sql
+          if-no-files-found: error
+          retention-days: 3
+
+  # ── Fast gate: every pull request ─────────────────────────────────
+  lint-unit:
+    name: lint-unit
+    needs: d1-prep
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Download generated D1 lockfile
+        uses: actions/download-artifact@v7
+        with:
+          name: d1-prep
+          path: .
 
       # postinstall runs `prisma generate` + the wasm portability patch,
       # so tsc has the generated client types it type-checks against.
@@ -122,6 +169,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - name: Download generated D1 lockfile
+        uses: actions/download-artifact@v7
+        with:
+          name: d1-prep
+          path: .
+
+      - name: Download generated D1 lockfile
+        uses: actions/download-artifact@v7
+        with:
+          name: d1-prep
+          path: .
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
@@ -261,11 +320,18 @@ jobs:
   # everything inside the image. Runs on ubuntu-latest's own Docker.
   docker:
     name: docker
+    needs: d1-prep
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Download generated D1 lockfile
+        uses: actions/download-artifact@v7
+        with:
+          name: d1-prep
+          path: .
 
       # POSTGRES_PASSWORD is the only required variable. Compose's
       # ${VAR:?msg} interpolation fires on EVERY compose command —
